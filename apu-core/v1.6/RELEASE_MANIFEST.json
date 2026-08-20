@@ -1,0 +1,44 @@
+{
+  "releaseId": "apu-core-v1.6-2026-08-16",
+  "version": "1.6",
+  "status": "STABLE/FROZEN",
+  "createdAt": "2026-08-16",
+  "sourceRelease": { "version": "1.5", "status": "stable-frozen" },
+  "hashMethod": "UTF-8; CRLF normalized to LF; trailing blank lines removed; SHA-256",
+  "canonicalQuestionPolicyOwner": "00_INSTRUCTIONS_v1.6.md",
+  "canonicalPhase2AnalysisOwner": "00_INSTRUCTIONS_v1.6.md",
+  "canonicalPedagogicalNeedExtractionOwner": "02_OBSERVATION_AND_INTAKE.md",
+  "validation": {
+    "coreV11": "15/15 UNCHANGED",
+    "coreV12": "15/15 UNCHANGED",
+    "coreV13": "15/15 UNCHANGED",
+    "coreV14": "15/15 UNCHANGED",
+    "coreV15": "15/15 UNCHANGED",
+    "coreV16": "15/15 INTEGRITY PASS",
+    "typeScript": "PASS",
+    "productionBuild": "PASS",
+    "automatedTests": "119 PASS / 0 FAIL",
+    "runtimeProvenance": "PASS"
+  },
+  "changedCoreFiles": [
+    { "path": "00_INSTRUCTIONS_v1.6.md", "reason": "Introduced the canonical Phase 2 Entry contract and made explicit Phase 3 transition independent of global Analysis depth." }
+  ],
+  "knowledgeBaseChanged": false,
+  "coreFiles": {
+    "00_INSTRUCTIONS_v1.6.md": "db62165377b4b58c6661a0e92f3f09737b49edc25ee16f75da413661505386b1",
+    "01_APU_MS_CORE_MODEL.md": "8d6e15f345e2186457144e09fbefb493ad18c4905a90ca79ec277919672cede2",
+    "02_OBSERVATION_AND_INTAKE.md": "73cc4f439fb1028c39aff867f5058270cc43315624caf044747a715b875e4e44",
+    "03_PROFILES_INDEX.md": "9d3857550bd0c756229c31cb90adc56cffc383f9608bc1768428e49388a86dce",
+    "04_PROFILE_P1_COMMUNICATION.md": "8e7afdcc1b6a1bff2a79709a91fcdb398cb9a338ea3cdf6c8ec8b946aad5f07e",
+    "05_PROFILE_P2_ACTIVATION.md": "8ee353ff21a2acd8eacae3d0447a5db5e7517cb1d98fa64ac48ac3f282f6a55d",
+    "06_PROFILE_P3_EMOTION.md": "3539c857dd9c718f902224726242e9304adb5cb0b9bb5a4e3d6835bbb0ec8f3a",
+    "07_PROFILE_P4_SENSORY.md": "ad4b0a2c4e0121064829a25511c063c159d15c76d715bd1c7a68d4ed0be70b2d",
+    "08_PROFILE_P5_ADAPTATION.md": "1f555cd6a622d8d4f5841d3b6edc14dd4b4deded0bfea9e3a14872a580c9d5a6",
+    "09_PROFILE_P6_SOCIAL_PLAY.md": "a45384262a47e1222abe879ad6b184d3a41dbf8988fa8c9968bc74dd67bed042",
+    "10_PROFILE_P7_MOTOR.md": "fc31b041586ac83653d7f3b0d3d8400d4eb8a7e286a10e6299677aa0d3b64023",
+    "11_PROFILE_P8_RHYTHMS_SELFCARE.md": "4cb164eb9ff4cd2050208e488dc9941cc11cb90424f7cf013598053c8fc4c618",
+    "12_ZONES_AND_MAPPING.md": "b4d32731fbe4f9221b84253cd20f19ca66f81ff46a2fd2a7bc089c2925f94692",
+    "13_OBSERVATION_BLOCKS_A_E.md": "ebbc1b6003773591a5681b6b70ef164333f4f299ce7400fbd1585719c587bfe6",
+    "14_MS_DIDACTIC_CORE.md": "5b7519e17964f184e04b51de46d0ab98cccf86985c78a9efdabba1133ca1c154"
+  }
+}
