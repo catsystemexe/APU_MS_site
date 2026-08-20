@@ -15,6 +15,7 @@ const PERCENT_ENCODED_UTF8 = "percent-encoded-utf-8";
 const SIGN_IN_PATH = "/signin-with-chatgpt";
 const SIGN_OUT_PATH = "/signout-with-chatgpt";
 const CALLBACK_PATH = "/callback";
+const LOCAL_DEV_EMAIL = "almadellobo@gmail.com";
 const ALLOWED_EMAILS = new Set([
   "almadellobo@gmail.com",
   "z.vilimek@gmail.com",
@@ -27,7 +28,20 @@ export function isAllowedChatGPTUser(email: string): boolean {
 export async function getChatGPTUser(): Promise<ChatGPTUser | null> {
   const requestHeaders = await headers();
   const email = requestHeaders.get(USER_EMAIL_HEADER);
-  if (!email) return null;
+  if (!email) {
+    if (
+      process.env.NODE_ENV === "development" &&
+      process.env.APU_LOCAL_DEV_AUTH === "1"
+    ) {
+      return {
+        displayName: LOCAL_DEV_EMAIL,
+        email: LOCAL_DEV_EMAIL,
+        fullName: null,
+      };
+    }
+
+    return null;
+  }
 
   const encodedFullName = requestHeaders.get(USER_FULL_NAME_HEADER);
   const fullName =
