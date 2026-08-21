@@ -218,7 +218,7 @@ function HighlightedMessage({
   return parts;
 }
 
-export default function ApuClient() {
+export default function ApuClient({ isDeveloper }: { isDeveloper: boolean }) {
   const [messages, setMessages] = useState<Message[]>([WELCOME]);
   const [input, setInput] = useState("");
   const [responseId, setResponseId] = useState<string | null>(null);
@@ -1216,7 +1216,7 @@ export default function ApuClient() {
             <h1 className="sr-only">APU — Asistent pedagogické podpory</h1>
           </div>
 
-          <div className="conversation-diagnostics" ref={statsRef}>
+          {isDeveloper && <div className="conversation-diagnostics" ref={statsRef}>
             <div className="model-row">
               <label htmlFor="model-select">Model</label>
               <div className="model-select-wrap">
@@ -1288,7 +1288,7 @@ export default function ApuClient() {
                 <p>{costTooltip}</p>
               </div>
             )}
-          </div>
+          </div>}
 
           <nav className="project-actions" aria-label="Projekt a účet">
             <button type="button" onClick={requestNewProject} disabled={isLoading} aria-label="Nový projekt" title="Nový projekt">
@@ -1379,7 +1379,7 @@ export default function ApuClient() {
                   onSelect={selectDialogAction}
                 />
               ))}
-              {message.role === "assistant" && message.diagnostics && (
+              {isDeveloper && message.role === "assistant" && message.diagnostics && (
                 <aside className="response-diagnostics" aria-label="Diagnostika odpovědi">
                   {message.debugText && <div className="diagnostic-debug">{message.debugText}</div>}
                   <div className="diagnostic-usage">
@@ -1542,7 +1542,7 @@ export default function ApuClient() {
           })}
         />
 
-        <aside
+        {isDeveloper && <aside
           id="diagnostics-drawer"
           className={`diagnostics-drawer${isDiagnosticsDrawerOpen ? " is-open" : ""}`}
           aria-label="Nastavení modelu, diagnostiky a vzhledu"
@@ -1622,10 +1622,10 @@ export default function ApuClient() {
               </section>
             </div>
           </div>
-        </aside>
+        </aside>}
 
         <nav className="tool-rail" aria-label="Rychlé nástroje">
-          <button
+          {isDeveloper && <button
             className={`tool-rail-button tool-rail-diagnostics${isDiagnosticsDrawerOpen ? " is-active" : ""}`}
             type="button"
             onClick={() => setIsDiagnosticsDrawerOpen((open) => !open)}
@@ -1635,7 +1635,7 @@ export default function ApuClient() {
             title="Nastavení"
           >
             <Settings aria-hidden="true" />
-          </button>
+          </button>}
           <button
             className={`tool-rail-button tool-rail-copy${exportStatus === "downloaded" ? " is-confirmed" : ""}`}
             type="button"

@@ -1,46 +1,23 @@
 import ApuClient from "./apu-client";
 import ApuLogo from "./apu-logo";
-import {
-  chatGPTSignInPath,
-  chatGPTSignOutPath,
-  getChatGPTUser,
-  isAllowedChatGPTUser,
-} from "./chatgpt-auth";
+import { getCurrentAccessIdentity } from "./access-auth";
 
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  const user = await getChatGPTUser();
+  const identity = await getCurrentAccessIdentity();
 
-  if (!user) {
+  if (!identity) {
     return (
       <main className="access-page">
         <section className="access-card" aria-labelledby="access-title">
           <div className="access-mark" aria-hidden="true"><ApuLogo /></div>
           <h1 id="access-title">APU Site 0.1</h1>
-          <p>Tato testovací verze je přístupná pouze pozvaným uživatelům.</p>
-          <a className="access-button" href={chatGPTSignInPath("/")}>
-            Přihlásit se přes ChatGPT
-          </a>
+          <p>Ověřená identita Cloudflare Access není dostupná.</p>
         </section>
       </main>
     );
   }
 
-  if (!isAllowedChatGPTUser(user.email)) {
-    return (
-      <main className="access-page">
-        <section className="access-card" aria-labelledby="access-title">
-          <div className="access-mark" aria-hidden="true"><ApuLogo /></div>
-          <h1 id="access-title">Účet nemá přístup</h1>
-          <p>Přihlášený účet <strong>{user.email}</strong> není mezi pozvanými testery.</p>
-          <a className="access-button access-button-secondary" href={chatGPTSignOutPath("/")}>
-            Přihlásit jiný účet
-          </a>
-        </section>
-      </main>
-    );
-  }
-
-  return <ApuClient />;
+  return <ApuClient isDeveloper={identity.role === "developer"} />;
 }

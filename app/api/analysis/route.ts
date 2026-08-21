@@ -2,7 +2,7 @@ import instructions from "../../../apu-core/v1.6/00_INSTRUCTIONS_v1.6.md?raw";
 import { cleanAnalysisQuestionText, stripLegacyQuestionFromSummary, type AnalysisState } from "../../analysis-model";
 import { CATEGORY_IDS, type CategoryId } from "../../notepad-model";
 import { estimateCostUsd } from "../../model-config";
-import { getChatGPTUser, isAllowedChatGPTUser } from "../../chatgpt-auth";
+import { getAccessIdentity } from "../../access-auth";
 
 export const runtime = "edge";
 
@@ -157,9 +157,8 @@ function normalize(raw: AnalysisState, notebook: NotebookItem[], skipped: string
 
 export async function POST(request: Request) {
   const started = performance.now();
-  const user = await getChatGPTUser();
-  if (!user) return jsonError("Pro použití APU se přihlaste přes ChatGPT.", 401);
-  if (!isAllowedChatGPTUser(user.email)) return jsonError("Tento účet nemá k APU přístup.", 403);
+  const identity = await getAccessIdentity(request.headers);
+  if (!identity) return jsonError("Chybí platná identita Cloudflare Access.", 401);
   const apiKey = process.env.OPENAI_API_KEY;
   const vectorStoreId = process.env.APU_VECTOR_STORE_ID;
   if (!apiKey || !vectorStoreId) return jsonError("APU není dokončeno: chybí serverová konfigurace.", 503);
@@ -198,14 +197,15 @@ export async function POST(request: Request) {
     const callId = crypto.randomUUID();
     const model = typeof response.model === "string" ? response.model : "gpt-5.6-terra";
     const fileSearchCalls = Array.isArray(response.output) ? response.output.filter((item) => item && typeof item === "object" && (item as { type?: unknown }).type === "file_search_call").length : 0;
-    return Response.json({ analysis, diagnostics: { callId, model, reasoning: "low", knowledgeBaseEnabled: true, routingSource: "phase-2", inputTokens, cachedInputTokens: usage?.input_tokens_details?.cached_tokens ?? 0, outputTokens, reasoningTokens: usage?.output_tokens_details?.reasoning_tokens ?? 0, totalTokens: usage?.total_tokens ?? inputTokens + outputTokens, estimatedCostUsd: estimateCostUsd({ model, inputTokens, cachedInputTokens: usage?.input_tokens_details?.cached_tokens ?? 0, outputTokens, fileSearchCalls }) }, telemetry: {
+    const developerData = identity.role === "developer" ? { diagnostics: { callId, model, reasoning: "low", knowledgeBaseEnabled: true, routingSource: "phase-2", inputTokens, cachedInputTokens: usage?.input_tokens_details?.cached_tokens ?? 0, outputTokens, reasoningTokens: usage?.output_tokens_details?.reasoning_tokens ?? 0, totalTokens: usage?.total_tokens ?? inputTokens + outputTokens, estimatedCostUsd: estimateCostUsd({ model, inputTokens, cachedInputTokens: usage?.input_tokens_details?.cached_tokens ?? 0, outputTokens, fileSearchCalls }) }, telemetry: {
       turn_id: turnId, completed_at: new Date().toISOString(), path: "analysis",
       latency_ms: { user_to_first_token: null, preflight_total: null, analysis_user_visible_ms: null, analysis_backend_total_ms: analysisDuration, total: Math.round(performance.now() - started), main_model_ttft: null, generation: null },
       stages: [{ name: "analysis", status: "completed", duration_ms: analysisDuration, api_request_id: callId, model, reasoning: "low", service_tier: "default", usage: { input_tokens: usage?.input_tokens ?? null, cached_input_tokens: usage?.input_tokens_details?.cached_tokens ?? null, cache_write_tokens: null, output_tokens: usage?.output_tokens ?? null, reasoning_tokens: usage?.output_tokens_details?.reasoning_tokens ?? null, total_tokens: usage?.total_tokens ?? null } }],
       context_sizes: { unit: "chars", core: instructions.length, runtime_instructions: null, notebook: JSON.stringify(body.notebook).length, previous_analysis: previousAnalysis ? JSON.stringify(previousAnalysis).length : 0, user_message: focusInstruction.length, previous_response_context: null },
       tools: { file_search: { available: true, invoked: fileSearchCalls > 0, calls: fileSearchCalls, duration_ms: null } },
       streaming: { model: false, backend: false, transport: false, ui: false },
-    } });
+    } } : {};
+    return Response.json({ analysis, ...developerData });
   }
   catch { return jsonError("Model nevrátil platný Rozbor.", 502); }
 }

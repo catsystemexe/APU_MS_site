@@ -8,7 +8,7 @@ import {
   isModelSelection,
   resolveRequestRuntime,
 } from "../../model-routing";
-import { getChatGPTUser, isAllowedChatGPTUser } from "../../chatgpt-auth";
+import { getAccessIdentity, type AccessIdentity } from "../../access-auth";
 import {
   DEFAULT_COMMUNICATION_PROFILE_ID,
   communicationProfileInstruction,
@@ -164,17 +164,16 @@ function validateFunctionalMapping(value: unknown): DebugMapping | undefined | n
   return mapping as DebugMapping;
 }
 
-async function authorizeApiRequest() {
-  const user = await getChatGPTUser();
-  if (!user) return jsonError("Pro použití APU se přihlaste přes ChatGPT.", 401);
-  if (!isAllowedChatGPTUser(user.email)) return jsonError("Tento účet nemá k APU přístup.", 403);
-  return null;
+async function authorizeApiRequest(request: Request): Promise<AccessIdentity | Response> {
+  const identity = await getAccessIdentity(request.headers);
+  return identity ?? jsonError("Chybí platná identita Cloudflare Access.", 401);
 }
 
 export async function POST(request: Request) {
   const requestStarted = performance.now();
-  const authError = await authorizeApiRequest();
-  if (authError) return authError;
+  const authorization = await authorizeApiRequest(request);
+  if (authorization instanceof Response) return authorization;
+  const isDeveloper = authorization.role === "developer";
 
   const apiKey = process.env.OPENAI_API_KEY;
   const vectorStoreId = process.env.APU_VECTOR_STORE_ID;
@@ -397,8 +396,8 @@ export async function POST(request: Request) {
           emit({
             type: "done",
             responseId: response?.id,
-            diagnostics,
-            ...(controllerRun.response ? {
+            ...(isDeveloper ? { diagnostics } : {}),
+            ...(isDeveloper && controllerRun.response ? {
               controllerDiagnostics: buildDiagnostics(controllerRun.response as CompletedResponse, `${callId}-controller`),
             } : {}),
             dialogActions: controllerResult.dialog_actions,
@@ -406,7 +405,7 @@ export async function POST(request: Request) {
             transitionReady: controllerResult.transition_ready,
             phaseLabel: controllerResult.phase === "intake" ? "[FÁZE 1]" : controllerResult.phase === "development" ? "[FÁZE 2]" : "[FÁZE 3]",
             controllerFallback: controllerRun.usedFallback,
-            telemetry: {
+            ...(isDeveloper ? { telemetry: {
               turn_id: typeof body.turnId === "string" ? body.turnId : null,
               completed_at: new Date().toISOString(),
               path: [controllerDuration === null ? null : "controller", "main"].filter(Boolean).join("-"),
@@ -427,7 +426,7 @@ export async function POST(request: Request) {
               tools: { file_search: { available: execution.useKnowledgeBase, invoked: fileSearchCalls > 0, calls: fileSearchCalls, duration_ms: null } },
               controller: { mode: controllerMode },
               streaming: { model: true, backend: true, transport: true, ui: true },
-            },
+            } } : {}),
           });
         }
         if (event.type === "error") emit({ type: "error", message: event.message || "Streaming selhal." });
@@ -461,9 +460,9 @@ export async function POST(request: Request) {
   });
 }
 
-export async function GET() {
-  const authError = await authorizeApiRequest();
-  if (authError) return authError;
+export async function GET(request: Request) {
+  const authorization = await authorizeApiRequest(request);
+  if (authorization instanceof Response) return authorization;
 
   return Response.json({
     models: publicModelCatalog(),

@@ -1,6 +1,6 @@
 import { estimateCostUsd } from "../../model-config";
 import { CATEGORY_IDS, CategoryId, locateSourceQuote } from "../../notepad-model";
-import { getChatGPTUser, isAllowedChatGPTUser } from "../../chatgpt-auth";
+import { getAccessIdentity } from "../../access-auth";
 import intakeCore from "../../../apu-core/v1.6/02_OBSERVATION_AND_INTAKE.md?raw";
 
 export const runtime = "edge";
@@ -251,9 +251,8 @@ async function verifyGrounding(
 
 export async function POST(request: Request) {
   const started = performance.now();
-  const user = await getChatGPTUser();
-  if (!user) return jsonError("Pro použití APU se přihlaste přes ChatGPT.", 401);
-  if (!isAllowedChatGPTUser(user.email)) return jsonError("Tento účet nemá k APU přístup.", 403);
+  const identity = await getAccessIdentity(request.headers);
+  if (!identity) return jsonError("Chybí platná identita Cloudflare Access.", 401);
 
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return jsonError("Extrakční vrstva není nakonfigurována.", 503);
@@ -390,7 +389,7 @@ export async function POST(request: Request) {
       situationReason: extraction.situationReason,
       candidates,
     },
-    diagnostics: {
+    ...(identity.role === "developer" ? { diagnostics: {
       callId,
       model,
       inputTokens,
@@ -408,7 +407,6 @@ export async function POST(request: Request) {
         cacheWriteTokens,
         outputTokens,
       }),
-    },
-    telemetry,
+    }, telemetry } : {}),
   }, { headers: { "Cache-Control": "no-store" } });
 }
