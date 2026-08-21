@@ -19,5 +19,5 @@ export default async function Home() {
     );
   }
 
-  return <ApuClient isDeveloper={identity.role === "developer"} />;
+  return <ApuClient email={identity.email} isDeveloper={identity.role === "developer"} />;
 }

@@ -15,3 +15,14 @@ test("local auth bypass remains explicitly bounded to development", async () => 
   assert.match(source, /process\.env\.NODE_ENV === "development"/);
   assert.match(source, /process\.env\.APU_LOCAL_DEV_AUTH === "1"/);
 });
+
+test("the verified Access email and developer role are passed into the header", async () => {
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const client = await readFile(new URL("../app/apu-client.tsx", import.meta.url), "utf8");
+
+  assert.match(page, /email=\{identity\.email\}/);
+  assert.match(page, /isDeveloper=\{identity\.role === "developer"\}/);
+  assert.match(client, /className="account-email"[^>]*>\{email\}/);
+  assert.match(client, /\{isDeveloper && \([\s\S]*?DEV ON[\s\S]*?TriangleAlert/);
+  assert.doesNotMatch(client, /className="personality-trigger"/);
+});
