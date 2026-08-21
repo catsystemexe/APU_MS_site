@@ -148,56 +148,31 @@ button:disabled { cursor: default; opacity: 0.52; }
 .apu-logo--horizontal { width: auto; max-width: none; height: 40px; }
 .apu-logo--flower { width: 36px; height: 36px; }
 
-.personality-menu { position: relative; min-width: 0; flex: none; }
-.personality-trigger {
-  min-width: 72px;
-  height: 26px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--bg-surface);
-  color: var(--text-primary);
-  padding: 0 10px;
-  outline: none;
-  font: inherit;
-  font-size: 10px;
-  font-weight: 680;
-  line-height: 1;
-  cursor: pointer;
-}
-.personality-trigger:hover:not(:disabled) { background: var(--surface-hover); }
-.personality-trigger:focus-visible { border-color: var(--accent); box-shadow: 0 0 0 3px var(--focus-ring); }
-.personality-trigger:disabled { opacity: .72; cursor: default; }
-.personality-menu-options {
-  position: absolute;
-  z-index: 20;
-  top: calc(100% + 6px);
-  left: 0;
-  width: 104px;
-  display: grid;
-  gap: 2px;
-  padding: 4px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--bg-surface);
-  box-shadow: 0 10px 28px var(--shadow-color);
-}
-.personality-menu-options button {
-  width: 100%;
-  min-height: 28px;
-  padding: 5px 8px;
-  border: 0;
-  border-radius: 7px;
-  background: transparent;
-  color: var(--text-primary);
-  font: inherit;
-  font-size: 10.5px;
+.account-email {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 11px;
   font-weight: 620;
-  text-align: left;
-  cursor: pointer;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.personality-menu-options button:hover,
-.personality-menu-options button:focus-visible { background: var(--surface-hover); outline: none; }
-.personality-menu-options button.is-active { color: var(--accent); font-weight: 750; }
+.developer-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  padding: 5px 7px;
+  border: 1px solid #e6a817;
+  border-radius: 7px;
+  background: #fff5d6;
+  color: #7a4c00;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  line-height: 1;
+}
+.developer-indicator svg { width: 15px; height: 15px; stroke-width: 2.4; }
 
 .conversation-diagnostics {
   position: relative;
@@ -1377,8 +1352,9 @@ button:disabled { cursor: default; opacity: 0.52; }
   .brand-mark { width: 78px; height: 36px; }
   .apu-logo--horizontal { height: 36px; }
   .brand { gap: 7px; }
-  .personality-trigger { min-width: 66px; height: 25px; padding: 0 8px; font-size: 9.5px; }
-  .personality-menu-options { width: 96px; }
+  .account-email { font-size: 10px; }
+  .developer-indicator { padding: 4px 5px; font-size: 9px; }
+  .developer-indicator svg { width: 13px; height: 13px; }
   .project-actions { gap: 0; }
   .project-actions button { width: 42px; height: 44px; }
   .project-actions button:disabled { display: none; }
@@ -1494,7 +1470,6 @@ button:disabled { cursor: default; opacity: 0.52; }
   .brand-mark { width: 78px; height: 36px; }
   .apu-logo--horizontal { height: 36px; }
   .brand { gap: 7px; }
-  .personality-trigger { min-width: 68px; height: 25px; }
   .conversation-diagnostics { min-width: 0; width: 100%; gap: 2px; }
   .model-row { gap: 4px; }
   .model-select-wrap select { width: 116px; }

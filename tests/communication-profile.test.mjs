@@ -35,14 +35,14 @@ test("profiles change delivery but preserve the shared APU judgment", () => {
   }
 });
 
-test("the selected profile is visible in the header and sent to the server", () => {
-  assert.match(client, /className="personality-trigger"/);
-  assert.match(client, /id="personality-menu-options"/);
-  assert.match(client, /role="menuitemradio"/);
+test("the selected profile remains available in developer settings and is sent to the server", () => {
+  assert.match(client, /id="drawer-profile-select"/);
+  assert.match(client, /setCommunicationProfile/);
+  assert.doesNotMatch(client, /className="personality-trigger"/);
   assert.match(client, /communicationProfile,/);
   assert.match(chatRoute, /isCommunicationProfile\(communicationProfile\)/);
   assert.match(chatRoute, /communicationProfileInstruction\(communicationProfile\)/);
-  assert.match(styles, /\.personality-menu-options/);
+  assert.doesNotMatch(styles, /\.personality-menu-options/);
   assert.doesNotMatch(styles, /\.personality-select-wrap::after/);
 });
 

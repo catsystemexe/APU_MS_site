@@ -22,6 +22,7 @@ import {
   Settings,
   Save,
   Square,
+  TriangleAlert,
   UserRound,
   X,
   FileText,
@@ -218,14 +219,18 @@ function HighlightedMessage({
   return parts;
 }
 
-export default function ApuClient({ isDeveloper }: { isDeveloper: boolean }) {
+type ApuClientProps = {
+  email: string;
+  isDeveloper: boolean;
+};
+
+export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
   const [messages, setMessages] = useState<Message[]>([WELCOME]);
   const [input, setInput] = useState("");
   const [responseId, setResponseId] = useState<string | null>(null);
   const [phase, setPhase] = useState<ConversationPhase>("intake");
   const [selectedModel, setSelectedModel] = useState<ModelSelection>(AUTO_MODEL_SELECTION);
   const [communicationProfile, setCommunicationProfile] = useState<CommunicationProfileId>(DEFAULT_COMMUNICATION_PROFILE_ID);
-  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [failedInput, setFailedInput] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -255,8 +260,6 @@ export default function ApuClient({ isDeveloper }: { isDeveloper: boolean }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const statsRef = useRef<HTMLDivElement>(null);
   const statsButtonRef = useRef<HTMLButtonElement>(null);
-  const profileMenuRef = useRef<HTMLDivElement>(null);
-  const profileButtonRef = useRef<HTMLButtonElement>(null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const speechSegmentsRef = useRef<SpeechTranscriptSegment[]>([]);
   const dictationSessionRef = useRef(0);
@@ -287,7 +290,6 @@ export default function ApuClient({ isDeveloper }: { isDeveloper: boolean }) {
   );
   const hasUnreadAnalysisChange = unseenAnalysisKeys.size > 0;
   const costTooltip = summary.estimatedCostUsd === null ? UNKNOWN_COST_TOOLTIP : COST_TOOLTIP;
-  const activeCommunicationProfile = COMMUNICATION_PROFILES[communicationProfile];
   const inputPlaceholder = activePanel ? INPUT_PLACEHOLDERS[activePanel] : "Popište situaci…";
   const activeDialogMessageId = useMemo(
     () => [...messages].reverse().find((message) => message.role === "assistant" && message.dialogActions?.length)?.id,
@@ -318,25 +320,6 @@ export default function ApuClient({ isDeveloper }: { isDeveloper: boolean }) {
       document.removeEventListener("keydown", closeWithEscape);
     };
   }, [isStatsOpen]);
-
-  useEffect(() => {
-    if (!isProfileMenuOpen) return;
-    const closeOutside = (event: PointerEvent) => {
-      if (!profileMenuRef.current?.contains(event.target as Node)) setIsProfileMenuOpen(false);
-    };
-    const closeWithEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setIsProfileMenuOpen(false);
-        profileButtonRef.current?.focus();
-      }
-    };
-    document.addEventListener("pointerdown", closeOutside);
-    document.addEventListener("keydown", closeWithEscape);
-    return () => {
-      document.removeEventListener("pointerdown", closeOutside);
-      document.removeEventListener("keydown", closeWithEscape);
-    };
-  }, [isProfileMenuOpen]);
 
   useEffect(() => {
     const textarea = textareaRef.current;
@@ -1178,41 +1161,13 @@ export default function ApuClient({ isDeveloper }: { isDeveloper: boolean }) {
             <span className="brand-mark" aria-hidden="true">
               <ApuLogo variant="horizontal" />
             </span>
-            <div className="personality-menu" ref={profileMenuRef}>
-              <button
-                ref={profileButtonRef}
-                className="personality-trigger"
-                type="button"
-                disabled={isLoading}
-                aria-haspopup="menu"
-                aria-expanded={isProfileMenuOpen}
-                aria-controls="personality-menu-options"
-                onClick={() => setIsProfileMenuOpen((open) => !open)}
-                title="Komunikační profil pro další odpověď"
-              >
-                {activeCommunicationProfile.label}
-              </button>
-              {isProfileMenuOpen && (
-                <div id="personality-menu-options" className="personality-menu-options" role="menu" aria-label="Komunikační profil APU">
-                  {COMMUNICATION_PROFILE_OPTIONS.map((profile) => (
-                    <button
-                      key={profile.id}
-                      type="button"
-                      role="menuitemradio"
-                      aria-checked={profile.id === communicationProfile}
-                      className={profile.id === communicationProfile ? "is-active" : ""}
-                      onClick={() => {
-                        setCommunicationProfile(profile.id);
-                        setIsProfileMenuOpen(false);
-                        profileButtonRef.current?.focus();
-                      }}
-                    >
-                      {profile.label}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+            <span className="account-email" title={email}>{email}</span>
+            {isDeveloper && (
+              <span className="developer-indicator" title="Developer režim je aktivní">
+                <span>DEV ON</span>
+                <TriangleAlert aria-hidden="true" />
+              </span>
+            )}
             <h1 className="sr-only">APU — Asistent pedagogické podpory</h1>
           </div>
 
