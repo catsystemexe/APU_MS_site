@@ -29,7 +29,14 @@ type AccessFailureReason =
   | "jwk_not_found"
   | "signature_invalid"
   | "validation_error";
-type ValidationResult<T> = { ok: true; value: T } | { ok: false; reason: AccessFailureReason };
+type ValidationResult<T> =
+  | { ok: true; value: T }
+  | {
+      ok: false;
+      reason: AccessFailureReason;
+      expectedIssuerHost?: string;
+      actualIssuerHost?: string;
+    };
 
 const ACCESS_JWT_HEADER = "cf-access-jwt-assertion";
 const LOCAL_IDENTITY: AccessIdentity = {
@@ -94,7 +101,14 @@ async function accessJwks(issuer: string): Promise<JsonWebKey[]> {
 
 function validateClaims(claims: AccessClaims, config: AccessConfig): ValidationResult<string> {
   const now = Math.floor(Date.now() / 1000);
-  if (claims.iss !== config.issuer) return { ok: false, reason: "issuer_mismatch" };
+  if (claims.iss !== config.issuer) {
+    return {
+      ok: false,
+      reason: "issuer_mismatch",
+      expectedIssuerHost: issuerHostname(config.issuer),
+      actualIssuerHost: issuerHostname(claims.iss),
+    };
+  }
   const audiences = Array.isArray(claims.aud) ? claims.aud : [claims.aud];
   if (!audiences.includes(config.audience)) return { ok: false, reason: "audience_mismatch" };
   if (typeof claims.email !== "string" || !normalizeEmail(claims.email)) {
@@ -108,6 +122,15 @@ function validateClaims(claims: AccessClaims, config: AccessConfig): ValidationR
     return { ok: false, reason: "invalid_iat" };
   }
   return { ok: true, value: normalizeEmail(claims.email) };
+}
+
+function issuerHostname(issuer: unknown): string {
+  if (typeof issuer !== "string") return "invalid";
+  try {
+    return new URL(issuer).hostname || "invalid";
+  } catch {
+    return "invalid";
+  }
 }
 
 async function validateAccessJwt(token: string, config: AccessConfig): Promise<ValidationResult<string>> {
@@ -149,8 +172,17 @@ async function validateAccessJwt(token: string, config: AccessConfig): Promise<V
   }
 }
 
-function logAccessFailure(reason: AccessFailureReason, missing?: string[]): void {
-  const suffix = reason === "missing_config" && missing?.length ? ` missing=${missing.join(",")}` : "";
+function logAccessFailure(
+  reason: AccessFailureReason,
+  options: { missing?: string[]; expectedIssuerHost?: string; actualIssuerHost?: string } = {},
+): void {
+  let suffix = reason === "missing_config" && options.missing?.length
+    ? ` missing=${options.missing.join(",")}`
+    : "";
+  if (reason === "issuer_mismatch") {
+    suffix = ` expected_issuer_host=${options.expectedIssuerHost ?? "invalid"}`
+      + ` actual_issuer_host=${options.actualIssuerHost ?? "invalid"}`;
+  }
   console.warn(`[access-auth] validation_failed reason=${reason}${suffix}`);
 }
 
@@ -160,7 +192,7 @@ export async function getAccessIdentity(requestHeaders: Headers): Promise<Access
   }
   const configResult = accessConfig();
   if (!configResult.ok) {
-    logAccessFailure(configResult.reason, configResult.missing);
+    logAccessFailure(configResult.reason, { missing: configResult.missing });
     return null;
   }
   const token = requestHeaders.get(ACCESS_JWT_HEADER);
@@ -170,7 +202,7 @@ export async function getAccessIdentity(requestHeaders: Headers): Promise<Access
   }
   const result = await validateAccessJwt(token, configResult.value);
   if (!result.ok) {
-    logAccessFailure(result.reason);
+    logAccessFailure(result.reason, result);
     return null;
   }
   return {

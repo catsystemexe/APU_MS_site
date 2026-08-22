@@ -108,7 +108,15 @@ test("Access validation reports safe, specific failures and preserves successful
     });
     await t.test("issuer_mismatch", async () => {
       configure();
-      await expectFailure(unsignedJwt(claims({ iss: "https://other.example.com" })), "issuer_mismatch");
+      const token = unsignedJwt(claims({
+        iss: "https://other.example.com/private/path?aud=secret-audience&email=secret@example.com",
+      }));
+      assert.equal(await getAccessIdentity(new Headers({ "cf-access-jwt-assertion": token })), null);
+      assert.deepEqual(logs, [
+        "[access-auth] validation_failed reason=issuer_mismatch"
+          + " expected_issuer_host=access.example.com actual_issuer_host=other.example.com",
+      ]);
+      assert.doesNotMatch(logs[0], /private|secret|JWT|signature|claims|audience|@/i);
     });
     await t.test("audience_mismatch", async () => {
       configure();
