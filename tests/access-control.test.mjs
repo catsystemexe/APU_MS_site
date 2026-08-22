@@ -23,7 +23,7 @@ test("the verified Access email and developer role are passed into the header", 
   assert.match(page, /email=\{identity\.email\}/);
   assert.match(page, /isDeveloper=\{identity\.role === "developer"\}/);
   assert.match(client, /className="account-email"[^>]*>\{email\}/);
-  assert.match(client, /\{isDeveloper && <DeveloperHeaderControls \/>\}/);
+  assert.match(client, /\{isDeveloper && <DeveloperHeaderControls/);
   assert.match(client, /className="developer-indicator"[^>]*>DEV ON<\/span>/);
   assert.match(client, /className="developer-log-toggle"[\s\S]*?<TriangleAlert/);
   assert.doesNotMatch(client, /className="personality-trigger"/);

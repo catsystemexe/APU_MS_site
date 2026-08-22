@@ -76,6 +76,8 @@ import { splitAssistantMetadata, type DebugMapping } from "./response-metadata";
 import { createProjectResetState, shouldResetCurrentProject } from "./project-session";
 import { analysisChangeKeys, EMPTY_ANALYSIS, formatAnalysisChat, preserveAnalysisSelection, type AnalysisNextPrompt, type AnalysisState, type SuggestedNeed } from "./analysis-model";
 import { ProcessingStatus, type F1ProcessingStage } from "./processing-status";
+import { DevLogPanel } from "./dev-log-panel";
+import type { SharedFeedbackResult } from "./shared-feedback";
 
 type SpeechRecognitionEventLike = {
   resultIndex: number;
@@ -222,17 +224,21 @@ function HighlightedMessage({
 type ApuClientProps = {
   email: string;
   isDeveloper: boolean;
+  sharedFeedback: SharedFeedbackResult | null;
 };
 
-function DeveloperHeaderControls() {
+function DeveloperHeaderControls({ open, onToggle }: { open: boolean; onToggle: () => void }) {
   return (
     <span className="developer-controls">
       <span className="developer-indicator" title="Developer režim je aktivní">DEV ON</span>
       <button
         type="button"
         className="developer-log-toggle"
-        aria-label="Developer log"
-        title="Developer log"
+        aria-label={open ? "Skrýt DEV LOG" : "Zobrazit DEV LOG"}
+        aria-expanded={open}
+        aria-controls="dev-log-panel"
+        title={open ? "Skrýt DEV LOG" : "Zobrazit DEV LOG"}
+        onClick={onToggle}
       >
         <TriangleAlert aria-hidden="true" />
       </button>
@@ -240,7 +246,7 @@ function DeveloperHeaderControls() {
   );
 }
 
-export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
+export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuClientProps) {
   const [messages, setMessages] = useState<Message[]>([WELCOME]);
   const [input, setInput] = useState("");
   const [responseId, setResponseId] = useState<string | null>(null);
@@ -252,6 +258,7 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
   const [error, setError] = useState<string | null>(null);
   const [isStatsOpen, setIsStatsOpen] = useState(false);
   const [isDiagnosticsDrawerOpen, setIsDiagnosticsDrawerOpen] = useState(false);
+  const [isDevLogOpen, setIsDevLogOpen] = useState(false);
   const [activePanel, setActivePanel] = useState<WorkspacePanelId>("notepad");
   const [analysis, setAnalysis] = useState<AnalysisState>(EMPTY_ANALYSIS);
   const [analysisStatus, setAnalysisStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
@@ -1178,7 +1185,7 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
               <ApuLogo variant="horizontal" />
             </span>
             <span className="account-email" title={email}>{email}</span>
-            {isDeveloper && <DeveloperHeaderControls />}
+            {isDeveloper && <DeveloperHeaderControls open={isDevLogOpen} onToggle={() => setIsDevLogOpen((value) => !value)} />}
             <h1 className="sr-only">APU — Asistent pedagogické podpory</h1>
           </div>
 
@@ -1639,6 +1646,7 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
           ))}
         </nav>
       </section>
+      {isDeveloper && isDevLogOpen && sharedFeedback && <DevLogPanel result={sharedFeedback} onClose={() => setIsDevLogOpen(false)} />}
     </main>
   );
 }

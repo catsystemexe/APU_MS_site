@@ -1,6 +1,7 @@
 import ApuClient from "./apu-client";
 import ApuLogo from "./apu-logo";
 import { getCurrentAccessIdentity } from "./access-auth";
+import { loadSharedFeedback } from "./shared-feedback-data";
 
 export const dynamic = "force-dynamic";
 
@@ -19,5 +20,6 @@ export default async function Home() {
     );
   }
 
-  return <ApuClient email={identity.email} isDeveloper={identity.role === "developer"} />;
+  const isDeveloper = identity.role === "developer";
+  return <ApuClient email={identity.email} isDeveloper={identity.role === "developer"} sharedFeedback={isDeveloper ? loadSharedFeedback() : null} />;
 }
