@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { parseSharedFeedback, SHARED_FEEDBACK_STATUS_LABELS, sortSharedFeedback } from "../app/shared-feedback.ts";
+import { canTransitionDevLogStatus, parseSharedFeedback, SHARED_FEEDBACK_STATUS_LABELS, sortSharedFeedback } from "../app/shared-feedback.ts";
 
 const item = (overrides = {}) => ({ id: "sf-1", type: "bug", title: "Title", status: "new", createdAt: "2026-08-22T00:00:00Z", source: "APU Shared", summary: "Summary", details: [{ label: "Problem", text: "Text" }], note: "", ...overrides });
 
@@ -35,11 +35,23 @@ test("DEV LOG trigger and payload remain developer-only", async () => {
   assert.match(client, /aria-controls="dev-log-panel"/);
 });
 
-test("accordion items default closed and toggle independently", async () => {
+test("DEV LOG uses three typed columns and keeps detail toggles separate from status controls", async () => {
   const panel = await readFile(new URL("../app/dev-log-panel.tsx", import.meta.url), "utf8");
-  assert.match(panel, /useState\(false\)/);
+  assert.match(panel, /DEV_LOG_TYPES\.map/);
+  assert.match(panel, /visibleItems\.filter\(\(item\) => item\.type === type\)/);
+  assert.match(panel, /className="dev-log-statuses"/);
+  assert.match(panel, /onClick=\{\(\) => onStatusChange\(status\)\}/);
   assert.match(panel, /setOpen\(\(value\) => !value\)/);
-  assert.match(panel, /aria-expanded=\{open\}/);
-  assert.match(panel, /\{open && <div className="dev-log-item-content"/);
   assert.match(panel, /item\.details\.map/);
+  assert.doesNotMatch(panel, /<dt>Typ|<dt>Zdroj|<dt>Stav|<dt>Vytvořeno/);
+});
+
+test("DEV LOG permits only the requested status transitions", () => {
+  assert.equal(canTransitionDevLogStatus("new", "in_progress"), true);
+  assert.equal(canTransitionDevLogStatus("new", "done"), true);
+  assert.equal(canTransitionDevLogStatus("in_progress", "new"), true);
+  assert.equal(canTransitionDevLogStatus("in_progress", "done"), true);
+  assert.equal(canTransitionDevLogStatus("done", "in_progress"), true);
+  assert.equal(canTransitionDevLogStatus("done", "new"), false);
+  assert.equal(canTransitionDevLogStatus("discuss", "new"), false);
 });

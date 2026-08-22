@@ -7,6 +7,11 @@ export type SharedFeedbackItem = { id: string; type: SharedFeedbackType; title: 
 export type SharedFeedbackData = { version: 1; items: SharedFeedbackItem[] };
 export type SharedFeedbackResult = { data: SharedFeedbackData | null; error: string | null };
 
+export const DEV_LOG_TYPES = ["bug", "improvement", "discussion"] as const;
+export const DEV_LOG_STATUSES = ["new", "in_progress", "done"] as const;
+export type DevLogType = (typeof DEV_LOG_TYPES)[number];
+export type DevLogStatus = (typeof DEV_LOG_STATUSES)[number];
+
 export const SHARED_FEEDBACK_STATUS_LABELS: Record<SharedFeedbackStatus, string> = { new: "NOVÉ", in_progress: "ŘEŠÍME", discuss: "PROBRAT", done: "HOTOVO", rejected: "ZAMÍTNUTO" };
 const STATUS_ORDER: Record<SharedFeedbackStatus, number> = { new: 0, in_progress: 1, discuss: 2, done: 4, rejected: 5 };
 function isRecord(value: unknown): value is Record<string, unknown> { return typeof value === "object" && value !== null && !Array.isArray(value); }
@@ -28,4 +33,12 @@ export function parseSharedFeedback(value: unknown): SharedFeedbackResult {
 }
 export function sortSharedFeedback(items: SharedFeedbackItem[]) {
   return [...items].sort((left, right) => STATUS_ORDER[left.status] - STATUS_ORDER[right.status] || Date.parse(right.createdAt) - Date.parse(left.createdAt));
+}
+
+export function canTransitionDevLogStatus(from: SharedFeedbackStatus, to: DevLogStatus) {
+  if (from === to) return true;
+  if (from === "new") return to === "in_progress" || to === "done";
+  if (from === "in_progress") return to === "new" || to === "done";
+  if (from === "done") return to === "in_progress";
+  return false;
 }
