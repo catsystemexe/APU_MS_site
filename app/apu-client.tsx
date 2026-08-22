@@ -224,6 +224,22 @@ type ApuClientProps = {
   isDeveloper: boolean;
 };
 
+function DeveloperHeaderControls() {
+  return (
+    <span className="developer-controls">
+      <span className="developer-indicator" title="Developer režim je aktivní">DEV ON</span>
+      <button
+        type="button"
+        className="developer-log-toggle"
+        aria-label="Developer log"
+        title="Developer log"
+      >
+        <TriangleAlert aria-hidden="true" />
+      </button>
+    </span>
+  );
+}
+
 export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
   const [messages, setMessages] = useState<Message[]>([WELCOME]);
   const [input, setInput] = useState("");
@@ -1162,12 +1178,7 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
               <ApuLogo variant="horizontal" />
             </span>
             <span className="account-email" title={email}>{email}</span>
-            {isDeveloper && (
-              <span className="developer-indicator" title="Developer režim je aktivní">
-                <span>DEV ON</span>
-                <TriangleAlert aria-hidden="true" />
-              </span>
-            )}
+            {isDeveloper && <DeveloperHeaderControls />}
             <h1 className="sr-only">APU — Asistent pedagogické podpory</h1>
           </div>
 

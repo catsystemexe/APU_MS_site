@@ -11,8 +11,10 @@ A standalone Cloudflare Worker application built with Next.js App Router,
 ## Standalone Cloudflare lifecycle
 
 `npm run build` produces the Worker server artifact under `dist/server` and
-static assets under `dist/client`. `wrangler.jsonc` describes the deployable
-Worker, but repository verification does not deploy it.
+static assets under `dist/client`. `npm run deploy` is the canonical production
+code-deploy command for `next`: it builds first and then runs `wrangler deploy`
+with the checked-in configuration and `--keep-vars`. Repository verification
+uses only a dry run and does not deploy the Worker.
 
 Cloudflare Access is the intended authentication gate for the complete Worker.
 The application independently validates `Cf-Access-Jwt-Assertion` on every
@@ -24,15 +26,28 @@ Scripts that need writable project-scoped home, npm, XDG, and temporary paths us
 
 ## Runtime configuration
 
-- `OPENAI_API_KEY`: server-only OpenAI credential
-- `APU_VECTOR_STORE_ID`: server-only vector store identifier
-- `CF_ACCESS_TEAM_DOMAIN`: Access team domain, with or without `https://`
-- `CF_ACCESS_AUD`: Access application audience
-- `APU_DEVELOPER_EMAILS`: comma-separated developer email allowlist
+- `OPENAI_API_KEY`: Cloudflare-managed secret; server-only OpenAI credential
+- `APU_VECTOR_STORE_ID`: Cloudflare-managed secret; server-only vector store identifier
+- `CF_ACCESS_TEAM_DOMAIN`: Cloudflare-managed plain-text variable; Access team domain, with or without `https://`
+- `CF_ACCESS_AUD`: Cloudflare-managed plain-text variable; Access application audience
+- `APU_DEVELOPER_EMAILS`: Cloudflare-managed plain-text variable; comma-separated developer email allowlist
 - `GOOGLE_DRIVE_CLIENT_ID`: optional public Google OAuth client identifier
 
-Do not commit runtime values. Configure them as Worker secrets or variables in
-Cloudflare. Missing Access issuer/audience configuration fails closed.
+Do not commit runtime values. Configure the two credentials with `wrangler
+secret put` (or the Cloudflare dashboard) and configure the three Access values
+as variables on the actively deployed Worker once. They deliberately are not
+duplicated in `wrangler.jsonc`: `keep_vars` in both the configuration and the
+canonical deploy command carries the dashboard-owned values into each new code
+version. Missing Access issuer/audience configuration fails closed.
+
+Previously, a code upload that did not preserve variables could create and
+activate a Worker version without the Access values. Re-adding values in the
+dashboard afterward created another version, which still needed a separate
+deployment before it became active. The canonical command now performs an
+immediate code deployment while retaining the variables and secrets already on
+the active Worker, so repeated deploys do not require a post-deploy dashboard
+edit or manual version activation. Cloudflare remains the single owner of all
+runtime values; the repository owns only the deployment policy.
 
 For explicit local development only, `npm run dev:local` sets
 `APU_LOCAL_DEV_AUTH=1`. The bypass is also restricted to
@@ -55,6 +70,7 @@ workers.dev and preview URLs cannot bypass Access.
 - `npm run install:ci`: perform the one bounded lockfile install
 - `npm run dev`: start the Vite/Vinext development server
 - `npm run build`: build and validate the deployable standalone Worker artifact
+- `npm run deploy`: build and deploy code while retaining Cloudflare-managed runtime values
 - `npm run start`: start the built Vinext application
 - `npm test`: build, validate, and verify the rendered development-preview metadata
 - `npm run validate:artifact`: recheck an existing Worker's ESM `default.fetch` export

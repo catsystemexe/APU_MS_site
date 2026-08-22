@@ -157,22 +157,36 @@ button:disabled { cursor: default; opacity: 0.52; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.developer-indicator {
+.developer-controls {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   flex: none;
-  padding: 5px 7px;
-  border: 1px solid #e6a817;
-  border-radius: 7px;
-  background: #fff5d6;
+  margin-left: 8px;
+}
+.developer-indicator {
   color: #7a4c00;
   font-size: 10px;
   font-weight: 800;
   letter-spacing: .04em;
   line-height: 1;
 }
-.developer-indicator svg { width: 15px; height: 15px; stroke-width: 2.4; }
+.developer-log-toggle {
+  width: 28px;
+  height: 28px;
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #7a4c00;
+  cursor: pointer;
+}
+.developer-log-toggle:hover { background: color-mix(in srgb, #e6a817 12%, transparent); }
+.developer-log-toggle:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.developer-log-toggle svg { width: 15px; height: 15px; stroke-width: 2.4; }
 
 .conversation-diagnostics {
   position: relative;
@@ -1353,8 +1367,10 @@ button:disabled { cursor: default; opacity: 0.52; }
   .apu-logo--horizontal { height: 36px; }
   .brand { gap: 7px; }
   .account-email { font-size: 10px; }
-  .developer-indicator { padding: 4px 5px; font-size: 9px; }
-  .developer-indicator svg { width: 13px; height: 13px; }
+  .developer-controls { gap: 3px; margin-left: 3px; }
+  .developer-indicator { font-size: 9px; }
+  .developer-log-toggle { width: 24px; height: 24px; }
+  .developer-log-toggle svg { width: 13px; height: 13px; }
   .project-actions { gap: 0; }
   .project-actions button { width: 42px; height: 44px; }
   .project-actions button:disabled { display: none; }
