@@ -2,6 +2,8 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "apu-ms-site",
   "main": "./worker/index.ts",
+  // Preserve dashboard-managed runtime variables and secrets on every code deploy.
+  // Access variables are configured once in Cloudflare; credentials never belong here.
   "keep_vars": true,
   "compatibility_date": "2026-08-21",
   "compatibility_flags": ["nodejs_compat"],
