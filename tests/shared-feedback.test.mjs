@@ -28,7 +28,7 @@ test("status labels use the specified Czech mapping", () => {
 
 test("DEV LOG trigger and payload remain developer-only", async () => {
   const [page, client] = await Promise.all([readFile(new URL("../app/page.tsx", import.meta.url), "utf8"), readFile(new URL("../app/apu-client.tsx", import.meta.url), "utf8")]);
-  assert.match(page, /sharedFeedback=\{isDeveloper \? loadSharedFeedback\(\) : null\}/);
+  assert.match(page, /sharedFeedback=\{isDeveloper \? loadDevLog\(\) : null\}/);
   assert.match(client, /\{isDeveloper && <DeveloperHeaderControls/);
   assert.match(client, /isDeveloper && isDevLogOpen && sharedFeedback/);
   assert.match(client, /aria-expanded=\{open\}/);
@@ -54,4 +54,39 @@ test("DEV LOG permits only the requested status transitions", () => {
   assert.equal(canTransitionDevLogStatus("done", "in_progress"), true);
   assert.equal(canTransitionDevLogStatus("done", "new"), false);
   assert.equal(canTransitionDevLogStatus("discuss", "new"), false);
+});
+
+test("DEV LOG repository entries satisfy V1 parsing and mapping", async () => {
+  const { DEV_LOG_SECTION_LABELS, DEV_LOG_SOURCE_TYPES, loadDevLogEntries, parseDevLogEntry, toDevLogUiItem } = await import("../app/dev-log.ts");
+  const directory = new URL("../data/dev-log/entries/", import.meta.url);
+  const { readdir } = await import("node:fs/promises");
+  const filenames = (await readdir(directory)).filter((name) => name.endsWith(".md"));
+  const files = Object.fromEntries(await Promise.all(filenames.map(async (name) => [name, await readFile(new URL(name, directory), "utf8")])));
+  const warnings = [];
+  const result = loadDevLogEntries(files, (warning) => warnings.push(warning));
+  assert.equal(warnings.length, 0);
+  assert.equal(result.data?.items.length, 11);
+  assert.equal(new Set(result.data?.items.map(({ id }) => id)).size, 11);
+  for (const markdown of Object.values(files)) {
+    const parsed = parseDevLogEntry(markdown);
+    assert.equal(parsed.error, null);
+    assert.deepEqual(parsed.entry && Object.keys(parsed.entry.sections), [...DEV_LOG_SECTION_LABELS]);
+  }
+  const expectedTypes = { BUG: "bug", PRODUCT_CHANGE: "improvement", METHODOLOGY_CHANGE: "improvement", PRODUCT_PROPOSAL: "discussion", METHODOLOGY_PROPOSAL: "discussion", UNCERTAINTY: "discussion" };
+  const template = Object.values(files)[0];
+  for (const type of DEV_LOG_SOURCE_TYPES) {
+    const parsed = parseDevLogEntry(template.replace(/^type: .+$/m, `type: ${type}`).replace(/^id: .+$/m, `id: type-${type}`));
+    assert.equal(parsed.entry && toDevLogUiItem(parsed.entry).type, expectedTypes[type]);
+  }
+});
+
+test("DEV LOG loader skips malformed and duplicate entries with diagnostics", async () => {
+  const { loadDevLogEntries } = await import("../app/dev-log.ts");
+  const valid = await readFile(new URL("../data/dev-log/entries/DL-20260822-001.md", import.meta.url), "utf8");
+  const warnings = [];
+  const result = loadDevLogEntries({ "valid.md": valid, "invalid.md": "---\nschema: wrong\n---", "duplicate.md": valid }, (warning) => warnings.push(warning));
+  assert.equal(result.data?.items.length, 1);
+  assert.equal(warnings.length, 2);
+  assert.match(warnings.join("\n"), /invalid\.md.*schema/);
+  assert.match(warnings.join("\n"), /DL-20260822-001.*duplicitní ID/);
 });

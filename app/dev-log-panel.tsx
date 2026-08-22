@@ -25,7 +25,6 @@ function FeedbackItem({ item, onStatusChange }: { item: SharedFeedbackItem; onSt
       </div>
     </div>
     {open && <div className="dev-log-item-content" id={contentId}>
-      <section><h4>Shrnutí</h4><p>{item.summary}</p></section>
       {item.details.map((detail, index) => <section key={`${detail.label}-${index}`}><h4>{detail.label}</h4><p>{detail.text}</p></section>)}
       {item.note.trim() && <section className="dev-log-note"><h4>Poznámka</h4><p>{item.note}</p></section>}
     </div>}
