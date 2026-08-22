@@ -12,9 +12,12 @@ A standalone Cloudflare Worker application built with Next.js App Router,
 
 `npm run build` produces the Worker server artifact under `dist/server` and
 static assets under `dist/client`. `npm run deploy` is the canonical production
-code-deploy command for `next`: it builds first and then runs `wrangler deploy`
-with the checked-in configuration and `--keep-vars`. Repository verification
-uses only a dry run and does not deploy the Worker.
+code-deploy command for Cloudflare's deploy stage: it uploads the already-built
+`dist/server/index.js` entry with Wrangler bundling disabled and retains
+dashboard-managed values with `--keep-vars`. Configure Cloudflare with Build
+command `npm run build` and Deploy command `npm run deploy`; the deploy stage
+must receive the build stage's `dist` artifact. Repository verification uses
+only a dry run and does not deploy the Worker.
 
 Cloudflare Access is the intended authentication gate for the complete Worker.
 The application independently validates `Cf-Access-Jwt-Assertion` on every
@@ -82,7 +85,7 @@ workers.dev and preview URLs cannot bypass Access.
 - `npm run install:ci`: perform the one bounded lockfile install
 - `npm run dev`: start the Vite/Vinext development server
 - `npm run build`: build and validate the deployable standalone Worker artifact
-- `npm run deploy`: build and deploy code while retaining Cloudflare-managed runtime values
+- `npm run deploy`: deploy the existing verified build artifact without rebuilding, while retaining Cloudflare-managed runtime values
 - `npm run start`: start the built Vinext application
 - `npm test`: build, validate, and verify the rendered development-preview metadata
 - `npm run validate:artifact`: recheck an existing Worker's ESM `default.fetch` export
