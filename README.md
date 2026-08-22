@@ -53,6 +53,18 @@ For explicit local development only, `npm run dev:local` sets
 `APU_LOCAL_DEV_AUTH=1`. The bypass is also restricted to
 `NODE_ENV=development` and must not be configured in hosted environments.
 
+## Shared Feedback roadmap
+
+The developer-only DEV LOG reads the versioned Shared Feedback contract from
+`data/shared-feedback.json`. Version 1 is a read-only repository-backed layer
+outside the canonical Zápisník → Rozbor → Výstup workflow. Its records contain
+`id`, stable `type` and `status` enums, `title`, ISO `createdAt`, `source`,
+`summary`, an ordered array of generic `{ label, text }` details, and `note`.
+Runtime parsing fails safely inside the DEV LOG if the contract is invalid.
+
+Server-side persistence, status editing, and developer-note editing remain
+pending. Deployment and live verification of this batch are not authorized.
+
 ## Access roles
 
 `app/access-auth.ts` verifies the Access JWT signature against the team JWKS,
