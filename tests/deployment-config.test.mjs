@@ -12,9 +12,17 @@ test("production deploys preserve Cloudflare-managed variables and secrets", asy
   assert.match(wrangler, /"keep_vars"\s*:\s*true/);
   assert.match(wrangler, /"main"\s*:\s*"\.\/dist\/server\/index\.js"/);
   assert.match(wrangler, /"no_bundle"\s*:\s*true/);
+  assert.match(wrangler, /"find_additional_modules"\s*:\s*true/);
+  assert.match(wrangler, /"base_dir"\s*:\s*"\.\/dist\/server"/);
+  assert.match(wrangler, /"type"\s*:\s*"ESModule"/);
+  assert.match(wrangler, /"\*\*\/\*\.js"/);
+  assert.match(wrangler, /"\*\*\/\*\.mjs"/);
   assert.equal(generatedWrangler.keep_vars, true);
   assert.equal(generatedWrangler.main, "index.js");
   assert.equal(generatedWrangler.no_bundle, true);
+  assert.deepEqual(generatedWrangler.rules, [
+    { type: "ESModule", globs: ["**/*.js", "**/*.mjs"] },
+  ]);
   assert.match(packageJson.scripts.deploy, /wrangler deploy --config wrangler\.jsonc --keep-vars/);
   assert.doesNotMatch(packageJson.scripts.deploy, /npm run build/);
 

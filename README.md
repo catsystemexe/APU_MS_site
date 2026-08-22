@@ -13,9 +13,12 @@ A standalone Cloudflare Worker application built with Next.js App Router,
 `npm run build` produces the Worker server artifact under `dist/server` and
 static assets under `dist/client`. `npm run deploy` is the canonical production
 code-deploy command for Cloudflare's deploy stage: it uploads the already-built
-`dist/server/index.js` entry with Wrangler bundling disabled and retains
-dashboard-managed values with `--keep-vars`. Configure Cloudflare with Build
-command `npm run build` and Deploy command `npm run deploy`; the deploy stage
+`dist/server/index.js` entry and its complete generated JavaScript module graph
+(including nested SSR chunks) with Wrangler bundling disabled. Additional-module
+discovery is rooted at `dist/server`, so emitted relative import names remain
+unchanged, and dashboard-managed values are retained with `--keep-vars`.
+Configure Cloudflare with Build command `npm run build` and Deploy command
+`npm run deploy`; the deploy stage
 must receive the build stage's `dist` artifact. Repository verification uses
 only a dry run and does not deploy the Worker.
 
