@@ -259,6 +259,7 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
   const [isStatsOpen, setIsStatsOpen] = useState(false);
   const [isDiagnosticsDrawerOpen, setIsDiagnosticsDrawerOpen] = useState(false);
   const [isDevLogOpen, setIsDevLogOpen] = useState(false);
+  const [isDevLogRendered, setIsDevLogRendered] = useState(false);
   const [activePanel, setActivePanel] = useState<WorkspacePanelId>("notepad");
   const [analysis, setAnalysis] = useState<AnalysisState>(EMPTY_ANALYSIS);
   const [analysisStatus, setAnalysisStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
@@ -302,6 +303,12 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
   const f1ProcessingSequenceRef = useRef<{ assistantId: string; complete: boolean } | null>(null);
   const f1MainPreparingRef = useRef<string | null>(null);
   const [isComposerExpanded, setIsComposerExpanded] = useState(false);
+
+  useEffect(() => {
+    if (isDevLogOpen) { setIsDevLogRendered(true); return; }
+    const timer = window.setTimeout(() => setIsDevLogRendered(false), 240);
+    return () => window.clearTimeout(timer);
+  }, [isDevLogOpen]);
 
   const summary = useMemo(
     () => summarizeDiagnostics(messages.flatMap((message) => [message.diagnostics, message.controllerDiagnostics, message.extractionDiagnostics])),
@@ -1178,7 +1185,7 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
 
   return (
     <main className="app-shell">
-      <section className="chat-card" aria-label="Konverzace s APU">
+      <section className={`chat-card${isDevLogOpen ? " is-dev-log-open" : ""}`} aria-label="Konverzace s APU">
         <header className="app-header">
           <div className="brand">
             <span className="brand-mark" aria-hidden="true">
@@ -1645,8 +1652,8 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
             </button>
           ))}
         </nav>
+        {isDeveloper && isDevLogRendered && sharedFeedback && <DevLogPanel result={sharedFeedback} open={isDevLogOpen} onClose={() => setIsDevLogOpen(false)} />}
       </section>
-      {isDeveloper && isDevLogOpen && sharedFeedback && <DevLogPanel result={sharedFeedback} onClose={() => setIsDevLogOpen(false)} />}
     </main>
   );
 }

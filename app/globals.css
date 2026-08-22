@@ -233,6 +233,7 @@ button:disabled { cursor: default; opacity: 0.52; }
 .dev-log-error, .dev-log-empty { margin: 0; padding: 20px 8px; color: var(--text-secondary); font-size: 12px; }
 .dev-log-error { color: #a12a2a; }
 .dev-log-warning { max-width: 1320px; margin: 0 auto 12px; color: #8a5704; font-size: 11px; }
+.dev-log-mobile-category, .dev-log-rail { display: none; }
 
 @media (min-width: 641px) {
   .dev-log-overlay { padding: clamp(10px, 1.5vw, 20px); }
@@ -1361,6 +1362,7 @@ button:disabled { cursor: default; opacity: 0.52; }
 
 @media (prefers-reduced-motion: reduce) {
   .notepad-panel, .diagnostics-drawer { transition: none; }
+  .dev-log-panel { transition: none; }
   .composer-field { transition: none; }
   .dictation-waveform i { animation: none; height: 10px; }
 }
@@ -1404,6 +1406,70 @@ button:disabled { cursor: default; opacity: 0.52; }
 }
 
 @media (max-width: 767px), (min-width: 768px) and (orientation: portrait) {
+  .chat-card.is-dev-log-open .app-header { z-index: 102; pointer-events: none; }
+  .chat-card.is-dev-log-open .developer-log-toggle { pointer-events: auto; }
+  .chat-card.is-dev-log-open > :not(.app-header):not(.dev-log-overlay) { pointer-events: none; }
+  .dev-log-overlay {
+    top: 0;
+    z-index: 100;
+    padding: 0;
+    overflow: hidden;
+    background: transparent;
+    backdrop-filter: none;
+    pointer-events: none;
+  }
+  .dev-log-overlay.is-closed { display: block; }
+  .dev-log-panel {
+    width: 100%;
+    margin: 0;
+    padding-top: 58px;
+    grid-template-columns: minmax(0, 1fr) 48px;
+    grid-template-rows: auto minmax(0, 1fr);
+    border: 0;
+    border-radius: 0;
+    box-shadow: -16px 0 36px #0005;
+    transform: translateX(100%);
+    transition: transform 220ms ease-out;
+  }
+  .dev-log-overlay.is-open { pointer-events: auto; }
+  .dev-log-overlay.is-open .dev-log-panel { transform: translateX(0); }
+  .dev-log-header { grid-column: 1 / -1; min-height: 52px; padding: 7px 9px 7px 12px; }
+  .dev-log-header h2 { font-size: 18px; }
+  .dev-log-kicker, .dev-log-close { display: none; }
+  .dev-log-body { grid-column: 1; grid-row: 2; padding: 7px; overscroll-behavior: contain; }
+  .dev-log-columns { display: none; }
+  .dev-log-mobile-category { display: block; min-width: 0; }
+  .dev-log-column-header { min-height: 36px; margin-bottom: 6px; }
+  .dev-log-rail {
+    grid-column: 2;
+    grid-row: 2;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding-top: 7px;
+    border-left: 1px solid var(--border);
+    background: var(--bg-surface);
+  }
+  .dev-log-rail-button {
+    width: 44px;
+    height: 44px;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-right: 0;
+    border-left: 3px solid transparent;
+    border-radius: 11px 0 0 11px;
+    background: color-mix(in srgb, var(--bg-surface) 94%, transparent);
+    color: var(--text-secondary);
+  }
+  .dev-log-rail-button.is-active { border-left-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+  .dev-log-rail-button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+  .dev-log-rail-button svg { width: 19px; height: 19px; stroke-width: 1.8; }
+  .dev-log-item-row { grid-template-columns: minmax(0, 1fr); }
+  .dev-log-statuses { min-width: 0; justify-content: flex-start; flex-wrap: wrap; }
+  .dev-log-status { min-height: 25px; padding: 4px 6px; }
+  .dev-log-item-content { padding: 8px 10px 16px; }
   .app-header { grid-template-columns: minmax(0, 1fr) auto; gap: 10px; }
   .conversation-diagnostics { display: none; }
   .project-actions { grid-column: 2; grid-row: 1; }
@@ -1424,18 +1490,6 @@ button:disabled { cursor: default; opacity: 0.52; }
 }
 
 @media (max-width: 640px) {
-  .dev-log-overlay { padding: 0; }
-  .dev-log-panel { border: 0; border-radius: 0; }
-  .dev-log-header { min-height: 68px; padding: 10px 12px; gap: 10px; }
-  .dev-log-header h2 { font-size: 20px; }
-  .dev-log-count { font-size: 10px; }
-  .dev-log-body { padding: 10px; }
-  .dev-log-columns { grid-template-columns: 1fr; }
-  .dev-log-column { padding: 0; }
-  .dev-log-column + .dev-log-column { margin-top: 14px; border-left: 0; }
-  .dev-log-item-row { grid-template-columns: 1fr; }
-  .dev-log-statuses { justify-content: flex-start; }
-  .dev-log-item-content { padding: 7px 12px 20px; }
   .app-shell { padding: 0; place-items: stretch; }
   .chat-card { width: 100%; height: 100dvh; min-height: 0; border: 0; border-radius: 0; box-shadow: none; }
   .app-header {
