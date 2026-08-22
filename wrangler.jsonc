@@ -1,7 +1,11 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "apu-ms-site",
-  "main": "./worker/index.ts",
+  // Vinext builds and validates this standalone entry before deployment.
+  // Do not ask Wrangler to bundle the source entry again: its virtual modules
+  // exist only inside the Vinext/Vite build pipeline.
+  "main": "./dist/server/index.js",
+  "no_bundle": true,
   // Preserve dashboard-managed runtime variables and secrets on every code deploy.
   // Access variables are configured once in Cloudflare; credentials never belong here.
   "keep_vars": true,
