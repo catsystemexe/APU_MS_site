@@ -23,10 +23,18 @@ test("notebook and analysis lifecycle records use actual success branches", asyn
   assert.match(client, /chatUpdate\.kind === "entry"[\s\S]*?"Vytvořeny pracovní hypotézy"[\s\S]*?"Aktualizován Rozbor"/);
 });
 
-test("completed records render separately from transient assistant content and survive stream deltas", async () => {
+test("completed records render inside the assistant response between its header and content", async () => {
   const client = await readFile(new URL("../app/apu-client.tsx", import.meta.url), "utf8");
 
-  assert.match(client, /message\.lifecycleRecords\?\.map[\s\S]*?<CompletedLifecycleStatus/);
+  assert.match(client, /<div className="message-author">[\s\S]*?message-phase[\s\S]*?<\/div>[\s\S]*?message-lifecycle-records[\s\S]*?message\.lifecycleRecords\?\.map[\s\S]*?<CompletedLifecycleStatus[\s\S]*?<div className="message-content">/);
+  assert.match(client, /message\.phaseLabel\.replace\(\/\^\\\[\|\\\]\$\/g, ""\)/);
   assert.match(client, /if \(phase === "intake"\) clearF1ProcessingStatus\(\)[\s\S]*?content: snapshot\.visibleContent/);
   assert.doesNotMatch(client, /clearF1ProcessingStatus\([\s\S]{0,200}lifecycleRecords:\s*\[\]/);
+});
+
+test("multiple completed records use a compact uncarded stack", async () => {
+  const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+
+  assert.match(styles, /\.message-lifecycle-records\s*\{[\s\S]*?display:\s*grid;[\s\S]*?gap:\s*2px;/);
+  assert.match(styles, /\.lifecycle-record\s*\{[\s\S]*?margin:\s*0;/);
 });
