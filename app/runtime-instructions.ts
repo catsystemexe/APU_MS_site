@@ -68,9 +68,9 @@ export function dialogActionRuntimeInstruction(result: QuestControllerResult) {
 - Aktuální fáze: ${result.phase}.
 - UI po tvém textu samostatně zobrazí tyto dialogové bloky: ${JSON.stringify(actions)}.
 - Pokud dialog_actions existují, jsou jediným vlastníkem všech F1 interakcí MAIN, SIDE i NAV pro tento tah. Tyto bloky ani jejich volby nepřeváděj zpět do běžného textu.
-- Napiš pouze krátkou deklarativní reakci nebo shrnutí vstupu; běžný text odpovědi smí obsahovat jen vysvětlení nebo reakci v oznamovacích větách. Nesmí obsahovat otázku, otazník, výzvu k dalšímu kroku, emoji 💬, markdown ** ani jiné formátování určené k prezentaci otázky či navigace.
+- Napiš pouze krátkou deklarativní reakci nebo shrnutí vstupu; běžný text odpovědi smí obsahovat jen vysvětlení nebo reakci v oznamovacích větách. Nesmí převzít roli dialogového bloku formulováním další otázky, výzvy k dalšímu kroku ani jiným formátováním určeným k prezentaci otázky či navigace.
 - Neopakuj ani významově neparafrázuj žádnou otázku nebo volbu z dialogových bloků. NAV label je výhradně structured UI obsah: nikdy jej nevkládej do prose a nevytvářej vlastní NAV větu.
-- Toto pravidlo pro daný F1 tah výslovně přebíjí obecné Core instrukce o doplňujících otázkách, prefixu 💬 a zvýraznění; UI otázky i navigaci vykreslí samostatně.`;
+- UI otázky i navigaci vykreslí samostatně.`;
 }
 
 export function composeApuSiteInstructions(parts: {

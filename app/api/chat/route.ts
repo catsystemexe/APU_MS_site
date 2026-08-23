@@ -16,6 +16,7 @@ import {
 } from "../../communication-profile";
 import { cleanDialogActionQuestion, CONVERSATION_PHASES, fallbackQuestController, resolveDialogEvent, resolveTextDialogEvent, type ConversationPhase } from "../../dialog-action";
 import { canBypassQuestController, runQuestController } from "../../quest-controller";
+import { enforceStructuredF1Prose, isStructuredF1Turn } from "../../f1-response-contract";
 import type { DebugMapping } from "../../response-metadata";
 import { composeApuSiteInstructions } from "../../runtime-instructions";
 import {
@@ -329,10 +330,12 @@ export async function POST(request: Request) {
 
   const encoder = new TextEncoder();
   const decoder = new TextDecoder();
+  const bufferStructuredF1Prose = isStructuredF1Turn(controllerResult);
 
   const stream = new ReadableStream({
     async start(controller) {
       let buffer = "";
+      let bufferedMainProse = "";
       let firstDeltaAt: number | null = null;
 
       const emit = (event: unknown) => controller.enqueue(encoder.encode(JSON.stringify(event) + "\n"));
@@ -370,13 +373,17 @@ export async function POST(request: Request) {
         const event = JSON.parse(line.slice(6));
         if (event.type === "response.output_text.delta") {
           if (firstDeltaAt === null) firstDeltaAt = performance.now();
-          emit({ type: "delta", text: event.delta });
+          if (bufferStructuredF1Prose) bufferedMainProse += event.delta;
+          else emit({ type: "delta", text: event.delta });
         }
         if (event.type === "response.completed") {
           const response = event.response as CompletedResponse;
           const completedAt = performance.now();
           const diagnostics = buildDiagnostics(response, callId, execution);
           const fileSearchCalls = response.output?.filter((item) => item.type === "file_search_call").length ?? 0;
+          if (bufferStructuredF1Prose) {
+            emit({ type: "delta", text: enforceStructuredF1Prose(bufferedMainProse, controllerResult.dialog_actions) });
+          }
           emit({
             type: "done",
             responseId: response?.id,
