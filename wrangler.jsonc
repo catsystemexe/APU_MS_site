@@ -23,13 +23,12 @@
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
   "preview_urls": true,
-  // Replace both provisioning placeholders with namespace IDs returned by
-  // Cloudflare before deployment. Production and preview must remain isolated.
+  // Production and preview DEV LOG state must remain isolated.
   "kv_namespaces": [
     {
       "binding": "DEV_LOG_STATE",
-      "id": "DEV_LOG_STATE_PRODUCTION_NAMESPACE_ID",
-      "preview_id": "DEV_LOG_STATE_PREVIEW_NAMESPACE_ID"
+      "id": "4a24c791d31a4c0983170c921cb744aa",
+      "preview_id": "8dd4e8a10dc74086bbd746e733b3d8d8"
     }
   ],
   "observability": {

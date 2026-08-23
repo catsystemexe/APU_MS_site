@@ -25,9 +25,9 @@ test("production deploys preserve Cloudflare-managed variables and secrets", asy
   assert.match(packageJson.scripts.deploy, /wrangler deploy --config wrangler\.jsonc --keep-vars/);
   assert.doesNotMatch(packageJson.scripts.deploy, /npm run build/);
   assert.match(wrangler, /"binding"\s*:\s*"DEV_LOG_STATE"/);
-  assert.match(wrangler, /"id"\s*:\s*"DEV_LOG_STATE_PRODUCTION_NAMESPACE_ID"/);
-  assert.match(wrangler, /"preview_id"\s*:\s*"DEV_LOG_STATE_PREVIEW_NAMESPACE_ID"/);
-  assert.notEqual("DEV_LOG_STATE_PRODUCTION_NAMESPACE_ID", "DEV_LOG_STATE_PREVIEW_NAMESPACE_ID");
+  assert.match(wrangler, /"id"\s*:\s*"4a24c791d31a4c0983170c921cb744aa"/);
+  assert.match(wrangler, /"preview_id"\s*:\s*"8dd4e8a10dc74086bbd746e733b3d8d8"/);
+  assert.notEqual("4a24c791d31a4c0983170c921cb744aa", "8dd4e8a10dc74086bbd746e733b3d8d8");
 
   for (const runtimeValue of [
     "OPENAI_API_KEY",
