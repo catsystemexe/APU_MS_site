@@ -1,4 +1,5 @@
-import { Check, LoaderCircle, PencilLine } from "lucide-react";
+import { Check, LoaderCircle, NotebookPen, PencilLine, ScanSearch } from "lucide-react";
+import type { CompletedLifecycleRecord } from "./lifecycle-record";
 
 export const F1_PROCESSING_STAGES = [
   "processing_input",
@@ -28,4 +29,12 @@ export function ProcessingStatus({ stage }: { stage: F1ProcessingStage }) {
       <span>{content.label}</span>
     </div>
   );
+}
+
+export function CompletedLifecycleStatus({ record }: { record: CompletedLifecycleRecord }) {
+  const Icon = record.operation === "notebook" ? NotebookPen : ScanSearch;
+  return <div className="processing-status processing-status--completed lifecycle-record" role="status">
+    <Icon aria-hidden="true" />
+    <span>{record.label}</span>
+  </div>;
 }

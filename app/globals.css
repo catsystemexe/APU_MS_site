@@ -442,7 +442,8 @@ button:disabled { cursor: default; opacity: 0.52; }
   scrollbar-color: #c3cdc9 transparent;
 }
 
-.message { display: grid; gap: 6px; margin-bottom: 24px; }
+.message-turn { display: grid; gap: 6px; margin-bottom: 24px; }
+.message { display: grid; gap: 6px; }
 .message--user { justify-items: end; }
 .message-author { display: flex; align-items: center; gap: 7px; padding: 0 1px; }
 .message-avatar-logo { width: 27px; height: 27px; flex: none; }
@@ -692,6 +693,13 @@ button:disabled { cursor: default; opacity: 0.52; }
 .processing-status--processing svg { animation: processing-spin .9s linear infinite; }
 .processing-status--writing svg { animation: processing-write .72s ease-in-out infinite alternate; }
 .processing-status--completed svg { color: #2e9c63; }
+.lifecycle-record {
+  width: fit-content;
+  max-width: min(690px, 94%);
+  margin: 0 4px 2px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
 @keyframes processing-spin { to { transform: rotate(360deg); } }
 @keyframes processing-write { from { transform: translate(-1px, 1px) rotate(-5deg); } to { transform: translate(1px, -1px) rotate(3deg); } }
 
