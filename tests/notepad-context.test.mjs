@@ -13,11 +13,8 @@ test("chat context treats explicit extracted user information as canonical", () 
   assert.doesNotMatch(chatRoute, /uživatelem potvrzený pracovní kontext jedné řešené situace/);
 });
 
-test("chat validates and explains the active workspace layer without overriding message meaning", () => {
-  assert.match(chatRoute, /WORKSPACE_PANELS = \["notepad", "analysis", "output"\]/);
-  assert.match(chatRoute, /activeWorkspacePanel\?: unknown/);
+test("chat prompt is independent of the active workspace view", () => {
+  assert.doesNotMatch(chatRoute, /activeWorkspacePanel/);
   assert.match(chatRoute, /composeApuSiteInstructions/);
-  assert.match(runtimeInstructions, /Aktivní pracovní vrstva:/);
-  assert.match(runtimeInstructions, /Výslovný význam zprávy má vždy přednost/);
-  assert.match(runtimeInstructions, /Nový fakt nebo oprava faktu patří do Zápisníku/);
+  assert.doesNotMatch(runtimeInstructions, /Aktivní pracovní vrstva:|AKTIVNÍ PRACOVNÍ VRSTVA/);
 });

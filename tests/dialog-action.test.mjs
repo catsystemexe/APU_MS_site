@@ -110,12 +110,13 @@ test("structured F1 questions are clean and Main receives a prose-only boundary"
   assert.match(route, /dialog_actions: controllerRun\.result\.dialog_actions\.map\(cleanDialogActionQuestion\)/);
 });
 
-test("question policy is disabled outside intake and for Analysis or Output context", async () => {
+test("question policy follows phase rather than workspace view", async () => {
   assert.deepEqual(fallbackQuestController([], "development"), { phase: "development", transition_ready: false, intake_question_policy_applies: false, dialog_actions: [] });
   assert.deepEqual(fallbackQuestController([], "output"), { phase: "output", transition_ready: false, intake_question_policy_applies: false, dialog_actions: [] });
   assert.deepEqual(fallbackQuestController([], "intake", { askedTargets: [] }, false), { phase: "intake", transition_ready: false, intake_question_policy_applies: false, dialog_actions: [] });
   const route = await readFile(new URL("../app/api/chat/route.ts", import.meta.url), "utf8");
-  assert.match(route, /const applyIntakePolicy = phase === "intake" && activeWorkspacePanel !== "analysis" && activeWorkspacePanel !== "output"/);
+  assert.match(route, /const applyIntakePolicy = phase === "intake"/);
+  assert.doesNotMatch(route, /activeWorkspacePanel/);
 });
 
 test("controller output validation enforces priority order, independent SIDE, and target history", () => {

@@ -150,11 +150,7 @@ const COMMUNICATION_PROFILE_OPTIONS = Object.values(COMMUNICATION_PROFILES);
 const CZK_PER_USD = 21.5;
 const COST_TOOLTIP = "Přibližný přepočet podle usage dat API a nakonfigurovaných sazeb modelu při kurzu 1 USD = 21,5 Kč. Skutečná fakturace se může lišit.";
 const UNKNOWN_COST_TOOLTIP = "Cenová sazba použitého modelu není nakonfigurována; tokeny jsou zobrazeny bez odhadu ceny.";
-const INPUT_PLACEHOLDERS: Record<Exclude<WorkspacePanelId, null>, string> = {
-  notepad: "Doplňte Zápisník…",
-  analysis: "Upřesněte Rozbor…",
-  output: "Upravte Výstup…",
-};
+const INPUT_PLACEHOLDER = "Napište APU…";
 
 function createMessageId() {
   return globalThis.crypto?.randomUUID?.() ??
@@ -322,7 +318,6 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
   );
   const hasUnreadAnalysisChange = unseenAnalysisKeys.size > 0;
   const costTooltip = summary.estimatedCostUsd === null ? UNKNOWN_COST_TOOLTIP : COST_TOOLTIP;
-  const inputPlaceholder = activePanel ? INPUT_PLACEHOLDERS[activePanel] : "Popište situaci…";
   const activeDialogMessageId = useMemo(
     () => [...messages].reverse().find((message) => message.role === "assistant" && message.dialogActions?.length)?.id,
     [messages],
@@ -712,7 +707,6 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
         previousResponseId: responseId,
         model: selectedModel,
         communicationProfile,
-        activeWorkspacePanel: activePanel,
         selectedHypothesisId,
         activeNeedId,
         analysisContext: {
@@ -953,7 +947,7 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
         return;
       }
       await requestAssistant(rawText, assistantId, notepadForChat, userMessage.id, turnId, requestId, undefined, controllerFastPathEligible);
-      if (phase === "development" && activePanel === "analysis") {
+      if (phase === "development") {
         setAnalysisFocus({ text: rawText, nonce: Date.now() });
       }
     } catch (cause) {
@@ -1436,7 +1430,7 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
                 value={input}
                 onChange={(event) => handleInputChange(event.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder={inputPlaceholder}
+                placeholder={INPUT_PLACEHOLDER}
                 disabled={isLoading || !isNotepadHydrated}
               />
             )}
@@ -1454,12 +1448,6 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
               >
                 {isDictating ? <X aria-hidden="true" /> : <Plus aria-hidden="true" />}
               </button>
-              {activePanel && (
-                <span className="composer-workspace-indicator" title={`Aktivní kontext: ${activePanel === "notepad" ? "Zápisník" : activePanel === "analysis" ? "Rozbor" : "Výstup"}`}>
-                  {activePanel === "notepad" ? <NotebookPen aria-hidden="true" /> : activePanel === "analysis" ? <ScanSearch aria-hidden="true" /> : <FileText aria-hidden="true" />}
-                  <span className="sr-only">Aktivní kontext: {activePanel === "notepad" ? "Zápisník" : activePanel === "analysis" ? "Rozbor" : "Výstup"}</span>
-                </span>
-              )}
               {isDictating ? (
                 <div className="composer-listening" aria-live="polite">
                   <span className="dictation-waveform" role="status" aria-label="Diktování je aktivní">
@@ -1474,7 +1462,7 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
                   disabled={isLoading || !isNotepadHydrated}
                   aria-label="Napsat zprávu pro APU"
                 >
-                  {!isComposerExpanded && <span>{inputPlaceholder}</span>}
+                  {!isComposerExpanded && <span>{INPUT_PLACEHOLDER}</span>}
                 </button>
               )}
               <div className="composer-actions">
