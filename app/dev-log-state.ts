@@ -3,6 +3,7 @@ import type { AccessIdentity } from "./access-auth";
 
 export const DEV_LOG_STATE_VERSION = 1 as const;
 export const DEV_LOG_STATE_KEY_PREFIX = "devlog:";
+export const DEV_LOG_NOTE_MAX_LENGTH = 2000;
 
 export type DevLogStateNamespace = {
   get(key: string): Promise<string | null>;
@@ -53,9 +54,15 @@ export async function patchDevLogState(request: Request, identity: DeveloperIden
   if (!namespace) return persistenceError();
   let body: unknown;
   try { body = await request.json(); } catch { return response({ error: "Neplatný JSON request." }, 400); }
-  if (!body || typeof body !== "object" || Array.isArray(body) || Object.keys(body).some((key) => key !== "id" && key !== "status")) return response({ error: "Neplatný request." }, 400);
-  const { id, status } = body as { id?: unknown; status?: unknown };
-  if (typeof id !== "string" || typeof status !== "string" || !DEV_LOG_STATUSES.includes(status as DevLogStatus)) return response({ error: "Neplatné ID nebo status." }, 400);
+  if (!body || typeof body !== "object" || Array.isArray(body) || Object.keys(body).some((key) => key !== "id" && key !== "status" && key !== "note")) return response({ error: "Neplatný request." }, 400);
+  const { id, status, note } = body as { id?: unknown; status?: unknown; note?: unknown };
+  const hasStatus = Object.prototype.hasOwnProperty.call(body, "status");
+  const hasNote = Object.prototype.hasOwnProperty.call(body, "note");
+  if (typeof id !== "string" || (!hasStatus && !hasNote)) return response({ error: "Request neobsahuje žádnou změnu." }, 400);
+  if (hasStatus && (typeof status !== "string" || !DEV_LOG_STATUSES.includes(status as DevLogStatus))) return response({ error: "Neplatné ID nebo status." }, 400);
+  if (hasNote && typeof note !== "string") return response({ error: "Neplatná poznámka." }, 400);
+  const normalizedNote = typeof note === "string" ? note.trim() : undefined;
+  if (normalizedNote && normalizedNote.length > DEV_LOG_NOTE_MAX_LENGTH) return response({ error: `Poznámka může mít maximálně ${DEV_LOG_NOTE_MAX_LENGTH} znaků.` }, 400);
   const sourceItem = sourceItems.find((item) => item.id === id);
   if (!sourceItem) return response({ error: "DEV LOG položka neexistuje." }, 404);
 
@@ -67,8 +74,12 @@ export async function patchDevLogState(request: Request, identity: DeveloperIden
       try { currentOverride = parseDevLogStateOverride(JSON.parse(raw)); } catch { currentOverride = null; }
     }
     const currentStatus = currentOverride?.status ?? sourceItem.status;
-    if (!canTransitionDevLogStatus(currentStatus, status as DevLogStatus)) return response({ error: "Nepovolený přechod statusu." }, 409);
-    const stored: DevLogStateOverride = { status: status as DevLogStatus, note: currentOverride?.note ?? "", updatedAt: new Date().toISOString(), updatedBy: identity.email };
+    if (hasStatus && !canTransitionDevLogStatus(currentStatus, status as DevLogStatus)) return response({ error: "Nepovolený přechod statusu." }, 409);
+    const stored: DevLogStateOverride = {
+      status: hasStatus ? status as DevLogStatus : currentStatus as DevLogStatus,
+      note: hasNote ? normalizedNote ?? "" : currentOverride?.note ?? sourceItem.note,
+      updatedAt: new Date().toISOString(), updatedBy: identity.email,
+    };
     await namespace.put(key, JSON.stringify(stored));
     return response(stored);
   } catch {
