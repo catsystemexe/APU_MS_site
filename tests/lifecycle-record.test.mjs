@@ -26,10 +26,21 @@ test("notebook and analysis lifecycle records use actual success branches", asyn
 test("completed records render inside the assistant response between its header and content", async () => {
   const client = await readFile(new URL("../app/apu-client.tsx", import.meta.url), "utf8");
 
-  assert.match(client, /<div className="message-author">[\s\S]*?message-phase[\s\S]*?<\/div>[\s\S]*?message-lifecycle-records[\s\S]*?message\.lifecycleRecords\?\.map[\s\S]*?<CompletedLifecycleStatus[\s\S]*?<div className="message-content">/);
+  assert.match(client, /<div className="message-author">[\s\S]*?message-phase[\s\S]*?<\/div>[\s\S]*?message-lifecycle-records[\s\S]*?message\.lifecycleRecords\.map[\s\S]*?<CompletedLifecycleStatus[\s\S]*?<div className="message-content">/);
   assert.match(client, /message\.phaseLabel\.replace\(\/\^\\\[\|\\\]\$\/g, ""\)/);
   assert.match(client, /if \(phase === "intake"\) clearF1ProcessingStatus\(\)[\s\S]*?content: snapshot\.visibleContent/);
   assert.doesNotMatch(client, /clearF1ProcessingStatus\([\s\S]{0,200}lifecycleRecords:\s*\[\]/);
+});
+
+test("completed records survive the first main-content delta", () => {
+  const pending = withCompletedLifecycleRecord(
+    { id: "assistant-1", role: "assistant", content: "" },
+    notebookRecord,
+  );
+  const afterFirstDelta = { ...pending, content: "Rozumím" };
+
+  assert.deepEqual(afterFirstDelta.lifecycleRecords, [notebookRecord]);
+  assert.equal(afterFirstDelta.content, "Rozumím");
 });
 
 test("multiple completed records use a compact uncarded stack", async () => {
