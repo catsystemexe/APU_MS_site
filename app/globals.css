@@ -1306,16 +1306,6 @@ button:disabled { cursor: default; opacity: 0.52; }
 .tool-rail-notepad { top: calc(50% - 50px); transform: translateY(-50%); }
 .tool-rail-analysis { top: 50%; transform: translateY(-50%); }
 .tool-rail-output { top: calc(50% + 50px); transform: translateY(-50%); }
-.composer-workspace-indicator {
-  width: 24px;
-  height: 32px;
-  display: grid;
-  place-items: center;
-  flex: none;
-  color: var(--accent);
-  pointer-events: none;
-}
-.composer-workspace-indicator svg { width: 15px; height: 15px; stroke-width: 1.8; }
 .notepad-update-badge {
   position: absolute;
   z-index: 2;

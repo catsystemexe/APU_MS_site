@@ -1,5 +1,4 @@
 import type { ConversationPhase, QuestControllerResult } from "./dialog-action";
-import type { WorkspacePanel } from "./notepad";
 import {
   ACTIVE_APU_CORE_MANIFEST_PATH,
   ACTIVE_APU_CORE_RELEASE_ID,
@@ -29,12 +28,6 @@ export function phaseRuntimeInstruction(phase: ConversationPhase, useKnowledgeBa
   return `TECHNICKÉ NASTAVENÍ FÁZE
 - Aktuální fáze: ${phase}.
 - Podle relevance používej file_search nad připojenou APU Knowledge Base v1.1.`;
-}
-
-export function workspacePanelRuntimeInstruction(panel: WorkspacePanel) {
-  const label = panel === "notepad" ? "Zápisník" : panel === "analysis" ? "Rozbor" : panel === "output" ? "Výstup" : "žádná";
-  return `AKTIVNÍ PRACOVNÍ VRSTVA
-Aktivní pracovní vrstva: ${label}. Použij ji pouze jako výchozí kontext nejednoznačného požadavku. Výslovný význam zprávy má vždy přednost. Nový fakt nebo oprava faktu patří do Zápisníku; rozpracování či porovnání hypotéz do Rozboru; požadavek na formulaci výsledku do Výstupu. Aktivní vrstva sama nerozhoduje, kam se informace uloží.`;
 }
 
 export function analysisSelectionRuntimeInstruction(selection: {
@@ -85,7 +78,6 @@ export function composeApuSiteInstructions(parts: {
   phase: ConversationPhase;
   useKnowledgeBase: boolean;
   communicationProfile: string;
-  activePanel: WorkspacePanel;
   notebookContext: string;
   dialogAction: QuestControllerResult;
   selectedHypothesisId?: string | null;
@@ -105,7 +97,6 @@ export function composeApuSiteInstructions(parts: {
     APU_SITE_RUNTIME_WRAPPER,
     phaseRuntimeInstruction(parts.phase, parts.useKnowledgeBase),
     parts.communicationProfile,
-    workspacePanelRuntimeInstruction(parts.activePanel),
     analysisSelectionRuntimeInstruction(parts),
     parts.notebookContext,
     dialogActionRuntimeInstruction(parts.dialogAction),

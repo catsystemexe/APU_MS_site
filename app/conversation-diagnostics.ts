@@ -3,7 +3,7 @@ export type Diagnostics = {
   model: string;
   reasoning?: "low" | "medium";
   knowledgeBaseEnabled?: boolean;
-  routingSource?: "manual-override" | "active-analysis" | "active-output" | "phase-1" | "phase-2";
+  routingSource?: "manual-override" | "phase-1" | "phase-2";
   inputTokens: number;
   cachedInputTokens?: number;
   cacheWriteTokens?: number;

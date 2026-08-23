@@ -135,17 +135,6 @@ function jsonError(message: string, status = 500) {
 }
 
 const REFINEMENT_TARGETS = ["context", "course", "helps", "hypothesis"] as const;
-const WORKSPACE_PANELS = ["notepad", "analysis", "output"] as const;
-
-type WorkspacePanel = typeof WORKSPACE_PANELS[number] | null;
-
-function validateWorkspacePanel(value: unknown): WorkspacePanel | undefined {
-  if (value === undefined || value === null) return value as null | undefined;
-  return typeof value === "string" && WORKSPACE_PANELS.includes(value as typeof WORKSPACE_PANELS[number])
-    ? value as WorkspacePanel
-    : undefined;
-}
-
 function validateRefinementTargets(value: unknown) {
   if (value === undefined) return [];
   if (!Array.isArray(value) || value.length > 4) return null;
@@ -194,7 +183,6 @@ export async function POST(request: Request) {
     pendingSide?: unknown;
     functionalMapping?: unknown;
     communicationProfile?: unknown;
-    activeWorkspacePanel?: unknown;
     selectedHypothesisId?: unknown;
     activeNeedId?: unknown;
     analysisContext?: unknown;
@@ -231,8 +219,6 @@ export async function POST(request: Request) {
   }
   const functionalMapping = validateFunctionalMapping(body.functionalMapping);
   if (functionalMapping === null) return jsonError("Neplatné funkční mapování.", 400);
-  const activeWorkspacePanel = validateWorkspacePanel(body.activeWorkspacePanel);
-  if (body.activeWorkspacePanel !== undefined && activeWorkspacePanel === undefined) return jsonError("Neplatná aktivní pracovní vrstva.", 400);
   const selectedHypothesisId = typeof body.selectedHypothesisId === "string" && body.selectedHypothesisId.length <= 120 ? body.selectedHypothesisId : null;
   const activeNeedId = typeof body.activeNeedId === "string" && body.activeNeedId.length <= 120 ? body.activeNeedId : null;
   const analysisContext = body.analysisContext && typeof body.analysisContext === "object" && !Array.isArray(body.analysisContext)
@@ -265,7 +251,7 @@ export async function POST(request: Request) {
     askedTargets: askedRefinementTargets,
     ...(pendingSide ? { pendingSide: { target: pendingSide.target as typeof REFINEMENT_TARGETS[number], question: pendingSide.question as string } } : {}),
   };
-  const applyIntakePolicy = phase === "intake" && activeWorkspacePanel !== "analysis" && activeWorkspacePanel !== "output";
+  const applyIntakePolicy = phase === "intake";
   const controllerBypass = !controlledResult && canBypassQuestController({
     phase: phase as ConversationPhase,
     notebook: intakeNotebook,
@@ -301,7 +287,6 @@ export async function POST(request: Request) {
   const executionPhase = controllerResult.phase;
   const execution = resolveRequestRuntime({
     manualModelOverride: selectedModel,
-    activePanel: activeWorkspacePanel ?? null,
     phase: executionPhase,
   });
 
@@ -310,7 +295,6 @@ export async function POST(request: Request) {
     phase: executionPhase,
     useKnowledgeBase: execution.useKnowledgeBase,
     communicationProfile: communicationProfileInstruction(communicationProfile),
-    activePanel: activeWorkspacePanel ?? null,
     notebookContext: notebookContext(notebook),
     dialogAction: controllerResult,
     selectedHypothesisId,
