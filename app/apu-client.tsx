@@ -75,7 +75,8 @@ import {
 import { splitAssistantMetadata, type DebugMapping } from "./response-metadata";
 import { createProjectResetState, shouldResetCurrentProject } from "./project-session";
 import { analysisChangeKeys, EMPTY_ANALYSIS, formatAnalysisChat, preserveAnalysisSelection, type AnalysisNextPrompt, type AnalysisState, type SuggestedNeed } from "./analysis-model";
-import { ProcessingStatus, type F1ProcessingStage } from "./processing-status";
+import { CompletedLifecycleStatus, ProcessingStatus, type F1ProcessingStage } from "./processing-status";
+import { addCompletedLifecycleRecord, withCompletedLifecycleRecord, type CompletedLifecycleRecord } from "./lifecycle-record";
 import { DevLogPanel } from "./dev-log-panel";
 import type { SharedFeedbackResult } from "./shared-feedback";
 
@@ -129,6 +130,7 @@ type Message = {
   telemetryRefs?: string[];
   analysisNextPrompt?: AnalysisNextPrompt;
   analysisEntryHypotheses?: F2EntryHypothesis[];
+  lifecycleRecords?: CompletedLifecycleRecord[];
 };
 
 function entryHypotheses(analysis: AnalysisState): F2EntryHypothesis[] {
@@ -672,17 +674,21 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
     if (phase === "intake" && (dialogEvent === "continue_to_solution" || textTransition === "continue_to_solution")) {
       setPhase("development");
       const result = await refreshStructuredAnalysis(notepadForChat, "", turnId, requestId, "F1");
-      setMessages((current) => current.map((message) => message.id === assistantId ? {
+      setMessages((current) => current.map((message) => message.id === assistantId ? withCompletedLifecycleRecord({
         ...message, content: "", analysisEntryHypotheses: entryHypotheses(result.analysis), analysisNextPrompt: result.analysis.chatUpdate.nextPrompt, phaseLabel: "[FÁZE 2]",
         ...(result.diagnostics ? { diagnostics: result.diagnostics } : {}),
-      } : message));
+      }, { operation: "analysis-entry", state: "completed", label: "Vytvořeny pracovní hypotézy" }) : message));
       return;
     }
     const phaseTwoTransition = phase === "development" ? textTransition : null;
     if (phase === "development" && !dialogEvent && phaseTwoTransition !== "continue_to_output") {
       const result = await refreshStructuredAnalysis(notepadForChat, rawText, turnId, requestId);
       setMessages((current) => current.map((message) => message.id === assistantId ? {
-        ...message,
+        ...withCompletedLifecycleRecord(message, {
+          operation: result.analysis.chatUpdate.kind === "entry" ? "analysis-entry" : "analysis-update",
+          state: "completed",
+          label: result.analysis.chatUpdate.kind === "entry" ? "Vytvořeny pracovní hypotézy" : "Aktualizován Rozbor",
+        }),
         content: formatAnalysisChat(result.analysis), analysisNextPrompt: result.analysis.chatUpdate.nextPrompt,
         phaseLabel: "[FÁZE 2]",
         ...(result.diagnostics ? { diagnostics: result.diagnostics } : {}),
@@ -824,11 +830,11 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
     if (!completeText || !receivedDone) throw new Error("Model nevrátil dokončenou odpověď s usage daty.");
     if (phase === "intake" && completedPhase === "development") {
       const result = await refreshStructuredAnalysis(notepadForChat, "", turnId, requestId, "F1");
-      setMessages((current) => current.map((message) => message.id === assistantId ? {
+      setMessages((current) => current.map((message) => message.id === assistantId ? withCompletedLifecycleRecord({
         ...message, content: "", analysisEntryHypotheses: entryHypotheses(result.analysis), analysisNextPrompt: result.analysis.chatUpdate.nextPrompt,
         phaseLabel: "[FÁZE 2]",
         ...(result.diagnostics ? { diagnostics: result.diagnostics } : {}),
-      } : message));
+      }, { operation: "analysis-entry", state: "completed", label: "Vytvořeny pracovní hypotézy" }) : message));
     }
   }
 
@@ -914,6 +920,9 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
           if (isF1ProcessingTurn) startF1ProcessingSequence(assistantId, applied.added.length > 0);
           if (applied.added.length) {
             setNotepad(applied.state);
+            setMessages((current) => addCompletedLifecycleRecord(current, assistantId, {
+              operation: "notebook", state: "completed", label: "Doplněn Zápisník",
+            }));
           }
         }
 
@@ -1288,11 +1297,11 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
 
         <div className="message-list" aria-live="polite" aria-busy={isLoading}>
           {messages.map((message) => (
-            <article
-              id={`message-${message.id}`}
-              className={`message message--${message.role}`}
-              key={message.id}
-            >
+            <div className="message-turn" key={message.id}>
+              {message.lifecycleRecords?.map((record) => (
+                <CompletedLifecycleStatus key={record.operation} record={record} />
+              ))}
+              <article id={`message-${message.id}`} className={`message message--${message.role}`}>
               {message.role === "assistant" ? (
                 <div className="message-author">
                   <ApuLogo className="message-avatar-logo" />
@@ -1392,7 +1401,8 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
                   </div>
                 </aside>
               )}
-            </article>
+              </article>
+            </div>
           ))}
 
           {error && (
