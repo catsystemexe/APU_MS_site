@@ -81,6 +81,8 @@ test("notepad uses local persistence and floating Lucide tool buttons", () => {
 });
 
 test("responsive layout has 60\/40 split and content-only overlay", () => {
+  assert.match(styles, /@media \(min-width: 1024px\), \(min-width: 768px\) and \(orientation: landscape\)[\s\S]*\.app-shell \{ padding: 10px; \}/);
+  assert.match(styles, /@media \(min-width: 1024px\), \(min-width: 768px\) and \(orientation: landscape\)[\s\S]*\.chat-card \{[\s\S]*width: 100%;[\s\S]*height: calc\(100dvh - 20px\);[\s\S]*min-height: 0;/);
   assert.match(styles, /grid-template-columns:\s*minmax\(0, 3fr\) minmax\(300px, 2fr\)/);
   assert.match(styles, /min-width:\s*768px\) and \(orientation:\s*landscape\)/);
   assert.match(styles, /\.tool-rail[\s\S]*grid-row:\s*2/);
@@ -102,4 +104,11 @@ test("responsive layout has 60\/40 split and content-only overlay", () => {
   assert.match(styles, /\.diagnostics-drawer[\s\S]*width:\s*min\(320px, calc\(100% - 58px\)\)/);
   assert.match(styles, /\.notepad-header[\s\S]*min-height:\s*36px/);
   assert.match(styles, /\.panel-title h2[\s\S]*font-size:\s*12px/);
+});
+
+test("desktop starts with the notepad open and keeps the universal composer", () => {
+  assert.match(page, /useState<WorkspacePanelId>\("notepad"\)/);
+  assert.match(page, /const INPUT_PLACEHOLDER = "Napište APU…"/);
+  assert.match(page, /activePanel === id \? " is-active"/);
+  assert.match(page, /setActivePanel\(\(current\) => current === panel \? null : panel\)/);
 });

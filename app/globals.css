@@ -1390,7 +1390,13 @@ button:disabled { cursor: default; opacity: 0.52; }
 }
 
 @media (min-width: 1024px), (min-width: 768px) and (orientation: landscape) {
-  .chat-card { grid-template-columns: minmax(0, 1fr); }
+  .app-shell { padding: 10px; }
+  .chat-card {
+    width: 100%;
+    height: calc(100dvh - 20px);
+    min-height: 0;
+    grid-template-columns: minmax(0, 1fr);
+  }
   .chat-card:has(.notepad-panel.is-open) { grid-template-columns: minmax(0, 3fr) minmax(300px, 2fr); }
   .message-list { padding-right: 26px; }
   .message-list, .composer { grid-column: 1; }
