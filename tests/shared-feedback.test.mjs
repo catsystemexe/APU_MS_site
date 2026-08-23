@@ -43,6 +43,18 @@ test("DEV LOG loads persistence and rolls an optimistic status back on failure",
   assert.match(panel, /Původní stav byl obnoven/);
 });
 
+test("DEV LOG note UI exposes conditional indicator, leading saved message, and explicit save states", async () => {
+  const panel = await readFile(new URL("../app/dev-log-panel.tsx", import.meta.url), "utf8");
+  assert.match(panel, /item\.note\.trim\(\) && <MessageCircle/);
+  assert.match(panel, /aria-label="Záznam obsahuje poznámku"/);
+  assert.ok(panel.indexOf('className="dev-log-note"') < panel.indexOf("item.details.map"));
+  assert.match(panel, /<textarea[^>]*maxLength=\{2000\}/);
+  assert.match(panel, /disabled=\{noteSaving \|\| noteDraft === item\.note\}/);
+  assert.match(panel, /noteSaving \? "Ukládám…" : "Uložit"/);
+  assert.match(panel, /catch \{ setNoteError\("Poznámku se nepodařilo uložit\."\); \}/);
+  assert.match(panel, /body: JSON\.stringify\(\{ id, note \}\)/);
+});
+
 test("DEV LOG uses three typed columns and keeps detail toggles separate from status controls", async () => {
   const panel = await readFile(new URL("../app/dev-log-panel.tsx", import.meta.url), "utf8");
   assert.match(panel, /DEV_LOG_TYPES\.map/);

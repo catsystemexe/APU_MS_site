@@ -47,6 +47,29 @@ test("PATCH persists identity, timestamp, status and existing note", async () =>
   assert.deepEqual(JSON.parse(kv.values.get("devlog:DL-1")), stored);
 });
 
+test("note PATCH trims and persists a note without changing status", async () => {
+  const kv = namespace({ "devlog:DL-1": JSON.stringify(override) });
+  const response = await patchDevLogState(patch({ id: "DL-1", note: "  new message  " }), developer, kv, [source]);
+  const stored = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(stored.note, "new message");
+  assert.equal(stored.status, override.status);
+  assert.deepEqual(JSON.parse(kv.values.get("devlog:DL-1")), stored);
+});
+
+test("empty note removes it and status PATCH preserves the resulting note field", async () => {
+  const kv = namespace({ "devlog:DL-1": JSON.stringify(override) });
+  const removed = await (await patchDevLogState(patch({ id: "DL-1", note: "  " }), developer, kv, [source])).json();
+  assert.equal(removed.note, "");
+  const statusResponse = await patchDevLogState(patch({ id: "DL-1", status: "done" }), developer, kv, [source]);
+  assert.equal((await statusResponse.json()).note, "");
+});
+
+test("PATCH rejects empty updates and notes over 2000 characters", async () => {
+  assert.equal((await patchDevLogState(patch({ id: "DL-1" }), developer, namespace(), [source])).status, 400);
+  assert.equal((await patchDevLogState(patch({ id: "DL-1", note: "x".repeat(2001) }), developer, namespace(), [source])).status, 400);
+});
+
 test("PATCH rejects unknown IDs and invalid transitions", async () => {
   assert.equal((await patchDevLogState(patch({ id: "unknown", status: "done" }), developer, namespace(), [source])).status, 404);
   const doneSource = { ...source, status: "done" };
@@ -62,6 +85,7 @@ test("route authenticates both methods and rejects testers", async () => {
   assert.equal(authorizeDevLogIdentity(null).status, 401);
   assert.equal(authorizeDevLogIdentity({ email: "tester@example.com", role: "tester" }).status, 403);
   assert.deepEqual(authorizeDevLogIdentity(developer), developer);
+  assert.equal(authorizeDevLogIdentity({ email: "tester@example.com", role: "tester" }).status, 403);
   const route = await readFile(new URL("../app/api/devlog-state/route.ts", import.meta.url), "utf8");
   assert.equal((route.match(/getAccessIdentity\(request\.headers\)/g) ?? []).length, 2);
   assert.equal((route.match(/authorizeDevLogIdentity/g) ?? []).length, 3);
