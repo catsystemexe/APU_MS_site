@@ -140,7 +140,7 @@ function entryHypotheses(analysis: AnalysisState): F2EntryHypothesis[] {
 const WELCOME: Message = {
   id: "welcome",
   role: "assistant",
-  content: "Popište situaci, kterou právě řešíte. Můžete psát přirozeně, stručně i neúplně.",
+  content: "Co dnes potřebujete?",
   createdAt: new Date().toISOString(),
 };
 
@@ -1309,9 +1309,9 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
               ) : (
                 <span className="message-label">Vy</span>
               )}
-              {message.role === "assistant" && Boolean(message.lifecycleRecords?.length) && (
+              {message.role === "assistant" && message.lifecycleRecords && message.lifecycleRecords.length > 0 && (
                 <div className="message-lifecycle-records" aria-label="Dokončené kroky">
-                  {message.lifecycleRecords?.map((record) => (
+                  {message.lifecycleRecords.map((record) => (
                     <CompletedLifecycleStatus key={record.operation} record={record} />
                   ))}
                 </div>

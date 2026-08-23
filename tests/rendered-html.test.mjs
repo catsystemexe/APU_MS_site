@@ -138,7 +138,7 @@ test("shows developer surfaces only to developers", async () => {
   assert.match(developerHtml, /conversation-diagnostics/);
   assert.doesNotMatch(testerHtml, /Otevřít nastavení/);
   assert.doesNotMatch(testerHtml, /conversation-diagnostics/);
-  assert.match(testerHtml, /Popište situaci, kterou právě řešíte/);
+  assert.match(testerHtml, /Co dnes potřebujete\?/);
 });
 
 test("model API rejects invalid auth and accepts tester and developer identities", async () => {
