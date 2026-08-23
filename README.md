@@ -61,15 +61,17 @@ For explicit local development only, `npm run dev:local` sets
 
 ## Shared Feedback roadmap
 
-The developer-only DEV LOG reads the versioned Shared Feedback contract from
-`data/shared-feedback.json`. Version 1 is a read-only repository-backed layer
-outside the canonical Zápisník → Rozbor → Výstup workflow. Its records contain
-`id`, stable `type` and `status` enums, `title`, ISO `createdAt`, `source`,
-`summary`, an ordered array of generic `{ label, text }` details, and `note`.
-Runtime parsing fails safely inside the DEV LOG if the contract is invalid.
+The developer-only DEV LOG reads its canonical content from the build-time
+Markdown entries in `data/dev-log/entries/*.md`. Cloudflare KV binding
+`DEV_LOG_STATE` stores only per-item mutable overrides (`status`, `note`,
+`updatedAt`, and `updatedBy`) under `devlog:<feedback-id>` keys. Missing or
+invalid overrides safely fall back to the repository status and note.
 
-Server-side persistence, status editing, and developer-note editing remain
-pending. Deployment and live verification of this batch are not authorized.
+Production and preview use separate KV namespaces. Their IDs must replace the
+explicit provisioning placeholders in `wrangler.jsonc` before deployment.
+Status editing is persisted through a developer-only API; `note` is included in
+the persistence contract but remains read-only in this batch. Deployment and
+live persistence verification are not authorized yet.
 
 ## Access roles
 

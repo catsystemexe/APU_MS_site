@@ -30,9 +30,17 @@ test("DEV LOG trigger and payload remain developer-only", async () => {
   const [page, client] = await Promise.all([readFile(new URL("../app/page.tsx", import.meta.url), "utf8"), readFile(new URL("../app/apu-client.tsx", import.meta.url), "utf8")]);
   assert.match(page, /sharedFeedback=\{isDeveloper \? loadDevLog\(\) : null\}/);
   assert.match(client, /\{isDeveloper && <DeveloperHeaderControls/);
-  assert.match(client, /isDeveloper && isDevLogOpen && sharedFeedback/);
+  assert.match(client, /isDeveloper && isDevLogRendered && sharedFeedback/);
   assert.match(client, /aria-expanded=\{open\}/);
   assert.match(client, /aria-controls="dev-log-panel"/);
+});
+
+test("DEV LOG loads persistence and rolls an optimistic status back on failure", async () => {
+  const panel = await readFile(new URL("../app/dev-log-panel.tsx", import.meta.url), "utf8");
+  assert.match(panel, /fetch\("\/api\/devlog-state", \{ cache: "no-store" \}\)/);
+  assert.match(panel, /method: "PATCH"/);
+  assert.match(panel, /setItems\(\(current\) => current\.map\(\(item\) => item\.id === id \? previous : item\)\)/);
+  assert.match(panel, /Původní stav byl obnoven/);
 });
 
 test("DEV LOG uses three typed columns and keeps detail toggles separate from status controls", async () => {

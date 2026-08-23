@@ -11,6 +11,7 @@ export const DEV_LOG_TYPES = ["bug", "improvement", "discussion"] as const;
 export const DEV_LOG_STATUSES = ["new", "in_progress", "done"] as const;
 export type DevLogType = (typeof DEV_LOG_TYPES)[number];
 export type DevLogStatus = (typeof DEV_LOG_STATUSES)[number];
+export type DevLogStateOverride = { status: DevLogStatus; note: string; updatedAt: string; updatedBy: string };
 
 export const SHARED_FEEDBACK_STATUS_LABELS: Record<SharedFeedbackStatus, string> = { new: "NOVÉ", in_progress: "ŘEŠÍME", discuss: "PROBRAT", done: "HOTOVO", rejected: "ZAMÍTNUTO" };
 const STATUS_ORDER: Record<SharedFeedbackStatus, number> = { new: 0, in_progress: 1, discuss: 2, done: 4, rejected: 5 };
@@ -41,4 +42,14 @@ export function canTransitionDevLogStatus(from: SharedFeedbackStatus, to: DevLog
   if (from === "in_progress") return to === "new" || to === "done";
   if (from === "done") return to === "in_progress";
   return false;
+}
+
+export function parseDevLogStateOverride(value: unknown): DevLogStateOverride | null {
+  if (!isRecord(value) || !DEV_LOG_STATUSES.includes(value.status as DevLogStatus)) return null;
+  if (typeof value.note !== "string" || !isNonEmptyString(value.updatedAt) || Number.isNaN(Date.parse(value.updatedAt)) || !isNonEmptyString(value.updatedBy)) return null;
+  return { status: value.status as DevLogStatus, note: value.note, updatedAt: value.updatedAt, updatedBy: value.updatedBy };
+}
+
+export function mergeDevLogState(item: SharedFeedbackItem, override: DevLogStateOverride | null | undefined): SharedFeedbackItem {
+  return override ? { ...item, status: override.status, note: override.note } : item;
 }
