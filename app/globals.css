@@ -450,11 +450,11 @@ button:disabled { cursor: default; opacity: 0.52; }
 .message-label { color: var(--muted); font-size: 12px; font-weight: 590; padding: 0 4px; }
 .message-author .message-label { padding: 0; }
 .message-phase {
-  width: min(690px, 94%);
-  margin: 1px 4px -1px;
-  color: var(--text-secondary);
-  font-size: 12px;
-  line-height: 1.35;
+  color: color-mix(in srgb, var(--muted) 68%, var(--bg-surface));
+  font-size: calc(10px * var(--font-scale));
+  font-weight: 560;
+  line-height: 1;
+  letter-spacing: .035em;
 }
 .message-content {
   max-width: min(690px, 87%);
@@ -693,10 +693,16 @@ button:disabled { cursor: default; opacity: 0.52; }
 .processing-status--processing svg { animation: processing-spin .9s linear infinite; }
 .processing-status--writing svg { animation: processing-write .72s ease-in-out infinite alternate; }
 .processing-status--completed svg { color: #2e9c63; }
+.message-lifecycle-records {
+  display: grid;
+  gap: 2px;
+  width: min(690px, 94%);
+  padding: 0 4px;
+}
 .lifecycle-record {
   width: fit-content;
-  max-width: min(690px, 94%);
-  margin: 0 4px 2px;
+  max-width: 100%;
+  margin: 0;
   color: var(--text-secondary);
   white-space: nowrap;
 }

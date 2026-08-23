@@ -1298,19 +1298,23 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
         <div className="message-list" aria-live="polite" aria-busy={isLoading}>
           {messages.map((message) => (
             <div className="message-turn" key={message.id}>
-              {message.lifecycleRecords?.map((record) => (
-                <CompletedLifecycleStatus key={record.operation} record={record} />
-              ))}
               <article id={`message-${message.id}`} className={`message message--${message.role}`}>
               {message.role === "assistant" ? (
                 <div className="message-author">
                   <ApuLogo className="message-avatar-logo" />
+                  {message.phaseLabel && (
+                    <span className="message-phase">{message.phaseLabel.replace(/^\[|\]$/g, "")}</span>
+                  )}
                 </div>
               ) : (
                 <span className="message-label">Vy</span>
               )}
-              {message.role === "assistant" && message.phaseLabel && (
-                <div className="message-phase">{message.phaseLabel}</div>
+              {message.role === "assistant" && Boolean(message.lifecycleRecords?.length) && (
+                <div className="message-lifecycle-records" aria-label="Dokončené kroky">
+                  {message.lifecycleRecords?.map((record) => (
+                    <CompletedLifecycleStatus key={record.operation} record={record} />
+                  ))}
+                </div>
               )}
               <div className="message-content">
                 {message.content
