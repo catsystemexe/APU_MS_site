@@ -69,7 +69,9 @@ test("analysis UI delegates to the stateful build editor and snapshot preview", 
   ]);
   assert.match(source, /<F2BuildEditor/);
   assert.match(source, /<F3Finalization/);
-  assert.match(editor, /Společný analytický obraz/);
+  assert.match(editor, /Výchozí pracovní hypotézy/);
+  assert.ok(editor.indexOf("Výchozí pracovní hypotézy") < editor.indexOf("Směr rozboru"));
+  assert.match(editor, /toggleExpandedHypothesis/);
   assert.match(editor, /\+ Doplnit informaci/);
   assert.match(editor, /Aktualizovat preview/);
   assert.doesNotMatch(editor, /Přejít k vytvoření výstupu/);
