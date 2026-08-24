@@ -32,14 +32,15 @@ F1 → F2
 • Opening the Rozbor panel alone does not change phase.
 
 F2 — Rozbor  
-• The current prototype is a stateful build-editor shell for one canonical pedagogical need. Its initial path comes from the need mapping in Zápisník, while the active path can be switched without rewriting that mapping.
-• Each path offers five optional build layers with local activation and short parameterization; build edits and added working context do not call the model or write back to Zápisník.
-• Working hypotheses and relevant uncertainty remain a shared analytical picture for the situation rather than separate workflows.
-• PREVIEW explicitly captures one current build snapshot. Later build edits preserve that snapshot and mark it as outdated until the user refreshes it.
-• Model-driven skill execution and real preview rendering are not yet implemented.
+• The stateful build editor works with one canonical pedagogical need. Its initial path comes from the need mapping in Zápisník, while the active path can be switched without rewriting that mapping.
+• `POCHOPIT` is the first model-driven build path: local skill/context configuration is applied only by explicit analytical execution and produces structured derived F2 state for the situation as a whole.
+• Its five optional skills are composable. Working hypotheses can change dynamically, while comparisons, relationships, expert framing, synthesis and path-relative uncertainty remain visible without turning missing information into a blocking question flow.
+• Ordinary skill, parameter and context edits make no model call, do not write back to Zápisník, and visibly leave analytical changes unapplied until the user executes the build again.
+• PREVIEW explicitly freezes the current accepted build and asks the model to render only that immutable snapshot. Later edits preserve the successful preview, mark it outdated and never regenerate it automatically; a failed refresh also preserves the previous preview.
+• `POZOROVAT` and `VYTVOŘIT` retain their five-layer local interaction shells but do not use `POCHOPIT` model semantics.
 
 F2 → F3  
-• The current prototype boundary is an explicit snapshot PREVIEW rendered on the Výstup surface.
+• The current boundary is an explicit model-rendered snapshot PREVIEW on the Výstup surface: an F2 output and early F3 contract, not a final F3 artifact.
 • Full elaboration of every Rozbor branch is not required; remaining uncertainty is carried forward transparently.
 
 CURRENT INTERACTION PRINCIPLES  

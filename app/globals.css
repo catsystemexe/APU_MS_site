@@ -1782,6 +1782,16 @@ button:disabled { cursor: default; opacity: 0.52; }
 .f2-uncertainty { padding: 12px 14px; border: 1px solid #b9cee5; border-radius: 11px; background: #f1f7fc; color: #31536f; }
 .f2-uncertainty p { margin: 4px 0 0; font-size: 12px; line-height: 1.45; }
 .f2-preview-action { display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
+.f2-execute { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 14px; border: 1px solid var(--border); border-radius: 11px; background: var(--surface-hover); }
+.f2-execute p, .f2-prototype p { margin: 3px 0; color: var(--text-secondary); font-size: 12px; }
+.f2-execute strong { display: block; margin-top: 5px; color: #496b87; font-size: 11px; }
+.f2-execute button { flex: 0 0 auto; border: 0; border-radius: 9px; padding: 10px 13px; background: var(--accent-strong); color: #fff; font-weight: 700; }
+.f2-execute button:disabled, .f2-preview-action button:disabled { opacity: .55; cursor: wait; }
+.f2-prototype { padding: 12px 14px; border: 1px dashed var(--border-strong); border-radius: 11px; }
+.f2-structured p, .f2-structured li { font-size: 12px; line-height: 1.5; }
+.f2-structured h4 { margin: 11px 0 4px; font-size: 12px; }
+.f2-uncertainty ul { display: grid; gap: 9px; margin: 9px 0 0; padding-left: 18px; }
+.f2-uncertainty li span { display: block; margin-top: 2px; font-size: 11px; }
 .f2-preview-action span, .f2-preview-stale { color: #496b87; font-size: 12px; }
 .f2-preview { display: grid; gap: 18px; padding: 22px; }
 .f2-preview header { padding-bottom: 15px; border-bottom: 1px solid var(--border); }
@@ -1798,6 +1808,7 @@ button:disabled { cursor: default; opacity: 0.52; }
   .f2-skill-track { scroll-snap-type: x proximity; }
   .f2-skill-wrap { flex-basis: 160px; scroll-snap-align: start; }
   .f2-context form { align-items: stretch; flex-direction: column; }
+  .f2-execute { align-items: stretch; flex-direction: column; }
 }
 
 @media (max-width: 480px) {
