@@ -51,6 +51,15 @@ test("Phase 2 chat and card are produced by the same structured analysis request
   assert.match(source, /selectedHypothesisId/);
   assert.match(source, /activeNeedId/);
   assert.match(source, /continue_to_output/);
+  assert.match(source, /canonicalNeed: getF1ToF2NeedContract\(notepadState, activeNeedId\)/);
+});
+
+test("F2 receives canonical initial routing and validates it against the Zápisník need", async () => {
+  const route = await readFile(new URL("../app/api/analysis/route.ts", import.meta.url), "utf8");
+  assert.match(route, /validCanonicalNeed/);
+  assert.match(route, /need\.initialF2Path === mapping\.f2Path/);
+  assert.match(route, /const input = \{ notebook: body\.notebook, canonicalNeed/);
+  assert.doesNotMatch(route, /function (?:classify|infer).*Path/i);
 });
 
 test("analysis UI contains flat hypotheses, need tabs, inline questions and explicit Phase 3", async () => {

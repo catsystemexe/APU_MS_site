@@ -8,6 +8,7 @@ import {
   EMPTY_NOTEPAD,
   LEGACY_NOTEPAD_STORAGE_KEY,
   migrateLegacyNotepad,
+  mapPedagogicalNeed,
   NotepadEntry,
   NOTEPAD_STORAGE_KEY,
   NotepadState,
@@ -197,7 +198,7 @@ function NotepadPanel({
   const [focusedItem, setFocusedItem] = useState<string | null>(null);
 
   function addItem(category: CategoryId) {
-    const entry: NotepadEntry = { id: createLocalId(), text: "", origin: "manual" };
+    const entry: NotepadEntry = { id: createLocalId(), text: "", origin: "manual", ...(category === "goals" ? { needMapping: mapPedagogicalNeed("") } : {}) };
     setFocusedItem(entry.id);
     onEntriesChange({ ...entries, [category]: [...entries[category], entry] });
   }
@@ -205,7 +206,7 @@ function NotepadPanel({
   function updateItem(category: CategoryId, index: number, value: string) {
     setFocusedItem(null);
     const next = [...entries[category]];
-    next[index] = { id: next[index].id, text: value, origin: "manual" };
+    next[index] = { id: next[index].id, text: value, origin: "manual", ...(category === "goals" ? { needMapping: mapPedagogicalNeed(value) } : {}) };
     onEntriesChange({ ...entries, [category]: next });
   }
 

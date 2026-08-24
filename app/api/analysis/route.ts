@@ -1,12 +1,12 @@
 import instructions from "../../../apu-core/v1.6/00_INSTRUCTIONS_v1.6.md?raw";
 import { cleanAnalysisQuestionText, stripLegacyQuestionFromSummary, type AnalysisState } from "../../analysis-model";
-import { CATEGORY_IDS, type CategoryId } from "../../notepad-model";
+import { CATEGORY_IDS, F2_PATHS, type CategoryId, type PedagogicalNeedMapping, type F1ToF2NeedContract } from "../../notepad-model";
 import { estimateCostUsd } from "../../model-config";
 import { getAccessIdentity } from "../../access-auth";
 
 export const runtime = "edge";
 
-type NotebookItem = { category: CategoryId; id: string; text: string; trust: "confirmed" | "unconfirmed" };
+type NotebookItem = { category: CategoryId; id: string; text: string; trust: "confirmed" | "unconfirmed"; needMapping?: PedagogicalNeedMapping };
 
 const question = {
   type: "object", additionalProperties: false, required: ["id", "text", "target", "status"],
@@ -92,7 +92,16 @@ function outputText(response: Record<string, unknown>) {
 function validNotebook(value: unknown): value is NotebookItem[] {
   return Array.isArray(value) && value.length <= 80 && value.every((entry) => entry && typeof entry === "object" &&
     typeof entry.id === "string" && entry.id.length <= 120 && typeof entry.text === "string" && entry.text.length <= 2000 &&
-    CATEGORY_IDS.includes(entry.category) && ["confirmed", "unconfirmed"].includes(entry.trust));
+    CATEGORY_IDS.includes(entry.category) && ["confirmed", "unconfirmed"].includes(entry.trust) &&
+    (entry.category !== "goals" || (entry.needMapping && F2_PATHS.includes(entry.needMapping.f2Path) && (entry.needMapping.f3Target === null || typeof entry.needMapping.f3Target === "string"))));
+}
+function validCanonicalNeed(value: unknown, notebook: NotebookItem[]): value is F1ToF2NeedContract {
+  if (!value || typeof value !== "object") return false;
+  const need = value as Partial<F1ToF2NeedContract>;
+  const source = notebook.find((item) => item.category === "goals" && item.id === need.needId);
+  const mapping = source?.needMapping;
+  return Boolean(source && mapping && need.needText === source.text && need.initialF2Path === mapping.f2Path &&
+    need.f3Target === mapping.f3Target);
 }
 function semanticKey(value: string) { return cleanAnalysisQuestionText(value).toLocaleLowerCase("cs-CZ").replace(/\s+/g, " "); }
 function stableId(prefix: string) { return `${prefix}-${crypto.randomUUID()}`; }
@@ -165,12 +174,14 @@ export async function POST(request: Request) {
   let body: Record<string, unknown>;
   try { body = await request.json(); } catch { return jsonError("Neplatný formát požadavku.", 400); }
   if (!validNotebook(body.notebook)) return jsonError("Neplatný obsah Zápisníku.", 400);
+  const canonicalNeed = body.canonicalNeed === null ? null : validCanonicalNeed(body.canonicalNeed, body.notebook) ? body.canonicalNeed : undefined;
+  if (canonicalNeed === undefined) return jsonError("Neplatné kanonické mapování pedagogické potřeby.", 400);
   const skipped = Array.isArray(body.skippedQuestions) && body.skippedQuestions.every((item) => typeof item === "string") ? body.skippedQuestions.slice(0, 50) as string[] : [];
   const previousAnalysis = body.previousAnalysis && typeof body.previousAnalysis === "object" ? body.previousAnalysis as AnalysisState : null;
   const isEntry = !previousAnalysis;
   const focusInstruction = typeof body.focusInstruction === "string" ? body.focusInstruction.slice(0, 2000) : "";
   const turnId = typeof body.turnId === "string" && body.turnId.length <= 160 ? body.turnId : null;
-  const input = { notebook: body.notebook, previousAnalysis, selectedHypothesisId: typeof body.selectedHypothesisId === "string" ? body.selectedHypothesisId : null, activeNeedId: typeof body.activeNeedId === "string" ? body.activeNeedId : null, focusInstruction, skippedQuestions: skipped };
+  const input = { notebook: body.notebook, canonicalNeed, previousAnalysis, selectedHypothesisId: typeof body.selectedHypothesisId === "string" ? body.selectedHypothesisId : null, activeNeedId: typeof body.activeNeedId === "string" ? body.activeNeedId : null, focusInstruction, skippedQuestions: skipped };
   const analysisStarted = performance.now();
   const upstream = await fetch("https://api.openai.com/v1/responses", {
     method: "POST", headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
