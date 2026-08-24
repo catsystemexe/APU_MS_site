@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { analysisChangeKeys, cleanAnalysisQuestionText, formatAnalysisChat, preserveAnalysisSelection } from "../app/analysis-model.ts";
+import { toggleExpandedHypothesis } from "../app/analysis-accordion.ts";
 
 const analysis = {
   hypotheses: [{ id: "h1", rank: 1, title: "H", summary: "S", relevantNeeds: ["n1"], question: null, supportingInformation: [], limitations: [], unknowns: [], questions: [] }],
@@ -12,6 +13,18 @@ const analysis = {
 test("analysis selection is preserved while its items still exist", () => {
   assert.deepEqual(preserveAnalysisSelection({ selectedHypothesisId: "h1", activeNeedId: "n1" }, analysis), { selectedHypothesisId: "h1", activeNeedId: "n1" });
   assert.deepEqual(preserveAnalysisSelection({ selectedHypothesisId: "missing", activeNeedId: "missing" }, analysis), { selectedHypothesisId: "h1", activeNeedId: "n1" });
+});
+
+test("hypothesis expansion toggles independently from analytical selection", () => {
+  let expanded = new Set();
+  expanded = toggleExpandedHypothesis(expanded, "h1");
+  assert.deepEqual([...expanded], ["h1"]);
+  expanded = toggleExpandedHypothesis(expanded, "h2");
+  assert.deepEqual([...expanded], ["h1", "h2"]);
+  expanded = toggleExpandedHypothesis(expanded, "h1");
+  assert.deepEqual([...expanded], ["h2"]);
+  expanded = toggleExpandedHypothesis(expanded, "h2");
+  assert.deepEqual([...expanded], []);
 });
 
 test("Phase 2 uses Terra low with KB and a strict structured analysis", async () => {
@@ -46,6 +59,8 @@ test("analysis UI contains flat hypotheses, need tabs, inline questions and expl
     readFile(new URL("../app/analysis-question-row.tsx", import.meta.url), "utf8"),
   ]);
   assert.match(source, /analysis-hypotheses/);
+  assert.match(source, /aria-controls=\{detailId\}/);
+  assert.match(source, /aria-expanded=\{isExpanded\}/);
   assert.match(source, /analysis-need-tabs/);
   assert.match(source, /AnalysisQuestions/);
   assert.match(questionRow, /aria-label="Přeskočit otázku"/);

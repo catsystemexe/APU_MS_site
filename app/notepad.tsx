@@ -17,6 +17,7 @@ import { NOTEPAD_CATEGORIES } from "./notepad-categories";
 import { NOTEPAD_CATEGORY_META } from "./notepad-categories";
 import { AnalysisQuestionRow } from "./analysis-question-row";
 import type { AnalysisState, SuggestedNeed } from "./analysis-model";
+import { toggleExpandedHypothesis } from "./analysis-accordion";
 import type { ConversationPhase } from "./dialog-action";
 
 export type WorkspacePanel = "notepad" | "analysis" | "output" | null;
@@ -284,13 +285,14 @@ function HypothesisRow({ hypothesis, analysis, mode, isActive, isExpanded, onTog
 }) {
   const headerRef = useRef<HTMLElement>(null); const detailRef = useRef<HTMLDivElement>(null);
   const headerKey = `hypothesis:${hypothesis.id}:header`; const detailKey = `hypothesis:${hypothesis.id}:detail`;
+  const detailId = `analysis-hypothesis-${hypothesis.id}-detail`;
   useViewportSeen(headerRef, headerKey, unseenKeys.has(headerKey), onSeen);
   useViewportSeen(detailRef, detailKey, isExpanded && unseenKeys.has(detailKey), onSeen);
   return <article ref={headerRef} className={`analysis-hypothesis${isActive ? " is-active" : ""}${highlightedKeys.has(headerKey) ? " is-highlighted" : ""}`}>
-    <button className="analysis-hypothesis-heading" type="button" onClick={onToggle} aria-expanded={isExpanded}>
+    <button className="analysis-hypothesis-heading" type="button" onClick={onToggle} aria-expanded={isExpanded} aria-controls={detailId}>
       <span className="analysis-rank">{hypothesis.rank}</span><ChevronDown className="analysis-hypothesis-chevron" aria-hidden="true" /><span className="analysis-hypothesis-copy"><strong>{hypothesis.title}</strong><small>{hypothesis.summary}</small></span>
     </button>
-    {isExpanded && <div ref={detailRef} className={`analysis-detail${highlightedKeys.has(detailKey) ? " is-highlighted" : ""}`}>
+    {isExpanded && <div id={detailId} ref={detailRef} className={`analysis-detail${highlightedKeys.has(detailKey) ? " is-highlighted" : ""}`}>
       {mode === "entry" ? <>
         {hypothesis.relevantNeeds.length > 0 && <><h3>Relevantní pro</h3><p>{hypothesis.relevantNeeds.map((id) => analysis.needs.find((need) => need.needId === id)?.title ?? id).join(" · ")}</p></>}
         {hypothesis.question && <AnalysisQuestionItem question={hypothesis.question} unseen={unseenKeys.has(`question:${hypothesis.question.id}`)} highlighted={highlightedKeys.has(`question:${hypothesis.question.id}`)} onSeen={onSeen} onSkip={onSkip} />}
@@ -334,7 +336,7 @@ function NeedContent({ need, analysis, mode, unseenKeys, highlightedKeys, onSeen
 }
 
 function AnalysisPanel(props: Pick<WorkspacePanelProps, "phase" | "analysis" | "analysisStatus" | "analysisError" | "selectedHypothesisId" | "activeNeedId" | "onSelectHypothesis" | "onSelectNeed" | "onRetryAnalysis" | "onSkipAnalysisQuestion" | "onConfirmSuggestedNeed" | "onContinueToOutput" | "unseenAnalysisKeys" | "highlightedAnalysisKeys" | "onAnalysisItemSeen">) {
-  const [expanded, setExpanded] = useState<string | null>(props.analysis.hypotheses[0]?.id ?? null);
+  const [expanded, setExpanded] = useState(() => new Set(props.analysis.hypotheses.slice(0, 1).map((hypothesis) => hypothesis.id)));
   if (props.phase === "intake") return <div id="workspace-analysis" className="notepad-scroll workspace-panel-body" role="tabpanel" aria-label="Rozbor"><div className="workspace-empty-state"><ScanSearch aria-hidden="true" /><h2>Rozbor začne ve Fázi 2</h2><p>Otevření panelu fázi nemění. Do Rozboru přejdete až svým potvrzením.</p></div></div>;
   if (props.analysisStatus === "loading" && !props.analysis.hypotheses.length) return <div className="analysis-state"><span className="analysis-spinner" />Vytvářím Rozbor z aktuálního Zápisníku…</div>;
   if (props.analysisStatus === "error" && !props.analysis.hypotheses.length) return <div className="analysis-state"><p>{props.analysisError}</p><button type="button" onClick={props.onRetryAnalysis}>Zkusit znovu</button></div>;
@@ -344,9 +346,9 @@ function AnalysisPanel(props: Pick<WorkspacePanelProps, "phase" | "analysis" | "
       <section className="analysis-hypotheses" aria-label="Pracovní hypotézy">
         {props.analysis.hypotheses.map((hypothesis) => {
           const isActive = hypothesis.id === props.selectedHypothesisId;
-          const isExpanded = expanded === hypothesis.id || isActive;
+          const isExpanded = expanded.has(hypothesis.id);
           return <HypothesisRow key={hypothesis.id} hypothesis={hypothesis} analysis={props.analysis} mode={props.analysis.mode} isActive={isActive} isExpanded={isExpanded}
-            onToggle={() => { props.onSelectHypothesis(hypothesis.id); setExpanded(isExpanded ? null : hypothesis.id); }} unseenKeys={props.unseenAnalysisKeys} highlightedKeys={props.highlightedAnalysisKeys} onSeen={props.onAnalysisItemSeen} onSkip={props.onSkipAnalysisQuestion} />;
+            onToggle={() => { props.onSelectHypothesis(hypothesis.id); setExpanded((current) => toggleExpandedHypothesis(current, hypothesis.id)); }} unseenKeys={props.unseenAnalysisKeys} highlightedKeys={props.highlightedAnalysisKeys} onSeen={props.onAnalysisItemSeen} onSkip={props.onSkipAnalysisQuestion} />;
         })}
       </section>
       {props.analysis.needs.length > 0 && <section className="analysis-needs">
