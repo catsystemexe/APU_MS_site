@@ -17,11 +17,12 @@ Derived layers must never silently rewrite canonical information.
 • AnalysisState is generated from the current Zápisník through the analysis flow.  
 • It may contain hypotheses, needs, relationships, uncertainty, limitations, follow-up questions and transition-readiness information.  
 • The F2 build editor owns the authoritative working build state: the canonical mapped path is retained as `initialPath`, an editable `activePath` selects one of three paths, and five optional skill layers per path can hold short parameters.
-• `POCHOPIT` is the first model-driven path. Local configuration → explicit analytical execution → structured F2 analytical state → explicit immutable PREVIEW snapshot → model-rendered preview.
-• Its active skills are composed in one situation-level model operation; dynamic shared hypotheses, comparisons, relationships, expert framing, synthesis, decisions and structured uncertainty remain derived F2 state.
+• All three F2 paths use one model-driven lifecycle: local path-specific configuration → explicit execution → typed structured processed build → explicit immutable PREVIEW snapshot → model-rendered preview.
+• `POCHOPIT` develops expert understanding, `POZOROVAT` specifies targeted evidence gathering, and `VYTVOŘIT` prepares a justified practical build specification. Their active skills are composed in one situation-level model operation and their processed layers remain identifiable by path.
+• Shared hypotheses remain dynamic across paths. Uncertainty is normalized but path-relative: `POCHOPIT` tolerates conceptual openness, `POZOROVAT` converts observable unknowns into evidence design, and `VYTVOŘIT` localizes missing context to provisional decisions. Uncertainty never automatically blocks continuation.
 • F2 working context and model interpretation do not silently write back to the canonical Zápisník. Local edits do not invoke model APIs and leave the last processed revision visibly unapplied.
 • PREVIEW is an F2 output and early F3 contract. It is bound to one isolated accepted build revision; subsequent relevant edits preserve it and mark it stale rather than automatically regenerating it.
-• `POZOROVAT` and `VYTVOŘIT` remain local interaction-shell prototypes; F3 and its final output editor are not implemented.
+• The active F2 path is authoritative for execution and preview; it is never inferred from the requested artifact. F3 target remains separate, and F2 previews may anticipate its shape without fully materializing the final artifact. F3 and its final output editor are not implemented.
 
 3\. VÝSTUP — DOWNSTREAM REALIZATION LAYER  
 • F3 consumes the preceding state to produce concrete recommendations, plans or documents.  

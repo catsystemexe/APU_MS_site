@@ -4,19 +4,24 @@ import test from "node:test";
 
 const route = await readFile(new URL("../app/api/f2/route.ts", import.meta.url), "utf8");
 
-test("F2 API gates execution to POCHOPIT and distinguishes build from preview telemetry", () => {
-  assert.match(route, /body\.activePath === "POCHOPIT"/);
-  assert.match(route, /f2-build-execution/);
-  assert.match(route, /f2-preview-render/);
+test("one F2 API explicitly routes all paths and emits path-relative telemetry", () => {
+  assert.match(route, /BUILD_SCHEMAS\[activePath\]/); assert.match(route, /PATH_PROMPTS\[activePath\]/); assert.match(route, /body\.build/);
+  for (const path of ["POCHOPIT", "POZOROVAT", "VYTVOŘIT"]) assert.ok(route.includes(path));
+  assert.match(route, /F2 build execution — \$\{activePath\}/); assert.match(route, /F2 preview — \$\{activePath\}/);
 });
 
-test("POCHOPIT prompt enforces situation-level truth hierarchy, skill composition and uncertainty", () => {
-  for (const boundary of ["Jednotkou práce je jedna situace", "Fakta Zápisníku jsou kanonická", "kompozice operací", "co chybí, proč to záleží a co to omezuje", "Nevytvářej automatické otázky", "vlastní F3 logiku"]) assert.ok(route.includes(boundary), boundary);
-  for (const skill of ["Rozviň mechanismy", "Porovnej podobnosti", "odliš asociaci od kauzality", "parametr uživatele musí řídit", "nedělej diagnózu"]) assert.ok(route.includes(skill), skill);
+test("shared prompt preserves truth hierarchy, explicit routing, dynamic hypotheses, uncertainty and F3 boundary", () => {
+  for (const boundary of ["Jednotkou práce je jedna situace", "Fakta Zápisníku", "Aktivní cesta v požadavku je autoritativní", "Sdílené hypotézy zůstávají dynamické", "Nejistota nikdy automaticky neblokuje", "F2 nesmí plně materializovat finální artefakt"]) assert.ok(route.includes(boundary), boundary);
 });
 
-test("preview prompt is snapshot-only and cannot silently redesign F2 or F3", () => {
-  assert.match(route, /výhradně z neměnného F2 snapshotu/);
-  assert.match(route, /neměň pedagogickou potřebu, cestu ani analytické závěry/);
-  assert.match(route, /ne finální F3 dokument/);
+test("each POZOROVAT skill has distinct observation semantics and anti-confirmation/F3 guards", () => {
+  for (const semantic of ["pozorovatelných indikátorů", "informativní situace", "kontrasty podmínek", "přiměřené období", "syrový záznam"]) assert.ok(route.includes(semantic), semantic);
+  for (const guard of ["evidenci proti nim", "co pozorování vyřešit může", "ani hotový formulář či tabulka", "ne široký vysvětlující esej"]) assert.ok(route.includes(guard), guard);
 });
+
+test("each VYTVOŘIT skill has distinct semantics, conditional precision and F2/F3 boundary", () => {
+  for (const semantic of ["cíl odlišný od formátu artefaktu", "plausibilní přístupy", "realistické varianty", "podmínky prostředí", "indikátory úspěchu realizace"]) assert.ok(route.includes(semantic), semantic);
+  for (const guard of ["nejnižší toleranci", "adaptabilními rozsahy", "Pedagogický cíl není F3 artefakt", "nikoli hotový materiál"]) assert.ok(route.includes(guard), guard);
+});
+
+test("preview is snapshot-only, path-authoritative and cannot materialize F3", () => { for (const boundary of ["výhradně z neměnného F2 snapshotu", "autoritativní cestu", "nesmí vést k finální materializaci F3 dokumentu"]) assert.ok(route.includes(boundary), boundary); });
