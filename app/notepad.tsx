@@ -45,11 +45,16 @@ type WorkspacePanelProps = {
   onContinueToOutput: () => void;
   f2Build: F2BuildState | null;
   f2Preview: F2PreviewState;
+  f2BuildStatus: "idle" | "loading" | "error";
+  f2BuildError: string | null;
+  f2PreviewStatus: "idle" | "loading" | "error";
+  f2PreviewError: string | null;
   onF2PathChange: (path: F2BuildState["activePath"]) => void;
   onF2SkillToggle: (id: string) => void;
   onF2ParameterChange: (id: string, value: string) => void;
   onF2ContextAdd: (text: string) => void;
   onF2ContextRemove: (id: string) => void;
+  onF2Execute: () => void;
   onF2Preview: () => void;
 };
 
@@ -265,12 +270,12 @@ function NotepadPanel({
   );
 }
 
-function AnalysisPanel(props: Pick<WorkspacePanelProps, "phase" | "analysis" | "analysisStatus" | "analysisError" | "onRetryAnalysis" | "f2Build" | "f2Preview" | "onF2PathChange" | "onF2SkillToggle" | "onF2ParameterChange" | "onF2ContextAdd" | "onF2ContextRemove" | "onF2Preview">) {
+function AnalysisPanel(props: Pick<WorkspacePanelProps, "phase" | "analysis" | "analysisStatus" | "analysisError" | "onRetryAnalysis" | "f2Build" | "f2Preview" | "f2BuildStatus" | "f2BuildError" | "f2PreviewStatus" | "f2PreviewError" | "onF2PathChange" | "onF2SkillToggle" | "onF2ParameterChange" | "onF2ContextAdd" | "onF2ContextRemove" | "onF2Execute" | "onF2Preview">) {
   if (props.phase === "intake") return <div id="workspace-analysis" className="notepad-scroll workspace-panel-body" role="tabpanel" aria-label="Rozbor"><div className="workspace-empty-state"><ScanSearch aria-hidden="true" /><h2>Rozbor začne ve Fázi 2</h2><p>Otevření panelu fázi nemění. Do Rozboru přejdete až svým potvrzením.</p></div></div>;
   if (props.analysisStatus === "loading" && !props.analysis.hypotheses.length) return <div className="analysis-state"><span className="analysis-spinner" />Vytvářím Rozbor z aktuálního Zápisníku…</div>;
   if (props.analysisStatus === "error" && !props.analysis.hypotheses.length) return <div className="analysis-state"><p>{props.analysisError}</p><button type="button" onClick={props.onRetryAnalysis}>Zkusit znovu</button></div>;
   if (!props.f2Build) return <div className="analysis-state"><p>Rozbor čeká na kanonickou pedagogickou potřebu v Zápisníku.</p></div>;
-  return <div id="workspace-analysis" className="notepad-scroll workspace-panel-body" role="tabpanel" aria-label="Rozbor"><F2BuildEditor build={props.f2Build} analysis={props.analysis} preview={props.f2Preview} onPathChange={props.onF2PathChange} onSkillToggle={props.onF2SkillToggle} onParameterChange={props.onF2ParameterChange} onContextAdd={props.onF2ContextAdd} onContextRemove={props.onF2ContextRemove} onPreview={props.onF2Preview} /></div>;
+  return <div id="workspace-analysis" className="notepad-scroll workspace-panel-body" role="tabpanel" aria-label="Rozbor"><F2BuildEditor build={props.f2Build} preview={props.f2Preview} buildStatus={props.f2BuildStatus} buildError={props.f2BuildError} previewStatus={props.f2PreviewStatus} previewError={props.f2PreviewError} onPathChange={props.onF2PathChange} onSkillToggle={props.onF2SkillToggle} onParameterChange={props.onF2ParameterChange} onContextAdd={props.onF2ContextAdd} onContextRemove={props.onF2ContextRemove} onExecute={props.onF2Execute} onPreview={props.onF2Preview} /></div>;
 }
 
 function OutputPanel({ preview }: { preview: F2PreviewState }) {

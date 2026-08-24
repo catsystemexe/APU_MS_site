@@ -82,7 +82,7 @@ import { CompletedLifecycleStatus, ProcessingStatus, type F1ProcessingStage } fr
 import { addCompletedLifecycleRecord, withCompletedLifecycleRecord, type CompletedLifecycleRecord } from "./lifecycle-record";
 import { DevLogPanel } from "./dev-log-panel";
 import type { SharedFeedbackResult } from "./shared-feedback";
-import { addF2Context, createF2BuildState, createF2Preview, parameterizeF2Skill, previewStatus, removeF2Context, switchF2Path, toggleF2Skill, type F2BuildState, type F2PreviewState } from "./f2-build-model";
+import { acceptRenderedPreview, addF2Context, applyPochopitBuildResult, createF2BuildState, createF2PreviewSnapshot, createPochopitBuildRequest, parameterizeF2Skill, previewStatus, removeF2Context, switchF2Path, toggleF2Skill, type F2BuildState, type F2NotebookContextItem, type F2PreviewState, type F2RenderedPreview, type PochopitBuildResult } from "./f2-build-model";
 
 type SpeechRecognitionEventLike = {
   resultIndex: number;
@@ -283,6 +283,10 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
   const [analysis, setAnalysis] = useState<AnalysisState>(EMPTY_ANALYSIS);
   const [f2Build, setF2Build] = useState<F2BuildState | null>(null);
   const [f2Preview, setF2Preview] = useState<F2PreviewState>(null);
+  const [f2BuildStatus, setF2BuildStatus] = useState<"idle" | "loading" | "error">("idle");
+  const [f2BuildError, setF2BuildError] = useState<string | null>(null);
+  const [f2PreviewStatus, setF2PreviewStatus] = useState<"idle" | "loading" | "error">("idle");
+  const [f2PreviewError, setF2PreviewError] = useState<string | null>(null);
   const [analysisStatus, setAnalysisStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [selectedHypothesisId, setSelectedHypothesisId] = useState<string | null>(null);
@@ -318,12 +322,12 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
     setF2Build((current) => {
       if (!current || current.canonicalNeed.needId !== canonicalF2Need.needId) {
         setF2Preview(null);
-        return createF2BuildState(canonicalF2Need, analysis.mainUncertainty ? [analysis.mainUncertainty] : []);
+        return createF2BuildState(canonicalF2Need, analysis.mainUncertainty ? [analysis.mainUncertainty] : [], analysis.hypotheses);
       }
-      if (!current.uncertainties.length && analysis.mainUncertainty) return { ...current, uncertainties: [analysis.mainUncertainty] };
+      if (!current.analytical.uncertainties.length && current.processedRevision === null && analysis.mainUncertainty) return { ...current, analytical: { ...current.analytical, uncertainties: [{ missing: analysis.mainUncertainty, importance: "Může zpřesnit analytický obraz.", limitation: "Omezuje míru jistoty, nikoli možnost pokračovat v rozboru." }] } };
       return current;
     });
-  }, [analysis.mainUncertainty, canonicalF2Need, phase]);
+  }, [analysis.hypotheses, analysis.mainUncertainty, canonicalF2Need, phase]);
   const dictationTranscriptRef = useRef("");
   const dictationFinalizedSessionRef = useRef(0);
   const dictationRestartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -619,6 +623,35 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
 
   function togglePanel(panel: WorkspacePanelId) {
     setActivePanel((current) => current === panel ? null : panel);
+  }
+
+  function f2Situation(): F2NotebookContextItem[] {
+    return Object.entries(notepad).flatMap(([category, items]) => items.map((item) => ({ category: category as F2NotebookContextItem["category"], text: item.text })));
+  }
+
+  async function executeF2Build() {
+    if (!f2Build) return;
+    setF2BuildStatus("loading"); setF2BuildError(null);
+    try {
+      const buildRequest = createPochopitBuildRequest(f2Build, f2Situation(), selectedModel);
+      const response = await fetch("/api/f2", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ operation: "build", model: selectedModel, build: buildRequest }) });
+      const payload = await response.json().catch(() => null) as { result?: PochopitBuildResult; error?: string } | null;
+      if (!response.ok || !payload?.result) throw new Error(payload?.error || "Build se nepodařilo rozpracovat.");
+      setF2Build((current) => current ? applyPochopitBuildResult(current, payload.result!, buildRequest.buildRevision) : current);
+      setF2BuildStatus("idle");
+    } catch (cause) { setF2BuildError(cause instanceof Error ? cause.message : "Build se nepodařilo rozpracovat."); setF2BuildStatus("error"); }
+  }
+
+  async function renderF2Preview() {
+    if (!f2Build) return;
+    setF2PreviewStatus("loading"); setF2PreviewError(null);
+    try {
+      const snapshot = createF2PreviewSnapshot(f2Build);
+      const response = await fetch("/api/f2", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ operation: "preview", model: selectedModel, snapshot }) });
+      const payload = await response.json().catch(() => null) as { result?: F2RenderedPreview; error?: string } | null;
+      if (!response.ok || !payload?.result) throw new Error(payload?.error || "Preview se nepodařilo vytvořit.");
+      setF2Preview(acceptRenderedPreview(snapshot, payload.result)); setF2PreviewStatus("idle"); setActivePanel("output");
+    } catch (cause) { setF2PreviewError(cause instanceof Error ? cause.message : "Preview se nepodařilo vytvořit."); setF2PreviewStatus("error"); }
   }
 
   async function refreshStructuredAnalysis(notepadState: NotepadState, focusInstruction = "", turnId?: string, requestId?: string, transitionFrom?: "F1" | "F2" | "F3") {
@@ -1612,16 +1645,17 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
           })}
           f2Build={f2Build}
           f2Preview={f2Build ? previewStatus(f2Preview, f2Build) : f2Preview}
+          f2BuildStatus={f2BuildStatus}
+          f2BuildError={f2BuildError}
+          f2PreviewStatus={f2PreviewStatus}
+          f2PreviewError={f2PreviewError}
           onF2PathChange={(path) => setF2Build((current) => current ? switchF2Path(current, path) : current)}
           onF2SkillToggle={(id) => setF2Build((current) => current ? toggleF2Skill(current, id) : current)}
           onF2ParameterChange={(id, value) => setF2Build((current) => current ? parameterizeF2Skill(current, id, value) : current)}
           onF2ContextAdd={(text) => setF2Build((current) => current ? addF2Context(current, { id: createLocalId("f2-context"), text }) : current)}
           onF2ContextRemove={(id) => setF2Build((current) => current ? removeF2Context(current, id) : current)}
-          onF2Preview={() => {
-            if (!f2Build) return;
-            setF2Preview(createF2Preview(f2Build, analysis.hypotheses));
-            setActivePanel("output");
-          }}
+          onF2Execute={() => void executeF2Build()}
+          onF2Preview={() => void renderF2Preview()}
         />
 
         {activePanel && <div
