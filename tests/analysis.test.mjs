@@ -68,7 +68,7 @@ test("analysis UI delegates to the stateful build editor and snapshot preview", 
     readFile(new URL("../app/f2-build-editor.tsx", import.meta.url), "utf8"),
   ]);
   assert.match(source, /<F2BuildEditor/);
-  assert.match(source, /<F2Preview/);
+  assert.match(source, /<F3Finalization/);
   assert.match(editor, /Společný analytický obraz/);
   assert.match(editor, /\+ Doplnit informaci/);
   assert.match(editor, /Aktualizovat preview/);

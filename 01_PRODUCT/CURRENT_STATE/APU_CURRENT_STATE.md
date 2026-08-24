@@ -17,9 +17,10 @@ Rozbor
 • Card and chat representation are views of the same structured Analysis state.
 
 Výstup  
-• Downstream realization layer for concrete recommendations, plans and documents.  
-• It must preserve relevant uncertainty and limitations inherited from Zápisník and Rozbor.  
-• A structured standalone Output artifact/editor remains a separate implementation concern; the existence of F3 routing does not by itself imply a finished output-management layer.
+• Downstream F3 realization layer for concrete recommendations, plans and documents, bound to one accepted immutable F2 PREVIEW snapshot.
+• F2 decides what makes pedagogical/analytical sense; F3 decides how that accepted content is materialized for an audience. It must preserve relevant uncertainty and limitations inherited from Zápisník and Rozbor.
+• Minimal local controls select audience, language style, detail and text/table/card representation. They do not call the model; `VYTVOŘIT VÝSTUP` is the only explicit final-render action.
+• One current successful render is retained. Configuration changes mark it stale, while a newer F2 preview is reported but not adopted without an explicit action.
 
 PHASE BEHAVIOR  
 F1 — Intake  
@@ -41,8 +42,10 @@ F2 — Rozbor
 • Switching paths preserves shared hypotheses and each path's local skill configuration, makes no automatic model call, and requires explicit execution when the target path's processed state is not current. The F3 target does not select the path and remains an early contract separate from F2 logic.
 
 F2 → F3  
-• The current boundary is an explicit model-rendered snapshot PREVIEW on the Výstup surface: an F2 output and early F3 contract, not a final F3 artifact.
-• Full elaboration of every Rozbor branch is not required; remaining uncertainty is carried forward transparently.
+• The boundary is an explicit model-rendered PREVIEW snapshot followed by explicit entry into F3. F3 consumes only that snapshot and never reconstructs the case from chat or mutable live F2 state.
+• Finalization can rephrase and materialize path-aware text, observation tables or practical cards, but cannot change F2 goals, hypotheses, selected approaches or observation evidence. A required substantive change produces a boundary issue and an explicit return to Rozbor.
+• Returning preserves F3 reference state and does not mutate F1, execute F2 or regenerate PREVIEW. A newer accepted F2 snapshot must be explicitly adopted and makes the retained final render stale.
+• Full elaboration of every Rozbor branch is not required; remaining materially relevant uncertainty is carried forward transparently.
 
 CURRENT INTERACTION PRINCIPLES  
 • Communication profiles Operátor, Kolega and Metodik change presentation style, not the underlying pedagogical decision structure.  
@@ -50,8 +53,8 @@ CURRENT INTERACTION PRINCIPLES
 • Project state and unread/seen state are presentation/state concerns and must not silently alter canonical data.  
 • APU Session JSON is a diagnostic/session snapshot, not a long-term project database or substitute for canonical project documentation.
 
-CURRENT LIMITATIONS  
-• Long-term project persistence, multi-project history and a fully structured Output editor are separate capabilities and must be documented only when actually implemented and verified.  
+CURRENT LIMITATIONS
+• Long-term project persistence, multi-project history, rich document editing, arbitrary templates and multiple saved F3 versions remain separate capabilities.
 • Integrations or deployment-specific access mechanisms are not product invariants and belong in technical current documentation.
 
 DOCUMENT OWNERSHIP  

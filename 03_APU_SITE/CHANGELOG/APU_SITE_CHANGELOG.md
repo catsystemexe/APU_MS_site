@@ -4,6 +4,16 @@ Status: CURRENT
 
 Records significant verified product/runtime/project changes. It is not a complete Git log. Historical Sites-era entries are retained where they remain useful; current deployment state must not be inferred from a changelog entry alone.
 
+## 2026-08-24 — Minimum viable F3 finalization layer
+
+### Added
+- Výstup now enters F3 explicitly from an immutable accepted F2 PREVIEW snapshot and remains bound to it until explicit adoption of a newer preview.
+- Local audience, language/detail and text/table/card controls feed one explicit path-aware final render request; current output is preserved and marked stale after configuration or source changes.
+- The F3 model/schema boundary prohibits substantive F2 changes, returns a distinct boundary issue when materialization would require invented reasoning, and provides an explicit return to Rozbor.
+
+### Preserved scope
+- Rich document editing, arbitrary templates, multiple output versions, PDF/export generation and production deployment remain outside this batch.
+
 ## 2026-08-24 — Model-driven F2 POZOROVAT and VYTVOŘIT paths
 
 ### Added

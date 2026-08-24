@@ -83,6 +83,7 @@ import { addCompletedLifecycleRecord, withCompletedLifecycleRecord, type Complet
 import { DevLogPanel } from "./dev-log-panel";
 import type { SharedFeedbackResult } from "./shared-feedback";
 import { acceptRenderedPreview, addF2Context, applyF2BuildResult, createF2BuildRequest, createF2BuildState, createF2PreviewSnapshot, parameterizeF2Skill, previewStatus, removeF2Context, switchF2Path, toggleF2Skill, type F2BuildResult, type F2BuildState, type F2NotebookContextItem, type F2PreviewState, type F2RenderedPreview } from "./f2-build-model";
+import { acceptF3Render, adoptF2Snapshot, createF3RenderRequest, createF3State, updateF3Config, type F3Config, type F3RenderResult, type F3State } from "./f3-finalization-model";
 
 type SpeechRecognitionEventLike = {
   resultIndex: number;
@@ -287,6 +288,9 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
   const [f2BuildError, setF2BuildError] = useState<string | null>(null);
   const [f2PreviewStatus, setF2PreviewStatus] = useState<"idle" | "loading" | "error">("idle");
   const [f2PreviewError, setF2PreviewError] = useState<string | null>(null);
+  const [f3State, setF3State] = useState<F3State | null>(null);
+  const [f3Status, setF3Status] = useState<"idle" | "loading" | "error">("idle");
+  const [f3Error, setF3Error] = useState<string | null>(null);
   const [analysisStatus, setAnalysisStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [selectedHypothesisId, setSelectedHypothesisId] = useState<string | null>(null);
@@ -651,6 +655,24 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
       if (!response.ok || !payload?.result) throw new Error(payload?.error || "Preview se nepodařilo vytvořit.");
       setF2Preview(acceptRenderedPreview(snapshot, payload.result)); setF2PreviewStatus("idle"); setActivePanel("output");
     } catch (cause) { setF2PreviewError(cause instanceof Error ? cause.message : "Preview se nepodařilo vytvořit."); setF2PreviewStatus("error"); }
+  }
+
+  function enterF3() {
+    if (!f2Preview) return;
+    setF3State((current) => current ?? createF3State(f2Preview.snapshot));
+    setF3Error(null); setPhase("output");
+  }
+
+  async function renderF3() {
+    if (!f3State) return;
+    const renderRequest = createF3RenderRequest(f3State, selectedModel);
+    setF3Status("loading"); setF3Error(null);
+    try {
+      const response = await fetch("/api/f3", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(renderRequest) });
+      const payload = await response.json().catch(() => null) as { result?: F3RenderResult; error?: string } | null;
+      if (!response.ok || !payload?.result) throw new Error(payload?.error || "Finální výstup se nepodařilo vytvořit.");
+      setF3State((current) => current ? acceptF3Render(current, payload.result!, renderRequest) : current); setF3Status("idle");
+    } catch (cause) { setF3Error(cause instanceof Error ? cause.message : "Finální výstup se nepodařilo vytvořit."); setF3Status("error"); }
   }
 
   async function refreshStructuredAnalysis(notepadState: NotepadState, focusInstruction = "", turnId?: string, requestId?: string, transitionFrom?: "F1" | "F2" | "F3") {
@@ -1134,6 +1156,8 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
     setAnalysisFocus(null);
     setUnseenAnalysisKeys(new Set());
     setHighlightedAnalysisKeys(new Set());
+    setF2Build(null); setF2Preview(null); setF2BuildStatus("idle"); setF2BuildError(null); setF2PreviewStatus("idle"); setF2PreviewError(null);
+    setF3State(null); setF3Status("idle"); setF3Error(null);
     setSessionTelemetry([]);
     telemetryClockRef.current.clear();
     sessionRef.current = { id: createMessageId(), startedAt: new Date().toISOString() };
@@ -1655,6 +1679,14 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
           onF2ContextRemove={(id) => setF2Build((current) => current ? removeF2Context(current, id) : current)}
           onF2Execute={() => void executeF2Build()}
           onF2Preview={() => void renderF2Preview()}
+          f3State={f3State}
+          f3Status={f3Status}
+          f3Error={f3Error}
+          onF3Enter={enterF3}
+          onF3Config={(change: Partial<F3Config>) => setF3State((current) => current ? updateF3Config(current, change) : current)}
+          onF3Render={() => void renderF3()}
+          onF3Adopt={() => setF3State((current) => current && f2Preview ? adoptF2Snapshot(current, f2Preview.snapshot) : current)}
+          onF3Return={() => { setPhase("development"); setActivePanel("analysis"); setF3Error(null); }}
         />
 
         {activePanel && <div
