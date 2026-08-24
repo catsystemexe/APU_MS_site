@@ -56,10 +56,13 @@ test("only substantive assistant content receives the response surface", async (
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
   ]);
 
-  assert.match(client, /message\.role === "assistant" && \(message\.content \|\| message\.analysisEntryHypotheses\) \? "assistant-response" : undefined/);
-  assert.match(client, /"assistant-response"[\s\S]*?analysisNextPrompt[\s\S]*?<AnalysisQuestionRow[\s\S]*?dialogActions\?\.map[\s\S]*?<DialogActionCard/);
+  assert.match(client, /message\.role === "assistant" && \(message\.content \|\| message\.analysisEntryHypotheses\)[\s\S]*?assistant-response/);
+  assert.match(client, /assistant-response--f2-entry[\s\S]*?analysisNextPrompt[\s\S]*?<AnalysisQuestionRow[\s\S]*?dialogActions\?\.map[\s\S]*?<DialogActionCard/);
   assert.match(styles, /\.assistant-response\s*\{[\s\S]*?background:\s*var\(--bg-surface\)/);
   assert.match(styles, /@media \(max-width: 640px\)[\s\S]*?\.assistant-response\s*\{[\s\S]*?max-width:\s*100%;[\s\S]*?padding:\s*7px 8px;/);
   assert.doesNotMatch(styles, /\.assistant-response\s*\{[^}]*?(?:border:|box-shadow:)/);
-  assert.match(styles, /\.message-list\s*\{[\s\S]*?background:\s*color-mix/);
+  assert.match(styles, /\.assistant-response\.assistant-response--f2-entry\s*\{[^}]*?padding:\s*0;[^}]*?background:\s*transparent;/);
+  assert.match(styles, /\.message-list\s*\{[\s\S]*?background:\s*color-mix\(in srgb, var\(--bg-page\) 92%, var\(--accent-soft\) 8%\)/);
+  assert.match(styles, /\.message--user \.message-content\s*\{[^}]*?width:\s*fit-content;[^}]*?min-width:\s*min\(9rem, calc\(100% - 16px\)\);[^}]*?max-width:\s*min\(690px, calc\(100% - 16px\)\);/);
+  assert.match(styles, /\.message-content\s*\{[^}]*?overflow-wrap:\s*anywhere;/);
 });

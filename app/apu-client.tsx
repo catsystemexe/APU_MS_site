@@ -819,7 +819,10 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
           state: "completed",
           label: result.analysis.chatUpdate.kind === "entry" ? "Vytvořeny pracovní hypotézy" : "Aktualizován Rozbor",
         }),
-        content: formatAnalysisChat(result.analysis), analysisNextPrompt: result.analysis.chatUpdate.nextPrompt,
+        ...(result.analysis.chatUpdate.kind === "entry"
+          ? { content: "", analysisEntryHypotheses: entryHypotheses(result.analysis) }
+          : { content: formatAnalysisChat(result.analysis) }),
+        analysisNextPrompt: result.analysis.chatUpdate.nextPrompt,
         phaseLabel: "[FÁZE 2]",
         ...(result.diagnostics ? { diagnostics: result.diagnostics } : {}),
       } : message));
@@ -1479,7 +1482,9 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
                   ))}
                 </div>
               )}
-              <div className={message.role === "assistant" && (message.content || message.analysisEntryHypotheses) ? "assistant-response" : undefined}>
+              <div className={message.role === "assistant" && (message.content || message.analysisEntryHypotheses)
+                ? `assistant-response${message.analysisEntryHypotheses ? " assistant-response--f2-entry" : ""}`
+                : undefined}>
                 <div className="message-content">
                   {message.content
                     ? (

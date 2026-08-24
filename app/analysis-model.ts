@@ -99,7 +99,6 @@ export function analysisChangeKeys(previous: AnalysisState, next: AnalysisState)
 export function formatAnalysisChat(analysis: AnalysisState) {
   const update = analysis.chatUpdate;
   const lines: string[] = [];
-  if (update.kind === "entry") lines.push("Přešli jsme do Rozboru. Připravil jsem kartu Rozbor z aktuálního Zápisníku.");
   if (update.notebookChanges.length) lines.push(`V Zápisníku se doplnilo: ${update.notebookChanges.join("; ")}.`);
   const summary = stripLegacyQuestionFromSummary(update.summary, update.nextPrompt);
   if (summary) lines.push(summary);
