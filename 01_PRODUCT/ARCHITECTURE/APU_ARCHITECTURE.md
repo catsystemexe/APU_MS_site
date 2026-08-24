@@ -10,6 +10,7 @@ Derived layers must never silently rewrite canonical information.
 1\. ZÁPISNÍK — CANONICAL DATA  
 • Contains explicit user facts and pedagogical needs for the current situation.  
 • Items may originate from manual input or grounded extraction.  
+• A canonical pedagogical need preserves its user-visible text and owns a mapped initial F2 path (`POCHOPIT`, `POZOROVAT` or `VYTVOŘIT`) plus a separate optional concrete F3 target.
 • Interpretation, working hypotheses and recommendations do not belong here.
 
 2\. ROZBOR — DERIVED ANALYTICAL LAYER  
@@ -25,6 +26,7 @@ Derived layers must never silently rewrite canonical information.
 
 DATA FLOW  
 • User message → extraction / grounding → supported candidates → Zápisník.  
+• Zápisník canonical pedagogical need → mapped F2 path + optional F3 target → F2.
 • Zápisník → analysis flow → AnalysisState → Rozbor card \+ chat representation.  
 • Zápisník \+ current Rozbor context → F3/output context → downstream work.  
 • Derived layers do not silently write backwards into Zápisník.
@@ -32,6 +34,7 @@ DATA FLOW
 PHASE BOUNDARIES  
 • Runtime phases correspond to F1 Intake, F2 Rozbor and F3 Výstup.  
 • F1 → F2 requires explicit user navigation/instruction and applicable intake readiness.  
+• The F1 mapped path is initial routing derived from the canonical need; a later F2 active path is an editable working choice and does not replace or rewrite that F1 mapping.
 • F2 → F3 requires explicit user action; complete elaboration of the entire Rozbor is not required.  
 • Opening Zápisník, Rozbor or Výstup is a working-layer selection and does not itself change phase.
 

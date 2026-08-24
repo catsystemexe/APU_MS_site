@@ -10,6 +10,14 @@ export type SourceReference = {
   end: number;
 };
 
+export const F2_PATHS = ["POCHOPIT", "POZOROVAT", "VYTVOŘIT"] as const;
+export type F2Path = typeof F2_PATHS[number];
+
+export type PedagogicalNeedMapping = {
+  f2Path: F2Path;
+  f3Target: string | null;
+};
+
 export type NotepadEntry = {
   id: string;
   text: string;
@@ -17,6 +25,7 @@ export type NotepadEntry = {
   source?: SourceReference;
   reviewStatus?: "unreviewed" | "reviewed";
   visibility?: "unseen" | "seen";
+  needMapping?: PedagogicalNeedMapping;
 };
 
 export type NotepadState = Record<CategoryId, NotepadEntry[]>;
@@ -76,7 +85,41 @@ function isNotepadEntry(value: unknown): value is NotepadEntry {
     (entry.origin === "manual" || entry.origin === "extracted") &&
     (entry.source === undefined || isSourceReference(entry.source)) &&
     (entry.reviewStatus === undefined || entry.reviewStatus === "unreviewed" || entry.reviewStatus === "reviewed") &&
-    (entry.visibility === undefined || entry.visibility === "unseen" || entry.visibility === "seen");
+    (entry.visibility === undefined || entry.visibility === "unseen" || entry.visibility === "seen") &&
+    (entry.needMapping === undefined || isPedagogicalNeedMapping(entry.needMapping));
+}
+
+export function isPedagogicalNeedMapping(value: unknown): value is PedagogicalNeedMapping {
+  if (!value || typeof value !== "object") return false;
+  const mapping = value as Partial<PedagogicalNeedMapping>;
+  return F2_PATHS.includes(mapping.f2Path as F2Path) &&
+    (mapping.f3Target === null || typeof mapping.f3Target === "string");
+}
+
+function concreteTarget(text: string, path: F2Path) {
+  const normalized = text.trim().replace(/[.!?]+$/, "");
+  if (path === "POCHOPIT" && /přehled/i.test(normalized)) return "přehled";
+  const observation = normalized.match(/((?:týdenní\s+)?pozorovací\s+tabulk\w*)/i)?.[1];
+  if (observation) return observation.toLocaleLowerCase("cs-CZ");
+  const practicalMaterial = normalized.match(/(pracovní\s+kart\w*)/i)?.[1];
+  if (practicalMaterial) return practicalMaterial.toLocaleLowerCase("cs-CZ");
+  const prepared = normalized.match(/(?:připrav(?:te)?|navrhni|vytvoř(?:te)?)\s+(?:mi\s+)?(.+)$/i)?.[1];
+  if (prepared && !/^(?:přehled)\s+možných\s+příčin/i.test(prepared)) return prepared.toLocaleLowerCase("cs-CZ");
+  return null;
+}
+
+/** Maps a canonical F1 need by pedagogical function; ambiguity deliberately falls back to POCHOPIT. */
+export function mapPedagogicalNeed(text: string): PedagogicalNeedMapping {
+  let f2Path: F2Path = "POCHOPIT";
+  if (/pozorovac|pozorovat|sledovat|zaznamen|záznam|evidenc/i.test(text)) f2Path = "POZOROVAT";
+  else if (/připrav|navrhni|pracovní\s+kart|intervenc|praktick(?:ou|ý)|aktivit|materiál/i.test(text)) f2Path = "VYTVOŘIT";
+  if (/pochop|porozum|vysvětl|interpret|rozliš|příčin|proč|přehled\s+možných/i.test(text)) f2Path = "POCHOPIT";
+  return { f2Path, f3Target: concreteTarget(text, f2Path) };
+}
+
+function withLegacyNeedMapping(entry: NotepadEntry): NotepadEntry {
+  if (entry.needMapping) return entry;
+  return { ...entry, needMapping: { f2Path: mapPedagogicalNeed(entry.text).f2Path, f3Target: null } };
 }
 
 export function parseNotepadState(value: unknown): NotepadState | null {
@@ -88,7 +131,7 @@ export function parseNotepadState(value: unknown): NotepadState | null {
   for (const category of CATEGORY_IDS) {
     const items = record[category] as unknown[];
     if (!items.every(isNotepadEntry)) return null;
-    parsed[category] = items;
+    parsed[category] = category === "goals" ? (items as NotepadEntry[]).map(withLegacyNeedMapping) : items as NotepadEntry[];
   }
   return parsed;
 }
@@ -106,6 +149,7 @@ export function migrateLegacyNotepad(value: unknown): NotepadState | null {
       id: createLocalId("legacy"),
       text,
       origin: "manual",
+      ...(category === "goals" ? { needMapping: { f2Path: mapPedagogicalNeed(text).f2Path, f3Target: null } } : {}),
     }));
   }
   return migrated;
@@ -123,6 +167,7 @@ export function compactNotepad(
         id: entry.id,
         text: entry.text.trim(),
         trust: "confirmed" as const,
+        ...(category === "goals" ? { needMapping: entry.needMapping ?? mapPedagogicalNeed(entry.text) } : {}),
       })),
   );
 }
@@ -174,6 +219,7 @@ export function applyCandidates(
         start: candidate.start,
         end: candidate.end,
       },
+      ...(candidate.category === "goals" ? { needMapping: mapPedagogicalNeed(candidate.notebookText) } : {}),
     };
     next[candidate.category].push(entry);
     added.push(entry);
@@ -203,6 +249,21 @@ export function replaceEntryFromConflict(
       start: candidate.start,
       end: candidate.end,
     },
+    ...(candidate.category === "goals" ? { needMapping: mapPedagogicalNeed(candidate.notebookText) } : {}),
   };
   return next;
+}
+
+export type F1ToF2NeedContract = {
+  needId: string;
+  needText: string;
+  initialF2Path: F2Path;
+  f3Target: string | null;
+};
+
+export function getF1ToF2NeedContract(state: NotepadState, activeNeedId?: string | null): F1ToF2NeedContract | null {
+  const need = state.goals.find((entry) => entry.id === activeNeedId) ?? state.goals[0];
+  if (!need) return null;
+  const mapping = need.needMapping ?? mapPedagogicalNeed(need.text);
+  return { needId: need.id, needText: need.text, initialF2Path: mapping.f2Path, f3Target: mapping.f3Target };
 }

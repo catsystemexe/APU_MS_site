@@ -43,6 +43,8 @@ import {
   createLocalId,
   ExtractionCandidate,
   ExtractionResult,
+  getF1ToF2NeedContract,
+  mapPedagogicalNeed,
   NotepadEntry,
   NotepadState,
   replaceEntryFromConflict,
@@ -617,6 +619,7 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
           activeNeedId,
           focusInstruction,
           skippedQuestions: skippedAnalysisQuestions,
+          canonicalNeed: getF1ToF2NeedContract(notepadState, activeNeedId),
           ...(turnId ? { turnId } : {}),
         }),
       });
@@ -1098,7 +1101,7 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
     if (notepad.goals.some((item) => item.text.trim().toLocaleLowerCase("cs-CZ") === normalized)) return;
     setNotepad({
       ...notepad,
-      goals: [...notepad.goals, { id: createLocalId("need"), text: need.title, origin: "manual", reviewStatus: "reviewed" }],
+      goals: [...notepad.goals, { id: createLocalId("need"), text: need.title, origin: "manual", reviewStatus: "reviewed", needMapping: mapPedagogicalNeed(need.title) }],
     });
     setAnalysis((current) => ({
       ...current,

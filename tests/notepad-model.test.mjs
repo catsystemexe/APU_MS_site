@@ -7,8 +7,54 @@ import {
   confirmNotepadEntry,
   EMPTY_NOTEPAD,
   migrateLegacyNotepad,
+  parseNotepadState,
   replaceEntryFromConflict,
+  F2_PATHS,
+  getF1ToF2NeedContract,
+  isPedagogicalNeedMapping,
+  mapPedagogicalNeed,
 } from "../app/notepad-model.ts";
+
+test("canonical F1 path schema permits exactly the three supported paths", () => {
+  assert.deepEqual(F2_PATHS, ["POCHOPIT", "POZOROVAT", "VYTVOŘIT"]);
+  for (const f2Path of F2_PATHS) assert.equal(isPedagogicalNeedMapping({ f2Path, f3Target: null }), true);
+  assert.equal(isPedagogicalNeedMapping({ f2Path: "PREVIEW", f3Target: null }), false);
+});
+
+test("pedagogical function maps the required examples independently from their artifact", () => {
+  assert.deepEqual(mapPedagogicalNeed("Potřebuji týdenní pozorovací tabulku."), {
+    f2Path: "POZOROVAT", f3Target: "týdenní pozorovací tabulku",
+  });
+  assert.deepEqual(mapPedagogicalNeed("Připrav mi pracovní karty."), {
+    f2Path: "VYTVOŘIT", f3Target: "pracovní karty",
+  });
+  assert.deepEqual(mapPedagogicalNeed("Vytvoř mi přehled možných příčin."), {
+    f2Path: "POCHOPIT", f3Target: "přehled",
+  });
+});
+
+test("ambiguous needs fall back to POCHOPIT and a target remains optional", () => {
+  assert.deepEqual(mapPedagogicalNeed("Potřebuji se v situaci posunout."), { f2Path: "POCHOPIT", f3Target: null });
+  assert.deepEqual(mapPedagogicalNeed("Chci lépe pochopit, proč se to děje."), { f2Path: "POCHOPIT", f3Target: null });
+});
+
+test("canonical need mapping persists and the F1 to F2 adapter consumes it", () => {
+  const state = structuredClone(EMPTY_NOTEPAD);
+  state.goals.push({ id: "need-1", text: "Připrav mi pracovní karty.", origin: "manual", needMapping: mapPedagogicalNeed("Připrav mi pracovní karty.") });
+  const parsed = parseNotepadState(JSON.parse(JSON.stringify(state)));
+  assert.deepEqual(parsed?.goals[0].needMapping, { f2Path: "VYTVOŘIT", f3Target: "pracovní karty" });
+  assert.deepEqual(getF1ToF2NeedContract(parsed), {
+    needId: "need-1", needText: "Připrav mi pracovní karty.", initialF2Path: "VYTVOŘIT", f3Target: "pracovní karty",
+  });
+});
+
+test("current legacy entries gain a safe route without fabricating an F3 target", () => {
+  const legacyCurrentState = structuredClone(EMPTY_NOTEPAD);
+  legacyCurrentState.goals.push({ id: "old-need", text: "Připrav mi pracovní karty.", origin: "manual" });
+  const parsed = parseNotepadState(legacyCurrentState);
+  assert.deepEqual(parsed?.goals[0].needMapping, { f2Path: "VYTVOŘIT", f3Target: null });
+  assert.equal(parsed?.goals[0].text, "Připrav mi pracovní karty.");
+});
 
 test("compact context treats explicit extracted notes as canonical and excludes the current message", () => {
   const state = structuredClone(EMPTY_NOTEPAD);
