@@ -17,6 +17,29 @@ test("canonical F1 mapping initializes all paths and keeps F3 target separate", 
   for (const path of ["POCHOPIT", "POZOROVAT", "VYTVOŘIT"]) { const build = createF2BuildState(need(path)); assert.equal(build.initialPath, path); assert.equal(build.activePath, path); assert.equal(build.f3Target, "přehled"); }
 });
 
+test("late analysis hypotheses populate an already initialized empty F2 build", () => {
+  const build = createF2BuildState(need(), [], []);
+  const next = synchronizeF2BuildWithCanonicalNeed(build, build.canonicalNeed, [], [hypothesis("h1"), hypothesis("h2")]);
+  assert.deepEqual(next.workingHypotheses.map((item) => item.id), ["h1", "h2"]);
+  assert.ok(next.workingHypotheses.length > 0, "F2 editor accordion render condition is satisfied");
+});
+
+test("updated analysis hypotheses refresh an unprocessed F2 entry layer", () => {
+  const build = createF2BuildState(need(), [], [hypothesis("h1")]);
+  const next = synchronizeF2BuildWithCanonicalNeed(build, build.canonicalNeed, [], [hypothesis("h1"), hypothesis("h2")]);
+  assert.deepEqual(next.workingHypotheses.map((item) => item.id), ["h1", "h2"]);
+});
+
+test("legacy analysis cannot overwrite hypotheses accepted from F2 processing", () => {
+  let build = createF2BuildState(need(), [], [hypothesis("h1")]);
+  build = applyF2BuildResult(build, { ...result("POCHOPIT"), hypotheses: [hypothesis("m", "Modelová hypotéza")] }, "POCHOPIT", build.buildRevision);
+  const processedResultId = build.processedBuilds.POCHOPIT.processedResultId;
+  const next = synchronizeF2BuildWithCanonicalNeed(build, build.canonicalNeed, [], [hypothesis("h1"), hypothesis("h2")]);
+  assert.equal(next, build);
+  assert.deepEqual(next.workingHypotheses.map((item) => item.id), ["m"]);
+  assert.equal(next.processedBuilds.POCHOPIT.processedResultId, processedResultId);
+});
+
 test("same-ID canonical text, route and target changes safely reset derived F2 state without calls", () => {
   let calls = 0;
   let build = configured("POCHOPIT", "přehled");

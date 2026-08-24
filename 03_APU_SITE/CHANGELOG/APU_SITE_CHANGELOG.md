@@ -4,6 +4,15 @@ Status: CURRENT
 
 Records significant verified product/runtime/project changes. It is not a complete Git log. Historical Sites-era entries are retained where they remain useful; current deployment state must not be inferred from a changelog entry alone.
 
+## 2026-08-24 — F2 entry-hypothesis synchronization repair
+
+### Fixed
+- Analysis hypotheses that complete after F2 build initialization now populate or refresh the shared entry hypothesis layer while the build remains unprocessed.
+- Once F2 accepts model-processed hypotheses, later legacy analysis refreshes no longer overwrite that newer analytical state.
+
+### Preserved scope
+- Canonical F1 invalidation, processed-result and snapshot identities, explicit model-call boundaries, the existing accordion UI and production deployment remain unchanged.
+
 ## 2026-08-24 — F2/F3 execution contract and response integrity repair
 
 ### Fixed

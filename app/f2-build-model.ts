@@ -63,7 +63,13 @@ export function createF2BuildState(need: F1ToF2NeedContract, uncertainties: stri
 }
 export function synchronizeF2BuildWithCanonicalNeed(build: F2BuildState | null, need: F1ToF2NeedContract, uncertainties: string[] = [], hypotheses: WorkingHypothesis[] = []) {
   if (!build) return createF2BuildState(need, uncertainties, hypotheses);
-  if (hasSameCanonicalF1Need(build.canonicalNeed, need)) return build;
+  if (hasSameCanonicalF1Need(build.canonicalNeed, need)) {
+    // Entry analysis may finish after the local F2 shell has been initialized.
+    // It remains authoritative only until F2 accepts its first model result;
+    // afterwards workingHypotheses is the newer shared, F2-owned layer.
+    if (Object.keys(build.processedBuilds).length > 0 || JSON.stringify(build.workingHypotheses) === JSON.stringify(hypotheses)) return build;
+    return revise(build, { workingHypotheses: structuredClone(hypotheses) });
+  }
   // A changed canonical contract invalidates all derived state. Reset activePath to
   // the new initial route rather than preserving an unexplained working override.
   return createF2BuildState(need);
