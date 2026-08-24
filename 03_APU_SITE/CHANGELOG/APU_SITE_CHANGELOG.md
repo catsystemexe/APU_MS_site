@@ -4,6 +4,16 @@ Status: CURRENT
 
 Records significant verified product/runtime/project changes. It is not a complete Git log. Historical Sites-era entries are retained where they remain useful; current deployment state must not be inferred from a changelog entry alone.
 
+## 2026-08-24 — Stateful F2 build-editor prototype
+
+### Added
+- Rozbor now initializes a local build from the canonical F1 need mapping and exposes switchable `POCHOPIT`, `POZOROVAT` and `VYTVOŘIT` paths with five optional parameterizable layers each.
+- F2 working context, shared hypotheses and informational uncertainty feed an explicit deterministic PREVIEW snapshot on the Výstup surface.
+- Build revisions keep an existing preview visible while marking it stale until explicitly refreshed; local build interactions make no model requests.
+
+### Not implemented
+- Model-driven skill execution and real pedagogical preview rendering remain outside this prototype.
+
 ## 2026-08-24 — Canonical pedagogical-need routing contract
 
 ### Added

@@ -32,13 +32,14 @@ F1 → F2
 • Opening the Rozbor panel alone does not change phase.
 
 F2 — Rozbor  
-• Entry starts with a concise working map rather than an exhaustive checklist.  
-• Further work may deepen only the selected relevant branch.  
-• A skipped question is not treated as an answer.  
-• F2 does not silently turn into concrete F3 recommendations.
+• The current prototype is a stateful build-editor shell for one canonical pedagogical need. Its initial path comes from the need mapping in Zápisník, while the active path can be switched without rewriting that mapping.
+• Each path offers five optional build layers with local activation and short parameterization; build edits and added working context do not call the model or write back to Zápisník.
+• Working hypotheses and relevant uncertainty remain a shared analytical picture for the situation rather than separate workflows.
+• PREVIEW explicitly captures one current build snapshot. Later build edits preserve that snapshot and mark it as outdated until the user refreshes it.
+• Model-driven skill execution and real preview rendering are not yet implemented.
 
 F2 → F3  
-• Transition is explicit.  
+• The current prototype boundary is an explicit snapshot PREVIEW rendered on the Výstup surface.
 • Full elaboration of every Rozbor branch is not required; remaining uncertainty is carried forward transparently.
 
 CURRENT INTERACTION PRINCIPLES  
@@ -58,4 +59,3 @@ DOCUMENT OWNERSHIP
 • APU — Product Decisions: durable product decisions and rationale.  
 • CHANGELOG: implemented historical changes.  
 • BACKLOG / KNOWN\_ISSUES: unfinished work and confirmed current defects.
-

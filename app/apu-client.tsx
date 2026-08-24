@@ -82,6 +82,7 @@ import { CompletedLifecycleStatus, ProcessingStatus, type F1ProcessingStage } fr
 import { addCompletedLifecycleRecord, withCompletedLifecycleRecord, type CompletedLifecycleRecord } from "./lifecycle-record";
 import { DevLogPanel } from "./dev-log-panel";
 import type { SharedFeedbackResult } from "./shared-feedback";
+import { addF2Context, createF2BuildState, createF2Preview, parameterizeF2Skill, previewStatus, removeF2Context, switchF2Path, toggleF2Skill, type F2BuildState, type F2PreviewState } from "./f2-build-model";
 
 type SpeechRecognitionEventLike = {
   resultIndex: number;
@@ -280,6 +281,8 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
   const [effectiveDesktopSplit, setEffectiveDesktopSplit] = useState(DEFAULT_DESKTOP_SPLIT);
   const [isResizingWorkspace, setIsResizingWorkspace] = useState(false);
   const [analysis, setAnalysis] = useState<AnalysisState>(EMPTY_ANALYSIS);
+  const [f2Build, setF2Build] = useState<F2BuildState | null>(null);
+  const [f2Preview, setF2Preview] = useState<F2PreviewState>(null);
   const [analysisStatus, setAnalysisStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [selectedHypothesisId, setSelectedHypothesisId] = useState<string | null>(null);
@@ -308,6 +311,19 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
   const dictationSessionRef = useRef(0);
   const dictationShouldContinueRef = useRef(false);
   const dictationPrefixRef = useRef("");
+  const canonicalF2Need = useMemo(() => getF1ToF2NeedContract(notepad, activeNeedId), [notepad, activeNeedId]);
+
+  useEffect(() => {
+    if (phase === "intake" || !canonicalF2Need) return;
+    setF2Build((current) => {
+      if (!current || current.canonicalNeed.needId !== canonicalF2Need.needId) {
+        setF2Preview(null);
+        return createF2BuildState(canonicalF2Need, analysis.mainUncertainty ? [analysis.mainUncertainty] : []);
+      }
+      if (!current.uncertainties.length && analysis.mainUncertainty) return { ...current, uncertainties: [analysis.mainUncertainty] };
+      return current;
+    });
+  }, [analysis.mainUncertainty, canonicalF2Need, phase]);
   const dictationTranscriptRef = useRef("");
   const dictationFinalizedSessionRef = useRef(0);
   const dictationRestartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1594,6 +1610,18 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
             dialogEvent: "continue_to_output",
             silent: true,
           })}
+          f2Build={f2Build}
+          f2Preview={f2Build ? previewStatus(f2Preview, f2Build) : f2Preview}
+          onF2PathChange={(path) => setF2Build((current) => current ? switchF2Path(current, path) : current)}
+          onF2SkillToggle={(id) => setF2Build((current) => current ? toggleF2Skill(current, id) : current)}
+          onF2ParameterChange={(id, value) => setF2Build((current) => current ? parameterizeF2Skill(current, id, value) : current)}
+          onF2ContextAdd={(text) => setF2Build((current) => current ? addF2Context(current, { id: createLocalId("f2-context"), text }) : current)}
+          onF2ContextRemove={(id) => setF2Build((current) => current ? removeF2Context(current, id) : current)}
+          onF2Preview={() => {
+            if (!f2Build) return;
+            setF2Preview(createF2Preview(f2Build, analysis.hypotheses));
+            setActivePanel("output");
+          }}
         />
 
         {activePanel && <div

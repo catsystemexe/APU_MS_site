@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, FileText, Info, NotebookPen, Plus, ScanSearch, TriangleAlert, type LucideIcon } from "lucide-react";
+import { FileText, Info, NotebookPen, Plus, ScanSearch, type LucideIcon } from "lucide-react";
 import { ChangeEvent, KeyboardEvent, type RefObject, useEffect, useRef, useState } from "react";
 import {
   CategoryId,
@@ -15,11 +15,10 @@ import {
   parseNotepadState,
 } from "./notepad-model";
 import { NOTEPAD_CATEGORIES } from "./notepad-categories";
-import { NOTEPAD_CATEGORY_META } from "./notepad-categories";
-import { AnalysisQuestionRow } from "./analysis-question-row";
 import type { AnalysisState, SuggestedNeed } from "./analysis-model";
-import { toggleExpandedHypothesis } from "./analysis-accordion";
 import type { ConversationPhase } from "./dialog-action";
+import { F2BuildEditor, F2Preview } from "./f2-build-editor";
+import type { F2BuildState, F2PreviewState } from "./f2-build-model";
 
 export type WorkspacePanel = "notepad" | "analysis" | "output" | null;
 
@@ -44,6 +43,14 @@ type WorkspacePanelProps = {
   onAnalysisItemSeen: (key: string) => void;
   onConfirmSuggestedNeed: (need: SuggestedNeed) => void;
   onContinueToOutput: () => void;
+  f2Build: F2BuildState | null;
+  f2Preview: F2PreviewState;
+  onF2PathChange: (path: F2BuildState["activePath"]) => void;
+  onF2SkillToggle: (id: string) => void;
+  onF2ParameterChange: (id: string, value: string) => void;
+  onF2ContextAdd: (text: string) => void;
+  onF2ContextRemove: (id: string) => void;
+  onF2Preview: () => void;
 };
 
 function useViewportSeen(ref: RefObject<Element | null>, key: string, unseen: boolean, onSeen: (key: string) => void) {
@@ -258,118 +265,18 @@ function NotepadPanel({
   );
 }
 
-function AnalysisQuestionItem({ question, unseen, highlighted, onSeen, onSkip }: {
-  question: AnalysisState["hypotheses"][number]["questions"][number]; unseen: boolean; highlighted: boolean;
-  onSeen: (key: string) => void; onSkip: (id: string) => void;
-}) {
-  const ref = useRef<HTMLDivElement>(null);
-  const key = `question:${question.id}`;
-  useViewportSeen(ref, key, unseen, onSeen);
-  return <div ref={ref} className="analysis-question-observer">
-    <AnalysisQuestionRow text={question.text} target={question.target} onSkip={() => onSkip(question.id)} className={highlighted ? "is-highlighted" : ""} />
-  </div>;
-}
-
-function AnalysisQuestions({ questions, onSkip, unseenKeys, highlightedKeys, onSeen }: {
-  questions: AnalysisState["hypotheses"][number]["questions"]; onSkip: (id: string) => void;
-  unseenKeys: Set<string>; highlightedKeys: Set<string>; onSeen: (key: string) => void;
-}) {
-  if (!questions.length) return null;
-  return <div className="analysis-questions">{questions.filter((question) => question.status === "active").map((question) => <AnalysisQuestionItem
-    key={question.id} question={question} unseen={unseenKeys.has(`question:${question.id}`)} highlighted={highlightedKeys.has(`question:${question.id}`)} onSeen={onSeen} onSkip={onSkip}
-  />)}</div>;
-}
-
-function HypothesisRow({ hypothesis, analysis, mode, isActive, isExpanded, onToggle, unseenKeys, highlightedKeys, onSeen, onSkip }: {
-  hypothesis: AnalysisState["hypotheses"][number]; analysis: AnalysisState; mode: AnalysisState["mode"]; isActive: boolean; isExpanded: boolean; onToggle: () => void;
-  unseenKeys: Set<string>; highlightedKeys: Set<string>; onSeen: (key: string) => void; onSkip: (id: string) => void;
-}) {
-  const headerRef = useRef<HTMLElement>(null); const detailRef = useRef<HTMLDivElement>(null);
-  const headerKey = `hypothesis:${hypothesis.id}:header`; const detailKey = `hypothesis:${hypothesis.id}:detail`;
-  const detailId = `analysis-hypothesis-${hypothesis.id}-detail`;
-  useViewportSeen(headerRef, headerKey, unseenKeys.has(headerKey), onSeen);
-  useViewportSeen(detailRef, detailKey, isExpanded && unseenKeys.has(detailKey), onSeen);
-  return <article ref={headerRef} className={`analysis-hypothesis${isActive ? " is-active" : ""}${highlightedKeys.has(headerKey) ? " is-highlighted" : ""}`}>
-    <button className="analysis-hypothesis-heading" type="button" onClick={onToggle} aria-expanded={isExpanded} aria-controls={detailId}>
-      <span className="analysis-rank">{hypothesis.rank}</span><ChevronDown className="analysis-hypothesis-chevron" aria-hidden="true" /><span className="analysis-hypothesis-copy"><strong>{hypothesis.title}</strong><small>{hypothesis.summary}</small></span>
-    </button>
-    {isExpanded && <div id={detailId} ref={detailRef} className={`analysis-detail${highlightedKeys.has(detailKey) ? " is-highlighted" : ""}`}>
-      {mode === "entry" ? <>
-        {hypothesis.relevantNeeds.length > 0 && <><h3>Relevantní pro</h3><p>{hypothesis.relevantNeeds.map((id) => analysis.needs.find((need) => need.needId === id)?.title ?? id).join(" · ")}</p></>}
-        {hypothesis.question && <AnalysisQuestionItem question={hypothesis.question} unseen={unseenKeys.has(`question:${hypothesis.question.id}`)} highlighted={highlightedKeys.has(`question:${hypothesis.question.id}`)} onSeen={onSeen} onSkip={onSkip} />}
-      </> : <>
-        {hypothesis.supportingInformation.length > 0 && <><h3>Opora v Zápisníku</h3><ul>{hypothesis.supportingInformation.map((item) => <li key={item}>{item}</li>)}</ul></>}
-        {hypothesis.limitations.length > 0 && <><h3><TriangleAlert aria-hidden="true" /> Limity a nejistoty</h3><ul>{hypothesis.limitations.map((item) => <li key={item}>{item}</li>)}</ul></>}
-        {hypothesis.unknowns.length > 0 && <><h3>Neznámé informace</h3><ul>{hypothesis.unknowns.map((item) => <li key={item}>{item}</li>)}</ul></>}
-        {hypothesis.question && <AnalysisQuestionItem question={hypothesis.question} unseen={unseenKeys.has(`question:${hypothesis.question.id}`)} highlighted={highlightedKeys.has(`question:${hypothesis.question.id}`)} onSeen={onSeen} onSkip={onSkip} />}
-        <AnalysisQuestions questions={hypothesis.questions} onSkip={onSkip} unseenKeys={unseenKeys} highlightedKeys={highlightedKeys} onSeen={onSeen} />
-      </>}
-    </div>}
-  </article>;
-}
-
-function NeedTab({ need, active, unseen, highlighted, onSeen, onSelect }: {
-  need: AnalysisState["needs"][number]; active: boolean; unseen: boolean; highlighted: boolean; onSeen: (key: string) => void; onSelect: () => void;
-}) {
-  const ref = useRef<HTMLButtonElement>(null); const key = `need:${need.needId}:tab`;
-  useViewportSeen(ref, key, unseen, onSeen);
-  return <button ref={ref} type="button" role="tab" aria-selected={active} className={`${active ? "is-active" : ""}${highlighted ? " is-highlighted" : ""}`} onClick={onSelect}>{need.title}</button>;
-}
-
-function NeedContent({ need, analysis, mode, unseenKeys, highlightedKeys, onSeen, onSkip }: {
-  need: AnalysisState["needs"][number]; analysis: AnalysisState; mode: AnalysisState["mode"]; unseenKeys: Set<string>; highlightedKeys: Set<string>;
-  onSeen: (key: string) => void; onSkip: (id: string) => void;
-}) {
-  const ref = useRef<HTMLDivElement>(null); const key = `need:${need.needId}:content`;
-  useViewportSeen(ref, key, unseenKeys.has(key), onSeen);
-  return <div ref={ref} className={`analysis-need-content${highlightedKeys.has(key) ? " is-highlighted" : ""}`} role="tabpanel">
-    <h3>Směr</h3><p>{need.direction}</p>
-    <h3>Relevantní hypotézy</h3><ul>{need.relevantHypotheses.map((id) => <li key={id}>{analysis.hypotheses.find((item) => item.id === id)?.title ?? id}</li>)}</ul>
-    {need.question && <AnalysisQuestionItem question={need.question} unseen={unseenKeys.has(`question:${need.question.id}`)} highlighted={highlightedKeys.has(`question:${need.question.id}`)} onSeen={onSeen} onSkip={onSkip} />}
-    {mode === "working" && <>
-      {need.distinctions.length > 0 && <><h3>Co je potřeba rozlišit</h3><ul>{need.distinctions.map((item) => <li key={item}>{item}</li>)}</ul></>}
-      {need.parameters.length > 0 && <><h3>Relevantní parametry</h3><ul>{need.parameters.map((item) => <li key={item}>{item}</li>)}</ul></>}
-      {need.limitations.length > 0 && <><h3>Limity</h3><ul>{need.limitations.map((item) => <li key={item}>{item}</li>)}</ul></>}
-      <AnalysisQuestions questions={need.questions} onSkip={onSkip} unseenKeys={unseenKeys} highlightedKeys={highlightedKeys} onSeen={onSeen} />
-      {need.intendedOutput && <><h3>Možný typ budoucího výstupu</h3><p>{need.intendedOutput}</p></>}
-    </>}
-  </div>;
-}
-
-function AnalysisPanel(props: Pick<WorkspacePanelProps, "phase" | "analysis" | "analysisStatus" | "analysisError" | "selectedHypothesisId" | "activeNeedId" | "onSelectHypothesis" | "onSelectNeed" | "onRetryAnalysis" | "onSkipAnalysisQuestion" | "onConfirmSuggestedNeed" | "onContinueToOutput" | "unseenAnalysisKeys" | "highlightedAnalysisKeys" | "onAnalysisItemSeen">) {
-  const [expanded, setExpanded] = useState(() => new Set(props.analysis.hypotheses.slice(0, 1).map((hypothesis) => hypothesis.id)));
+function AnalysisPanel(props: Pick<WorkspacePanelProps, "phase" | "analysis" | "analysisStatus" | "analysisError" | "onRetryAnalysis" | "f2Build" | "f2Preview" | "onF2PathChange" | "onF2SkillToggle" | "onF2ParameterChange" | "onF2ContextAdd" | "onF2ContextRemove" | "onF2Preview">) {
   if (props.phase === "intake") return <div id="workspace-analysis" className="notepad-scroll workspace-panel-body" role="tabpanel" aria-label="Rozbor"><div className="workspace-empty-state"><ScanSearch aria-hidden="true" /><h2>Rozbor začne ve Fázi 2</h2><p>Otevření panelu fázi nemění. Do Rozboru přejdete až svým potvrzením.</p></div></div>;
   if (props.analysisStatus === "loading" && !props.analysis.hypotheses.length) return <div className="analysis-state"><span className="analysis-spinner" />Vytvářím Rozbor z aktuálního Zápisníku…</div>;
   if (props.analysisStatus === "error" && !props.analysis.hypotheses.length) return <div className="analysis-state"><p>{props.analysisError}</p><button type="button" onClick={props.onRetryAnalysis}>Zkusit znovu</button></div>;
-  const activeNeed = props.analysis.needs.find((item) => item.needId === props.activeNeedId) ?? props.analysis.needs[0];
-  return (
-    <div id="workspace-analysis" className="notepad-scroll workspace-panel-body" role="tabpanel" aria-label="Rozbor">
-      <section className="analysis-hypotheses" aria-label="Pracovní hypotézy">
-        {props.analysis.hypotheses.map((hypothesis) => {
-          const isActive = hypothesis.id === props.selectedHypothesisId;
-          const isExpanded = expanded.has(hypothesis.id);
-          return <HypothesisRow key={hypothesis.id} hypothesis={hypothesis} analysis={props.analysis} mode={props.analysis.mode} isActive={isActive} isExpanded={isExpanded}
-            onToggle={() => { props.onSelectHypothesis(hypothesis.id); setExpanded((current) => toggleExpandedHypothesis(current, hypothesis.id)); }} unseenKeys={props.unseenAnalysisKeys} highlightedKeys={props.highlightedAnalysisKeys} onSeen={props.onAnalysisItemSeen} onSkip={props.onSkipAnalysisQuestion} />;
-        })}
-      </section>
-      {props.analysis.needs.length > 0 && <section className="analysis-needs">
-        <div className="analysis-need-tabs" role="tablist">{props.analysis.needs.map((need) => <NeedTab key={need.needId} need={need} active={need.needId === activeNeed?.needId} unseen={props.unseenAnalysisKeys.has(`need:${need.needId}:tab`)} highlighted={props.highlightedAnalysisKeys.has(`need:${need.needId}:tab`)} onSeen={props.onAnalysisItemSeen} onSelect={() => props.onSelectNeed(need.needId)} />)}</div>
-        {activeNeed && <NeedContent need={activeNeed} analysis={props.analysis} mode={props.analysis.mode} unseenKeys={props.unseenAnalysisKeys} highlightedKeys={props.highlightedAnalysisKeys} onSeen={props.onAnalysisItemSeen} onSkip={props.onSkipAnalysisQuestion} />}
-      </section>}
-      {props.analysis.suggestedNeeds.length > 0 && <section className="analysis-suggestions">{props.analysis.suggestedNeeds.map((need) => <div key={need.id}><span><strong>{need.title}</strong><small>{need.reason}</small></span><button type="button" onClick={() => props.onConfirmSuggestedNeed(need)}>Přidat do Zápisníku</button></div>)}</section>}
-      {props.analysis.hypotheses.length > 0 && props.analysis.needs.length > 0 && <button className="analysis-continue" type="button" onClick={props.onContinueToOutput}>Přejít k vytvoření výstupu</button>}
-    </div>
-  );
+  if (!props.f2Build) return <div className="analysis-state"><p>Rozbor čeká na kanonickou pedagogickou potřebu v Zápisníku.</p></div>;
+  return <div id="workspace-analysis" className="notepad-scroll workspace-panel-body" role="tabpanel" aria-label="Rozbor"><F2BuildEditor build={props.f2Build} analysis={props.analysis} preview={props.f2Preview} onPathChange={props.onF2PathChange} onSkillToggle={props.onF2SkillToggle} onParameterChange={props.onF2ParameterChange} onContextAdd={props.onF2ContextAdd} onContextRemove={props.onF2ContextRemove} onPreview={props.onF2Preview} /></div>;
 }
 
-function OutputPanel() {
+function OutputPanel({ preview }: { preview: F2PreviewState }) {
   return (
     <div id="workspace-output" className="notepad-scroll workspace-panel-body" role="tabpanel" aria-label="Výstup">
-      <div className="workspace-empty-state">
-        <FileText aria-hidden="true" />
-        <h2>Výstup</h2>
-        <p>Zde bude možné připravit výsledný výstup na základě Zápisníku a Rozboru.</p>
-      </div>
+      <F2Preview preview={preview} />
     </div>
   );
 }
@@ -464,7 +371,7 @@ export function WorkspacePanel({
           />
         )}
         {activePanel === "analysis" && <AnalysisPanel {...analysisProps} />}
-        {activePanel === "output" && <OutputPanel />}
+        {activePanel === "output" && <OutputPanel preview={analysisProps.f2Preview} />}
       </div>
     </aside>
   );
