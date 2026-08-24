@@ -1,7 +1,7 @@
 import { getAccessIdentity } from "../../access-auth";
 import { isSupportedModel } from "../../model-config";
 import { F2_PATHS, type F2Path } from "../../notepad-model";
-import type { F3RenderRequest } from "../../f3-finalization-model";
+import { parseF3RenderResult, type F3RenderRequest } from "../../f3-finalization-model";
 
 export const runtime = "edge";
 const strings = { type: "array", items: { type: "string" } } as const;
@@ -26,5 +26,5 @@ export async function POST(request: Request) {
   const upstream = await fetch("https://api.openai.com/v1/responses", { method: "POST", headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ model, reasoning: { effort: "low" }, store: false, instructions: `${BOUNDARY}\n\n${PATH[path]}\nCíl a formát přizpůsob pouze parametrům požadavku. Relevantní omezení zachovej stručnou poznámkou.`, input: JSON.stringify(body), text: { format: { type: "json_schema", name: `f3_${path.toLowerCase()}_final_render`, strict: true, schema } } }) });
   if (!upstream.ok) return error("Finální výstup se nepodařilo vytvořit.", 502);
   const response = await upstream.json() as Record<string, unknown>; const text = outputText(response); if (!text) return error("Model nevrátil použitelný F3 výsledek.", 502);
-  try { return Response.json({ result: JSON.parse(text), meta: { action: `F3 final render — ${path}`, model: typeof response.model === "string" ? response.model : model } }); } catch { return error("Model vrátil neplatný strukturovaný F3 výsledek.", 502); }
+  try { return Response.json({ result: parseF3RenderResult(JSON.parse(text)), meta: { action: `F3 final render — ${path}`, model: typeof response.model === "string" ? response.model : model } }); } catch { return error("Model vrátil neplatný strukturovaný F3 výsledek.", 502); }
 }

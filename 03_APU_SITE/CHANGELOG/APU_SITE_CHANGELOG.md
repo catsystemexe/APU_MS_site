@@ -4,6 +4,16 @@ Status: CURRENT
 
 Records significant verified product/runtime/project changes. It is not a complete Git log. Historical Sites-era entries are retained where they remain useful; current deployment state must not be inferred from a changelog entry alone.
 
+## 2026-08-24 — F2/F3 execution contract and response integrity repair
+
+### Fixed
+- All three F2 paths now execute their complete base semantic task with zero selected optional skills; selected skills and their parameters remain additive and path-isolated.
+- Parsed F2 build, PREVIEW and F3 model responses now cross local runtime validation boundaries in addition to the strict provider schemas.
+- Malformed regeneration results are rejected atomically, preserving the last successful processed build, PREVIEW or F3 render and their lifecycle identities.
+
+### Preserved scope
+- Canonical F1 invalidation, immutable PREVIEW/F3 binding and the single PREVIEW-bound transition remain unchanged; session telemetry expansion was deferred and no production deployment was performed.
+
 ## 2026-08-24 — Single PREVIEW-bound F2 to F3 transition
 
 ### Fixed

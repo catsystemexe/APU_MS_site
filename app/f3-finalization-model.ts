@@ -37,7 +37,17 @@ export function adoptF2Snapshot(state: F3State, snapshot: F2PreviewSnapshot): F3
   return { ...state, sourceSnapshotId: id, sourceSnapshotRevision: snapshot.buildRevision, sourceSnapshot: structuredClone(snapshot), target: snapshot.f3Target?.trim() || "Strukturovaný výstup", finalRender: state.finalRender ? { ...state.finalRender, status: "stale", staleReason: "source" } : null };
 }
 export function createF3RenderRequest(state: F3State, model?: string): F3RenderRequest { return structuredClone({ kind: "f3-render", sourceSnapshot: state.sourceSnapshot, sourceSnapshotId: state.sourceSnapshotId, f3Target: state.target, config: state.config, f3ConfigRevision: state.configRevision, ...(model ? { model } : {}) }); }
+const isRecord = (value: unknown): value is Record<string, unknown> => Boolean(value && typeof value === "object" && !Array.isArray(value));
+const isStringArray = (value: unknown): value is string[] => Array.isArray(value) && value.every((item) => typeof item === "string");
+export function parseF3RenderResult(value: unknown): F3RenderResult {
+  if (!isRecord(value)) throw new Error("Model vrátil neúplný nebo neplatný F3 výsledek.");
+  const valid = value.kind === "boundary_issue"
+    ? typeof value.reason === "string" && typeof value.affectedArea === "string" && typeof value.suggestedReturnToF2 === "string"
+    : value.kind === "material" && typeof value.title === "string" && typeof value.introduction === "string" && Array.isArray(value.sections) && value.sections.every((section) => isRecord(section) && typeof section.heading === "string" && typeof section.content === "string") && (value.table === null || (isRecord(value.table) && isStringArray(value.table.columns) && Array.isArray(value.table.rows) && value.table.rows.every(isStringArray))) && Array.isArray(value.cards) && value.cards.every((card) => isRecord(card) && typeof card.title === "string" && typeof card.content === "string") && (value.usageNote === null || typeof value.usageNote === "string");
+  if (!valid) throw new Error("Model vrátil neúplný nebo neplatný F3 výsledek.");
+  return structuredClone(value) as F3RenderResult;
+}
 export function acceptF3Render(state: F3State, result: F3RenderResult, request: F3RenderRequest): F3State {
   if (request.sourceSnapshotId !== state.sourceSnapshotId || request.f3ConfigRevision !== state.configRevision) return state;
-  return { ...state, finalRender: { sourceSnapshotId: request.sourceSnapshotId, f3ConfigRevision: request.f3ConfigRevision, content: structuredClone(result), status: "current", staleReason: null } };
+  return { ...state, finalRender: { sourceSnapshotId: request.sourceSnapshotId, f3ConfigRevision: request.f3ConfigRevision, content: parseF3RenderResult(result), status: "current", staleReason: null } };
 }

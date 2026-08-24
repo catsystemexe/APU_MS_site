@@ -1,7 +1,7 @@
 import { getAccessIdentity } from "../../access-auth";
 import { isSupportedModel } from "../../model-config";
 import { F2_PATHS, type F2Path } from "../../notepad-model";
-import type { F2BuildRequest, F2PreviewSnapshot } from "../../f2-build-model";
+import { F2_PATH_BASE_SEMANTICS, parseF2BuildResult, parseF2RenderedPreview, type F2BuildRequest, type F2PreviewSnapshot } from "../../f2-build-model";
 
 export const runtime = "edge";
 
@@ -43,8 +43,8 @@ const SHARED_PROMPT = "Jednotkou práce je jedna situace jako celek. Fakta Zápi
 function error(message: string, status = 500) { return Response.json({ error: message }, { status }); }
 function outputText(response: Record<string, unknown>) { if (typeof response.output_text === "string") return response.output_text; const output = Array.isArray(response.output) ? response.output : []; for (const item of output) for (const part of Array.isArray((item as { content?: unknown[] }).content) ? (item as { content: unknown[] }).content : []) if (part && typeof part === "object" && typeof (part as { text?: unknown }).text === "string") return (part as { text: string }).text; return null; }
 function isPath(value: unknown): value is F2Path { return typeof value === "string" && F2_PATHS.includes(value as F2Path); }
-function validBuild(value: unknown): value is F2BuildRequest { if (!value || typeof value !== "object") return false; const body = value as Partial<F2BuildRequest>; return body.kind === "f2-build" && isPath(body.activePath) && body.canonicalNeed?.initialF2Path !== undefined && Array.isArray(body.canonicalNotebookContext) && body.canonicalNotebookContext.length <= 80 && Array.isArray(body.workingHypotheses) && Array.isArray(body.activeSkills) && body.activeSkills.length > 0 && body.activeSkills.every((skill) => skill.id.startsWith(`${body.activePath!.toLowerCase()}-`) && skill.id in F2_SKILL_SEMANTICS) && typeof body.buildRevision === "number"; }
-function validSnapshot(value: unknown): value is F2PreviewSnapshot { if (!value || typeof value !== "object") return false; const snapshot = value as Partial<F2PreviewSnapshot>; return typeof snapshot.snapshotId === "string" && isPath(snapshot.activePath) && snapshot.canonicalNeed?.needText !== undefined && snapshot.processedRevision === snapshot.buildRevision && snapshot.processedBuild?.path === snapshot.activePath && typeof snapshot.processedBuild.processedResultId === "string" && Array.isArray(snapshot.hypotheses) && Array.isArray(snapshot.activeSkills); }
+export function validBuild(value: unknown): value is F2BuildRequest { if (!value || typeof value !== "object") return false; const body = value as Partial<F2BuildRequest>; return body.kind === "f2-build" && isPath(body.activePath) && body.canonicalNeed?.initialF2Path !== undefined && Array.isArray(body.canonicalNotebookContext) && body.canonicalNotebookContext.length <= 80 && Array.isArray(body.workingHypotheses) && Array.isArray(body.activeSkills) && body.activeSkills.every((skill) => skill.id.startsWith(`${body.activePath!.toLowerCase()}-`) && skill.id in F2_SKILL_SEMANTICS) && typeof body.buildRevision === "number" && Number.isInteger(body.buildRevision) && body.buildRevision >= 0; }
+function validSnapshot(value: unknown): value is F2PreviewSnapshot { if (!value || typeof value !== "object") return false; const snapshot = value as Partial<F2PreviewSnapshot>; return typeof snapshot.snapshotId === "string" && snapshot.snapshotId.length > 0 && isPath(snapshot.activePath) && snapshot.canonicalNeed?.needText !== undefined && Number.isInteger(snapshot.buildRevision) && snapshot.processedRevision === snapshot.buildRevision && snapshot.processedBuild?.path === snapshot.activePath && typeof snapshot.processedBuild.processedResultId === "string" && snapshot.processedBuild.processedResultId.length > 0 && snapshot.processedBuild.processedRevision === snapshot.processedRevision && Array.isArray(snapshot.hypotheses) && Array.isArray(snapshot.activeSkills); }
 
 export async function POST(request: Request) {
   if (!await getAccessIdentity(request.headers)) return error("Chybí platná identita Cloudflare Access.", 401);
@@ -54,7 +54,8 @@ export async function POST(request: Request) {
   let schema: object; let name: string; let instructions: string; let input: unknown; let activePath: F2Path;
   if (operation === "build" && validBuild(body.build)) {
     const build = body.build; activePath = build.activePath; schema = BUILD_SCHEMAS[activePath]; name = `f2_${activePath.toLowerCase()}_build`;
-    instructions = `${SHARED_PROMPT}\n\n${PATH_PROMPTS[activePath]}\n\nAktivní operace:\n${build.activeSkills.map((skill) => `- ${skill.label}: ${F2_SKILL_SEMANTICS[skill.id]}${skill.parameterText ? ` Zaměření uživatele: ${skill.parameterText}` : ""}`).join("\n")}`; input = build;
+    const operations = build.activeSkills.length ? build.activeSkills.map((skill) => `- ${skill.label}: ${F2_SKILL_SEMANTICS[skill.id]}${skill.parameterText ? ` Zaměření uživatele: ${skill.parameterText}` : ""}`).join("\n") : "- Žádné; proveď pouze základní úlohu cesty a neaktivuj skrytě žádnou volitelnou operaci.";
+    instructions = `${SHARED_PROMPT}\n\nZákladní úloha aktivní cesty: ${F2_PATH_BASE_SEMANTICS[activePath]}\n${PATH_PROMPTS[activePath]}\n\nVolitelné aktivní operace:\n${operations}`; input = build;
   } else if (operation === "preview" && validSnapshot(body.snapshot)) {
     activePath = body.snapshot.activePath; schema = PREVIEW_SCHEMA; name = `f2_${activePath.toLowerCase()}_preview`;
     instructions = `Vyrenderuj náhled výhradně z neměnného F2 snapshotu pro autoritativní cestu ${activePath}. Snapshot nepřehodnocuj z konverzace, neměň pedagogickou potřebu, cestu ani závěry. ${PATH_PROMPTS[activePath]} F3 target smí ovlivnit přehlednost formy, nikdy nesmí vést k finální materializaci F3 dokumentu.`; input = body.snapshot;
@@ -62,5 +63,5 @@ export async function POST(request: Request) {
   const upstream = await fetch("https://api.openai.com/v1/responses", { method: "POST", headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ model, reasoning: { effort: "low" }, store: false, instructions, input: JSON.stringify(input), text: { format: { type: "json_schema", name, strict: true, schema } } }) });
   if (!upstream.ok) return error("Modelové zpracování F2 se nezdařilo.", 502);
   const response = await upstream.json() as Record<string, unknown>; const text = outputText(response); if (!text) return error("Model nevrátil použitelný F2 výsledek.", 502);
-  try { return Response.json({ result: JSON.parse(text), meta: { action: operation === "build" ? `F2 build execution — ${activePath}` : `F2 preview — ${activePath}`, model: typeof response.model === "string" ? response.model : model } }); } catch { return error("Model vrátil neplatný strukturovaný F2 výsledek.", 502); }
+  try { const parsed = JSON.parse(text); const result = operation === "build" ? parseF2BuildResult(parsed, activePath) : parseF2RenderedPreview(parsed); return Response.json({ result, meta: { action: operation === "build" ? `F2 build execution — ${activePath}` : `F2 preview — ${activePath}`, model: typeof response.model === "string" ? response.model : model } }); } catch { return error("Model vrátil neplatný strukturovaný F2 výsledek.", 502); }
 }

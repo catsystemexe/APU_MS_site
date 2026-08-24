@@ -37,6 +37,11 @@ export const F2_PATH_META: Record<F2Path, { label: F2Path; description: string }
   POZOROVAT: { label: "POZOROVAT", description: "Co potřebujeme zjistit v realitě?" },
   VYTVOŘIT: { label: "VYTVOŘIT", description: "Jaký praktický obsah / přístup / prostředek má smysl připravit?" },
 };
+export const F2_PATH_BASE_SEMANTICS: Record<F2Path, string> = {
+  POCHOPIT: "Rozviň soudržné odborné porozumění situaci i bez volitelné analytické operace.",
+  POZOROVAT: "Odvoď užitečný cílený směr získávání evidence i bez volitelné analytické operace.",
+  VYTVOŘIT: "Odvoď zdůvodněnou praktickou specifikaci buildu i bez volitelné analytické operace.",
+};
 const SKILL_LABELS: Record<F2Path, string[]> = {
   POCHOPIT: ["Rozvinout hypotézy", "Porovnat vysvětlení", "Najít souvislosti", "Doplnit odborný rámec", "Zpřesnit obraz"],
   POZOROVAT: ["Určit, co sledovat", "Vybrat situace", "Porovnat podmínky", "Nastavit rozsah", "Určit evidenci"],
@@ -72,11 +77,29 @@ export function removeF2Context(state: F2BuildState, id: string) { return revise
 
 export function createF2BuildRequest(build: F2BuildState, canonicalNotebookContext: F2NotebookContextItem[], model?: string): F2BuildRequest {
   const activeSkills = build.skills.filter((skill) => skill.path === build.activePath && skill.active).map(({ id, label, parameterText }) => ({ id, label, parameterText: parameterText.trim() }));
-  if (!activeSkills.length) throw new Error("Vyberte alespoň jednu vrstvu buildu.");
   return structuredClone({ kind: "f2-build", initialPath: build.initialPath, activePath: build.activePath, canonicalNotebookContext, canonicalNeed: build.canonicalNeed, f3Target: build.f3Target, workingHypotheses: build.workingHypotheses, activeSkills, skillParameters: Object.fromEntries(activeSkills.map((skill) => [skill.id, skill.parameterText])), addedContext: build.addedContext, entryUncertainties: build.entryUncertainties, previousProcessedBuildState: build.processedBuilds[build.activePath] ?? null, buildRevision: build.buildRevision, ...(model ? { model } : {}) });
 }
 export const createPochopitBuildRequest = createF2BuildRequest;
+const isRecord = (value: unknown): value is Record<string, unknown> => Boolean(value && typeof value === "object" && !Array.isArray(value));
+const isStringArray = (value: unknown): value is string[] => Array.isArray(value) && value.every((item) => typeof item === "string");
+const isHypothesis = (value: unknown): value is WorkingHypothesis => isRecord(value) && typeof value.id === "string" && Number.isInteger(value.rank) && typeof value.title === "string" && typeof value.summary === "string" && isStringArray(value.relevantNeeds) && isStringArray(value.supportingInformation) && isStringArray(value.limitations) && isStringArray(value.unknowns) && (value.question === undefined || value.question === null || typeof value.question === "string") && (value.questions === undefined || isStringArray(value.questions));
+const isUncertainty = (value: unknown): value is F2Uncertainty => isRecord(value) && typeof value.description === "string" && typeof value.whyRelevant === "string" && typeof value.limits === "string" && typeof value.relatedDecisionOrArea === "string";
+function isPathResult(value: unknown, path: F2Path): value is F2PathResult {
+  if (!isRecord(value)) return false;
+  if (path === "POCHOPIT") return value.kind === "understanding" && isStringArray(value.relationships) && isStringArray(value.comparisons) && isStringArray(value.expertFrame) && typeof value.synthesis === "string";
+  if (path === "POZOROVAT") return value.kind === "observation" && typeof value.purpose === "string" && Array.isArray(value.observableIndicators) && value.observableIndicators.every((item) => isRecord(item) && typeof item.indicator === "string" && typeof item.interpretation === "string") && isStringArray(value.situations) && isStringArray(value.comparisonConditions) && typeof value.scope === "string" && isStringArray(value.evidenceMethod) && isStringArray(value.hypothesisLinks) && isStringArray(value.limitations);
+  return value.kind === "creation" && typeof value.pedagogicalObjective === "string" && isStringArray(value.candidateApproaches) && isStringArray(value.variantComparison) && typeof value.workingApproach === "string" && isStringArray(value.conditions) && isStringArray(value.whatToVerify) && isStringArray(value.relevantHypotheses) && isStringArray(value.limitations);
+}
+export function parseF2BuildResult(value: unknown, path: F2Path): F2BuildResult {
+  if (!isRecord(value) || !Array.isArray(value.hypotheses) || !value.hypotheses.every(isHypothesis) || !isPathResult(value.pathResult, path) || !isStringArray(value.decisions) || !Array.isArray(value.uncertainties) || !value.uncertainties.every(isUncertainty) || !isStringArray(value.missingInformation)) throw new Error("Model vrátil neúplný nebo neplatný F2 výsledek.");
+  return structuredClone(value) as F2BuildResult;
+}
+export function parseF2RenderedPreview(value: unknown): F2RenderedPreview {
+  if (!isRecord(value) || typeof value.title !== "string" || typeof value.introduction !== "string" || !Array.isArray(value.sections) || !value.sections.every((section) => isRecord(section) && typeof section.heading === "string" && typeof section.content === "string")) throw new Error("Model vrátil neúplný nebo neplatný PREVIEW výsledek.");
+  return structuredClone(value) as F2RenderedPreview;
+}
 export function applyF2BuildResult(build: F2BuildState, result: F2BuildResult, requestedPath: F2Path, requestedRevision: number): F2BuildState {
+  result = parseF2BuildResult(result, requestedPath);
   if (build.activePath !== requestedPath || build.buildRevision !== requestedRevision || result.pathResult.kind !== ({ POCHOPIT: "understanding", POZOROVAT: "observation", VYTVOŘIT: "creation" } as const)[requestedPath]) return build;
   const hypotheses = reconcileF2Hypotheses(build.workingHypotheses, result.hypotheses);
   const processed: F2ProcessedBuild = { ...structuredClone(result), hypotheses, path: requestedPath, processedRevision: requestedRevision, processedResultId: crypto.randomUUID() };
@@ -94,7 +117,7 @@ export function createF2PreviewSnapshot(build: F2BuildState): F2PreviewSnapshot 
   const activeSkills = build.skills.filter((skill) => skill.path === build.activePath && skill.active);
   return structuredClone({ snapshotId: crypto.randomUUID(), canonicalNeed: build.canonicalNeed, initialPath: build.initialPath, activePath: build.activePath, f3Target: build.f3Target, hypotheses: build.workingHypotheses, activeSkills, skillParameters: Object.fromEntries(activeSkills.map((skill) => [skill.id, skill.parameterText])), addedContext: build.addedContext, processedBuild, decisions: processedBuild.decisions, uncertainties: processedBuild.uncertainties, buildRevision: build.buildRevision, processedRevision: processedBuild.processedRevision });
 }
-export function acceptRenderedPreview(snapshot: F2PreviewSnapshot, render: F2RenderedPreview): F2PreviewState { return { snapshot: structuredClone(snapshot), sourceBuildRevision: snapshot.buildRevision, status: "current", render: structuredClone(render) }; }
+export function acceptRenderedPreview(snapshot: F2PreviewSnapshot, render: F2RenderedPreview): F2PreviewState { return { snapshot: structuredClone(snapshot), sourceBuildRevision: snapshot.buildRevision, status: "current", render: parseF2RenderedPreview(render) }; }
 export function previewStatus(preview: F2PreviewState, build: F2BuildState): F2PreviewState {
   if (!preview) return null;
   const processed = currentF2ProcessedBuild(build);
