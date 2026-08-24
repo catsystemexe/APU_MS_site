@@ -1777,8 +1777,17 @@ button:disabled { cursor: default; opacity: 0.52; }
 .f2-context li { margin: 5px 0; }
 .f2-context li button { margin-left: 8px; padding: 3px 7px; background: transparent; color: var(--text-secondary); font-size: 11px; }
 .f2-hypotheses { display: grid; gap: 7px; }
-.f2-hypotheses article { padding: 10px 12px; border-left: 3px solid var(--border-strong); background: var(--surface-hover); }
-.f2-hypotheses p { margin: 4px 0 0; color: var(--text-secondary); font-size: 12px; line-height: 1.45; }
+.f2-hypothesis-list { display: grid; border-top: 1px solid var(--border); }
+.f2-hypothesis-list article { border-bottom: 1px solid var(--border); }
+.f2-hypothesis-list article > button { display: grid; grid-template-columns: 24px 18px minmax(0, 1fr); align-items: start; gap: 7px; width: 100%; padding: 10px 2px; border: 0; background: transparent; color: var(--text-primary); text-align: left; }
+.f2-hypothesis-list article > button > svg { width: 18px; height: 18px; margin-top: 2px; color: var(--text-secondary); transition: transform 160ms ease-out; }
+.f2-hypothesis-list article > button[aria-expanded="false"] > svg { transform: rotate(-90deg); }
+.f2-hypothesis-list article > button > span:last-child { display: grid; gap: 2px; }
+.f2-hypothesis-list small { color: var(--text-secondary); font-size: 12px; line-height: 1.45; }
+.f2-hypothesis-detail { padding: 0 2px 12px 49px; font-size: 12px; line-height: 1.45; }
+.f2-hypothesis-detail h4 { display: flex; align-items: center; gap: 4px; margin: 9px 0 3px; font-size: 12px; }
+.f2-hypothesis-detail h4 svg { width: 13px; height: 13px; color: #b57925; }
+.f2-hypothesis-detail ul { margin: 0; padding-left: 17px; }
 .f2-uncertainty { padding: 12px 14px; border: 1px solid #b9cee5; border-radius: 11px; background: #f1f7fc; color: #31536f; }
 .f2-uncertainty p { margin: 4px 0 0; font-size: 12px; line-height: 1.45; }
 .f2-preview-action { display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
