@@ -26,7 +26,7 @@ test("notebook and analysis lifecycle records use actual success branches", asyn
 test("completed records render inside the assistant response between its header and content", async () => {
   const client = await readFile(new URL("../app/apu-client.tsx", import.meta.url), "utf8");
 
-  assert.match(client, /<div className="message-author">[\s\S]*?message-phase[\s\S]*?<\/div>[\s\S]*?message-lifecycle-records[\s\S]*?message\.lifecycleRecords\.map[\s\S]*?<CompletedLifecycleStatus[\s\S]*?<div className=\{`message-content/);
+  assert.match(client, /<div className="message-author">[\s\S]*?message-phase[\s\S]*?<\/div>[\s\S]*?message-lifecycle-records[\s\S]*?message\.lifecycleRecords\.map[\s\S]*?<CompletedLifecycleStatus[\s\S]*?<div className=\{message\.role === "assistant"/);
   assert.match(client, /message\.phaseLabel\.replace\(\/\^\\\[\|\\\]\$\/g, ""\)/);
   assert.match(client, /if \(phase === "intake"\) clearF1ProcessingStatus\(\)[\s\S]*?content: snapshot\.visibleContent/);
   assert.doesNotMatch(client, /clearF1ProcessingStatus\([\s\S]{0,200}lifecycleRecords:\s*\[\]/);
@@ -56,8 +56,10 @@ test("only substantive assistant content receives the response surface", async (
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
   ]);
 
-  assert.match(client, /message\.role === "assistant" && \(message\.content \|\| message\.analysisEntryHypotheses\) \? " message-content--assistant-response" : ""/);
-  assert.match(styles, /\.message--assistant \.message-content--assistant-response\s*\{[\s\S]*?background:\s*color-mix/);
-  assert.match(styles, /@media \(max-width: 640px\)[\s\S]*?\.message--assistant \.message-content--assistant-response\s*\{[\s\S]*?max-width:\s*100%;[\s\S]*?padding:\s*7px 8px;/);
-  assert.doesNotMatch(styles, /\.message--assistant \.message-content--assistant-response\s*\{[^}]*?(?:border:|box-shadow:)/);
+  assert.match(client, /message\.role === "assistant" && \(message\.content \|\| message\.analysisEntryHypotheses\) \? "assistant-response" : undefined/);
+  assert.match(client, /"assistant-response"[\s\S]*?analysisNextPrompt[\s\S]*?<AnalysisQuestionRow[\s\S]*?dialogActions\?\.map[\s\S]*?<DialogActionCard/);
+  assert.match(styles, /\.assistant-response\s*\{[\s\S]*?background:\s*var\(--bg-surface\)/);
+  assert.match(styles, /@media \(max-width: 640px\)[\s\S]*?\.assistant-response\s*\{[\s\S]*?max-width:\s*100%;[\s\S]*?padding:\s*7px 8px;/);
+  assert.doesNotMatch(styles, /\.assistant-response\s*\{[^}]*?(?:border:|box-shadow:)/);
+  assert.match(styles, /\.message-list\s*\{[\s\S]*?background:\s*color-mix/);
 });

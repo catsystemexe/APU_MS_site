@@ -1310,23 +1310,33 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
                   ))}
                 </div>
               )}
-              <div className={`message-content${message.role === "assistant" && (message.content || message.analysisEntryHypotheses) ? " message-content--assistant-response" : ""}`}>
-                {message.content
-                  ? (
-                      <HighlightedMessage
-                        message={message}
-                        notepad={notepad}
-                      />
-                    )
-                  : message.analysisEntryHypotheses
-                    ? <F2EntrySummary hypotheses={message.analysisEntryHypotheses} onOpenAnalysis={() => setActivePanel("analysis")} />
-                    : f1ProcessingStatus?.assistantId === message.id
-                    ? <ProcessingStatus stage={f1ProcessingStatus.stage} />
-                    : <span className="typing"><i /><i /><i /></span>}
+              <div className={message.role === "assistant" && (message.content || message.analysisEntryHypotheses) ? "assistant-response" : undefined}>
+                <div className="message-content">
+                  {message.content
+                    ? (
+                        <HighlightedMessage
+                          message={message}
+                          notepad={notepad}
+                        />
+                      )
+                    : message.analysisEntryHypotheses
+                      ? <F2EntrySummary hypotheses={message.analysisEntryHypotheses} onOpenAnalysis={() => setActivePanel("analysis")} />
+                      : f1ProcessingStatus?.assistantId === message.id
+                      ? <ProcessingStatus stage={f1ProcessingStatus.stage} />
+                      : <span className="typing"><i /><i /><i /></span>}
+                </div>
+                {message.role === "assistant" && message.analysisNextPrompt?.type === "question" && (
+                  <AnalysisQuestionRow text={message.analysisNextPrompt.text} className="analysis-chat-question" />
+                )}
+                {message.role === "assistant" && message.dialogActions?.map((action, actionIndex) => (
+                  <DialogActionCard
+                    key={`${action.type}-${action.target}-${actionIndex}`}
+                    action={action}
+                    active={message.id === activeDialogMessageId && !isLoading}
+                    onSelect={selectDialogAction}
+                  />
+                ))}
               </div>
-              {message.role === "assistant" && message.analysisNextPrompt?.type === "question" && (
-                <AnalysisQuestionRow text={message.analysisNextPrompt.text} className="analysis-chat-question" />
-              )}
               {message.extractionWarning && (
                 <p className="extraction-warning">Zápisník: {message.extractionWarning} Chat pokračoval beze změny zápisu.</p>
               )}
@@ -1358,14 +1368,6 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
                   )}
                 </aside>
               )}
-              {message.role === "assistant" && message.dialogActions?.map((action, actionIndex) => (
-                <DialogActionCard
-                  key={`${action.type}-${action.target}-${actionIndex}`}
-                  action={action}
-                  active={message.id === activeDialogMessageId && !isLoading}
-                  onSelect={selectDialogAction}
-                />
-              ))}
               {isDeveloper && message.role === "assistant" && message.diagnostics && (
                 <aside className="response-diagnostics" aria-label="Diagnostika odpovědi">
                   {message.debugText && <div className="diagnostic-debug">{message.debugText}</div>}
