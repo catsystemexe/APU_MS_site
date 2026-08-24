@@ -82,8 +82,8 @@ import { CompletedLifecycleStatus, ProcessingStatus, type F1ProcessingStage } fr
 import { addCompletedLifecycleRecord, withCompletedLifecycleRecord, type CompletedLifecycleRecord } from "./lifecycle-record";
 import { DevLogPanel } from "./dev-log-panel";
 import type { SharedFeedbackResult } from "./shared-feedback";
-import { acceptRenderedPreview, addF2Context, applyF2BuildResult, createF2BuildRequest, createF2PreviewSnapshot, parameterizeF2Skill, previewStatus, removeF2Context, switchF2Path, synchronizeF2BuildWithCanonicalNeed, toggleF2Skill, type F2BuildResult, type F2BuildState, type F2NotebookContextItem, type F2PreviewState, type F2RenderedPreview } from "./f2-build-model";
-import { acceptF3Render, adoptF2Snapshot, createF3RenderRequest, createF3State, updateF3Config, type F3Config, type F3RenderResult, type F3State } from "./f3-finalization-model";
+import { acceptRenderedPreview, addF2Context, applyF2BuildResult, createF2BuildRequest, createF2PreviewSnapshot, parameterizeF2Skill, parseF2BuildResult, parseF2RenderedPreview, previewStatus, removeF2Context, switchF2Path, synchronizeF2BuildWithCanonicalNeed, toggleF2Skill, type F2BuildState, type F2NotebookContextItem, type F2PreviewState } from "./f2-build-model";
+import { acceptF3Render, adoptF2Snapshot, createF3RenderRequest, createF3State, parseF3RenderResult, updateF3Config, type F3Config, type F3State } from "./f3-finalization-model";
 
 type SpeechRecognitionEventLike = {
   resultIndex: number;
@@ -637,9 +637,10 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
     try {
       const buildRequest = createF2BuildRequest(f2Build, f2Situation(), selectedModel);
       const response = await fetch("/api/f2", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ operation: "build", model: selectedModel, build: buildRequest }) });
-      const payload = await response.json().catch(() => null) as { result?: F2BuildResult; error?: string } | null;
+      const payload = await response.json().catch(() => null) as { result?: unknown; error?: string } | null;
       if (!response.ok || !payload?.result) throw new Error(payload?.error || "Build se nepodařilo rozpracovat.");
-      setF2Build((current) => current ? applyF2BuildResult(current, payload.result!, buildRequest.activePath, buildRequest.buildRevision) : current);
+      const result = parseF2BuildResult(payload.result, buildRequest.activePath);
+      setF2Build((current) => current ? applyF2BuildResult(current, result, buildRequest.activePath, buildRequest.buildRevision) : current);
       setF2BuildStatus("idle");
     } catch (cause) { setF2BuildError(cause instanceof Error ? cause.message : "Build se nepodařilo rozpracovat."); setF2BuildStatus("error"); }
   }
@@ -650,9 +651,9 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
     try {
       const snapshot = createF2PreviewSnapshot(f2Build);
       const response = await fetch("/api/f2", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ operation: "preview", model: selectedModel, snapshot }) });
-      const payload = await response.json().catch(() => null) as { result?: F2RenderedPreview; error?: string } | null;
+      const payload = await response.json().catch(() => null) as { result?: unknown; error?: string } | null;
       if (!response.ok || !payload?.result) throw new Error(payload?.error || "Preview se nepodařilo vytvořit.");
-      setF2Preview(acceptRenderedPreview(snapshot, payload.result)); setF2PreviewStatus("idle"); setActivePanel("output");
+      setF2Preview(acceptRenderedPreview(snapshot, parseF2RenderedPreview(payload.result))); setF2PreviewStatus("idle"); setActivePanel("output");
     } catch (cause) { setF2PreviewError(cause instanceof Error ? cause.message : "Preview se nepodařilo vytvořit."); setF2PreviewStatus("error"); }
   }
 
@@ -668,9 +669,10 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
     setF3Status("loading"); setF3Error(null);
     try {
       const response = await fetch("/api/f3", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(renderRequest) });
-      const payload = await response.json().catch(() => null) as { result?: F3RenderResult; error?: string } | null;
+      const payload = await response.json().catch(() => null) as { result?: unknown; error?: string } | null;
       if (!response.ok || !payload?.result) throw new Error(payload?.error || "Finální výstup se nepodařilo vytvořit.");
-      setF3State((current) => current ? acceptF3Render(current, payload.result!, renderRequest) : current); setF3Status("idle");
+      const result = parseF3RenderResult(payload.result);
+      setF3State((current) => current ? acceptF3Render(current, result, renderRequest) : current); setF3Status("idle");
     } catch (cause) { setF3Error(cause instanceof Error ? cause.message : "Finální výstup se nepodařilo vytvořit."); setF3Status("error"); }
   }
 

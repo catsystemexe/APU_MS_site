@@ -25,3 +25,4 @@ test("each VYTVOŘIT skill has distinct semantics, conditional precision and F2/
 });
 
 test("preview is snapshot-only, path-authoritative and cannot materialize F3", () => { for (const boundary of ["výhradně z neměnného F2 snapshotu", "autoritativní cestu", "nesmí vést k finální materializaci F3 dokumentu"]) assert.ok(route.includes(boundary), boundary); });
+test("zero skills retain a complete base path task and model results are locally validated", () => { for (const text of ["Základní úloha aktivní cesty", "Žádné; proveď pouze základní úlohu", "parseF2BuildResult", "parseF2RenderedPreview"]) assert.ok(route.includes(text), text); assert.equal(route.includes("activeSkills.length > 0"), false); });

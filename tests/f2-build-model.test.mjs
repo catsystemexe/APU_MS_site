@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { acceptRenderedPreview, addF2Context, applyF2BuildResult, createF2BuildRequest, createF2BuildState, createF2PreviewSnapshot, F2_SKILL_DEFINITIONS, parameterizeF2Skill, previewStatus, switchF2Path, synchronizeF2BuildWithCanonicalNeed, toggleF2Skill } from "../app/f2-build-model.ts";
+import { acceptRenderedPreview, addF2Context, applyF2BuildResult, createF2BuildRequest, createF2BuildState, createF2PreviewSnapshot, F2_SKILL_DEFINITIONS, parameterizeF2Skill, parseF2BuildResult, parseF2RenderedPreview, previewStatus, switchF2Path, synchronizeF2BuildWithCanonicalNeed, toggleF2Skill } from "../app/f2-build-model.ts";
 
 const need = (path = "POCHOPIT", target = "přehled") => ({ needId: `need-${path}`, needText: `Potřeba ${path}`, initialF2Path: path, f3Target: target });
 const hypothesis = (id, title = id) => ({ id, rank: 1, title, summary: `Shrnutí ${title}`, relevantNeeds: ["need-POCHOPIT"], question: null, supportingInformation: [], limitations: [], unknowns: [], questions: [] });
@@ -44,6 +44,26 @@ test("explicit activePath routes the shared request and serializes only active p
     const request = createF2BuildRequest(build, [{ category: "manifestations", text: "Obtížný začátek" }]);
     assert.equal(request.kind, "f2-build"); assert.equal(request.activePath, path); assert.deepEqual(request.activeSkills.map((item) => item.id), [`${path.toLowerCase()}-1`, `${path.toLowerCase()}-3`]); assert.equal(request.skillParameters[`${path.toLowerCase()}-3`], `parametr ${path}`);
   }
+});
+
+test("all paths execute their base contract with zero skills and no implicit selection", () => {
+  for (const path of ["POCHOPIT", "POZOROVAT", "VYTVOŘIT"]) {
+    const request = createF2BuildRequest(createF2BuildState(need(path)), []);
+    assert.deepEqual(request.activeSkills, []); assert.deepEqual(request.skillParameters, {});
+  }
+});
+
+test("malformed F2 results are rejected atomically before replacing a successful build", () => {
+  let build = configured("POCHOPIT"); build = applyF2BuildResult(build, result("POCHOPIT"), "POCHOPIT", build.buildRevision); const previous = structuredClone(build);
+  for (const invalid of [{ ...result("POCHOPIT"), pathResult: undefined }, { ...result("POCHOPIT"), pathResult: { kind: "unknown" } }, { ...result("POCHOPIT"), hypotheses: [{ id: "broken" }] }, { ...result("POCHOPIT"), uncertainties: [{}] }]) {
+    assert.throws(() => applyF2BuildResult(build, invalid, "POCHOPIT", build.buildRevision), /neplatný F2/); assert.deepEqual(build, previous);
+  }
+  assert.throws(() => parseF2BuildResult(result("POCHOPIT"), "POZOROVAT"), /neplatný F2/);
+});
+
+test("malformed PREVIEW refresh is rejected while the previous preview remains available", () => {
+  let build = configured("POCHOPIT"); build = applyF2BuildResult(build, result("POCHOPIT"), "POCHOPIT", build.buildRevision); const snapshot = createF2PreviewSnapshot(build); const previous = acceptRenderedPreview(snapshot, { title: "Platný", introduction: "Úvod", sections: [] });
+  assert.throws(() => parseF2RenderedPreview({ title: "Rozbitý", sections: [{ heading: 1 }] }), /neplatný PREVIEW/); assert.equal(previous.render.title, "Platný");
 });
 
 test("POZOROVAT response distinguishes observable evidence, interpretation and comparison", () => {
