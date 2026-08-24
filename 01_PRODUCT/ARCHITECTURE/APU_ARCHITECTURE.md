@@ -16,8 +16,10 @@ Derived layers must never silently rewrite canonical information.
 2\. ROZBOR — DERIVED ANALYTICAL LAYER  
 • AnalysisState is generated from the current Zápisník through the analysis flow.  
 • It may contain hypotheses, needs, relationships, uncertainty, limitations, follow-up questions and transition-readiness information.  
-• Entry is intentionally concise; Working deepens only a relevant selected branch.  
-• Card and chat representation are projections of one structured analytical state, not independent sources of truth.
+• The F2 build-editor prototype owns a separate local build state: the canonical mapped path is retained as `initialPath`, an editable `activePath` selects one of three paths, and five optional skill layers per path can hold short parameters.
+• F2 working context is derived state and does not silently write back to the canonical Zápisník; local build edits do not invoke model APIs.
+• Existing hypotheses remain shared analytical input. PREVIEW creates one isolated snapshot carrying the need mapping, paths, F3 target, hypotheses, active skills, working context and uncertainty; subsequent relevant edits make it stale rather than regenerating it.
+• Model-driven execution of skill layers and real preview generation are not part of the current prototype.
 
 3\. VÝSTUP — DOWNSTREAM REALIZATION LAYER  
 • F3 consumes the preceding state to produce concrete recommendations, plans or documents.  
@@ -68,4 +70,3 @@ DOCUMENTATION ARCHITECTURE
 • Product-state documents describe current verified behavior, not plans.  
 • Historical checkpoints and audits remain historical snapshots and are never treated as current source of truth.  
 • Workflow/meta-instruction documents may be changed only by explicit workflow decisions; ordinary implementation should not autonomously rewrite its own governing rules.
-

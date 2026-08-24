@@ -17,7 +17,7 @@ test("notepad uses local persistence and floating Lucide tool buttons", () => {
   assert.match(page, /\bSettings\b/);
   assert.match(page, /tool-rail-diagnostics/);
   assert.match(page, /tool-rail-\$\{id\}/);
-  assert.match(component, /className="analysis-need-tabs" role="tablist"/);
+  assert.match(component, /<F2BuildEditor/);
   assert.doesNotMatch(component, /workspace-tabs/);
   assert.doesNotMatch(component, /workspace-tab/);
   assert.match(component, /ScanSearch/);
@@ -25,7 +25,7 @@ test("notepad uses local persistence and floating Lucide tool buttons", () => {
   assert.match(component, /type WorkspacePanel = "notepad" \| "analysis" \| "output" \| null/);
   assert.match(component, /function AnalysisPanel/);
   assert.match(component, /function OutputPanel/);
-  assert.match(component, /Zde bude možné připravit výsledný výstup/);
+  assert.match(component, /<F2Preview preview=/);
   assert.doesNotMatch(page, /activeWorkspacePanel/);
   assert.doesNotMatch(page, /composer-workspace-indicator/);
   assert.match(page, /function togglePanel\(panel: WorkspacePanelId\)/);
@@ -83,7 +83,7 @@ test("notepad uses local persistence and floating Lucide tool buttons", () => {
 test("responsive layout has 60\/40 split and content-only overlay", () => {
   assert.match(styles, /@media \(min-width: 1024px\), \(min-width: 768px\) and \(orientation: landscape\)[\s\S]*\.app-shell \{ padding: 10px; \}/);
   assert.match(styles, /@media \(min-width: 1024px\), \(min-width: 768px\) and \(orientation: landscape\)[\s\S]*\.chat-card \{[\s\S]*width: 100%;[\s\S]*height: calc\(100dvh - 20px\);[\s\S]*min-height: 0;/);
-  assert.match(styles, /grid-template-columns:\s*minmax\(0, 3fr\) minmax\(300px, 2fr\)/);
+  assert.match(styles, /grid-template-columns:\s*var\(--desktop-chat-split, 60%\) minmax\(0, 1fr\)/);
   assert.match(styles, /min-width:\s*768px\) and \(orientation:\s*landscape\)/);
   assert.match(styles, /\.tool-rail[\s\S]*grid-row:\s*2/);
   assert.match(styles, /\.tool-rail[\s\S]*justify-self:\s*end/);
@@ -97,7 +97,7 @@ test("responsive layout has 60\/40 split and content-only overlay", () => {
   assert.match(styles, /\.tool-rail-notepad\s*\{\s*top:\s*calc\(50% - 50px\)/);
   assert.match(styles, /\.tool-rail-analysis\s*\{\s*top:\s*50%/);
   assert.match(styles, /\.tool-rail-output\s*\{\s*top:\s*calc\(50% \+ 50px\)/);
-  assert.match(styles, /\.chat-card:has\(\.notepad-panel\.is-open\)[\s\S]*grid-template-columns:\s*minmax\(0, 3fr\) minmax\(300px, 2fr\)/);
+  assert.match(styles, /\.chat-card:has\(\.notepad-panel\.is-open\)[\s\S]*grid-template-columns:\s*var\(--desktop-chat-split, 60%\) minmax\(0, 1fr\)/);
   assert.doesNotMatch(styles, /\.chat-card:has\(\.notepad-panel\.is-open\) \.tool-rail-workspace/);
   assert.match(styles, /@media \(max-width: 640px\)[\s\S]*\.project-actions button:disabled \{ display: none; \}/);
   assert.match(styles, /@media \(max-width: 640px\)[\s\S]*\.project-actions button:not\(:disabled\)/);

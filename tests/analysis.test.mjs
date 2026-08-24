@@ -62,24 +62,17 @@ test("F2 receives canonical initial routing and validates it against the Zápisn
   assert.doesNotMatch(route, /function (?:classify|infer).*Path/i);
 });
 
-test("analysis UI contains flat hypotheses, need tabs, inline questions and explicit Phase 3", async () => {
-  const [source, questionRow] = await Promise.all([
+test("analysis UI delegates to the stateful build editor and snapshot preview", async () => {
+  const [source, editor] = await Promise.all([
     readFile(new URL("../app/notepad.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/analysis-question-row.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/f2-build-editor.tsx", import.meta.url), "utf8"),
   ]);
-  assert.match(source, /analysis-hypotheses/);
-  assert.match(source, /aria-controls=\{detailId\}/);
-  assert.match(source, /aria-expanded=\{isExpanded\}/);
-  assert.match(source, /analysis-need-tabs/);
-  assert.match(source, /AnalysisQuestions/);
-  assert.match(questionRow, /aria-label="Přeskočit otázku"/);
-  assert.match(source, /Přidat do Zápisníku/);
-  assert.match(source, /Přejít k vytvoření výstupu/);
-  assert.match(source, /props\.analysis\.hypotheses\.length > 0 && props\.analysis\.needs\.length > 0/);
-  assert.doesNotMatch(source, /props\.analysis\.transitionReady && <button className="analysis-continue"/);
-  assert.match(source, /mode === "entry"/);
-  assert.doesNotMatch(source, />Pedagogická potřeba</);
-  assert.doesNotMatch(source, /Aktivní větev rozboru/);
+  assert.match(source, /<F2BuildEditor/);
+  assert.match(source, /<F2Preview/);
+  assert.match(editor, /Společný analytický obraz/);
+  assert.match(editor, /\+ Doplnit informaci/);
+  assert.match(editor, /Aktualizovat preview/);
+  assert.doesNotMatch(editor, /Přejít k vytvoření výstupu/);
 });
 
 test("stable IDs drive granular unread diffs and reordering alone is ignored", async () => {
@@ -144,16 +137,12 @@ test("F1 question renderer remains independent from F2 analysis questions", asyn
   assert.match(source, /\{action\.question\}/);
 });
 
-test("entry contract carries one explicit question and defers detailed fields", async () => {
-  const [route, card] = await Promise.all([
-    readFile(new URL("../app/api/analysis/route.ts", import.meta.url), "utf8"),
-    readFile(new URL("../app/notepad.tsx", import.meta.url), "utf8"),
-  ]);
+test("entry contract retains its compatible question data while the build shell defers detailed fields", async () => {
+  const route = await readFile(new URL("../app/api/analysis/route.ts", import.meta.url), "utf8");
   assert.match(route, /question: nullableEntryQuestion/);
   assert.doesNotMatch(route.slice(route.indexOf("const ENTRY_ANALYSIS_SCHEMA"), route.indexOf("const WORKING_ANALYSIS_SCHEMA")), /sourceText|supportingInformation|remainingUncertainty/);
   assert.match(route, /Negeneruj detailní opory, limity, seznamy neznámých, parametry ani zamýšlené výstupy/);
-  assert.match(card, /hypothesis\.question && <AnalysisQuestionItem/);
-  assert.match(card, /need\.question && <AnalysisQuestionItem/);
+  assert.match(route, /questions: \{ type: "array"/);
 });
 
 test("output context preserves entry uncertainty without treating readiness as a gate", async () => {
