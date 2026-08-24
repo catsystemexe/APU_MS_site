@@ -89,10 +89,10 @@ test("reordering stable hypotheses does not create an unread change", () => {
   assert.deepEqual([...analysisChangeKeys(analysis, second)], []);
 });
 
-test("non-entry Phase 2 chat does not duplicate the standard phase label", () => {
+test("structured Phase 2 entry does not duplicate the canonical callout text", () => {
   const text = formatAnalysisChat(analysis);
   assert.doesNotMatch(text, /\[FÁZE 2\]/);
-  assert.match(text, /Připravil jsem kartu Rozbor/);
+  assert.doesNotMatch(text, /Připravil jsem kartu Rozbor/);
   assert.match(text, /Nejdůležitější nejistota: U/);
 });
 
@@ -102,7 +102,10 @@ test("F2 entry chat uses the shared analysis hypotheses and a single clickable c
     readFile(new URL("../app/f2-entry-summary.tsx", import.meta.url), "utf8"),
   ]);
   assert.match(client, /content: "", analysisEntryHypotheses: entryHypotheses\(result\.analysis\)/);
+  assert.match(client, /result\.analysis\.chatUpdate\.kind === "entry"[\s\S]*?analysisEntryHypotheses: entryHypotheses\(result\.analysis\)/);
   assert.match(client, /<F2EntrySummary hypotheses=\{message\.analysisEntryHypotheses\} onOpenAnalysis=\{\(\) => setActivePanel\("analysis"\)\}/);
+  assert.match(client, /assistant-response--f2-entry/);
+  assert.doesNotMatch(await readFile(new URL("../app/analysis-model.ts", import.meta.url), "utf8"), /Připravil jsem kartu Rozbor/);
   assert.doesNotMatch(client, /if \(phase === "intake" && nextPhase === "development"\) setActivePanel\("analysis"\)/);
   assert.match(entry, /Připravil jsem kartu Rozbor z aktuálního Zápisníku/);
   assert.match(entry, /hypotheses\.map/);
