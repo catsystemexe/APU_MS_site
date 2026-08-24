@@ -1310,7 +1310,7 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
                   ))}
                 </div>
               )}
-              <div className="message-content">
+              <div className={`message-content${message.role === "assistant" && (message.content || message.analysisEntryHypotheses) ? " message-content--assistant-response" : ""}`}>
                 {message.content
                   ? (
                       <HighlightedMessage
