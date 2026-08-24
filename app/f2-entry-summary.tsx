@@ -1,4 +1,4 @@
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, ScanSearch } from "lucide-react";
 import type { WorkingHypothesis } from "./analysis-model";
 
 export type F2EntryHypothesis = Pick<WorkingHypothesis, "id" | "rank" | "title" | "summary">;
@@ -11,6 +11,7 @@ type F2EntrySummaryProps = {
 export function F2EntrySummary({ hypotheses, onOpenAnalysis }: F2EntrySummaryProps) {
   return <section className="f2-entry-summary" aria-label="Shrnutí Rozboru">
     <button type="button" className="f2-entry-callout" onClick={onOpenAnalysis}>
+      <ScanSearch className="f2-entry-callout-icon" aria-hidden="true" />
       <span>Připravil jsem kartu Rozbor z aktuálního Zápisníku.</span>
       <ChevronRight aria-hidden="true" />
     </button>
