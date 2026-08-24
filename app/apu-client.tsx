@@ -82,7 +82,7 @@ import { CompletedLifecycleStatus, ProcessingStatus, type F1ProcessingStage } fr
 import { addCompletedLifecycleRecord, withCompletedLifecycleRecord, type CompletedLifecycleRecord } from "./lifecycle-record";
 import { DevLogPanel } from "./dev-log-panel";
 import type { SharedFeedbackResult } from "./shared-feedback";
-import { acceptRenderedPreview, addF2Context, applyPochopitBuildResult, createF2BuildState, createF2PreviewSnapshot, createPochopitBuildRequest, parameterizeF2Skill, previewStatus, removeF2Context, switchF2Path, toggleF2Skill, type F2BuildState, type F2NotebookContextItem, type F2PreviewState, type F2RenderedPreview, type PochopitBuildResult } from "./f2-build-model";
+import { acceptRenderedPreview, addF2Context, applyF2BuildResult, createF2BuildRequest, createF2BuildState, createF2PreviewSnapshot, parameterizeF2Skill, previewStatus, removeF2Context, switchF2Path, toggleF2Skill, type F2BuildResult, type F2BuildState, type F2NotebookContextItem, type F2PreviewState, type F2RenderedPreview } from "./f2-build-model";
 
 type SpeechRecognitionEventLike = {
   resultIndex: number;
@@ -324,7 +324,6 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
         setF2Preview(null);
         return createF2BuildState(canonicalF2Need, analysis.mainUncertainty ? [analysis.mainUncertainty] : [], analysis.hypotheses);
       }
-      if (!current.analytical.uncertainties.length && current.processedRevision === null && analysis.mainUncertainty) return { ...current, analytical: { ...current.analytical, uncertainties: [{ missing: analysis.mainUncertainty, importance: "Může zpřesnit analytický obraz.", limitation: "Omezuje míru jistoty, nikoli možnost pokračovat v rozboru." }] } };
       return current;
     });
   }, [analysis.hypotheses, analysis.mainUncertainty, canonicalF2Need, phase]);
@@ -633,11 +632,11 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
     if (!f2Build) return;
     setF2BuildStatus("loading"); setF2BuildError(null);
     try {
-      const buildRequest = createPochopitBuildRequest(f2Build, f2Situation(), selectedModel);
+      const buildRequest = createF2BuildRequest(f2Build, f2Situation(), selectedModel);
       const response = await fetch("/api/f2", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ operation: "build", model: selectedModel, build: buildRequest }) });
-      const payload = await response.json().catch(() => null) as { result?: PochopitBuildResult; error?: string } | null;
+      const payload = await response.json().catch(() => null) as { result?: F2BuildResult; error?: string } | null;
       if (!response.ok || !payload?.result) throw new Error(payload?.error || "Build se nepodařilo rozpracovat.");
-      setF2Build((current) => current ? applyPochopitBuildResult(current, payload.result!, buildRequest.buildRevision) : current);
+      setF2Build((current) => current ? applyF2BuildResult(current, payload.result!, buildRequest.activePath, buildRequest.buildRevision) : current);
       setF2BuildStatus("idle");
     } catch (cause) { setF2BuildError(cause instanceof Error ? cause.message : "Build se nepodařilo rozpracovat."); setF2BuildStatus("error"); }
   }

@@ -33,11 +33,12 @@ F1 → F2
 
 F2 — Rozbor  
 • The stateful build editor works with one canonical pedagogical need. Its initial path comes from the need mapping in Zápisník, while the active path can be switched without rewriting that mapping.
-• `POCHOPIT` is the first model-driven build path: local skill/context configuration is applied only by explicit analytical execution and produces structured derived F2 state for the situation as a whole.
-• Its five optional skills are composable. Working hypotheses can change dynamically, while comparisons, relationships, expert framing, synthesis and path-relative uncertainty remain visible without turning missing information into a blocking question flow.
+• `POCHOPIT`, `POZOROVAT` and `VYTVOŘIT` are model-driven build paths sharing one lifecycle: local configuration → explicit execution → structured processed build → explicit revision-bound snapshot → model-rendered preview.
+• Their five optional skills are composable and path-specific. `POCHOPIT` develops expert understanding, `POZOROVAT` turns uncertainty into targeted evidence gathering, and `VYTVOŘIT` creates a justified practical build specification rather than a finished artifact.
+• Working hypotheses remain shared and dynamic across paths. Uncertainty is path-relative and localized to affected evidence or decisions, but never automatically blocks continuation.
 • Ordinary skill, parameter and context edits make no model call, do not write back to Zápisník, and visibly leave analytical changes unapplied until the user executes the build again.
 • PREVIEW explicitly freezes the current accepted build and asks the model to render only that immutable snapshot. Later edits preserve the successful preview, mark it outdated and never regenerate it automatically; a failed refresh also preserves the previous preview.
-• `POZOROVAT` and `VYTVOŘIT` retain their five-layer local interaction shells but do not use `POCHOPIT` model semantics.
+• Switching paths preserves shared hypotheses and each path's local skill configuration, makes no automatic model call, and requires explicit execution when the target path's processed state is not current. The F3 target does not select the path and remains an early contract separate from F2 logic.
 
 F2 → F3  
 • The current boundary is an explicit model-rendered snapshot PREVIEW on the Výstup surface: an F2 output and early F3 contract, not a final F3 artifact.

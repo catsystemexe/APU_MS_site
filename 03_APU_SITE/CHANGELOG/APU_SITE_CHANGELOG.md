@@ -4,6 +4,17 @@ Status: CURRENT
 
 Records significant verified product/runtime/project changes. It is not a complete Git log. Historical Sites-era entries are retained where they remain useful; current deployment state must not be inferred from a changelog entry alone.
 
+## 2026-08-24 — Model-driven F2 POZOROVAT and VYTVOŘIT paths
+
+### Added
+- One path-aware F2 execution and preview contract now serves `POCHOPIT`, `POZOROVAT` and `VYTVOŘIT`, with explicit active-path routing, typed path results, shared dynamic hypotheses and normalized path-relative uncertainty.
+- `POZOROVAT` produces an evidence-gathering specification that separates observable indicators from interpretation, relates contrasts and recording choices to hypotheses, and stops before final observation-sheet materialization.
+- `VYTVOŘIT` separates the pedagogical objective from the F3 artifact target, supports conditional approaches, comparisons, conditions and validation criteria, and localizes weak-context limitations without false precision or final artifact generation.
+- Immutable revision-bound preview snapshots and explicit model rendering now work for all paths; path switching and local edits remain call-free and preserve stale previews and path-specific configuration.
+
+### Preserved scope
+- Full F3 artifact construction remains unimplemented, and no production deployment was performed.
+
 ## 2026-08-24 — Model-driven F2 POCHOPIT vertical slice
 
 ### Added

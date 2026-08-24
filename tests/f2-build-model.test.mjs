@@ -1,55 +1,58 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { acceptRenderedPreview, addF2Context, applyPochopitBuildResult, createF2BuildState, createF2PreviewSnapshot, createPochopitBuildRequest, F2_SKILL_DEFINITIONS, parameterizeF2Skill, previewStatus, reconcileF2Hypotheses, switchF2Path, toggleF2Skill } from "../app/f2-build-model.ts";
+import { acceptRenderedPreview, addF2Context, applyF2BuildResult, createF2BuildRequest, createF2BuildState, createF2PreviewSnapshot, F2_SKILL_DEFINITIONS, parameterizeF2Skill, previewStatus, switchF2Path, toggleF2Skill } from "../app/f2-build-model.ts";
 
-const need = (path = "POCHOPIT") => ({ needId: `need-${path}`, needText: `Potřeba ${path}`, initialF2Path: path, f3Target: "přehled" });
+const need = (path = "POCHOPIT", target = "přehled") => ({ needId: `need-${path}`, needText: `Potřeba ${path}`, initialF2Path: path, f3Target: target });
 const hypothesis = (id, title = id) => ({ id, rank: 1, title, summary: `Shrnutí ${title}`, relevantNeeds: ["need-POCHOPIT"], question: null, supportingInformation: [], limitations: [], unknowns: [], questions: [] });
-const analytical = { relationships: [], comparisons: [], expertFrame: [], synthesis: "Současný obraz", decisions: ["Závěr"], uncertainties: [{ missing: "Průběh v čase", importance: "Rozliší stabilní a situační obraz.", limitation: "Omezuje závěr o stabilitě." }] };
+const uncertainties = [{ description: "Chybí kontext", whyRelevant: "Mění volbu", limits: "Volba je provizorní", relatedDecisionOrArea: "přístup" }];
+const pathResult = {
+  POCHOPIT: { kind: "understanding", relationships: ["vztah"], comparisons: [], expertFrame: [], synthesis: "obraz" },
+  POZOROVAT: { kind: "observation", purpose: "Rozlišit hypotézy", observableIndicators: [{ indicator: "zahájení do 30 s", interpretation: "může souviset s mírou podpory" }], situations: ["známý úkol"], comparisonConditions: ["s podporou vs bez podpory"], scope: "tři různé situace", evidenceMethod: ["čas a kontext"], hypothesisLinks: ["h1 může podpořit i oslabit"], limitations: ["pozorování neurčí vnitřní stav"] },
+  VYTVOŘIT: { kind: "creation", pedagogicalObjective: "podpořit samostatné zahájení úkolu", candidateApproaches: ["vizuální podpora"], variantComparison: ["kratší podpora je méně zatěžující"], workingApproach: "podmíněná vizuální opora", conditions: ["pokud dítě rozumí symbolům"], whatToVerify: ["samostatné zahájení, nejen použití karty"], relevantHypotheses: ["h1"], limitations: ["úroveň porozumění není známa"] },
+};
+const result = (path) => ({ hypotheses: [hypothesis("h1")], pathResult: pathResult[path], decisions: ["pracovní rozhodnutí"], uncertainties, missingInformation: ["úroveň podpory"] });
+const configured = (path, target) => toggleF2Skill(createF2BuildState(need(path, target), [], [hypothesis("h1")]), `${path.toLowerCase()}-1`);
 
-test("canonical F1 mapping initializes all paths without changing F3 target", () => {
+test("canonical F1 mapping initializes all paths and keeps F3 target separate", () => {
   for (const path of ["POCHOPIT", "POZOROVAT", "VYTVOŘIT"]) { const build = createF2BuildState(need(path)); assert.equal(build.initialPath, path); assert.equal(build.activePath, path); assert.equal(build.f3Target, "přehled"); }
 });
 
-test("POCHOPIT request contains only active composable skills and parameters", () => {
-  let build = createF2BuildState(need(), [], [hypothesis("h1")]);
-  build = toggleF2Skill(build, "pochopit-1"); build = toggleF2Skill(build, "pochopit-4"); build = parameterizeF2Skill(build, "pochopit-4", "Exekutivní funkce a věk");
-  const request = createPochopitBuildRequest(build, [{ category: "manifestations", text: "Obtížný začátek úkolu" }]);
-  assert.deepEqual(request.activeSkills.map((item) => item.id), ["pochopit-1", "pochopit-4"]);
-  assert.equal(request.activeSkills[1].parameterText, "Exekutivní funkce a věk");
-  assert.equal(request.canonicalNeed.needText, "Potřeba POCHOPIT");
+test("explicit activePath routes the shared request and serializes only active path skills with parameters", () => {
+  for (const path of ["POCHOPIT", "POZOROVAT", "VYTVOŘIT"]) {
+    let build = configured(path); build = toggleF2Skill(build, `${path.toLowerCase()}-3`); build = parameterizeF2Skill(build, `${path.toLowerCase()}-3`, `parametr ${path}`);
+    const request = createF2BuildRequest(build, [{ category: "manifestations", text: "Obtížný začátek" }]);
+    assert.equal(request.kind, "f2-build"); assert.equal(request.activePath, path); assert.deepEqual(request.activeSkills.map((item) => item.id), [`${path.toLowerCase()}-1`, `${path.toLowerCase()}-3`]); assert.equal(request.skillParameters[`${path.toLowerCase()}-3`], `parametr ${path}`);
+  }
 });
 
-test("route guard prevents POZOROVAT and VYTVOŘIT from using POCHOPIT executor", () => {
-  for (const path of ["POZOROVAT", "VYTVOŘIT"]) assert.throws(() => createPochopitBuildRequest(toggleF2Skill(createF2BuildState(need(path)), `${path.toLowerCase()}-1`), []), /pouze pro cestu POCHOPIT/);
+test("POZOROVAT response distinguishes observable evidence, interpretation and comparison", () => {
+  let build = configured("POZOROVAT", "týdenní pozorovací tabulka"); const revision = build.buildRevision; const canonical = structuredClone(build.canonicalNeed);
+  build = applyF2BuildResult(build, result("POZOROVAT"), "POZOROVAT", revision);
+  const observation = build.processedBuilds.POZOROVAT.pathResult; assert.equal(observation.kind, "observation"); assert.notEqual(observation.observableIndicators[0].indicator, observation.observableIndicators[0].interpretation); assert.match(observation.comparisonConditions[0], /vs/); assert.deepEqual(build.canonicalNeed, canonical); assert.equal(observation.purpose.includes("tabulka"), false);
 });
 
-test("hypothesis reconciliation preserves stable IDs and tolerates added and removed hypotheses", () => {
-  const result = reconcileF2Hypotheses([hypothesis("stable"), hypothesis("removed")], [hypothesis("stable", "Aktualizovaná"), hypothesis("new", "Nová")]);
-  assert.deepEqual(result.map((item) => item.id), ["stable", "new"]); assert.equal(result[0].rank, 1); assert.equal(result[1].rank, 2);
+test("VYTVOŘIT keeps pedagogical objective distinct from F3 artifact and localizes provisional uncertainty", () => {
+  let build = configured("VYTVOŘIT", "pracovní karty"); build = applyF2BuildResult(build, result("VYTVOŘIT"), "VYTVOŘIT", build.buildRevision);
+  const creation = build.processedBuilds.VYTVOŘIT.pathResult; assert.equal(creation.kind, "creation"); assert.notEqual(creation.pedagogicalObjective, build.f3Target); assert.match(creation.conditions[0], /pokud/i); assert.equal(build.processedBuilds.VYTVOŘIT.uncertainties[0].relatedDecisionOrArea, "přístup"); assert.equal(JSON.stringify(creation).includes("grafická sazba"), false);
 });
 
-test("model update changes only derived build state and marks the exact revision processed", () => {
-  const canonical = need(); let build = toggleF2Skill(createF2BuildState(canonical, [], [hypothesis("old")]), "pochopit-5"); const revision = build.buildRevision;
-  build = applyPochopitBuildResult(build, { hypotheses: [hypothesis("new")], analytical }, revision);
-  assert.deepEqual(canonical, need()); assert.equal(build.canonicalNeed.needText, canonical.needText); assert.equal(build.processedRevision, revision); assert.equal(build.analytical.uncertainties[0].limitation, "Omezuje závěr o stabilitě.");
+test("cross-path switching preserves hypotheses and each path's local skill configuration without calls", () => {
+  let calls = 0; let build = configured("POCHOPIT"); build = applyF2BuildResult(build, result("POCHOPIT"), "POCHOPIT", build.buildRevision); build = switchF2Path(build, "POZOROVAT"); build = toggleF2Skill(build, "pozorovat-2"); build = switchF2Path(build, "VYTVOŘIT");
+  assert.equal(calls, 0); assert.equal(build.workingHypotheses[0].id, "h1"); assert.equal(build.skills.find((skill) => skill.id === "pozorovat-2").active, true); assert.equal(build.canonicalNeed.initialF2Path, "POCHOPIT");
+  calls++; assert.equal(calls, 1);
 });
 
-test("local edits are pure and create unapplied state without any model side effect", () => {
-  let calls = 0; const model = () => calls++; let build = toggleF2Skill(createF2BuildState(need()), "pochopit-1"); build = parameterizeF2Skill(build, "pochopit-1", "zaměření"); build = addF2Context(build, { id: "c1", text: "Dítěti je pět let" });
-  assert.equal(calls, 0); model(createPochopitBuildRequest(build, [])); assert.equal(calls, 1);
+test("local skill, parameter and context edits never execute a model and mark processed state stale", () => {
+  let calls = 0; let build = configured("POCHOPIT"); build = applyF2BuildResult(build, result("POCHOPIT"), "POCHOPIT", build.buildRevision); const processedRevision = build.processedBuilds.POCHOPIT.processedRevision;
+  build = parameterizeF2Skill(build, "pochopit-1", "zaměření"); build = addF2Context(build, { id: "c1", text: "Dítěti je pět let" }); assert.equal(calls, 0); assert.notEqual(processedRevision, build.buildRevision);
 });
 
-test("preview snapshot is isolated, becomes stale after edit, and refresh failure preserves success", () => {
-  let build = toggleF2Skill(createF2BuildState(need(), [], [hypothesis("h1")]), "pochopit-1"); build = applyPochopitBuildResult(build, { hypotheses: [hypothesis("h1")], analytical }, build.buildRevision);
-  const snapshot = createF2PreviewSnapshot(build); let preview = acceptRenderedPreview(snapshot, { title: "Náhled N", introduction: "Úvod", sections: [] });
-  build = addF2Context(build, { id: "later", text: "Pozdější změna" });
-  assert.equal(snapshot.addedContext.length, 0); preview = previewStatus(preview, build); assert.equal(preview.status, "stale"); assert.equal(preview.render.title, "Náhled N");
-  const failedRefreshLeaves = preview; assert.strictEqual(failedRefreshLeaves, preview);
-  build = applyPochopitBuildResult(build, { hypotheses: [hypothesis("h1")], analytical }, build.buildRevision);
-  const next = createF2PreviewSnapshot(build); preview = acceptRenderedPreview(next, { title: "Náhled N+1", introduction: "Úvod", sections: [] }); assert.equal(preview.status, "current"); assert.equal(preview.sourceBuildRevision, snapshot.buildRevision + 1);
+test("POZOROVAT and VYTVOŘIT previews use immutable explicit snapshots and remain after stale edits", () => {
+  for (const path of ["POZOROVAT", "VYTVOŘIT"]) {
+    let build = configured(path, path === "POZOROVAT" ? "týdenní pozorovací tabulka" : "pracovní karty"); build = applyF2BuildResult(build, result(path), path, build.buildRevision);
+    const snapshot = createF2PreviewSnapshot(build); let preview = acceptRenderedPreview(snapshot, { title: `Náhled ${path}`, introduction: "Úvod", sections: [] }); build = addF2Context(build, { id: "later", text: "Pozdější změna" }); preview = previewStatus(preview, build);
+    assert.equal(snapshot.activePath, path); assert.equal(snapshot.processedBuild.path, path); assert.equal(snapshot.addedContext.length, 0); assert.equal(preview.status, "stale"); assert.equal(preview.render.title, `Náhled ${path}`); assert.throws(() => createF2PreviewSnapshot(build), /Nejprve rozpracujte/);
+  }
 });
 
-test("other path shells retain five independently editable skills", () => {
-  for (const path of ["POCHOPIT", "POZOROVAT", "VYTVOŘIT"]) assert.equal(F2_SKILL_DEFINITIONS.filter((skill) => skill.path === path).length, 5);
-  const switched = switchF2Path(createF2BuildState(need()), "VYTVOŘIT"); assert.equal(switched.initialPath, "POCHOPIT"); assert.equal(switched.activePath, "VYTVOŘIT");
-});
+test("all paths retain five independently configured skills", () => { for (const path of ["POCHOPIT", "POZOROVAT", "VYTVOŘIT"]) assert.equal(F2_SKILL_DEFINITIONS.filter((skill) => skill.path === path).length, 5); });
