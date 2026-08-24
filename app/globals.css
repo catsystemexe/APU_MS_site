@@ -926,6 +926,7 @@ button:disabled { cursor: default; opacity: 0.52; }
 .composer-hint.is-error { color: var(--danger); }
 
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+.workspace-resize-handle { display: none; }
 
 .notepad-panel {
   position: relative;
@@ -1408,7 +1409,7 @@ button:disabled { cursor: default; opacity: 0.52; }
     min-height: 0;
     grid-template-columns: minmax(0, 1fr);
   }
-  .chat-card:has(.notepad-panel.is-open) { grid-template-columns: minmax(0, 3fr) minmax(300px, 2fr); }
+  .chat-card:has(.notepad-panel.is-open) { grid-template-columns: var(--desktop-chat-split, 60%) minmax(0, 1fr); }
   .message-list { padding-right: 26px; }
   .message-list, .composer { grid-column: 1; }
   .notepad-panel {
@@ -1420,7 +1421,7 @@ button:disabled { cursor: default; opacity: 0.52; }
     display: none;
     transform: none;
     pointer-events: auto;
-    border-left: 1px solid var(--border);
+    border-left: 0;
   }
   .notepad-panel.is-open { display: block; }
   .notepad-content {
@@ -1432,6 +1433,38 @@ button:disabled { cursor: default; opacity: 0.52; }
   .chat-card:has(.notepad-panel.is-open) .tool-rail { grid-column: 2; }
   .diagnostics-drawer { grid-column: 1; }
   .chat-card:has(.notepad-panel.is-open) .diagnostics-drawer { grid-column: 2; }
+  .workspace-resize-handle {
+    display: block;
+    position: relative;
+    z-index: 8;
+    grid-column: 1;
+    grid-row: 2 / 4;
+    justify-self: end;
+    width: 10px;
+    height: 100%;
+    margin-right: -5px;
+    border: 0;
+    background: transparent;
+    cursor: col-resize;
+    touch-action: none;
+  }
+  .workspace-resize-handle::after {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 50%;
+    width: 1px;
+    background: var(--border);
+    transform: translateX(-50%);
+  }
+  .workspace-resize-handle:hover::after,
+  .workspace-resize-handle:focus-visible::after,
+  .chat-card.is-resizing-workspace .workspace-resize-handle::after {
+    width: 2px;
+    background: var(--accent);
+  }
+  .workspace-resize-handle:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+  .chat-card.is-resizing-workspace,
+  .chat-card.is-resizing-workspace * { cursor: col-resize !important; user-select: none !important; }
 }
 
 @media (max-width: 767px), (min-width: 768px) and (orientation: portrait) {

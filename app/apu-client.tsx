@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  CSSProperties,
   FormEvent,
   KeyboardEvent as ReactKeyboardEvent,
   ReactNode,
@@ -86,6 +87,20 @@ type SpeechRecognitionEventLike = {
 };
 
 type SpeechRecognitionErrorLike = { error: string };
+
+const DESKTOP_SPLIT_STORAGE_KEY = "apu.desktopSplit";
+const DEFAULT_DESKTOP_SPLIT = 60;
+const MIN_CHAT_WIDTH = 420;
+const MIN_WORKSPACE_WIDTH = 300;
+const SPLIT_KEYBOARD_STEP = 2;
+
+function clampDesktopSplit(preferred: number, width: number) {
+  if (width <= 0) return DEFAULT_DESKTOP_SPLIT;
+  const minimum = (MIN_CHAT_WIDTH / width) * 100;
+  const maximum = 100 - (MIN_WORKSPACE_WIDTH / width) * 100;
+  if (minimum > maximum) return (MIN_CHAT_WIDTH / (MIN_CHAT_WIDTH + MIN_WORKSPACE_WIDTH)) * 100;
+  return Math.min(maximum, Math.max(minimum, preferred));
+}
 
 type SpeechRecognitionLike = {
   continuous: boolean;
@@ -259,6 +274,9 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
   const [isDevLogOpen, setIsDevLogOpen] = useState(false);
   const [isDevLogRendered, setIsDevLogRendered] = useState(false);
   const [activePanel, setActivePanel] = useState<WorkspacePanelId>("notepad");
+  const [preferredDesktopSplit, setPreferredDesktopSplit] = useState(DEFAULT_DESKTOP_SPLIT);
+  const [effectiveDesktopSplit, setEffectiveDesktopSplit] = useState(DEFAULT_DESKTOP_SPLIT);
+  const [isResizingWorkspace, setIsResizingWorkspace] = useState(false);
   const [analysis, setAnalysis] = useState<AnalysisState>(EMPTY_ANALYSIS);
   const [analysisStatus, setAnalysisStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [analysisError, setAnalysisError] = useState<string | null>(null);
@@ -279,6 +297,7 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
   const design = useDesignPreferences();
   const { entries: notepad, setEntries: setNotepad, hydrated: isNotepadHydrated } = usePersistentNotepad();
   const bottomRef = useRef<HTMLDivElement>(null);
+  const chatCardRef = useRef<HTMLElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const statsRef = useRef<HTMLDivElement>(null);
   const statsButtonRef = useRef<HTMLButtonElement>(null);
@@ -298,6 +317,49 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
   const [hasDictationDraft, setHasDictationDraft] = useState(false);
   const [f1ProcessingStatus, setF1ProcessingStatus] = useState<{ assistantId: string; stage: F1ProcessingStage } | null>(null);
   const f1ProcessingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const stored = Number.parseFloat(window.localStorage.getItem(DESKTOP_SPLIT_STORAGE_KEY) ?? "");
+    if (Number.isFinite(stored) && stored > 0 && stored < 100) setPreferredDesktopSplit(stored);
+  }, []);
+
+  useEffect(() => {
+    const card = chatCardRef.current;
+    if (!card) return;
+    const updateEffectiveSplit = () => {
+      setEffectiveDesktopSplit(clampDesktopSplit(preferredDesktopSplit, card.getBoundingClientRect().width));
+    };
+    updateEffectiveSplit();
+    const observer = new ResizeObserver(updateEffectiveSplit);
+    observer.observe(card);
+    return () => observer.disconnect();
+  }, [preferredDesktopSplit]);
+
+  function savePreferredDesktopSplit(value: number) {
+    setPreferredDesktopSplit(value);
+    window.localStorage.setItem(DESKTOP_SPLIT_STORAGE_KEY, String(value));
+  }
+
+  function updateDesktopSplitFromClientX(clientX: number) {
+    const rect = chatCardRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const preferred = ((clientX - rect.left) / rect.width) * 100;
+    const effective = clampDesktopSplit(preferred, rect.width);
+    setEffectiveDesktopSplit(effective);
+    savePreferredDesktopSplit(effective);
+  }
+
+  function handleSplitKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (event.key === "Home") {
+      event.preventDefault();
+      savePreferredDesktopSplit(DEFAULT_DESKTOP_SPLIT);
+    } else if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+      event.preventDefault();
+      const direction = event.key === "ArrowLeft" ? -1 : 1;
+      const width = chatCardRef.current?.getBoundingClientRect().width ?? 0;
+      savePreferredDesktopSplit(clampDesktopSplit(effectiveDesktopSplit + direction * SPLIT_KEYBOARD_STEP, width));
+    }
+  }
   const f1ProcessingSequenceRef = useRef<{ assistantId: string; complete: boolean } | null>(null);
   const f1MainPreparingRef = useRef<string | null>(null);
   const [isComposerExpanded, setIsComposerExpanded] = useState(false);
@@ -1188,7 +1250,12 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
 
   return (
     <main className="app-shell">
-      <section className={`chat-card${isDevLogOpen ? " is-dev-log-open" : ""}`} aria-label="Konverzace s APU">
+      <section
+        ref={chatCardRef}
+        className={`chat-card${isDevLogOpen ? " is-dev-log-open" : ""}${isResizingWorkspace ? " is-resizing-workspace" : ""}`}
+        style={{ "--desktop-chat-split": `${effectiveDesktopSplit}%` } as CSSProperties}
+        aria-label="Konverzace s APU"
+      >
         <header className="app-header">
           <div className="brand">
             <span className="brand-mark" aria-hidden="true">
@@ -1525,6 +1592,34 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
             silent: true,
           })}
         />
+
+        {activePanel && <div
+          className="workspace-resize-handle"
+          role="separator"
+          aria-label="Změnit šířku chatu a pracovního panelu"
+          aria-orientation="vertical"
+          aria-valuemin={Math.round(clampDesktopSplit(0, chatCardRef.current?.getBoundingClientRect().width ?? 720))}
+          aria-valuemax={Math.round(clampDesktopSplit(100, chatCardRef.current?.getBoundingClientRect().width ?? 720))}
+          aria-valuenow={Math.round(effectiveDesktopSplit)}
+          tabIndex={0}
+          onKeyDown={handleSplitKeyDown}
+          onDoubleClick={() => savePreferredDesktopSplit(DEFAULT_DESKTOP_SPLIT)}
+          onPointerDown={(event) => {
+            if (event.button !== 0) return;
+            event.preventDefault();
+            event.currentTarget.setPointerCapture(event.pointerId);
+            setIsResizingWorkspace(true);
+            updateDesktopSplitFromClientX(event.clientX);
+          }}
+          onPointerMove={(event) => {
+            if (event.currentTarget.hasPointerCapture(event.pointerId)) updateDesktopSplitFromClientX(event.clientX);
+          }}
+          onPointerUp={(event) => {
+            if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+            setIsResizingWorkspace(false);
+          }}
+          onPointerCancel={() => setIsResizingWorkspace(false)}
+        />}
 
         {isDeveloper && <aside
           id="diagnostics-drawer"
