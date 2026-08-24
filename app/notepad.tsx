@@ -17,8 +17,10 @@ import {
 import { NOTEPAD_CATEGORIES } from "./notepad-categories";
 import type { AnalysisState, SuggestedNeed } from "./analysis-model";
 import type { ConversationPhase } from "./dialog-action";
-import { F2BuildEditor, F2Preview } from "./f2-build-editor";
+import { F2BuildEditor } from "./f2-build-editor";
 import type { F2BuildState, F2PreviewState } from "./f2-build-model";
+import { F3Finalization } from "./f3-finalization";
+import type { F3Config, F3State } from "./f3-finalization-model";
 
 export type WorkspacePanel = "notepad" | "analysis" | "output" | null;
 
@@ -56,6 +58,14 @@ type WorkspacePanelProps = {
   onF2ContextRemove: (id: string) => void;
   onF2Execute: () => void;
   onF2Preview: () => void;
+  f3State: F3State | null;
+  f3Status: "idle" | "loading" | "error";
+  f3Error: string | null;
+  onF3Enter: () => void;
+  onF3Config: (change: Partial<F3Config>) => void;
+  onF3Render: () => void;
+  onF3Adopt: () => void;
+  onF3Return: () => void;
 };
 
 function useViewportSeen(ref: RefObject<Element | null>, key: string, unseen: boolean, onSeen: (key: string) => void) {
@@ -278,10 +288,10 @@ function AnalysisPanel(props: Pick<WorkspacePanelProps, "phase" | "analysis" | "
   return <div id="workspace-analysis" className="notepad-scroll workspace-panel-body" role="tabpanel" aria-label="Rozbor"><F2BuildEditor build={props.f2Build} preview={props.f2Preview} buildStatus={props.f2BuildStatus} buildError={props.f2BuildError} previewStatus={props.f2PreviewStatus} previewError={props.f2PreviewError} onPathChange={props.onF2PathChange} onSkillToggle={props.onF2SkillToggle} onParameterChange={props.onF2ParameterChange} onContextAdd={props.onF2ContextAdd} onContextRemove={props.onF2ContextRemove} onExecute={props.onF2Execute} onPreview={props.onF2Preview} /></div>;
 }
 
-function OutputPanel({ preview }: { preview: F2PreviewState }) {
+function OutputPanel(props: Pick<WorkspacePanelProps, "f2Preview" | "f3State" | "f3Status" | "f3Error" | "onF3Enter" | "onF3Config" | "onF3Render" | "onF3Adopt" | "onF3Return">) {
   return (
     <div id="workspace-output" className="notepad-scroll workspace-panel-body" role="tabpanel" aria-label="Výstup">
-      <F2Preview preview={preview} />
+      <F3Finalization preview={props.f2Preview} state={props.f3State} status={props.f3Status} error={props.f3Error} onEnter={props.onF3Enter} onConfig={props.onF3Config} onRender={props.onF3Render} onAdopt={props.onF3Adopt} onReturn={props.onF3Return} />
     </div>
   );
 }
@@ -376,7 +386,7 @@ export function WorkspacePanel({
           />
         )}
         {activePanel === "analysis" && <AnalysisPanel {...analysisProps} />}
-        {activePanel === "output" && <OutputPanel preview={analysisProps.f2Preview} />}
+        {activePanel === "output" && <OutputPanel {...analysisProps} />}
       </div>
     </aside>
   );

@@ -1799,6 +1799,18 @@ button:disabled { cursor: default; opacity: 0.52; }
 .f2-preview dl { display: grid; gap: 7px; margin: 0; }
 .f2-preview dl div { display: grid; grid-template-columns: 120px 1fr; gap: 10px; }
 .f2-preview dt { color: var(--text-secondary); font-size: 12px; }.f2-preview dd { margin: 0; font-weight: 650; }
+
+.f3-entry, .f3-finalization { display: grid; gap: 18px; padding: 22px; }
+.f3-entry { align-content: start; }.f3-entry > button, .f3-render-action button, .f3-notice button, .f3-boundary button { border: 0; border-radius: 9px; padding: 10px 13px; background: var(--accent-strong); color: #fff; font-weight: 750; cursor: pointer; }
+.f3-entry span, .f3-finalization header span { color: var(--text-secondary); font-size: 12px; font-weight: 700; }.f3-entry h2, .f3-finalization h2 { margin: 5px 0; }
+.f3-finalization > header { display: flex; align-items: start; justify-content: space-between; gap: 14px; padding-bottom: 14px; border-bottom: 1px solid var(--border); }.f3-finalization header p { margin: 5px 0 0; color: var(--text-secondary); }
+.f3-secondary { border: 1px solid var(--border); border-radius: 9px; padding: 8px 10px; background: transparent; color: var(--text-primary); font-weight: 700; white-space: nowrap; cursor: pointer; }
+.f3-controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }.f3-controls label { display: grid; gap: 6px; color: var(--text-secondary); font-size: 12px; font-weight: 700; }.f3-controls select { width: 100%; border: 1px solid var(--border); border-radius: 8px; padding: 9px; background: var(--surface); color: var(--text-primary); }
+.f3-notice, .f3-boundary { display: flex; align-items: center; justify-content: space-between; gap: 14px; border-radius: 10px; padding: 12px; background: #fff4db; }.f3-notice div { display: grid; gap: 3px; }.f3-notice span, .f3-boundary span { font-size: 12px; color: var(--text-secondary); }
+.f3-render-action { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 12px; }.f3-render-action strong { color: #496b87; font-size: 12px; }.f3-render-action button:disabled { opacity: .55; cursor: wait; }
+.f3-boundary { display: grid; border: 1px solid #dfb75f; }.f3-boundary p { margin: 0; }
+.f3-material { display: grid; gap: 13px; border-top: 2px solid var(--accent-strong); padding-top: 16px; }.f3-material.is-stale { opacity: .72; }.f3-material section p { white-space: pre-wrap; }.f3-material aside { border-left: 3px solid #dfb75f; padding-left: 12px; }.f3-table-wrap { overflow-x: auto; }.f3-material table { width: 100%; border-collapse: collapse; }.f3-material th, .f3-material td { border: 1px solid var(--border); padding: 8px; text-align: left; vertical-align: top; }.f3-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }.f3-cards section { border: 1px solid var(--border); border-radius: 10px; padding: 12px; }
+@media (max-width: 620px) { .f3-finalization > header { display: grid; }.f3-controls, .f3-cards { grid-template-columns: 1fr; }.f3-notice { align-items: stretch; flex-direction: column; }.f3-render-action { align-items: stretch; flex-direction: column; }.f3-render-action button { width: 100%; } }
 .f2-preview li span { display: block; color: var(--text-secondary); font-size: 12px; }
 
 @media (max-width: 680px) {
