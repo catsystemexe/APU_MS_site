@@ -54,7 +54,7 @@ import ApuLogo from "./apu-logo";
 import DialogActionCard from "./dialog-action-card";
 import { AnalysisQuestionRow } from "./analysis-question-row";
 import { F2EntrySummary, type F2EntryHypothesis } from "./f2-entry-summary";
-import { resolveTextDialogEvent, type ConversationPhase, type DialogAction } from "./dialog-action";
+import { resolveF2OutputNavigation, resolveTextDialogEvent, type ConversationPhase, type DialogAction } from "./dialog-action";
 import {
   COLOR_THEMES,
   ColorThemeId,
@@ -82,7 +82,7 @@ import { CompletedLifecycleStatus, ProcessingStatus, type F1ProcessingStage } fr
 import { addCompletedLifecycleRecord, withCompletedLifecycleRecord, type CompletedLifecycleRecord } from "./lifecycle-record";
 import { DevLogPanel } from "./dev-log-panel";
 import type { SharedFeedbackResult } from "./shared-feedback";
-import { acceptRenderedPreview, addF2Context, applyF2BuildResult, createF2BuildRequest, createF2BuildState, createF2PreviewSnapshot, parameterizeF2Skill, previewStatus, removeF2Context, switchF2Path, toggleF2Skill, type F2BuildResult, type F2BuildState, type F2NotebookContextItem, type F2PreviewState, type F2RenderedPreview } from "./f2-build-model";
+import { acceptRenderedPreview, addF2Context, applyF2BuildResult, createF2BuildRequest, createF2PreviewSnapshot, parameterizeF2Skill, previewStatus, removeF2Context, switchF2Path, synchronizeF2BuildWithCanonicalNeed, toggleF2Skill, type F2BuildResult, type F2BuildState, type F2NotebookContextItem, type F2PreviewState, type F2RenderedPreview } from "./f2-build-model";
 import { acceptF3Render, adoptF2Snapshot, createF3RenderRequest, createF3State, updateF3Config, type F3Config, type F3RenderResult, type F3State } from "./f3-finalization-model";
 
 type SpeechRecognitionEventLike = {
@@ -323,13 +323,12 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
 
   useEffect(() => {
     if (phase === "intake" || !canonicalF2Need) return;
-    setF2Build((current) => {
-      if (!current || current.canonicalNeed.needId !== canonicalF2Need.needId) {
-        setF2Preview(null);
-        return createF2BuildState(canonicalF2Need, analysis.mainUncertainty ? [analysis.mainUncertainty] : [], analysis.hypotheses);
-      }
-      return current;
-    });
+    setF2Build((current) => synchronizeF2BuildWithCanonicalNeed(
+      current,
+      canonicalF2Need,
+      analysis.mainUncertainty ? [analysis.mainUncertainty] : [],
+      analysis.hypotheses,
+    ));
   }, [analysis.hypotheses, analysis.mainUncertainty, canonicalF2Need, phase]);
   const dictationTranscriptRef = useRef("");
   const dictationFinalizedSessionRef = useRef(0);
@@ -810,8 +809,7 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
       }, { operation: "analysis-entry", state: "completed", label: "Vytvořeny pracovní hypotézy" }) : message));
       return;
     }
-    const phaseTwoTransition = phase === "development" ? textTransition : null;
-    if (phase === "development" && !dialogEvent && phaseTwoTransition !== "continue_to_output") {
+    if (phase === "development" && !dialogEvent) {
       const result = await refreshStructuredAnalysis(notepadForChat, rawText, turnId, requestId);
       setMessages((current) => current.map((message) => message.id === assistantId ? {
         ...withCompletedLifecycleRecord(message, {
@@ -967,11 +965,38 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
     }
   }
 
+  function handleF2OutputNavigation(rawText: string, dialogEvent?: string, silent = false) {
+    if (phase !== "development") return false;
+    const textEvent = dialogEvent ? null : resolveTextDialogEvent(rawText, compactNotepad(notepad), phase);
+    const resolution = resolveF2OutputNavigation(textEvent, dialogEvent, Boolean(f2Preview));
+    if (!resolution) return false;
+
+    const turnId = `turn-${createMessageId()}`;
+    const userMessage: Message = { id: createMessageId(), role: "user", content: rawText, turnId, createdAt: new Date().toISOString(), phaseLabel: "[FÁZE 2]" };
+    const content = resolution === "enter_f3"
+      ? "Otevírám finalizaci nad přijatým PREVIEW. Samotný výstup vznikne až vaším explicitním pokynem."
+      : "Nejprve v Rozboru explicitně vytvořte PREVIEW; teprve jeho přijatý snapshot lze otevřít ve Výstupu.";
+    setMessages((current) => [...current, ...(silent ? [] : [userMessage]), { id: createMessageId(), role: "assistant", content, turnId, createdAt: new Date().toISOString(), communicationProfile }]);
+    setComposerInput("");
+    setIsComposerExpanded(false);
+    setError(null);
+    setFailedInput(null);
+    if (resolution === "enter_f3" && f2Preview) {
+      setF3State((current) => current ?? createF3State(f2Preview.snapshot));
+      setPhase("output");
+      setActivePanel("output");
+    } else {
+      setActivePanel("analysis");
+    }
+    return true;
+  }
+
   async function sendMessage(rawText: string, options?: { dialogEvent?: string; silent?: boolean }) {
     const text = rawText.trim();
     if (!text || isLoading || !isNotepadHydrated) return;
 
     if (isDictating) cancelDictation();
+    if (handleF2OutputNavigation(rawText, options?.dialogEvent, options?.silent)) return;
 
     const turnId = `turn-${createMessageId()}`;
     const requestId = `req-${createMessageId()}`;

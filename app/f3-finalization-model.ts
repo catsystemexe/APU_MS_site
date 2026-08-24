@@ -22,7 +22,7 @@ export type F3State = {
 export type F3RenderRequest = { kind: "f3-render"; sourceSnapshot: F2PreviewSnapshot; sourceSnapshotId: string; f3Target: string; config: F3Config; f3ConfigRevision: number; model?: string };
 
 export const DEFAULT_F3_CONFIG: F3Config = { audience: "teacher", languageStyle: "plain", lengthDetail: "standard", structureMode: "auto" };
-export function f2SnapshotId(snapshot: F2PreviewSnapshot) { return `${snapshot.canonicalNeed.needId}:${snapshot.activePath}:${snapshot.buildRevision}`; }
+export function f2SnapshotId(snapshot: F2PreviewSnapshot) { return snapshot.snapshotId; }
 export function createF3State(snapshot: F2PreviewSnapshot): F3State {
   return { sourceSnapshotId: f2SnapshotId(snapshot), sourceSnapshotRevision: snapshot.buildRevision, sourceSnapshot: structuredClone(snapshot), target: snapshot.f3Target?.trim() || "Strukturovaný výstup", config: { ...DEFAULT_F3_CONFIG }, configRevision: 0, finalRender: null };
 }

@@ -4,6 +4,26 @@ Status: CURRENT
 
 Records significant verified product/runtime/project changes. It is not a complete Git log. Historical Sites-era entries are retained where they remain useful; current deployment state must not be inferred from a changelog entry alone.
 
+## 2026-08-24 — Single PREVIEW-bound F2 to F3 transition
+
+### Fixed
+- F2 chat/navigation output intent is now resolved locally: without an accepted PREVIEW it focuses the explicit PREVIEW workflow, while with one it opens F3 bound to that immutable snapshot without making a model call.
+- The legacy controller can no longer advance directly from F2 to output, and the general chat API defensively rejects output-phase or unresolved F2-to-output generation requests.
+- Explicit PREVIEW generation and explicit F3 final rendering remain the only model-backed boundaries for their respective operations.
+
+### Preserved scope
+- F1/F2 conversational compatibility fields and Repair A processed/snapshot identities remain unchanged, and no production deployment was performed.
+
+## 2026-08-24 — Canonical F1 lifecycle and snapshot identity repair
+
+### Fixed
+- Same-ID changes to canonical pedagogical-need text, mapped initial path or F3 target now invalidate the copied F2 build and processed state without triggering automatic model work; an existing PREVIEW remains visible but stale.
+- Accepted F2 processing results and PREVIEW snapshots now carry independent identities, allowing F3 to detect and explicitly adopt a newer substantive snapshot even when the local build configuration revision is unchanged.
+- Explicit F3 adoption preserves local finalization settings and the prior final render as stale without regenerating it.
+
+### Preserved scope
+- F2 skills, prompts and legacy phase-navigation behavior are unchanged, and no production deployment was performed.
+
 ## 2026-08-24 — Minimum viable F3 finalization layer
 
 ### Added
