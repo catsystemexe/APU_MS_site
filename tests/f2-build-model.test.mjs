@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { acceptRenderedPreview, addF2Context, applyF2BuildResult, createF2BuildRequest, createF2BuildState, createF2PreviewSnapshot, F2_SKILL_DEFINITIONS, parameterizeF2Skill, previewStatus, switchF2Path, toggleF2Skill } from "../app/f2-build-model.ts";
+import { acceptRenderedPreview, addF2Context, applyF2BuildResult, createF2BuildRequest, createF2BuildState, createF2PreviewSnapshot, F2_SKILL_DEFINITIONS, parameterizeF2Skill, previewStatus, switchF2Path, synchronizeF2BuildWithCanonicalNeed, toggleF2Skill } from "../app/f2-build-model.ts";
 
 const need = (path = "POCHOPIT", target = "přehled") => ({ needId: `need-${path}`, needText: `Potřeba ${path}`, initialF2Path: path, f3Target: target });
 const hypothesis = (id, title = id) => ({ id, rank: 1, title, summary: `Shrnutí ${title}`, relevantNeeds: ["need-POCHOPIT"], question: null, supportingInformation: [], limitations: [], unknowns: [], questions: [] });
@@ -15,6 +15,27 @@ const configured = (path, target) => toggleF2Skill(createF2BuildState(need(path,
 
 test("canonical F1 mapping initializes all paths and keeps F3 target separate", () => {
   for (const path of ["POCHOPIT", "POZOROVAT", "VYTVOŘIT"]) { const build = createF2BuildState(need(path)); assert.equal(build.initialPath, path); assert.equal(build.activePath, path); assert.equal(build.f3Target, "přehled"); }
+});
+
+test("same-ID canonical text, route and target changes safely reset derived F2 state without calls", () => {
+  let calls = 0;
+  let build = configured("POCHOPIT", "přehled");
+  build = applyF2BuildResult(build, result("POCHOPIT"), "POCHOPIT", build.buildRevision);
+  const oldPreview = acceptRenderedPreview(createF2PreviewSnapshot(build), { title: "Starý", introduction: "Úvod", sections: [] });
+  const changes = [
+    { ...build.canonicalNeed, needText: "Jiná potřeba" },
+    { ...build.canonicalNeed, initialF2Path: "POZOROVAT" },
+    { ...build.canonicalNeed, f3Target: null },
+  ];
+  for (const changedNeed of changes) {
+    const next = synchronizeF2BuildWithCanonicalNeed(build, changedNeed);
+    assert.deepEqual(next.canonicalNeed, changedNeed);
+    assert.equal(next.initialPath, changedNeed.initialF2Path);
+    assert.equal(next.activePath, changedNeed.initialF2Path);
+    assert.deepEqual(next.processedBuilds, {});
+    assert.equal(previewStatus(oldPreview, next).status, "stale");
+  }
+  assert.equal(calls, 0);
 });
 
 test("explicit activePath routes the shared request and serializes only active path skills with parameters", () => {
@@ -45,6 +66,21 @@ test("cross-path switching preserves hypotheses and each path's local skill conf
 test("local skill, parameter and context edits never execute a model and mark processed state stale", () => {
   let calls = 0; let build = configured("POCHOPIT"); build = applyF2BuildResult(build, result("POCHOPIT"), "POCHOPIT", build.buildRevision); const processedRevision = build.processedBuilds.POCHOPIT.processedRevision;
   build = parameterizeF2Skill(build, "pochopit-1", "zaměření"); build = addF2Context(build, { id: "c1", text: "Dítěti je pět let" }); assert.equal(calls, 0); assert.notEqual(processedRevision, build.buildRevision);
+});
+
+test("repeated accepted processing at one configuration revision gets distinct result and snapshot identities", () => {
+  let build = configured("POCHOPIT");
+  const configurationRevision = build.buildRevision;
+  build = applyF2BuildResult(build, result("POCHOPIT"), "POCHOPIT", configurationRevision);
+  const firstResultId = build.processedBuilds.POCHOPIT.processedResultId;
+  const firstSnapshot = createF2PreviewSnapshot(build);
+  build = applyF2BuildResult(build, { ...result("POCHOPIT"), decisions: ["nové rozhodnutí"] }, "POCHOPIT", configurationRevision);
+  const secondResultId = build.processedBuilds.POCHOPIT.processedResultId;
+  const secondSnapshot = createF2PreviewSnapshot(build);
+  assert.equal(build.buildRevision, configurationRevision);
+  assert.notEqual(firstResultId, secondResultId);
+  assert.notEqual(firstSnapshot.snapshotId, secondSnapshot.snapshotId);
+  assert.equal(previewStatus(acceptRenderedPreview(firstSnapshot, { title: "A", introduction: "", sections: [] }), build).status, "stale");
 });
 
 test("POZOROVAT and VYTVOŘIT previews use immutable explicit snapshots and remain after stale edits", () => {

@@ -82,8 +82,8 @@ export function resolveTextDialogEvent(
   if (!text) return null;
 
   if (currentPhase === "development") {
-    const action = /\b(?:prejdi|prejdeme|prejit|pojdme|pokracuj|vytvor|priprav|sepis|chci|potrebuji)\b/.test(text);
-    const destination = /\b(?:faze 3|treti faze|vystup|dokument|plan|protokol|scenar|doporuceni)\b/.test(text);
+    const action = /\b(?:prejdi|prejdeme|prejit|pojdme|pokracuj|udelej|vytvor|priprav|sepis|chci|potrebuji)\b/.test(text);
+    const destination = /\b(?:faze 3|treti faze|vystup\w*|dokument|plan|protokol|scenar|doporuceni)\b/.test(text);
     return action && destination ? "continue_to_output" : null;
   }
   if (requiredIntakeTarget(notebook)) return null;
@@ -97,6 +97,17 @@ export function resolveTextDialogEvent(
   const destination = /\b(?:faze 2|druhe faze|navrhy podpory|navrhum podpory|doporuceni|reseni|konkretni napady|konkretni navrhy|dalsi postup)\b/.test(text);
   const directRecommendation = /\b(?:co bys doporucil|co doporucujes|jak bys postupoval|jaky postup doporucujes)\b/.test(text);
   return explicitContinuation || (action && destination) || directRecommendation ? "continue_to_solution" : null;
+}
+
+export type F2OutputNavigationResolution = "stay_for_preview" | "enter_f3";
+
+export function resolveF2OutputNavigation(
+  textEvent: ReturnType<typeof resolveTextDialogEvent>,
+  dialogEvent: string | undefined,
+  hasAcceptedPreview: boolean,
+): F2OutputNavigationResolution | null {
+  if (textEvent !== "continue_to_output" && dialogEvent !== "continue_to_output") return null;
+  return hasAcceptedPreview ? "enter_f3" : "stay_for_preview";
 }
 
 const CONTINUE_OPTION: DialogActionOption = {
@@ -266,6 +277,8 @@ export function resolveDialogEvent(id: string, notebook: IntakeNotebookItem[], c
       }, navAction()],
     };
   }
-  const phase: ConversationPhase = id === "continue_to_output" ? "output" : "development";
+  // F2 output intent is resolved locally against the accepted PREVIEW. The
+  // controller must never advance directly to output without that snapshot.
+  const phase: ConversationPhase = id === "continue_to_output" ? currentPhase : "development";
   return { phase, transition_ready: false, intake_question_policy_applies: false, dialog_actions: [] };
 }
