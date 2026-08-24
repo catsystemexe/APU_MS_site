@@ -472,6 +472,11 @@ button:disabled { cursor: default; opacity: 0.52; }
   font-size: calc(16px * var(--font-scale));
 }
 .message--assistant .message-content { padding: 2px 4px; }
+.message--assistant .message-content--assistant-response {
+  padding: 9px 11px;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--bg-surface) 92%, var(--bg-page));
+}
 .f2-entry-summary {
   display: grid;
   gap: 16px;
@@ -1533,6 +1538,10 @@ button:disabled { cursor: default; opacity: 0.52; }
   }
   .message-list { padding: 23px 17px 30px; }
   .message-content { max-width: 92%; font-size: calc(14px * var(--font-scale)); }
+  .message--assistant .message-content--assistant-response {
+    max-width: 100%;
+    padding: 7px 8px;
+  }
   .dialog-action-question p { font-size: calc(14px * var(--font-scale)); }
   .response-diagnostics { max-width: 100%; gap: 4px 7px; font-size: 9px; }
   .diagnostic-usage { gap: 4px 7px; }
