@@ -1,69 +1,80 @@
-**APU — Current State**  
-Status: CURRENT  
-Purpose: concise product-level answer to “How does APU work now?” Technical deployment provenance belongs to APU Site — Runtime & Technical Current.
+APU — Current State
+Status: CURRENT
+Purpose: canonical product-level answer to “How does APU work now?” This document describes current verified product behavior, not deployment history. Runtime provenance belongs to APU Site — Runtime & Technical Current; history belongs to CHANGELOG and checkpoints.
 
-PRODUCT FLOW  
+PRODUCT FLOW
 APU uses three distinct working layers: Zápisník → Rozbor → Výstup.
 
-Zápisník  
-• Canonical structured source of explicit user facts and pedagogical needs for the current situation.  
-• Five categories: Pozorovaný projev; Pedagogická potřeba; Kontext; Intenzita / trend; Zkušenosti.  
+Zápisník
+• Canonical structured source of explicit user facts and pedagogical needs for the current situation.
+• Five categories: Pozorovaný projev; Pedagogická potřeba; Kontext; Intenzita / trend; Zkušenosti.
 • Automatic extraction may add only explicitly grounded information and should preserve source evidence. Hypotheses and recommendations do not become canonical facts.
 
-Rozbor  
-• Derived analytical layer built from the current Zápisník.  
-• Contains working hypotheses, relationships to pedagogical needs, uncertainty, limitations and targeted follow-up questions.  
-• Must not silently rewrite Zápisník or present model interpretation as canonical fact.  
-• Card and chat representation are views of the same structured Analysis state.
+Rozbor
+• Derived analytical layer built from the current Zápisník.
+• The verified current POCHOPIT prototype starts from the situation/pedagogical need plus concise open baseline hypotheses.
+• Baseline hypotheses stay distinct from generated analysis and are not rewritten by Build operations.
+• Desktop F2 uses Build on the left and Rozbor on the right; the composer remains available, Build can hide to reveal chat, and the divider is resizable.
+• POCHOPIT Build currently offers exactly three operations:
+  – Rozvinout hypotézy: Základně / Podrobně / Do hloubky;
+  – Porovnat a propojit hypotézy;
+  – Doplnit odborný rámec.
+• VYTVOŘIT ROZBOR creates only the required generated components for active operations.
+• Each expansion is rendered directly below its matching baseline hypothesis. Porovnání a souvislosti and Odborný rámec are separate cross-cutting blocks below the hypothesis list.
+• Generated content remains a working component collage, not one polished final report.
+• Build changes do not silently regenerate model content. AKTUALIZOVAT ROZBOR is explicit and incremental.
+• Unchanged components are preserved. Only missing or dependency-stale components are regenerated; pure removals make no model call.
+• Turning an operation OFF does not immediately destroy the visible prior Rozbor; removal is applied on explicit AKTUALIZOVAT.
+• Mixed removals and generations are atomic. If generation fails, the previous complete generated Rozbor remains visible and retryable.
+• Stale in-flight model responses are discarded if the source need, hypotheses, Build config or required component specs changed meanwhile.
+• Generated Markdown is safely rendered for presentation without mutating stored source content or enabling raw HTML execution.
+• Rozbor must not silently rewrite Zápisník or present model interpretation as canonical fact.
 
-Výstup  
-• Downstream F3 realization layer for concrete recommendations, plans and documents, bound to one accepted immutable F2 PREVIEW snapshot.
-• F2 decides what makes pedagogical/analytical sense; F3 decides how that accepted content is materialized for an audience. It must preserve relevant uncertainty and limitations inherited from Zápisník and Rozbor.
-• Minimal local controls select audience, language style, detail and text/table/card representation. They do not call the model; `VYTVOŘIT VÝSTUP` is the only explicit final-render action.
-• One current successful render is retained. Configuration changes mark it stale, while a newer F2 preview is reported but not adopted without an explicit action.
+Výstup
+• F3 remains the downstream realization layer for concrete recommendations, plans and documents.
+• Product direction is that F3 should consume the current Rozbor substance and decide composition, audience, form and style without changing substantive F2 logic.
+• The new verified POCHOPIT slice has not yet migrated the existing immediate F2→F3 source contract. Legacy Preview-bound F3 implementation may still exist in the repository.
+• Therefore the new POCHOPIT flow must not currently be described as already entering F3 through the new current-Rozbor contract.
 
-PHASE BEHAVIOR  
-F1 — Intake  
-• Goal: capture at least one Pozorovaný projev and one Pedagogická potřeba before transition readiness.  
-• Structured F1 questions are rendered separately from normal assistant prose and must not be duplicated in prose.  
+PHASE BEHAVIOR
+F1 — Intake
+• Goal: capture at least one Pozorovaný projev and one Pedagogická potřeba before transition readiness.
+• Structured F1 questions are rendered separately from normal assistant prose and must not be duplicated in prose.
 • MAIN and NAV are mutually exclusive. A relevant intake turn may additionally contain one useful SIDE question, with at most two visible questions total.
 
-F1 → F2  
-• Transition is explicit: NAV action or unambiguous user instruction.  
+F1 → F2
+• Transition is explicit: NAV action or unambiguous user instruction.
 • Opening the Rozbor panel alone does not change phase.
 
-F2 — Rozbor  
-• The stateful build editor works with one canonical pedagogical need. Its initial path comes from the need mapping in Zápisník, while the active path can be switched without rewriting that mapping.
-• A substantive change to that canonical need contract (text, mapped initial path or F3 target) invalidates the copied F2 build and its processed state even when the need ID is unchanged. The prior PREVIEW remains available only as stale reference; reprocessing and PREVIEW remain explicit actions.
-• `POCHOPIT`, `POZOROVAT` and `VYTVOŘIT` are model-driven build paths sharing one lifecycle: local configuration → explicit execution → structured processed build → explicit revision-bound snapshot → model-rendered preview.
-• Their five optional skills are composable and path-specific. `POCHOPIT` develops expert understanding, `POZOROVAT` turns uncertainty into targeted evidence gathering, and `VYTVOŘIT` creates a justified practical build specification rather than a finished artifact.
-• Working hypotheses remain shared and dynamic across paths. Uncertainty is path-relative and localized to affected evidence or decisions, but never automatically blocks continuation.
-• Ordinary skill, parameter and context edits make no model call, do not write back to Zápisník, and visibly leave analytical changes unapplied until the user executes the build again.
-• PREVIEW explicitly freezes the current accepted build and asks the model to render only that immutable snapshot. Later edits preserve the successful preview, mark it outdated and never regenerate it automatically; a failed refresh also preserves the previous preview.
-• Configuration revision and accepted processed-result identity are distinct. Every accepted model execution and PREVIEW receives a fresh identity, so F3 can detect and explicitly adopt a substantively newer snapshot even when the local configuration revision did not change.
-• Switching paths preserves shared hypotheses and each path's local skill configuration, makes no automatic model call, and requires explicit execution when the target path's processed state is not current. The F3 target does not select the path and remains an early contract separate from F2 logic.
+F2 — Rozbor
+• Entry presents the concise baseline need + hypotheses rather than an exhaustive checklist.
+• Build controls are separate from baseline analytical content.
+• Ordinary Build selection changes are local and cause no model call.
+• VYTVOŘIT ROZBOR and AKTUALIZOVAT ROZBOR are the explicit model-backed actions for the verified POCHOPIT slice.
+• POZOROVAT and VYTVOŘIT redesign are not part of this verified slice.
+• The old path selector, five-skill track, processed path build and explicit PREVIEW generation are not current POCHOPIT interaction behavior.
 
-F2 → F3  
-• The boundary is an explicit model-rendered PREVIEW snapshot followed by explicit entry into F3. F3 consumes only that snapshot and never reconstructs the case from chat or mutable live F2 state.
-• Chat and navigation output intent is resolved locally against that boundary: without an accepted PREVIEW it returns the user to the explicit PREVIEW workflow, and with one it only opens snapshot-bound F3. It cannot independently generate substantive F3 content through the general chat model.
-• Finalization can rephrase and materialize path-aware text, observation tables or practical cards, but cannot change F2 goals, hypotheses, selected approaches or observation evidence. A required substantive change produces a boundary issue and an explicit return to Rozbor.
-• Returning preserves F3 reference state and does not mutate F1, execute F2 or regenerate PREVIEW. A newer accepted F2 snapshot must be explicitly adopted and makes the retained final render stale.
-• Full elaboration of every Rozbor branch is not required; remaining materially relevant uncertainty is carried forward transparently.
+F2 → F3
+• The intended product boundary is current Rozbor substance → F3 materialization.
+• Immediate contract migration is still pending and was not implemented in the completed POCHOPIT slice.
+• No product documentation should imply that this migration is already complete.
 
-CURRENT INTERACTION PRINCIPLES  
-• Communication profiles Operátor, Kolega and Metodik change presentation style, not the underlying pedagogical decision structure.  
-• Phase and active working layer determine context and model-routing policy; manual model override does not redefine product boundaries.  
-• Project state and unread/seen state are presentation/state concerns and must not silently alter canonical data.  
+CURRENT INTERACTION PRINCIPLES
+• Communication profiles Operátor, Kolega and Metodik change presentation style, not the underlying pedagogical decision structure.
+• Phase and active working layer determine context and model-routing policy; manual model override does not redefine product boundaries.
+• Project state and unread/seen state are presentation/state concerns and must not silently alter canonical data.
 • APU Session JSON is a diagnostic/session snapshot, not a long-term project database or substitute for canonical project documentation.
 
 CURRENT LIMITATIONS
 • Long-term project persistence, multi-project history, rich document editing, arbitrary templates and multiple saved F3 versions remain separate capabilities.
+• The new F2 POCHOPIT current-Rozbor source contract has not yet been wired into the existing F3 implementation.
+• POZOROVAT and VYTVOŘIT still require their own design/implementation cycle under the new F2 mental model.
 • Integrations or deployment-specific access mechanisms are not product invariants and belong in technical current documentation.
 
-DOCUMENT OWNERSHIP  
-• APU — Current State: current product behavior.  
-• APU — Architecture: architectural relationships, canonical/derived layers and phase boundaries.  
-• APU Site — Runtime & Technical Current: repository/runtime/deployment provenance and technical configuration.  
-• APU — Product Decisions: durable product decisions and rationale.  
-• CHANGELOG: implemented historical changes.  
-• BACKLOG / KNOWN\_ISSUES: unfinished work and confirmed current defects.
+DOCUMENT OWNERSHIP
+• APU — Current State: current product behavior.
+• APU — Architecture: architectural relationships, canonical/derived layers and phase boundaries.
+• APU Site — Runtime & Technical Current: repository/runtime/deployment provenance and technical configuration.
+• APU — Product Decisions: durable product decisions and rationale.
+• CHANGELOG: implemented historical changes.
+• BACKLOG / KNOWN_ISSUES: unfinished work and confirmed current defects.
