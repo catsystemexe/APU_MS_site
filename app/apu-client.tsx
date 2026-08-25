@@ -1484,7 +1484,7 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
               )}
               <div className={message.role === "assistant" && (message.content || message.analysisEntryHypotheses)
                 ? `assistant-response${message.analysisEntryHypotheses ? " assistant-response--f2-entry" : ""}`
-                : undefined}>
+                : message.role === "user" ? "user-response" : undefined}>
                 <div className="message-content">
                   {message.content
                     ? (
