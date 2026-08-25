@@ -135,3 +135,143 @@ test("POZOROVAT and VYTVOŘIT previews use immutable explicit snapshots and rema
 });
 
 test("all paths retain five independently configured skills", () => { for (const path of ["POCHOPIT", "POZOROVAT", "VYTVOŘIT"]) assert.equal(F2_SKILL_DEFINITIONS.filter((skill) => skill.path === path).length, 5); });
+
+// Batch 2: focused POCHOPIT component-state contract.
+import {
+  DEFAULT_POCHOPIT_BUILD_CONFIG,
+  createRozborBaselineFingerprint,
+  deriveRequiredRozborComponents,
+  reconcileRozborComponents,
+  createPochopitBuildState,
+  updatePochopitBuildConfig,
+} from "../app/f2-build-model.ts";
+
+const pochopitNeed = need("POCHOPIT");
+const pochopitConfig = (change = {}) => ({ ...DEFAULT_POCHOPIT_BUILD_CONFIG, ...change });
+const generated = (spec, content = `Obsah ${spec.id}`) => ({ ...spec, content });
+
+test("POCHOPIT default config requires no generated components", () => {
+  assert.deepEqual(deriveRequiredRozborComponents(pochopitNeed, [hypothesis("h1")], pochopitConfig()), []);
+});
+
+test("expansion depth requires one deterministic local component per hypothesis", () => {
+  const hypotheses = [hypothesis("h1"), hypothesis("h2")];
+  const first = deriveRequiredRozborComponents(pochopitNeed, hypotheses, pochopitConfig({ expansionDepth: 1 }));
+  const second = deriveRequiredRozborComponents(pochopitNeed, hypotheses, pochopitConfig({ expansionDepth: 1 }));
+  assert.deepEqual(first.map(({ id }) => id), ["hypothesis:h1:expansion", "hypothesis:h2:expansion"]);
+  assert.deepEqual(second, first);
+});
+
+test("every expansion depth transition changes local fingerprints in both directions", () => {
+  const fingerprints = [1, 2, 3].map((expansionDepth) => deriveRequiredRozborComponents(
+    pochopitNeed, [hypothesis("h1")], pochopitConfig({ expansionDepth }),
+  )[0].fingerprint);
+  assert.notEqual(fingerprints[0], fingerprints[1]);
+  assert.notEqual(fingerprints[1], fingerprints[2]);
+  assert.notEqual(fingerprints[2], fingerprints[1]);
+});
+
+test("comparison toggles add and remove comparison:all", () => {
+  const on = deriveRequiredRozborComponents(pochopitNeed, [hypothesis("h1")], pochopitConfig({ compareHypotheses: true }));
+  assert.deepEqual(on.map(({ id }) => id), ["comparison:all"]);
+  const component = generated(on[0]);
+  const off = reconcileRozborComponents(
+    deriveRequiredRozborComponents(pochopitNeed, [hypothesis("h1")], pochopitConfig()),
+    [component],
+  );
+  assert.deepEqual(off.remove, [component]);
+});
+
+test("expert-frame toggles add and remove expert-frame:all", () => {
+  const on = deriveRequiredRozborComponents(pochopitNeed, [hypothesis("h1")], pochopitConfig({ expertFrame: true }));
+  assert.deepEqual(on.map(({ id }) => id), ["expert-frame:all"]);
+  const component = generated(on[0]);
+  const off = reconcileRozborComponents(
+    deriveRequiredRozborComponents(pochopitNeed, [hypothesis("h1")], pochopitConfig()),
+    [component],
+  );
+  assert.deepEqual(off.remove, [component]);
+});
+
+test("one hypothesis edit stales its expansion and comparison but preserves independent components", () => {
+  const baseline = [hypothesis("h1", "První"), hypothesis("h2", "Druhá")];
+  const config = pochopitConfig({ expansionDepth: 1, compareHypotheses: true, expertFrame: true });
+  const originalSpecs = deriveRequiredRozborComponents(pochopitNeed, baseline, config);
+  const components = originalSpecs.map((spec) => generated(spec));
+  const changed = [hypothesis("h1", "Změněná"), baseline[1]];
+  const nextSpecs = deriveRequiredRozborComponents(pochopitNeed, changed, config);
+  const result = reconcileRozborComponents(nextSpecs, components);
+  assert.deepEqual(result.staleComponentIds.sort(), ["comparison:all", "expert-frame:all", "hypothesis:h1:expansion"].sort());
+  assert.deepEqual(result.keep.map(({ id }) => id), ["hypothesis:h2:expansion"]);
+  assert.equal(result.keep[0], components[1]);
+});
+
+test("removing a hypothesis removes its local expansion", () => {
+  const config = pochopitConfig({ expansionDepth: 1 });
+  const original = deriveRequiredRozborComponents(pochopitNeed, [hypothesis("h1"), hypothesis("h2")], config).map(generated);
+  const required = deriveRequiredRozborComponents(pochopitNeed, [hypothesis("h1")], config);
+  assert.deepEqual(reconcileRozborComponents(required, original).remove.map(({ id }) => id), ["hypothesis:h2:expansion"]);
+});
+
+test("matching component is kept by exact object identity and yields current derived state", () => {
+  const spec = deriveRequiredRozborComponents(pochopitNeed, [hypothesis("h1")], pochopitConfig({ expansionDepth: 1 }))[0];
+  const component = generated(spec);
+  const result = reconcileRozborComponents([spec], [component]);
+  assert.equal(result.keep[0], component);
+  assert.deepEqual(result.pendingComponentIds, []);
+  assert.deepEqual(result.staleComponentIds, []);
+  assert.equal(result.hasGeneratedRozbor, true);
+  assert.equal(result.isRozborCurrent, true);
+});
+
+test("missing required components are pending and an empty generated set is not current", () => {
+  const required = deriveRequiredRozborComponents(pochopitNeed, [hypothesis("h1")], pochopitConfig({ expansionDepth: 1 }));
+  const result = reconcileRozborComponents(required, []);
+  assert.deepEqual(result.pendingComponentIds, ["hypothesis:h1:expansion"]);
+  assert.equal(result.hasGeneratedRozbor, false);
+  assert.equal(result.isRozborCurrent, false);
+});
+
+test("hypothesis ordering affects whole-baseline and comparison fingerprints, not local IDs", () => {
+  const firstOrder = [hypothesis("h1"), hypothesis("h2")];
+  const secondOrder = [firstOrder[1], firstOrder[0]];
+  const config = pochopitConfig({ expansionDepth: 1, compareHypotheses: true });
+  const first = deriveRequiredRozborComponents(pochopitNeed, firstOrder, config);
+  const second = deriveRequiredRozborComponents(pochopitNeed, secondOrder, config);
+  assert.notEqual(createRozborBaselineFingerprint(pochopitNeed, firstOrder), createRozborBaselineFingerprint(pochopitNeed, secondOrder));
+  assert.notEqual(first.find(({ id }) => id === "comparison:all").fingerprint, second.find(({ id }) => id === "comparison:all").fingerprint);
+  assert.deepEqual(new Set(first.filter(({ kind }) => kind === "hypothesis-expansion").map(({ id }) => id)), new Set(second.filter(({ kind }) => kind === "hypothesis-expansion").map(({ id }) => id)));
+});
+
+test("unrelated operation toggles do not invalidate expansions", () => {
+  const hypotheses = [hypothesis("h1")];
+  const base = deriveRequiredRozborComponents(pochopitNeed, hypotheses, pochopitConfig({ expansionDepth: 2 }))[0];
+  const compare = deriveRequiredRozborComponents(pochopitNeed, hypotheses, pochopitConfig({ expansionDepth: 2, compareHypotheses: true }))[0];
+  const expert = deriveRequiredRozborComponents(pochopitNeed, hypotheses, pochopitConfig({ expansionDepth: 2, expertFrame: true }))[0];
+  assert.equal(base.fingerprint, compare.fingerprint);
+  assert.equal(base.fingerprint, expert.fingerprint);
+});
+
+test("POCHOPIT expansion control maps level selection and selected-level deselection to config", () => {
+  let state = createPochopitBuildState();
+  state = updatePochopitBuildConfig(state, { expansionDepth: 1 });
+  assert.equal(state.config.expansionDepth, 1);
+  state = updatePochopitBuildConfig(state, { expansionDepth: 0 });
+  assert.equal(state.config.expansionDepth, 0);
+  state = updatePochopitBuildConfig(state, { expansionDepth: 1 });
+  state = updatePochopitBuildConfig(state, { expansionDepth: 2 });
+  assert.equal(state.config.expansionDepth, 2);
+  state = updatePochopitBuildConfig(state, { expansionDepth: 3 });
+  assert.equal(state.config.expansionDepth, 3);
+});
+
+test("POCHOPIT comparison and expert cards toggle their config fields independently", () => {
+  let state = createPochopitBuildState();
+  state = updatePochopitBuildConfig(state, { compareHypotheses: true });
+  assert.equal(state.config.compareHypotheses, true);
+  state = updatePochopitBuildConfig(state, { compareHypotheses: false, expertFrame: true });
+  assert.equal(state.config.compareHypotheses, false);
+  assert.equal(state.config.expertFrame, true);
+  state = updatePochopitBuildConfig(state, { expertFrame: false });
+  assert.equal(state.config.expertFrame, false);
+});
