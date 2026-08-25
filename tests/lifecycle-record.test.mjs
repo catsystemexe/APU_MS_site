@@ -63,7 +63,14 @@ test("only substantive assistant content receives the response surface", async (
   assert.doesNotMatch(styles, /\.assistant-response\s*\{[^}]*?(?:border:|box-shadow:)/);
   assert.match(styles, /\.assistant-response\.assistant-response--f2-entry\s*\{[^}]*?padding:\s*0;[^}]*?background:\s*transparent;/);
   assert.match(styles, /\.message-list\s*\{[\s\S]*?background:\s*color-mix\(in srgb, var\(--bg-page\) 72%, var\(--bg-surface\) 28%\)/);
-  assert.match(styles, /\.message--user \.message-content\s*\{[^}]*?width:\s*max-content;[^}]*?max-width:\s*min\(690px, calc\(100% - 16px\)\);/);
-  assert.doesNotMatch(styles, /\.message--user \.message-content\s*\{[^}]*?min-width:/);
+  assert.match(client, /message\.role === "user" \? "user-response" : undefined/);
+  assert.match(styles, /\.message--user\s*\{[^}]*?width:\s*100%;[^}]*?\}/);
+  assert.doesNotMatch(styles, /\.message--user\s*\{[^}]*?justify-items:/);
+  assert.match(styles, /\.message--user \.message-label\s*\{[^}]*?justify-self:\s*end;/);
+  assert.match(styles, /\.user-response\s*\{[^}]*?justify-self:\s*end;[^}]*?max-width:\s*min\(690px, calc\(100% - 16px\)\);/);
+  assert.match(styles, /\.user-response \.message-content\s*\{[^}]*?max-width:\s*100%;/);
+  assert.doesNotMatch(styles, /\.message--user \.message-content\s*\{[^}]*?(?:width:|min-width:|max-width:)/);
+  assert.doesNotMatch(styles, /\.user-response\s*\{[^}]*?min-width:/);
+  assert.doesNotMatch(styles, /\.message-content\s*\{[^}]*?overflow-wrap:\s*anywhere;/);
   assert.match(styles, /\.message-content\s*\{[^}]*?overflow-wrap:\s*break-word;/);
 });
