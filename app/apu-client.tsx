@@ -33,6 +33,8 @@ import {
 import { Diagnostics, summarizeDiagnostics } from "./conversation-diagnostics";
 import { ACTIVE_APU_CORE_RELEASE_ID, ACTIVE_APU_CORE_VERSION, APU_SITE_RUNTIME_RELEASE } from "./core-config";
 import { buildSessionExport, createSessionTelemetry, downloadSessionExport, mergeSessionTelemetry, type SessionTelemetry } from "./session-export";
+import { appendModelUsageRecords, readModelUsageRecords, type ModelUsageRecordsResponse } from "./model-usage-collection";
+import type { ModelUsageRecord } from "./usage-ledger";
 import {
   MODEL_CATALOG,
   baseModelName,
@@ -310,6 +312,7 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
   const [highlightedAnalysisKeys, setHighlightedAnalysisKeys] = useState<Set<string>>(() => new Set());
   const [exportStatus, setExportStatus] = useState<"idle" | "downloaded" | "error">("idle");
   const [sessionTelemetry, setSessionTelemetry] = useState<SessionTelemetry[]>([]);
+  const [, setModelUsageRecords] = useState<ModelUsageRecord[]>([]);
   const sessionRef = useRef({ id: createMessageId(), startedAt: new Date().toISOString() });
   const telemetryClockRef = useRef(new Map<string, { actionStartedAt: number }>());
   const [isDictating, setIsDictating] = useState(false);
@@ -337,6 +340,12 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
     ? reconcileRozborComponents(deriveRequiredRozborComponents(canonicalF2Need, analysis.hypotheses, pochopitBuild.config), pochopitBuild.components)
     : null, [analysis.hypotheses, canonicalF2Need, pochopitBuild]);
   const isPochopitUpdatePending = Boolean(pochopitReconciliation && !pochopitReconciliation.isRozborCurrent);
+
+  function collectModelUsageRecords(response: unknown) {
+    const records = readModelUsageRecords(response);
+    if (!records.length) return;
+    setModelUsageRecords((current) => appendModelUsageRecords(current, records));
+  }
 
   useEffect(() => {
     if (phase === "intake" || !canonicalF2Need) return;
@@ -665,7 +674,8 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
     try {
       const buildRequest = createF2BuildRequest(f2Build, f2Situation(), selectedModel);
       const response = await fetch("/api/f2", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ operation: "build", model: selectedModel, build: buildRequest }) });
-      const payload = await response.json().catch(() => null) as { result?: unknown; error?: string } | null;
+      const payload = await response.json().catch(() => null) as ({ result?: unknown; error?: string } & ModelUsageRecordsResponse) | null;
+      collectModelUsageRecords(payload);
       if (!response.ok || !payload?.result) throw new Error(payload?.error || "Build se nepodařilo rozpracovat.");
       const result = parseF2BuildResult(payload.result, buildRequest.activePath);
       setF2Build((current) => current ? applyF2BuildResult(current, result, buildRequest.activePath, buildRequest.buildRevision) : current);
@@ -688,7 +698,8 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
     setPochopitGenerationStatus("loading"); setPochopitGenerationError(null);
     try {
       const response = await fetch("/api/f2", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ operation: "generate-rozbor-components", model: selectedModel, request }) });
-      const payload = await response.json().catch(() => null) as { components?: unknown; error?: string } | null;
+      const payload = await response.json().catch(() => null) as ({ components?: unknown; error?: string } & ModelUsageRecordsResponse) | null;
+      collectModelUsageRecords(payload);
       if (!response.ok || !payload?.components) throw new Error(payload?.error || "Rozbor se nepodařilo vytvořit.");
       const generated = parseGeneratedRozborComponents({ components: payload.components }, request.components);
       const latest = latestRozborSourceRef.current;
@@ -709,7 +720,8 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
     try {
       const snapshot = createF2PreviewSnapshot(f2Build);
       const response = await fetch("/api/f2", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ operation: "preview", model: selectedModel, snapshot }) });
-      const payload = await response.json().catch(() => null) as { result?: unknown; error?: string } | null;
+      const payload = await response.json().catch(() => null) as ({ result?: unknown; error?: string } & ModelUsageRecordsResponse) | null;
+      collectModelUsageRecords(payload);
       if (!response.ok || !payload?.result) throw new Error(payload?.error || "Preview se nepodařilo vytvořit.");
       setF2Preview(acceptRenderedPreview(snapshot, parseF2RenderedPreview(payload.result))); setF2PreviewStatus("idle"); setActivePanel("output");
     } catch (cause) { setF2PreviewError(cause instanceof Error ? cause.message : "Preview se nepodařilo vytvořit."); setF2PreviewStatus("error"); }
@@ -727,7 +739,8 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
     setF3Status("loading"); setF3Error(null);
     try {
       const response = await fetch("/api/f3", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(renderRequest) });
-      const payload = await response.json().catch(() => null) as { result?: unknown; error?: string } | null;
+      const payload = await response.json().catch(() => null) as ({ result?: unknown; error?: string } & ModelUsageRecordsResponse) | null;
+      collectModelUsageRecords(payload);
       if (!response.ok || !payload?.result) throw new Error(payload?.error || "Finální výstup se nepodařilo vytvořit.");
       const result = parseF3RenderResult(payload.result);
       setF3State((current) => current ? acceptF3Render(current, result, renderRequest) : current); setF3Status("idle");
@@ -752,11 +765,10 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
           ...(turnId ? { turnId } : {}),
         }),
       });
-      if (!response.ok) {
-        const detail = await response.json().catch(() => null) as { error?: string } | null;
-        throw new Error(detail?.error || "Rozbor se nepodařilo aktualizovat.");
-      }
-      const result = await response.json() as { analysis: AnalysisState; diagnostics?: Diagnostics; telemetry?: Partial<SessionTelemetry> };
+      const responseResult = await response.json().catch(() => null) as ({ analysis?: AnalysisState; diagnostics?: Diagnostics; telemetry?: Partial<SessionTelemetry>; error?: string } & ModelUsageRecordsResponse) | null;
+      collectModelUsageRecords(responseResult);
+      if (!response.ok || !responseResult?.analysis) throw new Error(responseResult?.error || "Rozbor se nepodařilo aktualizovat.");
+      const result = responseResult as { analysis: AnalysisState; diagnostics?: Diagnostics; telemetry?: Partial<SessionTelemetry> } & ModelUsageRecordsResponse;
       if (turnId && requestId && result.telemetry) {
         setSessionTelemetry((current) => current.map((item) => item.request_id === requestId
           ? mergeSessionTelemetry(item, { ...result.telemetry, phase: "F2", ...(transitionFrom ? { transition_from: transitionFrom } : {}) } as Partial<SessionTelemetry>) : item));
@@ -1126,7 +1138,8 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
           extraction: ExtractionResult;
           diagnostics?: Diagnostics;
           telemetry?: Partial<SessionTelemetry>;
-        };
+        } & ModelUsageRecordsResponse;
+        collectModelUsageRecords(result);
         if (result.telemetry) setSessionTelemetry((current) => current.map((item) => item.request_id === requestId
           ? mergeSessionTelemetry(item, result.telemetry as Partial<SessionTelemetry>) : item));
         const boundaryRequiresDecision = result.extraction.situationRelation === "different" ||
@@ -1253,6 +1266,7 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
     setIsF2BuildVisible(true);
     setF3State(null); setF3Status("idle"); setF3Error(null);
     setSessionTelemetry([]);
+    setModelUsageRecords([]);
     telemetryClockRef.current.clear();
     sessionRef.current = { id: createMessageId(), startedAt: new Date().toISOString() };
   }
