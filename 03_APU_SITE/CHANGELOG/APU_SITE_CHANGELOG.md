@@ -4,6 +4,29 @@ Status: CURRENT
 
 Records significant verified product/runtime/project changes. It is not a complete Git log. Historical Sites-era entries are retained where they remain useful; current deployment state must not be inferred from a changelog entry alone.
 
+## 2026-08-25 — Component-based F2 POCHOPIT Rozbor
+
+### Added / Changed
+- Replaced the visible POCHOPIT F2 editor with a desktop `Build | Rozbor` working shell while preserving chat access, composer ownership and resizable split behavior.
+- Added the three verified POCHOPIT Build operations: hypothesis expansion with three analytical depths, cross-hypothesis comparison/connection, and expert/theoretical framing.
+- Added deterministic generated Rozbor components with direct-input fingerprints: local `hypothesis:<id>:expansion` plus global `comparison:all` and `expert-frame:all`.
+- Added strict component-specific `/api/f2` generation and explicit `VYTVOŘIT ROZBOR` / incremental `AKTUALIZOVAT ROZBOR` orchestration.
+- Selective updates preserve unchanged components, perform pure removals without model calls, apply mixed updates atomically, preserve the previous complete Rozbor on failure, and reject stale in-flight responses.
+- Generated Markdown is rendered safely as presentation-only React content; original generated source strings remain unchanged and raw HTML is not executed.
+- Obsolete legacy F2 source-shape tests were replaced with regression checks for the approved component-based architecture.
+
+### Verification
+- Focused F2/Markdown suites passed.
+- Full `npm test`: 240 passed, 0 failed.
+- Typecheck and build passed; changed F2 files introduced no lint regression. Repository-wide lint remains blocked only by the unrelated pre-existing `app/dev-log-panel.tsx` hook error and unrelated warnings.
+- Authenticated local live/visual smoke passed, including Markdown rendering, resize, Build↔chat state retention, composer operation, selective depth updates, removals and duplicate-block checks.
+
+### Preserved scope
+- POZOROVAT and VYTVOŘIT redesign were not included.
+- The immediate F2→F3 source-contract migration from legacy Preview snapshot to current Rozbor was not included.
+- Persistence/session export was not expanded.
+- No production deployment, Cloudflare change or production tag was performed.
+
 ## 2026-08-24 — F2 entry-hypothesis synchronization repair
 
 ### Fixed
@@ -118,26 +141,3 @@ Records significant verified product/runtime/project changes. It is not a comple
 
 ### Changed
 - Unambiguous F1 intake turns may use the deterministic controller path when applicable.
-- Extraction preserves semantically distinct explicit observations while still deduplicating true duplicates.
-
-## 2026-08-16 — v67–v69
-
-### Added
-- APU Session JSON with structured session state and per-request telemetry replaced the main UI HTML export path.
-
-### Fixed
-- Telemetry separated end-to-end latency, model TTFT, preflight and perceived F2 latency more consistently.
-
-## 2026-08-15 — v63–v66
-
-### Added / Changed
-- F2 gained a shared structured `AnalysisState`, stable IDs, targeted updates, skipped-question state and separate unread metadata.
-- Rozbor UI moved toward a flatter full-width accordion presentation.
-
-## 2026-08-15 — v60–v62
-
-### Changed / Fixed
-- APU adopted the versioned Core/runtime-wrapper split and the MAIN/SIDE/NAV intake policy with explicit phase transitions.
-
-## Earlier history
-Older implementation detail remains in historical checkpoints and archived project documentation under `04_HISTORY/`; this live changelog does not attempt to reconstruct every pre-v60 change.
