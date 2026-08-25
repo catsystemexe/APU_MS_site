@@ -1,6 +1,7 @@
 import { estimateCostUsd } from "../../model-config";
 import { CATEGORY_IDS, CategoryId, locateSourceQuote } from "../../notepad-model";
 import { getAccessIdentity } from "../../access-auth";
+import { callOpenAIResponses, createRequestUsageCollector, modelUsagePayload, usageErrorPayload, type RequestUsageCollector } from "../../openai-responses-instrumentation";
 import intakeCore from "../../../apu-core/v1.6/02_OBSERVATION_AND_INTAKE.md?raw";
 
 export const runtime = "edge";
@@ -159,8 +160,8 @@ type RawExtraction = {
 
 type GroundingVerdict = { index: number; accepted: boolean; reason: string | null };
 
-function jsonError(message: string, status = 500) {
-  return Response.json({ error: message }, { status });
+function jsonError(message: string, status = 500, collector?: RequestUsageCollector) {
+  return Response.json(collector ? modelUsagePayload({ error: message }, collector) : { error: message }, { status });
 }
 
 function outputText(response: Record<string, unknown>) {
@@ -195,19 +196,18 @@ function validateNotebook(value: unknown): NotebookInput[] | null {
 
 async function verifyGrounding(
   apiKey: string,
+  requestId: string,
   message: string,
   notebook: NotebookInput[],
   candidates: RawCandidate[],
+  collector: RequestUsageCollector,
 ) {
   if (!candidates.length) return { acceptedIndexes: new Set<number>(), response: null };
 
-  const upstream = await fetch("https://api.openai.com/v1/responses", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
+  try {
+    const { response, usage_record, application_result } = await callOpenAIResponses({
+      api_key: apiKey, request_id: requestId, phase: "F1", operation: "grounding", requested_model: EXTRACTION_MODEL, reasoning_effort: "low", requested_service_tier: "default", collector,
+      payload: {
       model: EXTRACTION_MODEL,
       reasoning: { effort: "low" },
       instructions: GROUNDING_INSTRUCTIONS,
@@ -228,24 +228,22 @@ async function verifyGrounding(
       max_output_tokens: 1_200,
       service_tier: "default",
       store: false,
-    }),
-  });
-
-  if (!upstream.ok) return { acceptedIndexes: new Set<number>(), response: null };
-  const response = await upstream.json() as Record<string, unknown>;
-  const text = outputText(response);
-  if (!text) return { acceptedIndexes: new Set<number>(), response };
-
-  try {
-    const parsed = JSON.parse(text) as { verdicts?: GroundingVerdict[] };
+      },
+      validate_application_response: (providerResponse) => {
+        const text = outputText(providerResponse); if (!text) throw new Error("missing structured output");
+        return JSON.parse(text) as { verdicts?: GroundingVerdict[] };
+      },
+    });
+    if (usage_record.provider_status !== "completed" || !application_result) return { acceptedIndexes: new Set<number>(), response: response.body };
+    const parsed = application_result;
     const acceptedIndexes = new Set(
       (parsed.verdicts ?? [])
         .filter((verdict) => verdict.accepted && Number.isInteger(verdict.index) && verdict.index >= 0 && verdict.index < candidates.length)
         .map((verdict) => verdict.index),
     );
-    return { acceptedIndexes, response };
+    return { acceptedIndexes, response: response.body };
   } catch {
-    return { acceptedIndexes: new Set<number>(), response };
+    return { acceptedIndexes: new Set<number>(), response: null };
   }
 }
 
@@ -275,13 +273,14 @@ export async function POST(request: Request) {
   if (body.turnId !== undefined && (typeof body.turnId !== "string" || body.turnId.length > 160)) return jsonError("Neplatný identifikátor tahu.", 400);
 
   const extractStarted = performance.now();
-  const upstream = await fetch("https://api.openai.com/v1/responses", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
+  const collector = createRequestUsageCollector();
+  const requestId = crypto.randomUUID();
+  let response: Record<string, unknown>;
+  let extraction: RawExtraction;
+  try {
+    const result = await callOpenAIResponses<RawExtraction>({
+      api_key: apiKey, request_id: requestId, turn_id: typeof body.turnId === "string" ? body.turnId : null, phase: "F1", operation: "extraction", requested_model: EXTRACTION_MODEL, reasoning_effort: "low", requested_service_tier: "default", collector,
+      payload: {
       model: EXTRACTION_MODEL,
       reasoning: { effort: "low" },
       instructions: EXTRACTION_INSTRUCTIONS,
@@ -301,25 +300,20 @@ export async function POST(request: Request) {
       max_output_tokens: 2_000,
       service_tier: "default",
       store: false,
-    }),
-  });
-
-  if (!upstream.ok) {
-    const detail = await upstream.json().catch(() => null) as { error?: { message?: string } } | null;
-    return jsonError(detail?.error?.message || "Extrakce do Zápisníku selhala.", upstream.status || 502);
+      },
+      validate_application_response: (providerResponse) => {
+        const text = outputText(providerResponse); if (!text) throw new Error("missing structured output");
+        return JSON.parse(text) as RawExtraction;
+      },
+    });
+    if (result.usage_record.provider_status !== "completed" || !result.application_result) return jsonError("Extrakce do Zápisníku selhala.", 502, collector);
+    response = result.response.body;
+    extraction = result.application_result;
+  } catch (cause) {
+    const payload = usageErrorPayload(cause, collector);
+    return Response.json(payload ?? modelUsagePayload({ error: "Výstup extraktoru nebyl platný JSON." }, collector), { status: 502 });
   }
-
-  const response = await upstream.json() as Record<string, unknown>;
   const extractDuration = Math.round(performance.now() - extractStarted);
-  const text = outputText(response);
-  if (!text) return jsonError("Extraktor nevrátil strukturovaný výstup.", 502);
-
-  let extraction: RawExtraction;
-  try {
-    extraction = JSON.parse(text) as RawExtraction;
-  } catch {
-    return jsonError("Výstup extraktoru nebyl platný JSON.", 502);
-  }
 
   const locatedCandidates = extraction.candidates.flatMap((rawCandidate) => {
     const candidate = { ...rawCandidate };
@@ -340,7 +334,7 @@ export async function POST(request: Request) {
     (candidate) => candidate.action === "add" || candidate.action === "conflict",
   );
   const groundingStarted = performance.now();
-  const grounding = await verifyGrounding(apiKey, body.message as string, notebook, candidatesRequiringGrounding);
+  const grounding = await verifyGrounding(apiKey, requestId, body.message as string, notebook, candidatesRequiringGrounding, collector);
   const groundingDuration = candidatesRequiringGrounding.length ? Math.round(performance.now() - groundingStarted) : null;
   const acceptedCandidateKeys = new Set(
     [...grounding.acceptedIndexes].map((index) => candidatesRequiringGrounding[index])
@@ -383,7 +377,7 @@ export async function POST(request: Request) {
     streaming: { model: false, backend: false, transport: false, ui: false },
   };
 
-  return Response.json({
+  return Response.json(modelUsagePayload({
     extraction: {
       situationRelation: extraction.situationRelation,
       situationReason: extraction.situationReason,
@@ -408,5 +402,5 @@ export async function POST(request: Request) {
         outputTokens,
       }),
     }, telemetry } : {}),
-  }, { headers: { "Cache-Control": "no-store" } });
+  }, collector), { headers: { "Cache-Control": "no-store" } });
 }

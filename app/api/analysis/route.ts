@@ -3,6 +3,7 @@ import { cleanAnalysisQuestionText, stripLegacyQuestionFromSummary, type Analysi
 import { CATEGORY_IDS, F2_PATHS, type CategoryId, type PedagogicalNeedMapping, type F1ToF2NeedContract } from "../../notepad-model";
 import { estimateCostUsd } from "../../model-config";
 import { getAccessIdentity } from "../../access-auth";
+import { callOpenAIResponses, createRequestUsageCollector, modelUsagePayload, usageErrorPayload, type RequestUsageCollector } from "../../openai-responses-instrumentation";
 
 export const runtime = "edge";
 
@@ -80,7 +81,7 @@ const WORKING_ANALYSIS_SCHEMA = {
   },
 } as const;
 
-function jsonError(message: string, status = 500) { return Response.json({ error: message }, { status }); }
+function jsonError(message: string, status = 500, collector?: RequestUsageCollector) { return Response.json(collector ? modelUsagePayload({ error: message }, collector) : { error: message }, { status }); }
 function outputText(response: Record<string, unknown>) {
   if (typeof response.output_text === "string") return response.output_text;
   const output = Array.isArray(response.output) ? response.output : [];
@@ -174,6 +175,7 @@ export async function POST(request: Request) {
   let body: Record<string, unknown>;
   try { body = await request.json(); } catch { return jsonError("Neplatný formát požadavku.", 400); }
   if (!validNotebook(body.notebook)) return jsonError("Neplatný obsah Zápisníku.", 400);
+  const notebook = body.notebook;
   const canonicalNeed = body.canonicalNeed === null ? null : validCanonicalNeed(body.canonicalNeed, body.notebook) ? body.canonicalNeed : undefined;
   if (canonicalNeed === undefined) return jsonError("Neplatné kanonické mapování pedagogické potřeby.", 400);
   const skipped = Array.isArray(body.skippedQuestions) && body.skippedQuestions.every((item) => typeof item === "string") ? body.skippedQuestions.slice(0, 50) as string[] : [];
@@ -183,31 +185,31 @@ export async function POST(request: Request) {
   const turnId = typeof body.turnId === "string" && body.turnId.length <= 160 ? body.turnId : null;
   const input = { notebook: body.notebook, canonicalNeed, previousAnalysis, selectedHypothesisId: typeof body.selectedHypothesisId === "string" ? body.selectedHypothesisId : null, activeNeedId: typeof body.activeNeedId === "string" ? body.activeNeedId : null, focusInstruction, skippedQuestions: skipped };
   const analysisStarted = performance.now();
-  const upstream = await fetch("https://api.openai.com/v1/responses", {
-    method: "POST", headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
+  const collector = createRequestUsageCollector();
+  try {
+    const { response, usage_record, application_result } = await callOpenAIResponses({
+      api_key: apiKey, request_id: crypto.randomUUID(), turn_id: turnId, phase: "F2", operation: "analysis", requested_model: "gpt-5.6-terra", reasoning_effort: "low", requested_service_tier: "default", collector,
+      payload: {
       model: "gpt-5.6-terra", reasoning: { effort: "low" }, store: false,
+      service_tier: "default",
       tools: [{ type: "file_search", vector_store_ids: [vectorStoreId] }],
       instructions: `${instructions}\n\nVrať pouze JSON podle technického schématu. Dodrž kanonickou analytickou politiku a hranici FÁZE 2 / FÁZE 3 z Core. Rozbor odvozuj výhradně z aktuálního Zápisníku. Karta i chatUpdate jsou dva pohledy na jediný vrácený stav; chatUpdate nesmí být rozhodnější než hypotézy. ${isEntry ? "Jde o F2 Entry: vytvoř pouze 2–4 stručné hypotézy s vazbou na pedagogické potřeby a nejvýše jednou skutečnou prioritní otázkou na hypotézu. Pro každou potřebu vytvoř stručný směr, relevantní hypotézy a nejvýše jednu skutečnou otázku. Negeneruj detailní opory, limity, seznamy neznámých, parametry ani zamýšlené výstupy; nejistotu shrň jen jednou v mainUncertainty. transitionReady je pouze informativní a nesmí znamenat blokaci explicitního přechodu uživatele do FÁZE 3." : "Jde o F2 Working: rozpracuj pouze větev vybranou focusInstruction, selectedHypothesisId nebo activeNeedId. Ostatní větve zachovej stručné a nevytvářej plošně detail celého stromu."} V poli chatUpdate.summary nikdy neopakuj ani neformuluj otázku. chatUpdate.nextPrompt je jediná prioritní otázka pro chat; všechny texty otázek v hypotheses.question, needs.question a chatUpdate.nextPrompt musí být čistý text bez emoji nebo jiných prefixů. Při prvním Rozboru kind=entry, jinak kind=update. Reuse stabilní ID z previousAnalysis pro významově stejné prvky, i při změně pořadí nebo formulace. Pro každou položku kategorie goals vytvoř právě jedno needs se shodným needId a krátkým významově věrným title. Přeskočené otázky neopakuj a všechny vrácené otázky mají status active. chatUpdate stručně zachytí skutečnou změnu a nejvýše jeden nextPrompt. relevantHypotheses smí obsahovat jen vrácená ID. focusInstruction mění pouze zaměření, nikoli fakta.`,
       input: JSON.stringify(input),
       text: { format: { type: "json_schema", name: isEntry ? "apu_phase_2_entry" : "apu_phase_2_working", strict: true, schema: isEntry ? ENTRY_ANALYSIS_SCHEMA : WORKING_ANALYSIS_SCHEMA } },
-    }),
-  });
-  if (!upstream.ok) {
-    const detail = await upstream.json().catch(() => null) as { error?: { message?: string } } | null;
-    return jsonError(detail?.error?.message || "Rozbor se nepodařilo vytvořit.", upstream.status || 502);
-  }
-  const response = await upstream.json() as Record<string, unknown>;
-  const analysisDuration = Math.round(performance.now() - analysisStarted);
-  const text = outputText(response);
-  if (!text) return jsonError("Model nevrátil platný Rozbor.", 502);
-  try {
-    const analysis = normalize(JSON.parse(text) as AnalysisState, body.notebook, skipped, previousAnalysis, isEntry ? "entry" : "working");
-    const usage = response.usage as { input_tokens?: number; output_tokens?: number; total_tokens?: number; input_tokens_details?: { cached_tokens?: number }; output_tokens_details?: { reasoning_tokens?: number } } | undefined;
+      },
+      validate_application_response: (providerResponse) => {
+        const text = outputText(providerResponse); if (!text) throw new Error("missing structured output");
+        return normalize(JSON.parse(text) as AnalysisState, notebook, skipped, previousAnalysis, isEntry ? "entry" : "working");
+      },
+    });
+    if (usage_record.provider_status !== "completed" || !application_result) return jsonError("Rozbor se nepodařilo vytvořit.", 502, collector);
+    const analysisDuration = Math.round(performance.now() - analysisStarted);
+    const analysis = application_result;
+    const usage = response.body.usage as { input_tokens?: number; output_tokens?: number; total_tokens?: number; input_tokens_details?: { cached_tokens?: number }; output_tokens_details?: { reasoning_tokens?: number } } | undefined;
     const inputTokens = usage?.input_tokens ?? 0; const outputTokens = usage?.output_tokens ?? 0;
     const callId = crypto.randomUUID();
-    const model = typeof response.model === "string" ? response.model : "gpt-5.6-terra";
-    const fileSearchCalls = Array.isArray(response.output) ? response.output.filter((item) => item && typeof item === "object" && (item as { type?: unknown }).type === "file_search_call").length : 0;
+    const model = typeof response.body.model === "string" ? response.body.model : "gpt-5.6-terra";
+    const fileSearchCalls = Array.isArray(response.body.output) ? response.body.output.filter((item) => item && typeof item === "object" && (item as { type?: unknown }).type === "file_search_call").length : 0;
     const developerData = identity.role === "developer" ? { diagnostics: { callId, model, reasoning: "low", knowledgeBaseEnabled: true, routingSource: "phase-2", inputTokens, cachedInputTokens: usage?.input_tokens_details?.cached_tokens ?? 0, outputTokens, reasoningTokens: usage?.output_tokens_details?.reasoning_tokens ?? 0, totalTokens: usage?.total_tokens ?? inputTokens + outputTokens, estimatedCostUsd: estimateCostUsd({ model, inputTokens, cachedInputTokens: usage?.input_tokens_details?.cached_tokens ?? 0, outputTokens, fileSearchCalls }) }, telemetry: {
       turn_id: turnId, completed_at: new Date().toISOString(), path: "analysis",
       latency_ms: { user_to_first_token: null, preflight_total: null, analysis_user_visible_ms: null, analysis_backend_total_ms: analysisDuration, total: Math.round(performance.now() - started), main_model_ttft: null, generation: null },
@@ -216,7 +218,10 @@ export async function POST(request: Request) {
       tools: { file_search: { available: true, invoked: fileSearchCalls > 0, calls: fileSearchCalls, duration_ms: null } },
       streaming: { model: false, backend: false, transport: false, ui: false },
     } } : {};
-    return Response.json({ analysis, ...developerData });
+    return Response.json(modelUsagePayload({ analysis, ...developerData }, collector));
   }
-  catch { return jsonError("Model nevrátil platný Rozbor.", 502); }
+  catch (cause) {
+    const payload = usageErrorPayload(cause, collector);
+    return Response.json(payload ?? modelUsagePayload({ error: "Model nevrátil platný Rozbor." }, collector), { status: 502 });
+  }
 }

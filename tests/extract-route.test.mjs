@@ -14,7 +14,7 @@ test("extract route requests strict structured output and revalidates quotes", a
   assert.match(source, /type:\s*"json_schema"/);
   assert.match(source, /strict:\s*true/);
   assert.match(source, /locateSourceQuote\(body\.message as string, candidate\.sourceQuote\)/);
-  assert.match(source, /verifyGrounding\(apiKey, body\.message as string, notebook/);
+  assert.match(source, /verifyGrounding\(apiKey, requestId, body\.message as string, notebook/);
   assert.match(source, /z „žák je líný“ nelze přijmout/);
   assert.match(source, /povinně projdi všech pět kategorií/);
   assert.match(source, /Pedagogická potřeba/);

@@ -2,6 +2,7 @@ import { getAccessIdentity } from "../../access-auth";
 import { isSupportedModel } from "../../model-config";
 import { F2_PATHS, type F2Path } from "../../notepad-model";
 import { parseF3RenderResult, type F3RenderRequest } from "../../f3-finalization-model";
+import { callOpenAIResponses, createRequestUsageCollector, modelUsagePayload, usageErrorPayload, type RequestUsageCollector } from "../../openai-responses-instrumentation";
 
 export const runtime = "edge";
 const strings = { type: "array", items: { type: "string" } } as const;
@@ -14,7 +15,7 @@ const PATH: Record<F2Path, string> = {
   POZOROVAT: "Materializuj pouze existující pozorovací specifikaci; tabulka smí obsahovat jen dodané indikátory, situace, kontrasty, rozsah a evidenci.",
   VYTVOŘIT: "Napiš skutečný materiál podle již zvoleného cíle, pracovního přístupu, podmínek a ověřování. Pokud pracovní přístup chybí, vrať boundary_issue.",
 };
-function error(message: string, status = 500) { return Response.json({ error: message }, { status }); }
+function error(message: string, status = 500, collector?: RequestUsageCollector) { return Response.json(collector ? modelUsagePayload({ error: message }, collector) : { error: message }, { status }); }
 function valid(value: unknown): value is F3RenderRequest { if (!value || typeof value !== "object") return false; const item = value as Partial<F3RenderRequest>; const snapshot = item.sourceSnapshot; return item.kind === "f3-render" && typeof item.sourceSnapshotId === "string" && typeof item.f3Target === "string" && typeof item.f3ConfigRevision === "number" && Boolean(snapshot && item.sourceSnapshotId === snapshot.snapshotId && F2_PATHS.includes(snapshot.activePath) && snapshot.processedBuild?.path === snapshot.activePath && typeof snapshot.processedBuild.processedResultId === "string" && snapshot.processedRevision === snapshot.buildRevision) && Boolean(item.config && ["teacher", "parent", "student", "internal"].includes(item.config.audience) && ["concise", "plain", "professional", "accessible"].includes(item.config.languageStyle) && ["brief", "standard", "detailed"].includes(item.config.lengthDetail) && ["auto", "text", "table", "cards"].includes(item.config.structureMode)); }
 function outputText(response: Record<string, unknown>) { if (typeof response.output_text === "string") return response.output_text; for (const item of Array.isArray(response.output) ? response.output : []) for (const part of Array.isArray((item as { content?: unknown[] }).content) ? (item as { content: unknown[] }).content : []) if (part && typeof part === "object" && typeof (part as { text?: unknown }).text === "string") return (part as { text: string }).text; return null; }
 export async function POST(request: Request) {
@@ -23,8 +24,20 @@ export async function POST(request: Request) {
   let body: unknown; try { body = await request.json(); } catch { return error("Neplatný formát požadavku.", 400); }
   if (!valid(body)) return error("Neplatný F3 finalizační požadavek.", 400);
   const model = isSupportedModel(body.model) ? body.model : "gpt-5.6-terra"; const path = body.sourceSnapshot.activePath;
-  const upstream = await fetch("https://api.openai.com/v1/responses", { method: "POST", headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ model, reasoning: { effort: "low" }, store: false, instructions: `${BOUNDARY}\n\n${PATH[path]}\nCíl a formát přizpůsob pouze parametrům požadavku. Relevantní omezení zachovej stručnou poznámkou.`, input: JSON.stringify(body), text: { format: { type: "json_schema", name: `f3_${path.toLowerCase()}_final_render`, strict: true, schema } } }) });
-  if (!upstream.ok) return error("Finální výstup se nepodařilo vytvořit.", 502);
-  const response = await upstream.json() as Record<string, unknown>; const text = outputText(response); if (!text) return error("Model nevrátil použitelný F3 výsledek.", 502);
-  try { return Response.json({ result: parseF3RenderResult(JSON.parse(text)), meta: { action: `F3 final render — ${path}`, model: typeof response.model === "string" ? response.model : model } }); } catch { return error("Model vrátil neplatný strukturovaný F3 výsledek.", 502); }
+  const collector = createRequestUsageCollector();
+  try {
+    const { response, usage_record, application_result } = await callOpenAIResponses({
+      api_key: apiKey, request_id: crypto.randomUUID(), phase: "F3", operation: "f3_render", requested_model: model, reasoning_effort: "low", requested_service_tier: "default", collector,
+      payload: { model, reasoning: { effort: "low" }, service_tier: "default", store: false, instructions: `${BOUNDARY}\n\n${PATH[path]}\nCíl a formát přizpůsob pouze parametrům požadavku. Relevantní omezení zachovej stručnou poznámkou.`, input: JSON.stringify(body), text: { format: { type: "json_schema", name: `f3_${path.toLowerCase()}_final_render`, strict: true, schema } } },
+      validate_application_response: (providerResponse) => {
+        const text = outputText(providerResponse); if (!text) throw new Error("missing structured output");
+        return parseF3RenderResult(JSON.parse(text));
+      },
+    });
+    if (usage_record.provider_status !== "completed" || !application_result) return error("Finální výstup se nepodařilo vytvořit.", 502, collector);
+    return Response.json(modelUsagePayload({ result: application_result, meta: { action: `F3 final render — ${path}`, model: typeof response.body.model === "string" ? response.body.model : model } }, collector));
+  } catch (cause) {
+    const payload = usageErrorPayload(cause, collector);
+    return Response.json(payload ?? modelUsagePayload({ error: "Model vrátil neplatný strukturovaný F3 výsledek." }, collector), { status: 502 });
+  }
 }

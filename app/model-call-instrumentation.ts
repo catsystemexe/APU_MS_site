@@ -25,11 +25,12 @@ export type ProviderResponseBody = {
 export type InstrumentedProviderResponse<TBody extends ProviderResponseBody> = {
   body: TBody;
   headers?: ResponseHeaders;
+  status_code?: number;
 };
 
 export type ModelCallSink = (record: ModelUsageRecord) => void | Promise<void>;
 
-export type InstrumentedModelCallInput<TBody extends ProviderResponseBody> = {
+export type InstrumentedModelCallInput<TBody extends ProviderResponseBody, TApplicationResult = void> = {
   request_id: string;
   turn_id?: string | null;
   phase: TelemetryPhase;
@@ -45,7 +46,7 @@ export type InstrumentedModelCallInput<TBody extends ProviderResponseBody> = {
   create_call_id?: () => string;
   sink: ModelCallSink;
   invoke: (request: { call_id: string; headers: Readonly<Record<string, string>> }) => Promise<InstrumentedProviderResponse<TBody>>;
-  validate_application_response?: (body: TBody) => void | Promise<void>;
+  validate_application_response?: (body: TBody) => TApplicationResult | Promise<TApplicationResult>;
 };
 
 export class InstrumentedModelCallError extends Error {
@@ -76,7 +77,9 @@ function responseHeader(headers: ResponseHeaders | undefined, name: string) {
   return entry?.[1] ?? null;
 }
 
-function providerStatus(value: unknown): ProviderStatus {
+function providerStatus(value: unknown, statusCode: number | undefined): ProviderStatus {
+  if (statusCode !== undefined && (!Number.isInteger(statusCode) || statusCode < 100 || statusCode > 599)) return "unknown";
+  if (statusCode !== undefined && (statusCode < 200 || statusCode >= 300)) return "failed";
   if (value === "completed" || value === "incomplete" || value === "failed") return value;
   return "unknown";
 }
@@ -108,9 +111,9 @@ function assertClientRequestId(callId: string) {
   }
 }
 
-export async function runInstrumentedModelCall<TBody extends ProviderResponseBody>(
-  input: InstrumentedModelCallInput<TBody>,
-): Promise<{ response: InstrumentedProviderResponse<TBody>; usage_record: ModelUsageRecord }> {
+export async function runInstrumentedModelCall<TBody extends ProviderResponseBody, TApplicationResult = void>(
+  input: InstrumentedModelCallInput<TBody, TApplicationResult>,
+): Promise<{ response: InstrumentedProviderResponse<TBody>; usage_record: ModelUsageRecord; application_result: TApplicationResult | undefined }> {
   const now = input.now ?? (() => new Date());
   const callId = input.call_id ?? (input.create_call_id ?? (() => crypto.randomUUID()))();
   assertClientRequestId(callId);
@@ -157,7 +160,7 @@ export async function runInstrumentedModelCall<TBody extends ProviderResponseBod
   }
 
   const body = response.body;
-  const status = providerStatus(body.status);
+  const status = providerStatus(body.status, response.status_code);
   let completed = finalizeModelUsageRecord(pending, {
     completed_at: now().toISOString(),
     reported_model: optionalString(body.model),
@@ -171,9 +174,10 @@ export async function runInstrumentedModelCall<TBody extends ProviderResponseBod
     error: providerError(body, status),
   });
 
+  let applicationResult: TApplicationResult | undefined;
   if (status === "completed" && input.validate_application_response) {
     try {
-      await input.validate_application_response(body);
+      applicationResult = await input.validate_application_response(body);
     } catch (cause) {
       completed = finalizeModelUsageRecord(completed, {
         application_status: "rejected_invalid_output",
@@ -185,5 +189,5 @@ export async function runInstrumentedModelCall<TBody extends ProviderResponseBod
   }
 
   await input.sink(completed);
-  return { response, usage_record: completed };
+  return { response, usage_record: completed, application_result: applicationResult };
 }

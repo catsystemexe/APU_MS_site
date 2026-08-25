@@ -2,6 +2,7 @@ import { getAccessIdentity } from "../../access-auth";
 import { isSupportedModel } from "../../model-config";
 import { F2_PATHS, type F2Path } from "../../notepad-model";
 import { F2_PATH_BASE_SEMANTICS, parseF2BuildResult, parseF2RenderedPreview, parseGeneratedRozborComponents, type F2BuildRequest, type F2PreviewSnapshot, type PochopitBuildConfig, type RequiredRozborComponent, type RozborComponentGenerationRequest } from "../../f2-build-model";
+import { callOpenAIResponses, createRequestUsageCollector, modelUsagePayload, usageErrorPayload, type RequestUsageCollector } from "../../openai-responses-instrumentation";
 
 export const runtime = "edge";
 
@@ -73,7 +74,7 @@ const PATH_PROMPTS: Record<F2Path, string> = {
 };
 const SHARED_PROMPT = "Jednotkou práce je jedna situace jako celek. Fakta Zápisníku a kanonická pedagogická potřeba jsou zdroj pravdy; F2 interpretace jsou odvozené a nesmějí je přepsat. Aktivní cesta v požadavku je autoritativní a nesmí se odvozovat z textu, dovedností, F3 targetu ani předchozího výsledku. Sdílené hypotézy zůstávají dynamické a mohou při analytické oporě zesílit, zeslábnout, sloučit se, rozdělit, zmizet či vzniknout, ale nikdy se tiše nestávají faktem. Zachovej ID významově stejné hypotézy. Aktivní dovednosti jsou kompozice požadovaných operací, nikoli povinné pořadí; vyplňuj pole pouze podle nich. Nejistotu transparentně lokalizuj jako popis, relevanci, omezení a související rozhodnutí. Nejistota nikdy automaticky neblokuje pokračování. F3 target je oddělený časný kontrakt: F2 nesmí plně materializovat finální artefakt.";
 
-function error(message: string, status = 500) { return Response.json({ error: message }, { status }); }
+function error(message: string, status = 500, collector?: RequestUsageCollector) { return Response.json(collector ? modelUsagePayload({ error: message }, collector) : { error: message }, { status }); }
 function outputText(response: Record<string, unknown>) { if (typeof response.output_text === "string") return response.output_text; const output = Array.isArray(response.output) ? response.output : []; for (const item of output) for (const part of Array.isArray((item as { content?: unknown[] }).content) ? (item as { content: unknown[] }).content : []) if (part && typeof part === "object" && typeof (part as { text?: unknown }).text === "string") return (part as { text: string }).text; return null; }
 function isPath(value: unknown): value is F2Path { return typeof value === "string" && F2_PATHS.includes(value as F2Path); }
 export function validBuild(value: unknown): value is F2BuildRequest { if (!value || typeof value !== "object") return false; const body = value as Partial<F2BuildRequest>; return body.kind === "f2-build" && isPath(body.activePath) && body.canonicalNeed?.initialF2Path !== undefined && Array.isArray(body.canonicalNotebookContext) && body.canonicalNotebookContext.length <= 80 && Array.isArray(body.workingHypotheses) && Array.isArray(body.activeSkills) && body.activeSkills.every((skill) => skill.id.startsWith(`${body.activePath!.toLowerCase()}-`) && skill.id in F2_SKILL_SEMANTICS) && typeof body.buildRevision === "number" && Number.isInteger(body.buildRevision) && body.buildRevision >= 0; }
@@ -97,13 +98,27 @@ export async function POST(request: Request) {
     instructions = rozborComponentInstructions(componentRequest);
     input = { canonicalNeed: componentRequest.canonicalNeed, hypotheses: componentRequest.hypotheses, config: componentRequest.config, components: componentRequest.components.map(({ id, kind, hypothesisId }) => ({ id, kind, ...(hypothesisId ? { hypothesisId } : {}) })) };
   } else return error("Neplatný nebo nepodporovaný F2 požadavek.", 400);
-  const upstream = await fetch("https://api.openai.com/v1/responses", { method: "POST", headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ model, reasoning: { effort: "low" }, store: false, instructions, input: JSON.stringify(input), text: { format: { type: "json_schema", name, strict: true, schema } } }) });
-  if (!upstream.ok) return error("Modelové zpracování F2 se nezdařilo.", 502);
-  const response = await upstream.json() as Record<string, unknown>; const text = outputText(response); if (!text) return error("Model nevrátil použitelný F2 výsledek.", 502);
+  const collector = createRequestUsageCollector();
+  const requestId = crypto.randomUUID();
   try {
-    const parsed = JSON.parse(text);
-    if (componentRequest) return Response.json({ components: parseGeneratedRozborComponents(parsed, componentRequest.components), meta: { action: "F2 POCHOPIT component generation", model: typeof response.model === "string" ? response.model : model } });
-    const result = operation === "build" ? parseF2BuildResult(parsed, activePath!) : parseF2RenderedPreview(parsed);
-    return Response.json({ result, meta: { action: operation === "build" ? `F2 build execution — ${activePath}` : `F2 preview — ${activePath}`, model: typeof response.model === "string" ? response.model : model } });
-  } catch { return error("Model vrátil neplatný strukturovaný F2 výsledek.", 502); }
+    const { response, usage_record, application_result } = await callOpenAIResponses({
+      api_key: apiKey, request_id: requestId, phase: "F2",
+      operation: operation === "build" ? "f2_build" : operation === "preview" ? "f2_preview" : "f2_component_generation",
+      requested_model: model, reasoning_effort: "low", requested_service_tier: "default", collector,
+      payload: { model, reasoning: { effort: "low" }, service_tier: "default", store: false, instructions, input: JSON.stringify(input), text: { format: { type: "json_schema", name, strict: true, schema } } },
+      validate_application_response: (providerResponse) => {
+        const text = outputText(providerResponse); if (!text) throw new Error("missing structured output");
+        const parsed = JSON.parse(text);
+        if (componentRequest) return { components: parseGeneratedRozborComponents(parsed, componentRequest.components) };
+        return { result: operation === "build" ? parseF2BuildResult(parsed, activePath!) : parseF2RenderedPreview(parsed) };
+      },
+    });
+    if (usage_record.provider_status !== "completed" || !application_result) return error("Modelové zpracování F2 se nezdařilo.", 502, collector);
+    const reportedModel = typeof response.body.model === "string" ? response.body.model : model;
+    if ("components" in application_result) return Response.json(modelUsagePayload({ components: application_result.components, meta: { action: "F2 POCHOPIT component generation", model: reportedModel } }, collector));
+    return Response.json(modelUsagePayload({ result: application_result.result, meta: { action: operation === "build" ? `F2 build execution — ${activePath}` : `F2 preview — ${activePath}`, model: reportedModel } }, collector));
+  } catch (cause) {
+    const payload = usageErrorPayload(cause, collector);
+    return Response.json(payload ?? modelUsagePayload({ error: "Model vrátil neplatný strukturovaný F2 výsledek." }, collector), { status: 502 });
+  }
 }
