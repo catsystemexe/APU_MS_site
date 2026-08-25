@@ -12,6 +12,8 @@ import {
 } from "react";
 import {
   ArrowUp,
+  ChevronLeft,
+  ChevronRight,
   Check,
   Download,
   FilePlus2,
@@ -281,6 +283,7 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
   const [preferredDesktopSplit, setPreferredDesktopSplit] = useState(DEFAULT_DESKTOP_SPLIT);
   const [effectiveDesktopSplit, setEffectiveDesktopSplit] = useState(DEFAULT_DESKTOP_SPLIT);
   const [isResizingWorkspace, setIsResizingWorkspace] = useState(false);
+  const [isF2BuildVisible, setIsF2BuildVisible] = useState(true);
   const [analysis, setAnalysis] = useState<AnalysisState>(EMPTY_ANALYSIS);
   const [f2Build, setF2Build] = useState<F2BuildState | null>(null);
   const [f2Preview, setF2Preview] = useState<F2PreviewState>(null);
@@ -320,6 +323,7 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
   const dictationShouldContinueRef = useRef(false);
   const dictationPrefixRef = useRef("");
   const canonicalF2Need = useMemo(() => getF1ToF2NeedContract(notepad, activeNeedId), [notepad, activeNeedId]);
+  const isF2DesktopLayout = phase === "development" && activePanel === "analysis" && f2Build !== null;
 
   useEffect(() => {
     if (phase === "intake" || !canonicalF2Need) return;
@@ -804,6 +808,8 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
     const textTransition = resolveTextDialogEvent(rawText, compactNotepad(notepadForChat), phase);
     if (phase === "intake" && (dialogEvent === "continue_to_solution" || textTransition === "continue_to_solution")) {
       setPhase("development");
+      setActivePanel("analysis");
+      setIsF2BuildVisible(true);
       const result = await refreshStructuredAnalysis(notepadForChat, "", turnId, requestId, "F1");
       setMessages((current) => current.map((message) => message.id === assistantId ? withCompletedLifecycleRecord({
         ...message, content: "", analysisEntryHypotheses: entryHypotheses(result.analysis), analysisNextPrompt: result.analysis.chatUpdate.nextPrompt, phaseLabel: "[FÁZE 2]",
@@ -961,6 +967,8 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
     if (buffer.trim()) processLine(buffer);
     if (!completeText || !receivedDone) throw new Error("Model nevrátil dokončenou odpověď s usage daty.");
     if (phase === "intake" && completedPhase === "development") {
+      setActivePanel("analysis");
+      setIsF2BuildVisible(true);
       const result = await refreshStructuredAnalysis(notepadForChat, "", turnId, requestId, "F1");
       setMessages((current) => current.map((message) => message.id === assistantId ? withCompletedLifecycleRecord({
         ...message, content: "", analysisEntryHypotheses: entryHypotheses(result.analysis), analysisNextPrompt: result.analysis.chatUpdate.nextPrompt,
@@ -1187,6 +1195,7 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
     setUnseenAnalysisKeys(new Set());
     setHighlightedAnalysisKeys(new Set());
     setF2Build(null); setF2Preview(null); setF2BuildStatus("idle"); setF2BuildError(null); setF2PreviewStatus("idle"); setF2PreviewError(null);
+    setIsF2BuildVisible(true);
     setF3State(null); setF3Status("idle"); setF3Error(null);
     setSessionTelemetry([]);
     telemetryClockRef.current.clear();
@@ -1357,7 +1366,7 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
     <main className="app-shell">
       <section
         ref={chatCardRef}
-        className={`chat-card${isDevLogOpen ? " is-dev-log-open" : ""}${isResizingWorkspace ? " is-resizing-workspace" : ""}`}
+        className={`chat-card${isDevLogOpen ? " is-dev-log-open" : ""}${isResizingWorkspace ? " is-resizing-workspace" : ""}${isF2DesktopLayout ? " is-f2-layout" : ""}${isF2DesktopLayout && isF2BuildVisible ? " is-f2-build-visible" : ""}`}
         style={{ "--desktop-chat-split": `${effectiveDesktopSplit}%` } as CSSProperties}
         aria-label="Konverzace s APU"
       >
@@ -1462,6 +1471,7 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
         </header>
 
         <div className="message-list" aria-live="polite" aria-busy={isLoading}>
+          {isF2DesktopLayout && !isF2BuildVisible && <button type="button" className="f2-build-reopen" onClick={() => setIsF2BuildVisible(true)}><ChevronRight aria-hidden="true" /><span>Zobrazit Build</span></button>}
           {messages.map((message) => (
             <div className="message-turn" key={message.id}>
               <article id={`message-${message.id}`} className={`message message--${message.role}`}>
@@ -1595,6 +1605,12 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
           <div ref={bottomRef} />
         </div>
 
+        {isF2DesktopLayout && <section className="f2-build-shell" aria-label="Build">
+          <header className="f2-build-header"><div><span>F2 · POCHOPIT</span><h2>Build</h2></div><button type="button" onClick={() => setIsF2BuildVisible(false)} aria-label="Skrýt Build a zobrazit chat" title="Zobrazit chat"><ChevronRight aria-hidden="true" /></button></header>
+          <div className="f2-build-placeholder"><p>Nastavení buildu bude doplněno v dalším kroku.</p></div>
+          <button type="button" className="f2-build-divider-action" disabled aria-label="Vytvoření Rozboru bude dostupné v dalším kroku"><span>Rozbor</span><ChevronLeft aria-hidden="true" /></button>
+        </section>}
+
         <form className="composer" onSubmit={submit}>
           <div className={`composer-field${isComposerExpanded && !isDictating ? " is-expanded" : ""}${isDictating ? " is-dictating" : ""}`}>
             <label className="sr-only" htmlFor="message">Zpráva pro APU</label>
@@ -1724,7 +1740,7 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
         {activePanel && <div
           className="workspace-resize-handle"
           role="separator"
-          aria-label="Změnit šířku chatu a pracovního panelu"
+          aria-label={isF2DesktopLayout ? "Změnit šířku Buildu nebo chatu a Rozboru" : "Změnit šířku chatu a pracovního panelu"}
           aria-orientation="vertical"
           aria-valuemin={Math.round(clampDesktopSplit(0, chatCardRef.current?.getBoundingClientRect().width ?? 720))}
           aria-valuemax={Math.round(clampDesktopSplit(100, chatCardRef.current?.getBoundingClientRect().width ?? 720))}

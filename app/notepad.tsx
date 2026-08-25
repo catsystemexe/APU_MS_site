@@ -17,7 +17,6 @@ import {
 import { NOTEPAD_CATEGORIES } from "./notepad-categories";
 import type { AnalysisState, SuggestedNeed } from "./analysis-model";
 import type { ConversationPhase } from "./dialog-action";
-import { F2BuildEditor } from "./f2-build-editor";
 import type { F2BuildState, F2PreviewState } from "./f2-build-model";
 import { F3Finalization } from "./f3-finalization";
 import type { F3Config, F3State } from "./f3-finalization-model";
@@ -285,7 +284,32 @@ function AnalysisPanel(props: Pick<WorkspacePanelProps, "phase" | "analysis" | "
   if (props.analysisStatus === "loading" && !props.analysis.hypotheses.length) return <div className="analysis-state"><span className="analysis-spinner" />Vytvářím Rozbor z aktuálního Zápisníku…</div>;
   if (props.analysisStatus === "error" && !props.analysis.hypotheses.length) return <div className="analysis-state"><p>{props.analysisError}</p><button type="button" onClick={props.onRetryAnalysis}>Zkusit znovu</button></div>;
   if (!props.f2Build) return <div className="analysis-state"><p>Rozbor čeká na kanonickou pedagogickou potřebu v Zápisníku.</p></div>;
-  return <div id="workspace-analysis" className="notepad-scroll workspace-panel-body" role="tabpanel" aria-label="Rozbor"><F2BuildEditor build={props.f2Build} preview={props.f2Preview} buildStatus={props.f2BuildStatus} buildError={props.f2BuildError} previewStatus={props.f2PreviewStatus} previewError={props.f2PreviewError} onPathChange={props.onF2PathChange} onSkillToggle={props.onF2SkillToggle} onParameterChange={props.onF2ParameterChange} onContextAdd={props.onF2ContextAdd} onContextRemove={props.onF2ContextRemove} onExecute={props.onF2Execute} onPreview={props.onF2Preview} /></div>;
+  return <div id="workspace-analysis" className="notepad-scroll f2-baseline" role="tabpanel" aria-label="Rozbor">
+    <section className="f2-baseline-situation" aria-labelledby="f2-situation-title">
+      <span>Situace / pedagogická potřeba</span>
+      <h2 id="f2-situation-title">{props.f2Build.canonicalNeed.needText || "Bez popisu"}</h2>
+    </section>
+    <section className="f2-baseline-hypotheses" aria-labelledby="f2-hypotheses-title">
+      <h2 id="f2-hypotheses-title">Pracovní hypotézy</h2>
+      <div className="f2-baseline-list">
+        {props.f2Build.workingHypotheses.map((hypothesis) => {
+          const clarifications = [
+            ...hypothesis.unknowns,
+            ...hypothesis.limitations,
+            ...hypothesis.questions.map((question) => question.text),
+            ...(hypothesis.question ? [hypothesis.question.text] : []),
+          ].filter((item, index, items) => item.trim() && items.indexOf(item) === index).slice(0, 2);
+          return <article className="f2-baseline-hypothesis" key={hypothesis.id}>
+            <div className="f2-baseline-hypothesis-heading">
+              <span className="analysis-rank">{hypothesis.rank}</span>
+              <div><h3>{hypothesis.title}</h3><p>{hypothesis.summary}</p></div>
+            </div>
+            {clarifications.length > 0 && <div className="f2-baseline-clarifications"><h4>Co chybí / čím zpřesnit</h4><ul>{clarifications.map((item) => <li key={item}>{item}</li>)}</ul></div>}
+          </article>;
+        })}
+      </div>
+    </section>
+  </div>;
 }
 
 function OutputPanel(props: Pick<WorkspacePanelProps, "f2Preview" | "f3State" | "f3Status" | "f3Error" | "onF3Enter" | "onF3Config" | "onF3Render" | "onF3Adopt" | "onF3Return">) {
