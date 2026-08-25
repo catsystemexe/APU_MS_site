@@ -145,6 +145,7 @@ import {
   createPochopitBuildState,
   updatePochopitBuildConfig,
   applyGeneratedRozborComponents,
+  applyRozborComponentUpdate,
   createRozborGenerationRequest,
   parseGeneratedRozborComponents,
 } from "../app/f2-build-model.ts";
@@ -305,5 +306,63 @@ test("applying generated components preserves baseline inputs and uses required 
   assert.deepEqual(baseline, before);
   assert.equal(state.components[0].fingerprint, requested[0].fingerprint);
   assert.equal("fingerprint" in state.components[0], true);
-  assert.equal(createRozborGenerationRequest(pochopitNeed, baseline, state.config, state.components), null, "Batch 4 does not implement an update call after creation");
+  assert.equal(createRozborGenerationRequest(pochopitNeed, baseline, state.config, state.components), null);
+});
+
+test("depth updates request only stale expansions and comparison while retaining expert", () => {
+  const baseline = [hypothesis("h1"), hypothesis("h2")];
+  for (const [from, to] of [[1, 2], [2, 3], [3, 2]]) {
+    const oldConfig = pochopitConfig({ expansionDepth: from, compareHypotheses: true, expertFrame: true });
+    const nextConfig = pochopitConfig({ expansionDepth: to, compareHypotheses: true, expertFrame: true });
+    const existing = deriveRequiredRozborComponents(pochopitNeed, baseline, oldConfig).map(generated);
+    const request = createRozborGenerationRequest(pochopitNeed, baseline, nextConfig, existing);
+    assert.deepEqual(request.components.map(({ id }) => id), ["hypothesis:h1:expansion", "hypothesis:h2:expansion", "comparison:all"]);
+    const expert = existing.find(({ id }) => id === "expert-frame:all");
+    const response = request.components.map(({ id, kind, hypothesisId }) => ({ id, kind, ...(hypothesisId ? { hypothesisId } : {}), content: `Nový ${id}` }));
+    const updated = applyRozborComponentUpdate({ config: nextConfig, components: existing }, deriveRequiredRozborComponents(pochopitNeed, baseline, nextConfig), response);
+    assert.equal(updated.components.find(({ id }) => id === "expert-frame:all"), expert);
+  }
+});
+
+test("operation toggles generate only newly missing components and removals need no request", () => {
+  const baseline = [hypothesis("h1")];
+  const expansionConfig = pochopitConfig({ expansionDepth: 1 });
+  const expansion = deriveRequiredRozborComponents(pochopitNeed, baseline, expansionConfig).map(generated);
+  assert.deepEqual(createRozborGenerationRequest(pochopitNeed, baseline, { ...expansionConfig, compareHypotheses: true }, expansion).components.map(({ id }) => id), ["comparison:all"]);
+  assert.deepEqual(createRozborGenerationRequest(pochopitNeed, baseline, { ...expansionConfig, expertFrame: true }, expansion).components.map(({ id }) => id), ["expert-frame:all"]);
+  const withCrossCutting = deriveRequiredRozborComponents(pochopitNeed, baseline, pochopitConfig({ compareHypotheses: true, expertFrame: true })).map(generated);
+  assert.equal(createRozborGenerationRequest(pochopitNeed, baseline, pochopitConfig(), withCrossCutting), null);
+  const removed = applyRozborComponentUpdate({ config: pochopitConfig(), components: withCrossCutting }, [], []);
+  assert.deepEqual(removed.components, []);
+});
+
+test("baseline additions, edits, and removals produce dependency-correct selective plans", () => {
+  const h1 = hypothesis("h1", "První"); const h2 = hypothesis("h2", "Druhá");
+  const config = pochopitConfig({ expansionDepth: 2, compareHypotheses: true, expertFrame: true });
+  const existing = deriveRequiredRozborComponents(pochopitNeed, [h1, h2], config).map(generated);
+  const changed = createRozborGenerationRequest(pochopitNeed, [hypothesis("h1", "Změněná"), h2], config, existing);
+  assert.deepEqual(changed.components.map(({ id }) => id), ["hypothesis:h1:expansion", "comparison:all", "expert-frame:all"]);
+  const removedRequired = deriveRequiredRozborComponents(pochopitNeed, [h2], config);
+  const removedPlan = reconcileRozborComponents(removedRequired, existing);
+  assert.deepEqual(removedPlan.remove.map(({ id }) => id), ["hypothesis:h1:expansion"]);
+  assert.deepEqual(removedPlan.keep.map(({ id }) => id), ["hypothesis:h2:expansion"]);
+  assert.deepEqual(createRozborGenerationRequest(pochopitNeed, [h2], config, existing).components.map(({ id }) => id), ["comparison:all", "expert-frame:all"]);
+  const added = createRozborGenerationRequest(pochopitNeed, [h1, h2, hypothesis("h3", "Třetí")], config, existing);
+  assert.deepEqual(added.components.map(({ id }) => id), ["hypothesis:h3:expansion", "comparison:all", "expert-frame:all"]);
+});
+
+test("atomic update removes obsolete components and replaces stale semantic IDs without duplicates", () => {
+  const baseline = [hypothesis("h1"), hypothesis("h2")];
+  const oldConfig = pochopitConfig({ expansionDepth: 1, expertFrame: true });
+  const nextConfig = pochopitConfig({ expansionDepth: 2 });
+  const existing = deriveRequiredRozborComponents(pochopitNeed, baseline, oldConfig).map(generated);
+  const required = deriveRequiredRozborComponents(pochopitNeed, baseline, nextConfig);
+  const request = createRozborGenerationRequest(pochopitNeed, baseline, nextConfig, existing);
+  const response = request.components.map(({ id, kind, hypothesisId }) => ({ id, kind, ...(hypothesisId ? { hypothesisId } : {}), content: `Replacement ${id}` }));
+  const updated = applyRozborComponentUpdate({ config: nextConfig, components: existing }, required, response);
+  assert.deepEqual(updated.components.map(({ id }) => id), ["hypothesis:h1:expansion", "hypothesis:h2:expansion"]);
+  assert.equal(new Set(updated.components.map(({ id }) => id)).size, updated.components.length);
+  assert.deepEqual(existing.map(({ id }) => id), ["hypothesis:h1:expansion", "hypothesis:h2:expansion", "expert-frame:all"]);
+  assert.throws(() => applyRozborComponentUpdate({ config: nextConfig, components: existing }, required, response.slice(1)), /úplnou/);
+  assert.deepEqual(existing.map(({ id }) => id), ["hypothesis:h1:expansion", "hypothesis:h2:expansion", "expert-frame:all"], "a failed response leaves the complete previous set untouched");
 });

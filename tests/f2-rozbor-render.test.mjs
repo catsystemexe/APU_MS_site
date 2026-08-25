@@ -24,7 +24,14 @@ test("first success changes CTA label and the new flow never invokes Preview", (
 });
 
 test("client checks current deterministic fingerprints before applying an in-flight response", () => {
-  assert.match(client, /currentSignature !== requestSignature/);
+  assert.match(client, /currentSignature !== updateSignature/);
   assert.match(client, /latestRozborSourceRef/);
   assert.match(client, /latestPochopitBuildRef/);
+});
+
+test("incremental CTA is reconciliation-derived and removals are deferred to explicit update", () => {
+  assert.match(client, /isPochopitUpdatePending/);
+  assert.match(client, /!pochopitReconciliation\.isRozborCurrent/);
+  assert.match(client, /applyRozborComponentUpdate\(current, required, \[\]\)/);
+  assert.doesNotMatch(client, /removedIds = new Set/);
 });
