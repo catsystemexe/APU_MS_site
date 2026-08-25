@@ -144,6 +144,9 @@ import {
   reconcileRozborComponents,
   createPochopitBuildState,
   updatePochopitBuildConfig,
+  applyGeneratedRozborComponents,
+  createRozborGenerationRequest,
+  parseGeneratedRozborComponents,
 } from "../app/f2-build-model.ts";
 
 const pochopitNeed = need("POCHOPIT");
@@ -274,4 +277,33 @@ test("POCHOPIT comparison and expert cards toggle their config fields independen
   assert.equal(state.config.expertFrame, true);
   state = updatePochopitBuildConfig(state, { expertFrame: false });
   assert.equal(state.config.expertFrame, false);
+});
+
+test("first component request contains only missing active specs for every operation combination", () => {
+  const hypotheses = [hypothesis("h1"), hypothesis("h2")];
+  assert.deepEqual(createRozborGenerationRequest(pochopitNeed, hypotheses, pochopitConfig({ expansionDepth: 1 }), []).components.map(({ id }) => id), ["hypothesis:h1:expansion", "hypothesis:h2:expansion"]);
+  assert.deepEqual(createRozborGenerationRequest(pochopitNeed, hypotheses, pochopitConfig({ compareHypotheses: true }), []).components.map(({ id }) => id), ["comparison:all"]);
+  assert.deepEqual(createRozborGenerationRequest(pochopitNeed, hypotheses, pochopitConfig({ expertFrame: true }), []).components.map(({ id }) => id), ["expert-frame:all"]);
+  assert.deepEqual(createRozborGenerationRequest(pochopitNeed, hypotheses, pochopitConfig({ expansionDepth: 3, compareHypotheses: true, expertFrame: true }), []).components.map(({ id }) => id), ["hypothesis:h1:expansion", "hypothesis:h2:expansion", "comparison:all", "expert-frame:all"]);
+  assert.equal(createRozborGenerationRequest(pochopitNeed, hypotheses, pochopitConfig(), []), null);
+});
+
+test("component response rejects unknown, duplicate, missing, and mismatched IDs", () => {
+  const requested = deriveRequiredRozborComponents(pochopitNeed, [hypothesis("h1")], pochopitConfig({ expansionDepth: 1, compareHypotheses: true }));
+  const valid = requested.map(({ id, kind, hypothesisId }) => ({ id, kind, ...(hypothesisId ? { hypothesisId } : {}), content: "Obsah" }));
+  assert.equal(parseGeneratedRozborComponents({ components: valid }, requested).length, 2);
+  assert.throws(() => parseGeneratedRozborComponents({ components: [{ ...valid[0], id: "unknown" }, valid[1]] }, requested), /nevyžádanou/);
+  assert.throws(() => parseGeneratedRozborComponents({ components: [valid[0], valid[0]] }, requested), /duplicitní/);
+  assert.throws(() => parseGeneratedRozborComponents({ components: [valid[0]] }, requested), /úplnou/);
+  assert.throws(() => parseGeneratedRozborComponents({ components: [{ ...valid[0], kind: "expert-frame" }, valid[1]] }, requested), /nevyžádanou/);
+});
+
+test("applying generated components preserves baseline inputs and uses required fingerprints", () => {
+  const baseline = [hypothesis("h1")]; const before = structuredClone(baseline);
+  const requested = deriveRequiredRozborComponents(pochopitNeed, baseline, pochopitConfig({ expansionDepth: 2 }));
+  const state = applyGeneratedRozborComponents({ config: pochopitConfig({ expansionDepth: 2 }), components: [] }, requested, [{ id: requested[0].id, kind: requested[0].kind, hypothesisId: "h1", content: "Lokální rozvinutí" }]);
+  assert.deepEqual(baseline, before);
+  assert.equal(state.components[0].fingerprint, requested[0].fingerprint);
+  assert.equal("fingerprint" in state.components[0], true);
+  assert.equal(createRozborGenerationRequest(pochopitNeed, baseline, state.config, state.components), null, "Batch 4 does not implement an update call after creation");
 });

@@ -1,7 +1,7 @@
 import { getAccessIdentity } from "../../access-auth";
 import { isSupportedModel } from "../../model-config";
 import { F2_PATHS, type F2Path } from "../../notepad-model";
-import { F2_PATH_BASE_SEMANTICS, parseF2BuildResult, parseF2RenderedPreview, type F2BuildRequest, type F2PreviewSnapshot } from "../../f2-build-model";
+import { F2_PATH_BASE_SEMANTICS, parseF2BuildResult, parseF2RenderedPreview, parseGeneratedRozborComponents, type F2BuildRequest, type F2PreviewSnapshot, type PochopitBuildConfig, type RequiredRozborComponent, type RozborComponentGenerationRequest } from "../../f2-build-model";
 
 export const runtime = "edge";
 
@@ -15,6 +15,39 @@ const creationResult = { type: "object", additionalProperties: false, required: 
 const resultSchema = (pathResult: typeof understandingResult | typeof observationResult | typeof creationResult) => ({ type: "object", additionalProperties: false, required: ["hypotheses", "pathResult", "decisions", "uncertainties", "missingInformation"], properties: { ...common, pathResult } } as const);
 const BUILD_SCHEMAS = { POCHOPIT: resultSchema(understandingResult), POZOROVAT: resultSchema(observationResult), VYTVOŘIT: resultSchema(creationResult) } as const;
 const PREVIEW_SCHEMA = { type: "object", additionalProperties: false, required: ["title", "introduction", "sections"], properties: { title: { type: "string" }, introduction: { type: "string" }, sections: { type: "array", maxItems: 8, items: { type: "object", additionalProperties: false, required: ["heading", "content"], properties: { heading: { type: "string" }, content: { type: "string" } } } } } } as const;
+
+function componentSchema(spec: RequiredRozborComponent) {
+  const properties: Record<string, object> = { id: { type: "string", enum: [spec.id] }, kind: { type: "string", enum: [spec.kind] }, content: { type: "string", minLength: 1 } };
+  const required = ["id", "kind", "content"];
+  if (spec.hypothesisId) { properties.hypothesisId = { type: "string", enum: [spec.hypothesisId] }; required.push("hypothesisId"); }
+  return { type: "object", additionalProperties: false, required, properties };
+}
+
+export function rozborComponentSchema(specs: RequiredRozborComponent[]) {
+  return { type: "object", additionalProperties: false, required: ["components"], properties: { components: { type: "array", minItems: specs.length, maxItems: specs.length, items: { anyOf: specs.map(componentSchema) } } } };
+}
+
+function validConfig(value: unknown): value is PochopitBuildConfig { if (!value || typeof value !== "object") return false; const config = value as Partial<PochopitBuildConfig>; return [0, 1, 2, 3].includes(config.expansionDepth ?? -1) && typeof config.compareHypotheses === "boolean" && typeof config.expertFrame === "boolean"; }
+export function validRozborGeneration(value: unknown): value is RozborComponentGenerationRequest {
+  if (!value || typeof value !== "object") return false;
+  const body = value as Partial<RozborComponentGenerationRequest>;
+  if (!body.canonicalNeed || typeof body.canonicalNeed.needText !== "string" || !Array.isArray(body.hypotheses) || body.hypotheses.length > 8 || !validConfig(body.config) || !Array.isArray(body.components) || !body.components.length || body.components.length > 10) return false;
+  const hypothesisIds = new Set(body.hypotheses.map(({ id }) => id)); const ids = new Set<string>();
+  return body.components.every((spec) => {
+    if (!spec || typeof spec.id !== "string" || ids.has(spec.id) || typeof spec.fingerprint !== "string") return false; ids.add(spec.id);
+    if (spec.kind === "hypothesis-expansion") return body.config!.expansionDepth > 0 && typeof spec.hypothesisId === "string" && hypothesisIds.has(spec.hypothesisId) && spec.id === `hypothesis:${spec.hypothesisId}:expansion`;
+    if (spec.kind === "hypothesis-comparison") return body.config!.compareHypotheses && spec.hypothesisId === undefined && spec.id === "comparison:all";
+    return spec.kind === "expert-frame" && body.config!.expertFrame && spec.hypothesisId === undefined && spec.id === "expert-frame:all";
+  });
+}
+
+export function rozborComponentInstructions(request: RozborComponentGenerationRequest) {
+  const depth = request.config.expansionDepth;
+  const depthInstruction = depth === 1 ? "Hloubka 1 — Základně: prakticky vysvětli mechanismus a možné relevantní projevy."
+    : depth === 2 ? "Hloubka 2 — Podrobně: zahrň základní význam, mechanismy, podmínky, vztahy a co dostupný kontext podporuje nebo oslabuje."
+      : depth === 3 ? "Hloubka 3 — Do hloubky: zahrň podrobný význam, kritickou interpretaci, alternativní vysvětlení, limity, komplikující faktory, hraniční podmínky a důsledky pro další uvažování; nevytvářej obecný akademický přehled." : "Rozvinutí hypotéz není požadováno.";
+  return `F2 je pracovní analytický Rozbor, ne finální F3 próza. Každou vyžádanou komponentu zpracuj samostatně, stručně, strukturovaně a pouze pod přesným dodaným ID. Nepřepisuj výchozí hypotézy, nevymýšlej fakta a zachovej nejistotu; kanonická fakta uživatele mají přednost před hypotézami a inferencí.\n\nROZVINUTÍ HYPOTÉZY — pouze lokální případová analýza dané hypotézy. ${depthInstruction}\n\nPOROVNÁNÍ — pouze jedna syntéza napříč hypotézami: rozdíly, průniky, slučitelnost, možné souběžné působení, napětí, vysvětlované aspekty a nerozlišitelnost z dostupných informací. Respektuj analytickou hloubku ${depth}.\n\nODBORNÝ RÁMEC — pouze explicitní relevantní pojmenované teorie, modely, konstrukty a výzkumné koncepty. Terminologii nepřidávej dekorativně; nefabrikuj studie, autory, DOI, velikosti účinku ani empirická tvrzení. Není-li konkrétní evidence spolehlivě známá, zůstaň u obecného teoretického rámce a jasně jej odliš od specifické evidence.`;
+}
 
 export const F2_SKILL_SEMANTICS: Record<string, string> = {
   "pochopit-1": "Rozviň mechanismy; při skutečně odlišných mechanismech hypotézu rozděl a při oporě přidej novou. Neprodlužuj pouze text.",
@@ -51,7 +84,7 @@ export async function POST(request: Request) {
   const apiKey = process.env.OPENAI_API_KEY; if (!apiKey) return error("APU není dokončeno: chybí serverová konfigurace.", 503);
   let body: Record<string, unknown>; try { body = await request.json(); } catch { return error("Neplatný formát požadavku.", 400); }
   const operation = body.operation; const model = isSupportedModel(body.model) ? body.model : "gpt-5.6-terra";
-  let schema: object; let name: string; let instructions: string; let input: unknown; let activePath: F2Path;
+  let schema: object; let name: string; let instructions: string; let input: unknown; let activePath: F2Path | undefined; let componentRequest: RozborComponentGenerationRequest | undefined;
   if (operation === "build" && validBuild(body.build)) {
     const build = body.build; activePath = build.activePath; schema = BUILD_SCHEMAS[activePath]; name = `f2_${activePath.toLowerCase()}_build`;
     const operations = build.activeSkills.length ? build.activeSkills.map((skill) => `- ${skill.label}: ${F2_SKILL_SEMANTICS[skill.id]}${skill.parameterText ? ` Zaměření uživatele: ${skill.parameterText}` : ""}`).join("\n") : "- Žádné; proveď pouze základní úlohu cesty a neaktivuj skrytě žádnou volitelnou operaci.";
@@ -59,9 +92,18 @@ export async function POST(request: Request) {
   } else if (operation === "preview" && validSnapshot(body.snapshot)) {
     activePath = body.snapshot.activePath; schema = PREVIEW_SCHEMA; name = `f2_${activePath.toLowerCase()}_preview`;
     instructions = `Vyrenderuj náhled výhradně z neměnného F2 snapshotu pro autoritativní cestu ${activePath}. Snapshot nepřehodnocuj z konverzace, neměň pedagogickou potřebu, cestu ani závěry. ${PATH_PROMPTS[activePath]} F3 target smí ovlivnit přehlednost formy, nikdy nesmí vést k finální materializaci F3 dokumentu.`; input = body.snapshot;
+  } else if (operation === "generate-rozbor-components" && validRozborGeneration(body.request)) {
+    componentRequest = body.request; schema = rozborComponentSchema(componentRequest.components); name = "f2_pochopit_components";
+    instructions = rozborComponentInstructions(componentRequest);
+    input = { canonicalNeed: componentRequest.canonicalNeed, hypotheses: componentRequest.hypotheses, config: componentRequest.config, components: componentRequest.components.map(({ id, kind, hypothesisId }) => ({ id, kind, ...(hypothesisId ? { hypothesisId } : {}) })) };
   } else return error("Neplatný nebo nepodporovaný F2 požadavek.", 400);
   const upstream = await fetch("https://api.openai.com/v1/responses", { method: "POST", headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ model, reasoning: { effort: "low" }, store: false, instructions, input: JSON.stringify(input), text: { format: { type: "json_schema", name, strict: true, schema } } }) });
   if (!upstream.ok) return error("Modelové zpracování F2 se nezdařilo.", 502);
   const response = await upstream.json() as Record<string, unknown>; const text = outputText(response); if (!text) return error("Model nevrátil použitelný F2 výsledek.", 502);
-  try { const parsed = JSON.parse(text); const result = operation === "build" ? parseF2BuildResult(parsed, activePath) : parseF2RenderedPreview(parsed); return Response.json({ result, meta: { action: operation === "build" ? `F2 build execution — ${activePath}` : `F2 preview — ${activePath}`, model: typeof response.model === "string" ? response.model : model } }); } catch { return error("Model vrátil neplatný strukturovaný F2 výsledek.", 502); }
+  try {
+    const parsed = JSON.parse(text);
+    if (componentRequest) return Response.json({ components: parseGeneratedRozborComponents(parsed, componentRequest.components), meta: { action: "F2 POCHOPIT component generation", model: typeof response.model === "string" ? response.model : model } });
+    const result = operation === "build" ? parseF2BuildResult(parsed, activePath!) : parseF2RenderedPreview(parsed);
+    return Response.json({ result, meta: { action: operation === "build" ? `F2 build execution — ${activePath}` : `F2 preview — ${activePath}`, model: typeof response.model === "string" ? response.model : model } });
+  } catch { return error("Model vrátil neplatný strukturovaný F2 výsledek.", 502); }
 }

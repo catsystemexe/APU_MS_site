@@ -54,6 +54,13 @@ export type PochopitBuildState = {
   config: PochopitBuildConfig;
   components: RozborComponent[];
 };
+export type RozborComponentGenerationRequest = {
+  canonicalNeed: F1ToF2NeedContract;
+  hypotheses: WorkingHypothesis[];
+  config: PochopitBuildConfig;
+  components: RequiredRozborComponent[];
+};
+export type GeneratedRozborComponent = Pick<RequiredRozborComponent, "id" | "kind" | "hypothesisId"> & { content: string };
 export type RozborComponentReconciliation = {
   keep: RozborComponent[];
   remove: RozborComponent[];
@@ -195,6 +202,49 @@ export function reconcileRozborComponents(
     hasGeneratedRozbor: existing.length > 0,
     isRozborCurrent: remove.length === 0 && missing.length === 0 && stale.length === 0,
   };
+}
+
+export function createRozborGenerationRequest(
+  need: F1ToF2NeedContract,
+  hypotheses: WorkingHypothesis[],
+  config: PochopitBuildConfig,
+  existing: RozborComponent[],
+): RozborComponentGenerationRequest | null {
+  const required = deriveRequiredRozborComponents(need, hypotheses, config);
+  const { missing, stale, hasGeneratedRozbor } = reconcileRozborComponents(required, existing);
+  // Batch 4 creates the first collage only. Once anything has been generated,
+  // selective stale/missing updates deliberately remain a Batch 5 concern.
+  if (hasGeneratedRozbor || stale.length || missing.length === 0) return null;
+  return structuredClone({ canonicalNeed: need, hypotheses, config, components: missing });
+}
+
+export function parseGeneratedRozborComponents(value: unknown, requested: RequiredRozborComponent[]): GeneratedRozborComponent[] {
+  if (!value || typeof value !== "object" || !Array.isArray((value as { components?: unknown }).components)) throw new Error("Model nevrátil úplnou sadu komponent Rozboru.");
+  const requestedById = new Map(requested.map((spec) => [spec.id, spec]));
+  const seen = new Set<string>();
+  const components = (value as { components: unknown[] }).components.map((item) => {
+    if (!item || typeof item !== "object") throw new Error("Model vrátil neplatnou komponentu Rozboru.");
+    const candidate = item as Record<string, unknown>;
+    if (typeof candidate.id !== "string" || seen.has(candidate.id)) throw new Error("Model vrátil duplicitní nebo neplatné ID komponenty Rozboru.");
+    seen.add(candidate.id);
+    const spec = requestedById.get(candidate.id);
+    if (!spec || candidate.kind !== spec.kind || candidate.hypothesisId !== spec.hypothesisId || typeof candidate.content !== "string" || !candidate.content.trim()) throw new Error("Model vrátil nevyžádanou nebo neplatnou komponentu Rozboru.");
+    return { id: spec.id, kind: spec.kind, ...(spec.hypothesisId ? { hypothesisId: spec.hypothesisId } : {}), content: candidate.content.trim() };
+  });
+  if (components.length !== requested.length || requested.some((spec) => !seen.has(spec.id))) throw new Error("Model nevrátil úplnou sadu komponent Rozboru.");
+  return components;
+}
+
+export function applyGeneratedRozborComponents(
+  state: PochopitBuildState,
+  requested: RequiredRozborComponent[],
+  generated: GeneratedRozborComponent[],
+): PochopitBuildState {
+  const parsed = parseGeneratedRozborComponents({ components: generated }, requested);
+  const byId = new Map(parsed.map((item) => [item.id, item]));
+  const additions: RozborComponent[] = requested.map((spec) => ({ ...spec, content: byId.get(spec.id)!.content }));
+  const ids = new Set(additions.map(({ id }) => id));
+  return { ...state, components: [...state.components.filter(({ id }) => !ids.has(id)), ...additions] };
 }
 
 export const F2_PATH_META: Record<F2Path, { label: F2Path; description: string }> = {
