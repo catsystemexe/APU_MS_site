@@ -1,6 +1,9 @@
 import type { WorkingHypothesis } from "./analysis-model";
 import type { CategoryId, F1ToF2NeedContract, F2Path } from "./notepad-model";
 
+// Legacy F2 path/skill and processed-build contracts remain below for the
+// unchanged POZOROVAT, VYTVOŘIT, Preview and API flows. The focused POCHOPIT
+// component contract is independent and does not use these abstractions.
 export type F2Skill = { id: string; path: F2Path; label: string; active: boolean; parameterText: string };
 export type F2ContextItem = { id: string; text: string };
 export type F2NotebookContextItem = { category: CategoryId; text: string };
@@ -31,6 +34,168 @@ export type F2PreviewSnapshot = {
 };
 export type F2RenderedPreview = { title: string; introduction: string; sections: Array<{ heading: string; content: string }> };
 export type F2PreviewState = { snapshot: F2PreviewSnapshot; sourceBuildRevision: number; status: "current" | "stale"; render: F2RenderedPreview } | null;
+
+export type PochopitBuildConfig = {
+  expansionDepth: 0 | 1 | 2 | 3;
+  compareHypotheses: boolean;
+  expertFrame: boolean;
+};
+export type RozborComponentKind = "hypothesis-expansion" | "hypothesis-comparison" | "expert-frame";
+export type RequiredRozborComponent = {
+  id: string;
+  kind: RozborComponentKind;
+  hypothesisId?: string;
+  fingerprint: string;
+};
+export type RozborComponent = RequiredRozborComponent & {
+  content: string;
+};
+export type PochopitBuildState = {
+  config: PochopitBuildConfig;
+  components: RozborComponent[];
+};
+export type RozborComponentReconciliation = {
+  keep: RozborComponent[];
+  remove: RozborComponent[];
+  missing: RequiredRozborComponent[];
+  stale: Array<{ spec: RequiredRozborComponent; component: RozborComponent }>;
+  pendingComponentIds: string[];
+  staleComponentIds: string[];
+  hasGeneratedRozbor: boolean;
+  isRozborCurrent: boolean;
+};
+
+export const DEFAULT_POCHOPIT_BUILD_CONFIG: PochopitBuildConfig = {
+  expansionDepth: 0,
+  compareHypotheses: false,
+  expertFrame: false,
+};
+
+export function createPochopitBuildState(): PochopitBuildState {
+  return { config: { ...DEFAULT_POCHOPIT_BUILD_CONFIG }, components: [] };
+}
+
+export function updatePochopitBuildConfig(
+  state: PochopitBuildState,
+  change: Partial<PochopitBuildConfig>,
+): PochopitBuildState {
+  const config = { ...state.config, ...change };
+  return config.expansionDepth === state.config.expansionDepth &&
+    config.compareHypotheses === state.config.compareHypotheses &&
+    config.expertFrame === state.config.expertFrame
+    ? state
+    : { ...state, config };
+}
+
+function relevantHypothesisContent(hypothesis: WorkingHypothesis) {
+  return [
+    hypothesis.title,
+    hypothesis.summary,
+    hypothesis.relevantNeeds,
+    hypothesis.supportingInformation,
+    hypothesis.limitations,
+    hypothesis.unknowns,
+    hypothesis.question ?? null,
+    hypothesis.questions ?? [],
+  ];
+}
+
+function canonicalNeedSource(need: F1ToF2NeedContract) {
+  return [need.needId, need.needText];
+}
+
+/** Stable fingerprint of the complete baseline source, suitable for consumers
+ * whose semantics depend on the whole ordered Rozbor baseline. */
+export function createRozborBaselineFingerprint(need: F1ToF2NeedContract, hypotheses: WorkingHypothesis[]) {
+  return JSON.stringify([
+    canonicalNeedSource(need),
+    hypotheses.map((hypothesis) => [hypothesis.id, relevantHypothesisContent(hypothesis)]),
+  ]);
+}
+
+export function deriveRequiredRozborComponents(
+  need: F1ToF2NeedContract,
+  hypotheses: WorkingHypothesis[],
+  config: PochopitBuildConfig,
+): RequiredRozborComponent[] {
+  const required: RequiredRozborComponent[] = [];
+  if (config.expansionDepth > 0) {
+    for (const hypothesis of hypotheses) {
+      required.push({
+        id: `hypothesis:${hypothesis.id}:expansion`,
+        kind: "hypothesis-expansion",
+        hypothesisId: hypothesis.id,
+        // Local expansions intentionally do not use the whole-baseline
+        // fingerprint, so editing a sibling hypothesis cannot invalidate them.
+        fingerprint: JSON.stringify([
+          "hypothesis-expansion",
+          canonicalNeedSource(need),
+          hypothesis.id,
+          relevantHypothesisContent(hypothesis),
+          config.expansionDepth,
+        ]),
+      });
+    }
+  }
+  if (config.compareHypotheses) {
+    required.push({
+      id: "comparison:all",
+      kind: "hypothesis-comparison",
+      fingerprint: JSON.stringify([
+        "hypothesis-comparison",
+        createRozborBaselineFingerprint(need, hypotheses),
+        config.expansionDepth,
+        true,
+      ]),
+    });
+  }
+  if (config.expertFrame) {
+    required.push({
+      id: "expert-frame:all",
+      kind: "expert-frame",
+      // The expert layer reads the baseline, not optional expansion output.
+      fingerprint: JSON.stringify([
+        "expert-frame",
+        createRozborBaselineFingerprint(need, hypotheses),
+        true,
+      ]),
+    });
+  }
+  return required;
+}
+
+export function reconcileRozborComponents(
+  required: RequiredRozborComponent[],
+  existing: RozborComponent[],
+): RozborComponentReconciliation {
+  const requiredById = new Map(required.map((spec) => [spec.id, spec]));
+  const existingById = new Map(existing.map((component) => [component.id, component]));
+  const keep: RozborComponent[] = [];
+  const remove = existing.filter((component) => !requiredById.has(component.id));
+  const missing: RequiredRozborComponent[] = [];
+  const stale: RozborComponentReconciliation["stale"] = [];
+
+  for (const spec of required) {
+    const component = existingById.get(spec.id);
+    if (!component) missing.push(spec);
+    else if (component.kind !== spec.kind || component.hypothesisId !== spec.hypothesisId || component.fingerprint !== spec.fingerprint) {
+      stale.push({ spec, component });
+    } else keep.push(component);
+  }
+
+  const pendingComponentIds = missing.map((spec) => spec.id);
+  const staleComponentIds = stale.map(({ spec }) => spec.id);
+  return {
+    keep,
+    remove,
+    missing,
+    stale,
+    pendingComponentIds,
+    staleComponentIds,
+    hasGeneratedRozbor: existing.length > 0,
+    isRozborCurrent: remove.length === 0 && missing.length === 0 && stale.length === 0,
+  };
+}
 
 export const F2_PATH_META: Record<F2Path, { label: F2Path; description: string }> = {
   POCHOPIT: { label: "POCHOPIT", description: "Jak této situaci odborně rozumět?" },
