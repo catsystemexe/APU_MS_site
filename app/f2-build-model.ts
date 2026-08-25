@@ -211,11 +211,10 @@ export function createRozborGenerationRequest(
   existing: RozborComponent[],
 ): RozborComponentGenerationRequest | null {
   const required = deriveRequiredRozborComponents(need, hypotheses, config);
-  const { missing, stale, hasGeneratedRozbor } = reconcileRozborComponents(required, existing);
-  // Batch 4 creates the first collage only. Once anything has been generated,
-  // selective stale/missing updates deliberately remain a Batch 5 concern.
-  if (hasGeneratedRozbor || stale.length || missing.length === 0) return null;
-  return structuredClone({ canonicalNeed: need, hypotheses, config, components: missing });
+  const { missing, stale } = reconcileRozborComponents(required, existing);
+  const components = [...missing, ...stale.map(({ spec }) => spec)];
+  if (components.length === 0) return null;
+  return structuredClone({ canonicalNeed: need, hypotheses, config, components });
 }
 
 export function parseGeneratedRozborComponents(value: unknown, requested: RequiredRozborComponent[]): GeneratedRozborComponent[] {
@@ -245,6 +244,27 @@ export function applyGeneratedRozborComponents(
   const additions: RozborComponent[] = requested.map((spec) => ({ ...spec, content: byId.get(spec.id)!.content }));
   const ids = new Set(additions.map(({ id }) => id));
   return { ...state, components: [...state.components.filter(({ id }) => !ids.has(id)), ...additions] };
+}
+
+/** Applies a complete reconciliation in one state transition. Current
+ * components are retained by reference, while stale/missing components are
+ * supplied by the validated selective generation response. */
+export function applyRozborComponentUpdate(
+  state: PochopitBuildState,
+  required: RequiredRozborComponent[],
+  generated: GeneratedRozborComponent[],
+): PochopitBuildState {
+  const reconciliation = reconcileRozborComponents(required, state.components);
+  const requested = [...reconciliation.missing, ...reconciliation.stale.map(({ spec }) => spec)];
+  const parsed = parseGeneratedRozborComponents({ components: generated }, requested);
+  const generatedById = new Map(parsed.map((component) => [component.id, component]));
+  const keptById = new Map(reconciliation.keep.map((component) => [component.id, component]));
+  const components = required.map((spec) => {
+    const kept = keptById.get(spec.id);
+    if (kept) return kept;
+    return { ...spec, content: generatedById.get(spec.id)!.content };
+  });
+  return { ...state, components };
 }
 
 export const F2_PATH_META: Record<F2Path, { label: F2Path; description: string }> = {

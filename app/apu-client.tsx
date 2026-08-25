@@ -84,7 +84,7 @@ import { CompletedLifecycleStatus, ProcessingStatus, type F1ProcessingStage } fr
 import { addCompletedLifecycleRecord, withCompletedLifecycleRecord, type CompletedLifecycleRecord } from "./lifecycle-record";
 import { DevLogPanel } from "./dev-log-panel";
 import type { SharedFeedbackResult } from "./shared-feedback";
-import { acceptRenderedPreview, addF2Context, applyF2BuildResult, applyGeneratedRozborComponents, canonicalF1NeedFingerprint, createF2BuildRequest, createF2PreviewSnapshot, createPochopitBuildState, createRozborGenerationRequest, deriveRequiredRozborComponents, parameterizeF2Skill, parseF2BuildResult, parseF2RenderedPreview, parseGeneratedRozborComponents, previewStatus, reconcileRozborComponents, removeF2Context, switchF2Path, synchronizeF2BuildWithCanonicalNeed, toggleF2Skill, updatePochopitBuildConfig, type F2BuildState, type F2NotebookContextItem, type F2PreviewState, type PochopitBuildState } from "./f2-build-model";
+import { acceptRenderedPreview, addF2Context, applyF2BuildResult, applyRozborComponentUpdate, canonicalF1NeedFingerprint, createF2BuildRequest, createF2PreviewSnapshot, createPochopitBuildState, createRozborGenerationRequest, deriveRequiredRozborComponents, parameterizeF2Skill, parseF2BuildResult, parseF2RenderedPreview, parseGeneratedRozborComponents, previewStatus, reconcileRozborComponents, removeF2Context, switchF2Path, synchronizeF2BuildWithCanonicalNeed, toggleF2Skill, updatePochopitBuildConfig, type F2BuildState, type F2NotebookContextItem, type F2PreviewState, type PochopitBuildState } from "./f2-build-model";
 import { acceptF3Render, adoptF2Snapshot, createF3RenderRequest, createF3State, parseF3RenderResult, updateF3Config, type F3Config, type F3State } from "./f3-finalization-model";
 
 type SpeechRecognitionEventLike = {
@@ -333,6 +333,10 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
   const pochopitNeedFingerprintRef = useRef<string | null>(null);
   const isF2DesktopLayout = phase === "development" && activePanel === "analysis" && f2Build !== null;
   const hasActivePochopitOperation = pochopitBuild.config.expansionDepth > 0 || pochopitBuild.config.compareHypotheses || pochopitBuild.config.expertFrame;
+  const pochopitReconciliation = useMemo(() => canonicalF2Need
+    ? reconcileRozborComponents(deriveRequiredRozborComponents(canonicalF2Need, analysis.hypotheses, pochopitBuild.config), pochopitBuild.components)
+    : null, [analysis.hypotheses, canonicalF2Need, pochopitBuild]);
+  const isPochopitUpdatePending = Boolean(pochopitReconciliation && !pochopitReconciliation.isRozborCurrent);
 
   useEffect(() => {
     if (phase === "intake" || !canonicalF2Need) return;
@@ -351,13 +355,9 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
         pochopitNeedFingerprintRef.current = needFingerprint;
         return createPochopitBuildState();
       }
-      const required = deriveRequiredRozborComponents(canonicalF2Need, analysis.hypotheses, current.config);
-      const reconciliation = reconcileRozborComponents(required, current.components);
-      if (reconciliation.remove.length === 0) return current;
-      const removedIds = new Set(reconciliation.remove.map((component) => component.id));
-      return { ...current, components: current.components.filter((component) => !removedIds.has(component.id)) };
+      return current;
     });
-  }, [analysis.hypotheses, canonicalF2Need]);
+  }, [canonicalF2Need]);
   const dictationTranscriptRef = useRef("");
   const dictationFinalizedSessionRef = useRef(0);
   const dictationRestartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -675,9 +675,16 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
 
   async function generatePochopitRozbor() {
     if (!canonicalF2Need || pochopitGenerationStatus === "loading") return;
+    const required = deriveRequiredRozborComponents(canonicalF2Need, analysis.hypotheses, pochopitBuild.config);
+    const reconciliation = reconcileRozborComponents(required, pochopitBuild.components);
+    if (reconciliation.isRozborCurrent) return;
     const request = createRozborGenerationRequest(canonicalF2Need, analysis.hypotheses, pochopitBuild.config, pochopitBuild.components);
-    if (!request) return;
-    const requestSignature = JSON.stringify(request.components.map(({ id, kind, hypothesisId, fingerprint }) => [id, kind, hypothesisId, fingerprint]));
+    const updateSignature = JSON.stringify(required.map(({ id, kind, hypothesisId, fingerprint }) => [id, kind, hypothesisId, fingerprint]));
+    if (!request) {
+      setPochopitGenerationError(null);
+      setPochopitBuild((current) => applyRozborComponentUpdate(current, required, []));
+      return;
+    }
     setPochopitGenerationStatus("loading"); setPochopitGenerationError(null);
     try {
       const response = await fetch("/api/f2", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ operation: "generate-rozbor-components", model: selectedModel, request }) });
@@ -688,8 +695,10 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
       if (!latest.need) throw new Error("Výsledek byl zahozen, protože se mezitím změnil výchozí Rozbor nebo Build.");
       const currentSpecs = deriveRequiredRozborComponents(latest.need, latest.hypotheses, latestPochopitBuildRef.current.config);
       const currentSignature = JSON.stringify(currentSpecs.map(({ id, kind, hypothesisId, fingerprint }) => [id, kind, hypothesisId, fingerprint]));
-      if (currentSignature !== requestSignature) throw new Error("Výsledek byl zahozen, protože se mezitím změnil výchozí Rozbor nebo Build.");
-      setPochopitBuild((current) => applyGeneratedRozborComponents(current, request.components, generated));
+      if (currentSignature !== updateSignature) throw new Error("Výsledek byl zahozen, protože se mezitím změnil výchozí Rozbor nebo Build.");
+      setPochopitBuild((current) => JSON.stringify(current.config) === JSON.stringify(request.config)
+        ? applyRozborComponentUpdate(current, required, generated)
+        : current);
       setPochopitGenerationStatus("idle");
     } catch (cause) { setPochopitGenerationError(cause instanceof Error ? cause.message : "Rozbor se nepodařilo vytvořit."); setPochopitGenerationStatus("error"); }
   }
@@ -1676,7 +1685,7 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
               <span className="f2-operation-copy"><strong>Doplnit odborný rámec</strong><span>Propojí rozbor s relevantními teoriemi, odbornými koncepty a evidencí.</span></span>
             </button>
           </div>
-          <button type="button" className="f2-build-divider-action" onClick={() => void generatePochopitRozbor()} disabled={!hasActivePochopitOperation || pochopitGenerationStatus === "loading" || pochopitBuild.components.length > 0} aria-label={pochopitBuild.components.length ? "Aktualizovat Rozbor" : "Vytvořit Rozbor"}><span>{pochopitGenerationStatus === "loading" ? "VYTVÁŘÍM ROZBOR" : pochopitBuild.components.length ? "AKTUALIZOVAT ROZBOR" : "VYTVOŘIT ROZBOR"}</span><ChevronLeft aria-hidden="true" /></button>
+          <button type="button" className="f2-build-divider-action" onClick={() => void generatePochopitRozbor()} disabled={pochopitGenerationStatus === "loading" || !isPochopitUpdatePending || (!hasActivePochopitOperation && pochopitBuild.components.length === 0)} aria-label={pochopitBuild.components.length ? "Aktualizovat Rozbor" : "Vytvořit Rozbor"}><span>{pochopitGenerationStatus === "loading" ? "VYTVÁŘÍM ROZBOR" : pochopitBuild.components.length ? "AKTUALIZOVAT ROZBOR" : "VYTVOŘIT ROZBOR"}</span><ChevronLeft aria-hidden="true" /></button>
           {pochopitGenerationError && <p className="f2-generation-error" role="alert">{pochopitGenerationError}</p>}
         </section>}
 
