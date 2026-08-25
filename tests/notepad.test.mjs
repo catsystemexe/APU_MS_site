@@ -17,7 +17,9 @@ test("notepad uses local persistence and floating Lucide tool buttons", () => {
   assert.match(page, /\bSettings\b/);
   assert.match(page, /tool-rail-diagnostics/);
   assert.match(page, /tool-rail-\$\{id\}/);
-  assert.match(component, /<F2BuildEditor/);
+  assert.match(component, /className="notepad-scroll f2-baseline"/);
+  assert.match(component, /<GeneratedMarkdown content=\{expansion\.content\}/);
+  assert.doesNotMatch(component, /<F2BuildEditor|Směr rozboru|PREVIEW/);
   assert.doesNotMatch(component, /workspace-tabs/);
   assert.doesNotMatch(component, /workspace-tab/);
   assert.match(component, /ScanSearch/);

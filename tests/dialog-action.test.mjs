@@ -217,7 +217,7 @@ test("phase, debug and usage remain in the existing visual hierarchy", async () 
   assert.match(metadata, /FÁZE\\s\+\[123\]/);
   assert.ok(client.indexOf("diagnostic-debug") < client.indexOf("diagnostic-usage"));
   assert.match(styles, /\.message-phase/);
-  assert.match(styles, /\.dialog-action-question p \{[^}]*font-size: calc\(16px \* var\(--font-scale\)\)/s);
+  assert.match(styles, /\.dialog-action-question p \{[^}]*font-size: calc\(15px \* var\(--font-scale\)\)/s);
 });
 
 test("runtime keeps technical debug and dialog rendering outside Core", async () => {

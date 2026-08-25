@@ -20,6 +20,7 @@ import type { ConversationPhase } from "./dialog-action";
 import type { F2BuildState, F2PreviewState, PochopitBuildState } from "./f2-build-model";
 import { F3Finalization } from "./f3-finalization";
 import type { F3Config, F3State } from "./f3-finalization-model";
+import { GeneratedMarkdown } from "./generated-markdown";
 
 export type WorkspacePanel = "notepad" | "analysis" | "output" | null;
 
@@ -307,13 +308,13 @@ function AnalysisPanel(props: Pick<WorkspacePanelProps, "phase" | "analysis" | "
               <div><h3>{hypothesis.title}</h3><p>{hypothesis.summary}</p></div>
             </div>
             {clarifications.length > 0 && <div className="f2-baseline-clarifications"><h4>Co chybí / čím zpřesnit</h4><ul>{clarifications.map((item) => <li key={item}>{item}</li>)}</ul></div>}
-            {expansion && <section className="f2-generated-component f2-generated-expansion"><h4>Rozvinutí · {(["", "Základně", "Podrobně", "Do hloubky"] as const)[props.pochopitBuild.config.expansionDepth]}</h4><p>{expansion.content}</p></section>}
+            {expansion && <section className="f2-generated-component f2-generated-expansion"><h4>Rozvinutí · {(["", "Základně", "Podrobně", "Do hloubky"] as const)[props.pochopitBuild.config.expansionDepth]}</h4><GeneratedMarkdown content={expansion.content} /></section>}
           </article>;
         })}
       </div>
     </section>
-    {props.pochopitBuild.components.find(({ id }) => id === "comparison:all") && <section className="f2-generated-component f2-generated-crosscut"><h2>Porovnání a souvislosti</h2><p>{props.pochopitBuild.components.find(({ id }) => id === "comparison:all")!.content}</p></section>}
-    {props.pochopitBuild.components.find(({ id }) => id === "expert-frame:all") && <section className="f2-generated-component f2-generated-crosscut is-expert"><h2>Odborný rámec</h2><p>{props.pochopitBuild.components.find(({ id }) => id === "expert-frame:all")!.content}</p></section>}
+    {props.pochopitBuild.components.find(({ id }) => id === "comparison:all") && <section className="f2-generated-component f2-generated-crosscut"><h2>Porovnání a souvislosti</h2><GeneratedMarkdown content={props.pochopitBuild.components.find(({ id }) => id === "comparison:all")!.content} /></section>}
+    {props.pochopitBuild.components.find(({ id }) => id === "expert-frame:all") && <section className="f2-generated-component f2-generated-crosscut is-expert"><h2>Odborný rámec</h2><GeneratedMarkdown content={props.pochopitBuild.components.find(({ id }) => id === "expert-frame:all")!.content} /></section>}
   </div>;
 }
 

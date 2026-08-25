@@ -1835,7 +1835,13 @@ button:disabled { cursor: default; opacity: 0.52; }
 .f2-generated-component { margin-top: 12px; padding: 12px 13px; border: 1px solid var(--border-strong); border-radius: 9px; background: color-mix(in srgb, var(--surface-hover) 62%, var(--bg-surface)); }
 .f2-generated-expansion { margin-left: 33px; }
 .f2-generated-component h2, .f2-generated-component h4 { margin: 0 0 6px; font-size: 11px; font-weight: 740; letter-spacing: .01em; }
-.f2-generated-component p { margin: 0; color: var(--text-secondary); font-size: 12px; line-height: 1.55; white-space: pre-wrap; }
+.f2-generated-markdown { min-width: 0; overflow-wrap: anywhere; color: var(--text-secondary); font-size: 12px; line-height: 1.55; }
+.f2-generated-markdown > :first-child { margin-top: 0; }
+.f2-generated-markdown > :last-child { margin-bottom: 0; }
+.f2-generated-markdown p { margin: 0 0 8px; }
+.f2-generated-markdown h3, .f2-generated-markdown h4 { margin: 10px 0 4px; color: var(--text-primary); font-size: 12px; line-height: 1.4; letter-spacing: 0; }
+.f2-generated-markdown ul, .f2-generated-markdown ol { margin: 0 0 8px; padding-left: 19px; }
+.f2-generated-markdown li + li { margin-top: 2px; }
 .f2-generated-crosscut { margin-top: 16px; }
 .f2-generated-crosscut.is-expert { border-style: double; }
 

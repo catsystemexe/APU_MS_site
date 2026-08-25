@@ -62,19 +62,21 @@ test("F2 receives canonical initial routing and validates it against the Zápisn
   assert.doesNotMatch(route, /function (?:classify|infer).*Path/i);
 });
 
-test("analysis UI delegates to the stateful build editor and snapshot preview", async () => {
-  const [source, editor] = await Promise.all([
+test("analysis UI exposes the approved POCHOPIT baseline and component architecture", async () => {
+  const [source, client, model] = await Promise.all([
     readFile(new URL("../app/notepad.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/f2-build-editor.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/apu-client.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/f2-build-model.ts", import.meta.url), "utf8"),
   ]);
-  assert.match(source, /<F2BuildEditor/);
   assert.match(source, /<F3Finalization/);
-  assert.match(editor, /Výchozí pracovní hypotézy/);
-  assert.ok(editor.indexOf("Výchozí pracovní hypotézy") < editor.indexOf("Směr rozboru"));
-  assert.match(editor, /toggleExpandedHypothesis/);
-  assert.match(editor, /\+ Doplnit informaci/);
-  assert.match(editor, /Aktualizovat preview/);
-  assert.doesNotMatch(editor, /Přejít k vytvoření výstupu/);
+  assert.match(source, /f2-baseline/);
+  assert.match(source, /Pracovní hypotézy/);
+  assert.match(source, /component\.hypothesisId === hypothesis\.id/);
+  assert.match(client, /f2-build-shell/);
+  assert.match(client, /is-f2-layout/);
+  assert.match(model, /type PochopitBuildConfig/);
+  assert.match(model, /type RozborComponent/);
+  assert.doesNotMatch(source, /<F2BuildEditor|Směr rozboru|Aktualizovat preview/);
 });
 
 test("stable IDs drive granular unread diffs and reordering alone is ignored", async () => {
