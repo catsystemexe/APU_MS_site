@@ -17,7 +17,7 @@ import {
 import { NOTEPAD_CATEGORIES } from "./notepad-categories";
 import type { AnalysisState, SuggestedNeed } from "./analysis-model";
 import type { ConversationPhase } from "./dialog-action";
-import type { F2BuildState, F2PreviewState } from "./f2-build-model";
+import type { F2BuildState, F2PreviewState, PochopitBuildState } from "./f2-build-model";
 import { F3Finalization } from "./f3-finalization";
 import type { F3Config, F3State } from "./f3-finalization-model";
 
@@ -45,6 +45,7 @@ type WorkspacePanelProps = {
   onConfirmSuggestedNeed: (need: SuggestedNeed) => void;
   onContinueToOutput: () => void;
   f2Build: F2BuildState | null;
+  pochopitBuild: PochopitBuildState;
   f2Preview: F2PreviewState;
   f2BuildStatus: "idle" | "loading" | "error";
   f2BuildError: string | null;
@@ -279,7 +280,7 @@ function NotepadPanel({
   );
 }
 
-function AnalysisPanel(props: Pick<WorkspacePanelProps, "phase" | "analysis" | "analysisStatus" | "analysisError" | "onRetryAnalysis" | "f2Build" | "f2Preview" | "f2BuildStatus" | "f2BuildError" | "f2PreviewStatus" | "f2PreviewError" | "onF2PathChange" | "onF2SkillToggle" | "onF2ParameterChange" | "onF2ContextAdd" | "onF2ContextRemove" | "onF2Execute" | "onF2Preview">) {
+function AnalysisPanel(props: Pick<WorkspacePanelProps, "phase" | "analysis" | "analysisStatus" | "analysisError" | "onRetryAnalysis" | "f2Build" | "pochopitBuild" | "f2Preview" | "f2BuildStatus" | "f2BuildError" | "f2PreviewStatus" | "f2PreviewError" | "onF2PathChange" | "onF2SkillToggle" | "onF2ParameterChange" | "onF2ContextAdd" | "onF2ContextRemove" | "onF2Execute" | "onF2Preview">) {
   if (props.phase === "intake") return <div id="workspace-analysis" className="notepad-scroll workspace-panel-body" role="tabpanel" aria-label="Rozbor"><div className="workspace-empty-state"><ScanSearch aria-hidden="true" /><h2>Rozbor začne ve Fázi 2</h2><p>Otevření panelu fázi nemění. Do Rozboru přejdete až svým potvrzením.</p></div></div>;
   if (props.analysisStatus === "loading" && !props.analysis.hypotheses.length) return <div className="analysis-state"><span className="analysis-spinner" />Vytvářím Rozbor z aktuálního Zápisníku…</div>;
   if (props.analysisStatus === "error" && !props.analysis.hypotheses.length) return <div className="analysis-state"><p>{props.analysisError}</p><button type="button" onClick={props.onRetryAnalysis}>Zkusit znovu</button></div>;
@@ -293,6 +294,7 @@ function AnalysisPanel(props: Pick<WorkspacePanelProps, "phase" | "analysis" | "
       <h2 id="f2-hypotheses-title">Pracovní hypotézy</h2>
       <div className="f2-baseline-list">
         {props.f2Build.workingHypotheses.map((hypothesis) => {
+          const expansion = props.pochopitBuild.components.find((component) => component.kind === "hypothesis-expansion" && component.hypothesisId === hypothesis.id);
           const clarifications = [
             ...hypothesis.unknowns,
             ...hypothesis.limitations,
@@ -305,10 +307,13 @@ function AnalysisPanel(props: Pick<WorkspacePanelProps, "phase" | "analysis" | "
               <div><h3>{hypothesis.title}</h3><p>{hypothesis.summary}</p></div>
             </div>
             {clarifications.length > 0 && <div className="f2-baseline-clarifications"><h4>Co chybí / čím zpřesnit</h4><ul>{clarifications.map((item) => <li key={item}>{item}</li>)}</ul></div>}
+            {expansion && <section className="f2-generated-component f2-generated-expansion"><h4>Rozvinutí · {(["", "Základně", "Podrobně", "Do hloubky"] as const)[props.pochopitBuild.config.expansionDepth]}</h4><p>{expansion.content}</p></section>}
           </article>;
         })}
       </div>
     </section>
+    {props.pochopitBuild.components.find(({ id }) => id === "comparison:all") && <section className="f2-generated-component f2-generated-crosscut"><h2>Porovnání a souvislosti</h2><p>{props.pochopitBuild.components.find(({ id }) => id === "comparison:all")!.content}</p></section>}
+    {props.pochopitBuild.components.find(({ id }) => id === "expert-frame:all") && <section className="f2-generated-component f2-generated-crosscut is-expert"><h2>Odborný rámec</h2><p>{props.pochopitBuild.components.find(({ id }) => id === "expert-frame:all")!.content}</p></section>}
   </div>;
 }
 

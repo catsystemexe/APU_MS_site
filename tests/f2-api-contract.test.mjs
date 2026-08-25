@@ -26,3 +26,14 @@ test("each VYTVOŘIT skill has distinct semantics, conditional precision and F2/
 
 test("preview is snapshot-only, path-authoritative and cannot materialize F3", () => { for (const boundary of ["výhradně z neměnného F2 snapshotu", "autoritativní cestu", "nesmí vést k finální materializaci F3 dokumentu"]) assert.ok(route.includes(boundary), boundary); });
 test("zero skills retain a complete base path task and model results are locally validated", () => { for (const text of ["Základní úloha aktivní cesty", "Žádné; proveď pouze základní úlohu", "parseF2BuildResult", "parseF2RenderedPreview"]) assert.ok(route.includes(text), text); assert.equal(route.includes("activeSkills.length > 0"), false); });
+
+test("POCHOPIT component operation is bounded, strict, and returns direct semantic IDs", () => {
+  for (const text of ["generate-rozbor-components", "validRozborGeneration", "rozborComponentSchema", "parseGeneratedRozborComponents", "F2 POCHOPIT component generation"]) assert.ok(route.includes(text), text);
+  assert.match(route, /minItems: specs\.length, maxItems: specs\.length/);
+  assert.match(route, /enum: \[spec\.id\]/);
+  assert.match(route, /components\.map\(\(\{ id, kind, hypothesisId \}\)/);
+});
+
+test("component prompts keep expansion depths, comparison, and expert framing semantically distinct", () => {
+  for (const text of ["Hloubka 1 — Základně", "Hloubka 2 — Podrobně", "Hloubka 3 — Do hloubky", "ROZVINUTÍ HYPOTÉZY", "POROVNÁNÍ", "ODBORNÝ RÁMEC", "nefabrikuj studie", "kanonická fakta uživatele mají přednost"]) assert.ok(route.includes(text), text);
+});

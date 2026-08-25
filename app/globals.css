@@ -1499,6 +1499,7 @@ button:disabled { cursor: default; opacity: 0.52; }
   .f2-build-divider-action:disabled { border-color: var(--border-strong); background: var(--surface-hover); color: var(--text-secondary); opacity: .72; }
   .f2-build-divider-action span { writing-mode: vertical-rl; transform: rotate(180deg); font-size: 11px; font-weight: 750; letter-spacing: .04em; }
   .f2-build-divider-action svg { width: 14px; height: 14px; }
+  .f2-generation-error { position: absolute; z-index: 10; right: 42px; bottom: 12px; max-width: min(360px, calc(100% - 60px)); margin: 0; padding: 8px 10px; border: 1px solid var(--danger, #b84b4b); border-radius: 8px; background: var(--bg-surface); color: var(--text-primary); font-size: 11px; line-height: 1.4; }
   .f2-build-reopen { position: sticky; z-index: 3; top: 0; margin: -14px 0 12px auto; min-height: 34px; display: inline-flex; align-items: center; gap: 6px; padding: 7px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-surface); color: var(--text-secondary); box-shadow: 0 5px 16px var(--shadow-color); font-size: 11px; font-weight: 700; }
   .f2-build-reopen svg { width: 15px; height: 15px; }
   .workspace-resize-handle {
@@ -1831,6 +1832,12 @@ button:disabled { cursor: default; opacity: 0.52; }
 .f2-baseline-clarifications { margin: 10px 0 0 33px; }
 .f2-baseline-clarifications h4 { margin: 0 0 4px; font-size: 11px; font-weight: 720; }
 .f2-baseline-clarifications ul { display: grid; gap: 3px; margin: 0; padding-left: 17px; color: var(--text-secondary); font-size: 11px; line-height: 1.45; }
+.f2-generated-component { margin-top: 12px; padding: 12px 13px; border: 1px solid var(--border-strong); border-radius: 9px; background: color-mix(in srgb, var(--surface-hover) 62%, var(--bg-surface)); }
+.f2-generated-expansion { margin-left: 33px; }
+.f2-generated-component h2, .f2-generated-component h4 { margin: 0 0 6px; font-size: 11px; font-weight: 740; letter-spacing: .01em; }
+.f2-generated-component p { margin: 0; color: var(--text-secondary); font-size: 12px; line-height: 1.55; white-space: pre-wrap; }
+.f2-generated-crosscut { margin-top: 16px; }
+.f2-generated-crosscut.is-expert { border-style: double; }
 
 .f2-editor { display: grid; gap: 22px; padding: 20px; color: var(--text-primary); }
 .f2-editor section > h3, .f2-editor h3 { margin: 0 0 9px; font-size: 14px; }
