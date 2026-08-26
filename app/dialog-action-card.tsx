@@ -1,6 +1,7 @@
 "use client";
 
-import { Lightbulb, Signpost } from "lucide-react";
+import { useState } from "react";
+import { Info, Lightbulb, Signpost } from "lucide-react";
 import type { DialogAction } from "./dialog-action";
 import { NOTEPAD_CATEGORY_META } from "./notepad-categories";
 
@@ -15,8 +16,48 @@ const TARGET_META = {
   output: { label: "Volba výstupu", icon: Signpost },
 } as const;
 
-export default function DialogActionCard({ action, active, onSelect }: {
+const TEACHER_NEED_RESPONSES = ["Pochopit", "Prozkoumat", "Vytvořit"] as const;
+const TEACHER_NEED_HELP = "Můžete si vybrat jeden ze směrů, nebo odpovědět vlastními slovy. Pokud si nejste jistí, klidně napište, že to chcete nejdřív probrat.";
+
+function TeacherNeedQuickResponses({ active, onSelect }: { active: boolean; onSelect: (response: string) => void }) {
+  const [helpOpen, setHelpOpen] = useState(false);
+
+  return (
+    <div className="teacher-need-quick-responses">
+      {TEACHER_NEED_RESPONSES.map((response) => (
+        <button type="button" disabled={!active} key={response} onClick={() => onSelect(response)}>{response}</button>
+      ))}
+      <span
+        className="teacher-need-help-wrap"
+        onMouseEnter={() => setHelpOpen(true)}
+        onMouseLeave={() => setHelpOpen(false)}
+        onBlur={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget)) setHelpOpen(false);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") setHelpOpen(false);
+        }}
+      >
+        <button
+          type="button"
+          className="welcome-help-trigger teacher-need-help-trigger"
+          aria-label="Více informací k možnostem odpovědi"
+          aria-expanded={helpOpen}
+          aria-describedby={helpOpen ? "teacher-need-help" : undefined}
+          onFocus={() => setHelpOpen(true)}
+          onClick={() => setHelpOpen((open) => !open)}
+        >
+          <Info aria-hidden="true" />
+        </button>
+        {helpOpen && <span id="teacher-need-help" role="tooltip" className="welcome-help teacher-need-help">{TEACHER_NEED_HELP}</span>}
+      </span>
+    </div>
+  );
+}
+
+export default function DialogActionCard({ action, active, onSelect, onQuickResponse }: {
   action: DialogAction; active: boolean; onSelect: (id: string, label: string) => void;
+  onQuickResponse?: (response: string) => void;
 }) {
   const meta = TARGET_META[action.target as keyof typeof TARGET_META] ?? TARGET_META.phase;
   const Icon = meta.icon;
@@ -43,6 +84,9 @@ export default function DialogActionCard({ action, active, onSelect }: {
         <span className="dialog-action-icon" title={meta.label}><Icon aria-hidden="true" /></span>
         <p>{action.question}</p>
       </div>
+      {active && action.type === "MAIN" && action.target === "teacher_need" && onQuickResponse && (
+        <TeacherNeedQuickResponses active={active} onSelect={onQuickResponse} />
+      )}
       {action.type === "SIDE" && (
         <div className="dialog-action-nav-wrap">
           {solutionOption && (
