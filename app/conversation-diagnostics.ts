@@ -1,5 +1,6 @@
 export type Diagnostics = {
   callId: string;
+  canonicalCallIds?: string[];
   model: string;
   reasoning?: "low" | "medium";
   knowledgeBaseEnabled?: boolean;

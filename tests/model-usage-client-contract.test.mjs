@@ -25,3 +25,10 @@ test("raw records and their derived summary are cleared with the client session 
   const exportCall = client.slice(client.indexOf("buildSessionExport({"), client.indexOf("downloadSessionExport", client.indexOf("buildSessionExport({")));
   assert.doesNotMatch(exportCall, /modelUsageRecords/);
 });
+
+test("client maintains a non-UI shadow comparison between legacy diagnostics and canonical usage", () => {
+  assert.match(client, /compareUsageShadow\(legacyDiagnostics, modelUsageSession\)/);
+  assert.match(client, /usageShadowComparisonRef\.current/);
+  const exportCall = client.slice(client.indexOf("buildSessionExport({"), client.indexOf("downloadSessionExport", client.indexOf("buildSessionExport({")));
+  assert.doesNotMatch(exportCall, /usageShadowComparison/);
+});

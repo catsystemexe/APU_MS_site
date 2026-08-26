@@ -39,6 +39,7 @@ import {
   readModelUsageRecords,
   type ModelUsageRecordsResponse,
 } from "./model-usage-collection";
+import { compareUsageShadow, type UsageShadowComparison } from "./usage-shadow-comparison";
 import {
   MODEL_CATALOG,
   baseModelName,
@@ -316,7 +317,8 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
   const [highlightedAnalysisKeys, setHighlightedAnalysisKeys] = useState<Set<string>>(() => new Set());
   const [exportStatus, setExportStatus] = useState<"idle" | "downloaded" | "error">("idle");
   const [sessionTelemetry, setSessionTelemetry] = useState<SessionTelemetry[]>([]);
-  const [, setModelUsageSession] = useState(createModelUsageSession);
+  const [modelUsageSession, setModelUsageSession] = useState(createModelUsageSession);
+  const usageShadowComparisonRef = useRef<UsageShadowComparison | null>(null);
   const sessionRef = useRef({ id: createMessageId(), startedAt: new Date().toISOString() });
   const telemetryClockRef = useRef(new Map<string, { actionStartedAt: number }>());
   const [isDictating, setIsDictating] = useState(false);
@@ -435,10 +437,14 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
     return () => window.clearTimeout(timer);
   }, [isDevLogOpen]);
 
-  const summary = useMemo(
-    () => summarizeDiagnostics(messages.flatMap((message) => [message.diagnostics, message.controllerDiagnostics, message.extractionDiagnostics])),
+  const legacyDiagnostics = useMemo(
+    () => messages.flatMap((message) => [message.diagnostics, message.controllerDiagnostics, message.extractionDiagnostics]),
     [messages],
   );
+  const summary = useMemo(() => summarizeDiagnostics(legacyDiagnostics), [legacyDiagnostics]);
+  useEffect(() => {
+    usageShadowComparisonRef.current = compareUsageShadow(legacyDiagnostics, modelUsageSession);
+  }, [legacyDiagnostics, modelUsageSession]);
   const hasUnreadNotepadChange = useMemo(
     () => Object.values(notepad).some((items) => items.some((entry) => entry.visibility === "unseen")),
     [notepad],

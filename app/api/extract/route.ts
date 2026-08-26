@@ -361,7 +361,10 @@ export async function POST(request: Request) {
     (groundingUsage?.input_tokens_details?.cache_write_tokens ?? 0);
   const outputTokens = (usage?.output_tokens ?? 0) + (groundingUsage?.output_tokens ?? 0);
   const model = typeof response.model === "string" ? response.model : EXTRACTION_MODEL;
-  const callId = crypto.randomUUID();
+  const canonicalCallIds = collector.records()
+    .filter((record) => record.operation === "extraction" || record.operation === "grounding")
+    .map((record) => record.call_id);
+  const callId = canonicalCallIds[0] ?? crypto.randomUUID();
   const groundingModel = typeof grounding.response?.model === "string" ? grounding.response.model : EXTRACTION_MODEL;
   const telemetry = {
     turn_id: typeof body.turnId === "string" ? body.turnId : null,
@@ -385,6 +388,7 @@ export async function POST(request: Request) {
     },
     ...(identity.role === "developer" ? { diagnostics: {
       callId,
+      canonicalCallIds,
       model,
       inputTokens,
       ...((typeof usage?.input_tokens_details?.cached_tokens === "number" || typeof groundingUsage?.input_tokens_details?.cached_tokens === "number") ? { cachedInputTokens } : {}),
