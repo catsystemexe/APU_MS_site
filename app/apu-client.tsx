@@ -30,7 +30,7 @@ import {
   X,
   FileText,
 } from "lucide-react";
-import { Diagnostics, summarizeDiagnostics } from "./conversation-diagnostics";
+import { Diagnostics } from "./conversation-diagnostics";
 import { ACTIVE_APU_CORE_RELEASE_ID, ACTIVE_APU_CORE_VERSION, APU_SITE_RUNTIME_RELEASE } from "./core-config";
 import { buildSessionExport, createSessionTelemetry, downloadSessionExport, mergeSessionTelemetry, type SessionTelemetry } from "./session-export";
 import {
@@ -178,6 +178,7 @@ const COMMUNICATION_PROFILE_OPTIONS = Object.values(COMMUNICATION_PROFILES);
 const CZK_PER_USD = 21.5;
 const COST_TOOLTIP = "Přibližný přepočet podle usage dat API a nakonfigurovaných sazeb modelu při kurzu 1 USD = 21,5 Kč. Skutečná fakturace se může lišit.";
 const UNKNOWN_COST_TOOLTIP = "Cenová sazba použitého modelu není nakonfigurována; tokeny jsou zobrazeny bez odhadu ceny.";
+const INCOMPLETE_COST_TOOLTIP = "Úplný odhad ceny není k dispozici, protože některé volání nemá spolehlivá usage nebo cenová data. Známý subtotal zůstává uveden níže.";
 const INPUT_PLACEHOLDER = "Napište APU…";
 
 function createMessageId() {
@@ -441,16 +442,36 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
     () => messages.flatMap((message) => [message.diagnostics, message.controllerDiagnostics, message.extractionDiagnostics]),
     [messages],
   );
-  const summary = useMemo(() => summarizeDiagnostics(legacyDiagnostics), [legacyDiagnostics]);
   useEffect(() => {
     usageShadowComparisonRef.current = compareUsageShadow(legacyDiagnostics, modelUsageSession);
   }, [legacyDiagnostics, modelUsageSession]);
+  const canonicalUsageSummary = useMemo(() => {
+    const { records, summary } = modelUsageSession;
+    const hasReported = (field: "cached_input_tokens" | "cache_write_tokens" | "reasoning_tokens") =>
+      records.some((record) => record.usage[field] !== null);
+    const fileSearchCalls = records.reduce((total, record) => total + record.file_search_calls, 0);
+    return {
+      inputTokens: summary.input_tokens,
+      cachedInputTokens: hasReported("cached_input_tokens") ? summary.cached_input_tokens : undefined,
+      cacheWriteTokens: hasReported("cache_write_tokens") ? summary.cache_write_tokens : undefined,
+      outputTokens: summary.output_tokens,
+      reasoningTokens: hasReported("reasoning_tokens") ? summary.reasoning_tokens : undefined,
+      totalTokens: summary.normalized_total_tokens,
+      fileSearchCalls: fileSearchCalls > 0 ? fileSearchCalls : undefined,
+      estimatedCostUsd: summary.complete_estimated_cost_usd,
+      knownCostSubtotalUsd: summary.known_cost_subtotal_usd,
+      unpricedCallCount: summary.unpriced_call_count,
+      responseCount: summary.call_count,
+    };
+  }, [modelUsageSession]);
   const hasUnreadNotepadChange = useMemo(
     () => Object.values(notepad).some((items) => items.some((entry) => entry.visibility === "unseen")),
     [notepad],
   );
   const hasUnreadAnalysisChange = unseenAnalysisKeys.size > 0;
-  const costTooltip = summary.estimatedCostUsd === null ? UNKNOWN_COST_TOOLTIP : COST_TOOLTIP;
+  const costTooltip = canonicalUsageSummary.estimatedCostUsd === null
+    ? canonicalUsageSummary.knownCostSubtotalUsd > 0 ? INCOMPLETE_COST_TOOLTIP : UNKNOWN_COST_TOOLTIP
+    : COST_TOOLTIP;
   const activeDialogMessageId = useMemo(
     () => [...messages].reverse().find((message) => message.role === "assistant" && message.dialogActions?.length)?.id,
     [messages],
@@ -1495,10 +1516,10 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
               title={costTooltip}
             >
               <span className="stats-desktop">
-                Konverzace · <b>IN</b> {formatInteger(summary.inputTokens)} · <b>OUT</b> {formatInteger(summary.outputTokens)} · <b>Σ</b> {formatInteger(summary.totalTokens)} tok. · <b>{formatCost(summary.estimatedCostUsd)}</b>
+                Konverzace · <b>IN</b> {formatInteger(canonicalUsageSummary.inputTokens)} · <b>OUT</b> {formatInteger(canonicalUsageSummary.outputTokens)} · <b>Σ</b> {formatInteger(canonicalUsageSummary.totalTokens)} tok. · <b>{formatCost(canonicalUsageSummary.estimatedCostUsd)}</b>
               </span>
               <span className="stats-mobile">
-                <b>{formatCost(summary.estimatedCostUsd)}</b>
+                <b>{formatCost(canonicalUsageSummary.estimatedCostUsd)}</b>
               </span>
               <span className="info-icon" aria-hidden="true">i</span>
             </button>
@@ -1512,23 +1533,29 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
               >
                 <strong>Tato konverzace</strong>
                 <dl>
-                  <div><dt>Vstupní tokeny</dt><dd>{formatInteger(summary.inputTokens)}</dd></div>
-                  {summary.cachedInputTokens !== undefined && (
-                    <div><dt>z toho cachované</dt><dd>{formatInteger(summary.cachedInputTokens)}</dd></div>
+                  <div><dt>Vstupní tokeny</dt><dd>{formatInteger(canonicalUsageSummary.inputTokens)}</dd></div>
+                  {canonicalUsageSummary.cachedInputTokens !== undefined && (
+                    <div><dt>z toho cachované</dt><dd>{formatInteger(canonicalUsageSummary.cachedInputTokens)}</dd></div>
                   )}
-                  {summary.cacheWriteTokens !== undefined && (
-                    <div><dt>zapsané do cache</dt><dd>{formatInteger(summary.cacheWriteTokens)}</dd></div>
+                  {canonicalUsageSummary.cacheWriteTokens !== undefined && (
+                    <div><dt>zapsané do cache</dt><dd>{formatInteger(canonicalUsageSummary.cacheWriteTokens)}</dd></div>
                   )}
-                  <div><dt>Výstupní tokeny</dt><dd>{formatInteger(summary.outputTokens)}</dd></div>
-                  {summary.reasoningTokens !== undefined && (
-                    <div><dt>Reasoning tokeny</dt><dd>{formatInteger(summary.reasoningTokens)}</dd></div>
+                  <div><dt>Výstupní tokeny</dt><dd>{formatInteger(canonicalUsageSummary.outputTokens)}</dd></div>
+                  {canonicalUsageSummary.reasoningTokens !== undefined && (
+                    <div><dt>Reasoning tokeny</dt><dd>{formatInteger(canonicalUsageSummary.reasoningTokens)}</dd></div>
                   )}
-                  <div className="stats-total"><dt>Celkem</dt><dd>{formatInteger(summary.totalTokens)}</dd></div>
-                  {summary.fileSearchCalls !== undefined && (
-                    <div><dt>Vyhledání v KB</dt><dd>{formatInteger(summary.fileSearchCalls)}</dd></div>
+                  <div className="stats-total"><dt>Celkem</dt><dd>{formatInteger(canonicalUsageSummary.totalTokens)}</dd></div>
+                  {canonicalUsageSummary.fileSearchCalls !== undefined && (
+                    <div><dt>Vyhledání v KB</dt><dd>{formatInteger(canonicalUsageSummary.fileSearchCalls)}</dd></div>
                   )}
-                  <div title={costTooltip}><dt>Odhad ceny</dt><dd>{formatCost(summary.estimatedCostUsd)}</dd></div>
-                  <div><dt>API volání</dt><dd>{formatInteger(summary.responseCount)}</dd></div>
+                  <div title={costTooltip}><dt>Odhad ceny</dt><dd>{formatCost(canonicalUsageSummary.estimatedCostUsd)}</dd></div>
+                  {canonicalUsageSummary.estimatedCostUsd === null && canonicalUsageSummary.knownCostSubtotalUsd > 0 && (
+                    <div><dt>Známý subtotal</dt><dd>{formatCost(canonicalUsageSummary.knownCostSubtotalUsd)}</dd></div>
+                  )}
+                  {canonicalUsageSummary.unpricedCallCount > 0 && (
+                    <div><dt>Neoceněná volání</dt><dd>{formatInteger(canonicalUsageSummary.unpricedCallCount)}</dd></div>
+                  )}
+                  <div><dt>API volání</dt><dd>{formatInteger(canonicalUsageSummary.responseCount)}</dd></div>
                 </dl>
                 <p>{costTooltip}</p>
               </div>
@@ -1910,11 +1937,11 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
                 <h2 id="usage-settings-title">Tato konverzace</h2>
                 <dl>
                   <div className="stats-token-pair">
-                    <div><dt>IN</dt><dd>{formatInteger(summary.inputTokens)}</dd></div>
-                    <div><dt>OUT</dt><dd>{formatInteger(summary.outputTokens)}</dd></div>
+                    <div><dt>IN</dt><dd>{formatInteger(canonicalUsageSummary.inputTokens)}</dd></div>
+                    <div><dt>OUT</dt><dd>{formatInteger(canonicalUsageSummary.outputTokens)}</dd></div>
                   </div>
-                  <div><dt>Celkem</dt><dd>{formatInteger(summary.totalTokens)} tok.</dd></div>
-                  <div><dt>Odhad ceny</dt><dd>{formatCost(summary.estimatedCostUsd)}</dd></div>
+                  <div><dt>Celkem</dt><dd>{formatInteger(canonicalUsageSummary.totalTokens)} tok.</dd></div>
+                  <div><dt>Odhad ceny</dt><dd>{formatCost(canonicalUsageSummary.estimatedCostUsd)}</dd></div>
                 </dl>
               </section>
               <section className="settings-section design-settings-body" aria-labelledby="design-settings-title">

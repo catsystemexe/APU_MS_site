@@ -32,3 +32,15 @@ test("client maintains a non-UI shadow comparison between legacy diagnostics and
   const exportCall = client.slice(client.indexOf("buildSessionExport({"), client.indexOf("downloadSessionExport", client.indexOf("buildSessionExport({")));
   assert.doesNotMatch(exportCall, /usageShadowComparison/);
 });
+
+test("DEV header reads the canonical session summary while legacy diagnostics remain only in shadow comparison", () => {
+  assert.match(client, /const canonicalUsageSummary = useMemo\(\(\) => \{/);
+  assert.match(client, /inputTokens: summary\.input_tokens/);
+  assert.match(client, /totalTokens: summary\.normalized_total_tokens/);
+  assert.match(client, /estimatedCostUsd: summary\.complete_estimated_cost_usd/);
+  assert.match(client, /knownCostSubtotalUsd: summary\.known_cost_subtotal_usd/);
+  assert.match(client, /unpricedCallCount: summary\.unpriced_call_count/);
+  const header = client.slice(client.indexOf('className="stats-trigger"'), client.indexOf('<nav className="project-actions"'));
+  assert.match(header, /canonicalUsageSummary/);
+  assert.doesNotMatch(header, /\bsummary\./);
+});
