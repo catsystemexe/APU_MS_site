@@ -16,6 +16,7 @@ import {
   ChevronRight,
   Check,
   Download,
+  FlaskConical,
   FilePlus2,
   FolderOpen,
   Info,
@@ -89,6 +90,7 @@ import { analysisChangeKeys, EMPTY_ANALYSIS, formatAnalysisChat, preserveAnalysi
 import { CompletedLifecycleStatus, ProcessingStatus, type F1ProcessingStage } from "./processing-status";
 import { addCompletedLifecycleRecord, withCompletedLifecycleRecord, type CompletedLifecycleRecord } from "./lifecycle-record";
 import { DevLogPanel } from "./dev-log-panel";
+import { DEV_TEST_SCENARIOS, type DevTestScenario } from "./dev-test-scenarios";
 import type { SharedFeedbackResult } from "./shared-feedback";
 import { acceptRenderedPreview, addF2Context, applyF2BuildResult, applyRozborComponentUpdate, canonicalF1NeedFingerprint, createF2BuildRequest, createF2PreviewSnapshot, createPochopitBuildState, createRozborGenerationRequest, deriveRequiredRozborComponents, parameterizeF2Skill, parseF2BuildResult, parseF2RenderedPreview, parseGeneratedRozborComponents, previewStatus, reconcileRozborComponents, removeF2Context, switchF2Path, synchronizeF2BuildWithCanonicalNeed, toggleF2Skill, updatePochopitBuildConfig, type F2BuildState, type F2NotebookContextItem, type F2PreviewState, type PochopitBuildState } from "./f2-build-model";
 import { acceptF3Render, adoptF2Snapshot, createF3RenderRequest, createF3State, parseF3RenderResult, updateF3Config, type F3Config, type F3State } from "./f3-finalization-model";
@@ -284,18 +286,72 @@ type ApuClientProps = {
   sharedFeedback: SharedFeedbackResult | null;
 };
 
-function DeveloperHeaderControls({ open, onToggle }: { open: boolean; onToggle: () => void }) {
+function DeveloperHeaderControls({
+  logOpen,
+  onLogToggle,
+  onSelectScenario,
+}: {
+  logOpen: boolean;
+  onLogToggle: () => void;
+  onSelectScenario: (scenario: DevTestScenario) => void;
+}) {
+  const [scenarioMenuOpen, setScenarioMenuOpen] = useState(false);
+  const scenarioPickerRef = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    if (!scenarioMenuOpen) return;
+    const closeOutside = (event: PointerEvent) => {
+      if (!scenarioPickerRef.current?.contains(event.target as Node)) setScenarioMenuOpen(false);
+    };
+    const closeWithEscape = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") setScenarioMenuOpen(false);
+    };
+    document.addEventListener("pointerdown", closeOutside);
+    document.addEventListener("keydown", closeWithEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOutside);
+      document.removeEventListener("keydown", closeWithEscape);
+    };
+  }, [scenarioMenuOpen]);
+
   return (
     <span className="developer-controls">
       <span className="developer-indicator" title="Developer režim je aktivní">DEV ON</span>
+      <span className="dev-scenario-picker" ref={scenarioPickerRef}>
+        <button
+          type="button"
+          className="developer-log-toggle"
+          aria-label="Testovací scénáře"
+          aria-expanded={scenarioMenuOpen}
+          aria-controls="dev-scenario-menu"
+          title="Testovací scénáře"
+          onClick={() => setScenarioMenuOpen((value) => !value)}
+        >
+          <FlaskConical aria-hidden="true" />
+        </button>
+        {scenarioMenuOpen && <span id="dev-scenario-menu" className="dev-scenario-menu" role="menu" aria-label="Testovací scénáře">
+          {DEV_TEST_SCENARIOS.map((scenario) => <button
+            key={scenario.id}
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              onSelectScenario(scenario);
+              setScenarioMenuOpen(false);
+            }}
+          >
+            <strong>{scenario.label}</strong>
+            <span>{scenario.subtitle}</span>
+          </button>)}
+        </span>}
+      </span>
       <button
         type="button"
         className="developer-log-toggle"
-        aria-label={open ? "Skrýt DEV LOG" : "Zobrazit DEV LOG"}
-        aria-expanded={open}
+        aria-label={logOpen ? "Skrýt DEV LOG" : "Zobrazit DEV LOG"}
+        aria-expanded={logOpen}
         aria-controls="dev-log-panel"
-        title={open ? "Skrýt DEV LOG" : "Zobrazit DEV LOG"}
-        onClick={onToggle}
+        title={logOpen ? "Skrýt DEV LOG" : "Zobrazit DEV LOG"}
+        onClick={onLogToggle}
       >
         <TriangleAlert aria-hidden="true" />
       </button>
@@ -719,6 +775,15 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
   function expandComposer() {
     if (isDictating || isLoading || !isNotepadHydrated) return;
     setIsComposerExpanded(true);
+    requestAnimationFrame(() => textareaRef.current?.focus());
+  }
+
+  function selectDevTestScenario(scenario: DevTestScenario) {
+    if (input.trim() && !window.confirm("Composer už obsahuje text. Chcete ho nahradit testovacím scénářem?")) return;
+    if (isDictating) cancelDictation();
+    setDictationNotice(null);
+    setIsComposerExpanded(true);
+    setComposerInput(scenario.text);
     requestAnimationFrame(() => textareaRef.current?.focus());
   }
 
@@ -1524,7 +1589,11 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
               <ApuLogo variant="horizontal" />
             </span>
             <span className="account-email" title={email}>{email}</span>
-            {isDeveloper && <DeveloperHeaderControls open={isDevLogOpen} onToggle={() => setIsDevLogOpen((value) => !value)} />}
+            {isDeveloper && <DeveloperHeaderControls
+              logOpen={isDevLogOpen}
+              onLogToggle={() => setIsDevLogOpen((value) => !value)}
+              onSelectScenario={selectDevTestScenario}
+            />}
             <h1 className="sr-only">APU — Asistent pedagogické podpory</h1>
           </div>
 
