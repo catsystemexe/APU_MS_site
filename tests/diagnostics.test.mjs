@@ -3,10 +3,10 @@ import test from "node:test";
 import { summarizeDiagnostics } from "../app/conversation-diagnostics.ts";
 import {
   DEFAULT_MODEL_ID,
-  FILE_SEARCH_CALL_USD,
   estimateCostUsd,
   isSupportedModel,
 } from "../app/model-config.ts";
+import { USAGE_FILE_SEARCH_RATE_PER_1000 } from "../app/usage-ledger.ts";
 
 test("Terra remains the concrete fallback model", () => {
   assert.equal(DEFAULT_MODEL_ID, "gpt-5.6-terra");
@@ -68,7 +68,7 @@ test("price separates regular, cached, cache-write and output tokens", () => {
     outputTokens: 2_000,
     fileSearchCalls: 1,
   });
-  const expected = (5_000 * 5 + 4_000 * 0.5 + 1_000 * 6.25 + 2_000 * 30) / 1_000_000 + FILE_SEARCH_CALL_USD;
+  const expected = (5_000 * 4 + 4_000 * 0.4 + 1_000 * 5 + 2_000 * 20) / 1_000_000 + USAGE_FILE_SEARCH_RATE_PER_1000 / 1_000;
   assert.equal(price, expected);
 });
 
