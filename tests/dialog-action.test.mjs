@@ -205,7 +205,7 @@ test("Quest Controller uses Core as the pedagogical source and a strict technica
   assert.doesNotMatch(source, /MAIN má absolutní prioritu|Po splnění minima vyber/);
 });
 
-test("phase, debug and usage remain in the existing visual hierarchy", async () => {
+test("phase and debug remain in the existing visual hierarchy without per-message usage", async () => {
   const [client, metadata, styles] = await Promise.all([
     readFile(new URL("../app/apu-client.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/response-metadata.ts", import.meta.url), "utf8"),
@@ -215,7 +215,8 @@ test("phase, debug and usage remain in the existing visual hierarchy", async () 
   assert.match(client, /event\.phaseLabel/);
   assert.match(await readFile(new URL("../app/api/chat/route.ts", import.meta.url), "utf8"), /phaseLabel: controllerResult\.phase === "intake"/);
   assert.match(metadata, /FÁZE\\s\+\[123\]/);
-  assert.ok(client.indexOf("diagnostic-debug") < client.indexOf("diagnostic-usage"));
+  assert.match(client, /diagnostic-debug/);
+  assert.doesNotMatch(client, /diagnostic-usage|diagnostic-cost|diagnostic-controller/);
   assert.match(styles, /\.message-phase/);
   assert.match(styles, /\.dialog-action-question p \{[^}]*font-size: calc\(15px \* var\(--font-scale\)\)/s);
 });

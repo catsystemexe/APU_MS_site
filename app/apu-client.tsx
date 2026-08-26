@@ -40,10 +40,7 @@ import {
   type ModelUsageRecordsResponse,
 } from "./model-usage-collection";
 import { compareUsageShadow, type UsageShadowComparison } from "./usage-shadow-comparison";
-import {
-  MODEL_CATALOG,
-  baseModelName,
-} from "./model-config";
+import { MODEL_CATALOG } from "./model-config";
 import { AUTO_MODEL_SELECTION, type ModelSelection } from "./model-routing";
 import { WorkspacePanel, type WorkspacePanel as WorkspacePanelId, usePersistentNotepad } from "./notepad";
 import {
@@ -201,11 +198,6 @@ function formatCostNumber(valueUsd: number) {
 
 function formatCost(value: number | null) {
   return value === null ? "≈ —" : `≈ ${formatCostNumber(value)}`;
-}
-
-function displayModel(model: string) {
-  const base = baseModelName(model);
-  return base ? MODEL_CATALOG[base].label : model;
 }
 
 function assistantSourceRanges(message: Message, notepad: NotepadState) {
@@ -1660,37 +1652,9 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
                   )}
                 </aside>
               )}
-              {isDeveloper && message.role === "assistant" && message.diagnostics && (
-                <aside className="response-diagnostics" aria-label="Diagnostika odpovědi">
-                  {message.debugText && <div className="diagnostic-debug">{message.debugText}</div>}
-                  <div className="diagnostic-usage">
-                    <span className="diagnostic-model" title={`Server potvrdil: ${message.diagnostics.model}`}>
-                      {displayModel(message.diagnostics.model)}
-                    </span>
-                    {message.diagnostics.reasoning && (
-                      <span title="Reasoning skutečně použitý pro tento request">reasoning {message.diagnostics.reasoning}</span>
-                    )}
-                    {message.diagnostics.knowledgeBaseEnabled !== undefined && (
-                      <span title="Knowledge Base podle skutečně sestaveného requestu">
-                        KB {message.diagnostics.knowledgeBaseEnabled ? "zapnuto" : "vypnuto"}
-                      </span>
-                    )}
-                    <span title="Kompletní vstupní tokeny reportované API včetně instrukcí, historie a načteného kontextu">
-                      IN {formatInteger(message.diagnostics.inputTokens)}
-                    </span>
-                    <span title="Výstupní tokeny včetně interního reasoningu">
-                      OUT {formatInteger(message.diagnostics.outputTokens)}
-                    </span>
-                    <span title="Mechanický součet IN + OUT">Σ {formatInteger(message.diagnostics.inputTokens + message.diagnostics.outputTokens)}</span>
-                    <span className="diagnostic-cost" title={message.diagnostics.estimatedCostUsd === null ? UNKNOWN_COST_TOOLTIP : COST_TOOLTIP}>
-                      {formatCost(message.diagnostics.estimatedCostUsd)}
-                    </span>
-                    {message.controllerDiagnostics && (
-                      <span className="diagnostic-controller" title="Samostatné volání Quest Controlleru">
-                        QC IN {formatInteger(message.controllerDiagnostics.inputTokens)} · OUT {formatInteger(message.controllerDiagnostics.outputTokens)} · {formatCost(message.controllerDiagnostics.estimatedCostUsd)}
-                      </span>
-                    )}
-                  </div>
+              {isDeveloper && message.role === "assistant" && message.debugText && (
+                <aside className="response-diagnostics" aria-label="Technická poznámka odpovědi">
+                  <div className="diagnostic-debug">{message.debugText}</div>
                 </aside>
               )}
               </article>

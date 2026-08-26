@@ -44,3 +44,12 @@ test("DEV header reads the canonical session summary while legacy diagnostics re
   assert.match(header, /canonicalUsageSummary/);
   assert.doesNotMatch(header, /\bsummary\./);
 });
+
+test("chat does not render per-message usage while internal diagnostics remain available", () => {
+  assert.match(client, /diagnostics\?: Diagnostics/);
+  assert.match(client, /controllerDiagnostics\?: Diagnostics/);
+  assert.match(client, /extractionDiagnostics\?: Diagnostics/);
+  const chat = client.slice(client.indexOf("{messages.map((message) => ("), client.indexOf("{error &&"));
+  assert.doesNotMatch(chat, /diagnostic-usage|diagnostic-cost|diagnostic-controller|inputTokens|outputTokens|estimatedCostUsd/);
+  assert.match(chat, /diagnostic-debug/);
+});
