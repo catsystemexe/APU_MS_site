@@ -49,6 +49,16 @@ export type InstrumentedModelCallInput<TBody extends ProviderResponseBody, TAppl
   validate_application_response?: (body: TBody) => TApplicationResult | Promise<TApplicationResult>;
 };
 
+export type InstrumentedModelCallLifecycleInput = Omit<
+  InstrumentedModelCallInput<ProviderResponseBody>,
+  "invoke" | "validate_application_response"
+>;
+
+type ApplicationFinalization = {
+  application_status?: ApplicationStatus;
+  error?: { category: string; code: string | null } | null;
+};
+
 export class InstrumentedModelCallError extends Error {
   readonly usage_record: ModelUsageRecord;
   readonly cause: unknown;
@@ -111,9 +121,7 @@ function assertClientRequestId(callId: string) {
   }
 }
 
-export async function runInstrumentedModelCall<TBody extends ProviderResponseBody, TApplicationResult = void>(
-  input: InstrumentedModelCallInput<TBody, TApplicationResult>,
-): Promise<{ response: InstrumentedProviderResponse<TBody>; usage_record: ModelUsageRecord; application_result: TApplicationResult | undefined }> {
+export function createInstrumentedModelCallLifecycle(input: InstrumentedModelCallLifecycleInput) {
   const now = input.now ?? (() => new Date());
   const callId = input.call_id ?? (input.create_call_id ?? (() => crypto.randomUUID()))();
   assertClientRequestId(callId);
@@ -140,54 +148,94 @@ export async function runInstrumentedModelCall<TBody extends ProviderResponseBod
     application_status: "not_applicable",
     error: null,
   });
-  await input.sink(pending);
+
+  let began = false;
+  let finalRecord: ModelUsageRecord | null = null;
+  const begin = async () => {
+    if (began) return;
+    began = true;
+    await input.sink(pending);
+  };
+
+  return {
+    call_id: callId,
+    headers: { "X-Client-Request-Id": callId } as const,
+    provider_status<TBody extends ProviderResponseBody>(response: InstrumentedProviderResponse<TBody>) {
+      return providerStatus(response.body.status, response.status_code);
+    },
+    is_finalized: () => finalRecord !== null,
+    begin,
+    async finish_provider<TBody extends ProviderResponseBody>(
+      response: InstrumentedProviderResponse<TBody>,
+      application: ApplicationFinalization = {},
+    ) {
+      await begin();
+      if (finalRecord) return finalRecord;
+      const body = response.body;
+      const status = providerStatus(body.status, response.status_code);
+      finalRecord = finalizeModelUsageRecord(pending, {
+        completed_at: now().toISOString(),
+        reported_model: optionalString(body.model),
+        reported_service_tier: optionalString(body.service_tier),
+        provider_request_id: responseHeader(response.headers, "x-request-id"),
+        provider_response_id: optionalString(body.id),
+        provider_status: status,
+        application_status: application.application_status ?? applicationStatus(status),
+        provider_usage: body.usage,
+        file_search_calls: fileSearchCalls(body.output),
+        error: application.error !== undefined ? application.error : providerError(body, status),
+      });
+      await input.sink(finalRecord);
+      return finalRecord;
+    },
+    async finish_transport(errorCode: string | null = null) {
+      await begin();
+      if (finalRecord) return finalRecord;
+      finalRecord = finalizeModelUsageRecord(pending, {
+        completed_at: now().toISOString(),
+        provider_status: "transport_error",
+        application_status: "failed",
+        error: { category: "transport", code: errorCode },
+      });
+      await input.sink(finalRecord);
+      return finalRecord;
+    },
+  };
+}
+
+export async function runInstrumentedModelCall<TBody extends ProviderResponseBody, TApplicationResult = void>(
+  input: InstrumentedModelCallInput<TBody, TApplicationResult>,
+): Promise<{ response: InstrumentedProviderResponse<TBody>; usage_record: ModelUsageRecord; application_result: TApplicationResult | undefined }> {
+  const lifecycle = createInstrumentedModelCallLifecycle(input);
+  await lifecycle.begin();
 
   let response: InstrumentedProviderResponse<TBody>;
   try {
     response = await input.invoke({
-      call_id: callId,
-      headers: { "X-Client-Request-Id": callId },
+      call_id: lifecycle.call_id,
+      headers: lifecycle.headers,
     });
   } catch (cause) {
-    const failed = finalizeModelUsageRecord(pending, {
-      completed_at: now().toISOString(),
-      provider_status: "transport_error",
-      application_status: "failed",
-      error: { category: "transport", code: null },
-    });
-    await input.sink(failed);
+    const failed = await lifecycle.finish_transport();
     throw new InstrumentedModelCallError("Model provider transport failed", failed, cause);
   }
 
   const body = response.body;
-  const status = providerStatus(body.status, response.status_code);
-  let completed = finalizeModelUsageRecord(pending, {
-    completed_at: now().toISOString(),
-    reported_model: optionalString(body.model),
-    reported_service_tier: optionalString(body.service_tier),
-    provider_request_id: responseHeader(response.headers, "x-request-id"),
-    provider_response_id: optionalString(body.id),
-    provider_status: status,
-    application_status: applicationStatus(status),
-    provider_usage: body.usage,
-    file_search_calls: fileSearchCalls(body.output),
-    error: providerError(body, status),
-  });
+  const status = lifecycle.provider_status(response);
 
   let applicationResult: TApplicationResult | undefined;
   if (status === "completed" && input.validate_application_response) {
     try {
       applicationResult = await input.validate_application_response(body);
     } catch (cause) {
-      completed = finalizeModelUsageRecord(completed, {
+      const completed = await lifecycle.finish_provider(response, {
         application_status: "rejected_invalid_output",
         error: { category: "application_validation", code: null },
       });
-      await input.sink(completed);
       throw new InstrumentedModelCallError("Model response failed application validation", completed, cause);
     }
   }
 
-  await input.sink(completed);
+  const completed = await lifecycle.finish_provider(response);
   return { response, usage_record: completed, application_result: applicationResult };
 }

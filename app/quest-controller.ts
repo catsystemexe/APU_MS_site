@@ -9,6 +9,7 @@ import {
   validateQuestControllerResult,
 } from "./dialog-action.ts";
 import type { DebugMapping } from "./response-metadata.ts";
+import { callOpenAIResponses, type RequestUsageCollector } from "./openai-responses-instrumentation.ts";
 
 export const QUEST_CONTROLLER_MODEL = "gpt-5.6-luna";
 
@@ -67,9 +68,11 @@ type ControllerResponse = {
   id?: string; model?: string; usage?: Record<string, unknown>; output_text?: string;
   output?: Array<{ content?: Array<{ type?: string; text?: string }> }>;
 };
-function responseText(response: ControllerResponse) {
-  if (typeof response.output_text === "string") return response.output_text;
-  return response.output?.flatMap((item) => item.content ?? [])
+function responseText(response: unknown) {
+  if (!response || typeof response !== "object") return "";
+  const body = response as ControllerResponse;
+  if (typeof body.output_text === "string") return body.output_text;
+  return body.output?.flatMap((item) => item.content ?? [])
     .filter((item) => item.type === "output_text").map((item) => item.text ?? "").join("") ?? "";
 }
 const FUNCTIONAL_ROUTING_HINTS = `Interní orientační osy pro výběr diskriminační otázky:
@@ -94,6 +97,9 @@ const CONTROLLER_INSTRUCTIONS = `Jsi technický Quest Controller APU Site. Pedag
 
 export async function runQuestController(args: {
   apiKey: string;
+  requestId: string;
+  turnId: string | null;
+  collector: RequestUsageCollector;
   coreInstructions: string;
   message: string;
   notebook: IntakeNotebookItem[];
@@ -104,12 +110,20 @@ export async function runQuestController(args: {
 }) {
   const fallback = fallbackQuestController(args.notebook, args.phase, args.refinement, args.applyIntakePolicy);
   try {
-    const upstream = await fetch("https://api.openai.com/v1/responses", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${args.apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
+    const { response, usage_record, application_result } = await callOpenAIResponses({
+      api_key: args.apiKey,
+      request_id: args.requestId,
+      turn_id: args.turnId,
+      phase: args.phase === "intake" ? "F1" : "F2",
+      operation: "controller",
+      requested_model: QUEST_CONTROLLER_MODEL,
+      reasoning_effort: "low",
+      requested_service_tier: "default",
+      collector: args.collector,
+      payload: {
         model: QUEST_CONTROLLER_MODEL,
         reasoning: { effort: "low" },
+        service_tier: "default",
         instructions: `${args.coreInstructions}\n\n${CONTROLLER_INSTRUCTIONS}\n\n${FUNCTIONAL_ROUTING_HINTS}`,
         input: JSON.stringify({
           phase: args.phase,
@@ -122,24 +136,27 @@ export async function runQuestController(args: {
         }),
         text: { format: { type: "json_schema", name: "apu_quest_controller", strict: true, schema: QUEST_CONTROLLER_SCHEMA } },
         max_output_tokens: 1_000, store: false,
-      }),
+      },
+      validate_application_response: (providerResponse) => {
+        const parsed = JSON.parse(responseText(providerResponse)) as { chat_navigation_event?: unknown };
+        const result = validateQuestControllerResult(
+          parsed,
+          args.notebook,
+          args.phase,
+          args.refinement,
+          args.applyIntakePolicy,
+        );
+        if (result && parsed.chat_navigation_event === "continue_to_solution" && args.applyIntakePolicy &&
+          args.phase === "intake" && requiredIntakeTarget(args.notebook) === null) {
+          const transitioned = resolveDialogEvent("continue_to_solution", args.notebook, args.phase);
+          if (transitioned) return transitioned;
+        }
+        if (!result) throw new Error("invalid controller response");
+        return result;
+      },
     });
-    if (!upstream.ok) return { result: fallback, response: null, usedFallback: true };
-    const response = await upstream.json() as ControllerResponse;
-    const parsed = JSON.parse(responseText(response)) as { chat_navigation_event?: unknown };
-    const result = validateQuestControllerResult(
-      parsed,
-      args.notebook,
-      args.phase,
-      args.refinement,
-      args.applyIntakePolicy,
-    );
-    if (result && parsed.chat_navigation_event === "continue_to_solution" && args.applyIntakePolicy &&
-      args.phase === "intake" && requiredIntakeTarget(args.notebook) === null) {
-      const transitioned = resolveDialogEvent("continue_to_solution", args.notebook, args.phase);
-      if (transitioned) return { result: transitioned, response, usedFallback: false };
-    }
-    return result ? { result, response, usedFallback: false } : { result: fallback, response, usedFallback: true };
+    if (usage_record.provider_status !== "completed" || !application_result) return { result: fallback, response: null, usedFallback: true };
+    return { result: application_result, response: response.body as ControllerResponse, usedFallback: false };
   } catch {
     return { result: fallback, response: null, usedFallback: true };
   }

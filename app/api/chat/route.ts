@@ -19,6 +19,8 @@ import { canBypassQuestController, runQuestController } from "../../quest-contro
 import { enforceStructuredF1Prose, isStructuredF1Turn } from "../../f1-response-contract";
 import type { DebugMapping } from "../../response-metadata";
 import { composeApuSiteInstructions } from "../../runtime-instructions";
+import { createInstrumentedModelCallLifecycle, type ProviderResponseBody } from "../../model-call-instrumentation";
+import { createRequestUsageCollector } from "../../openai-responses-instrumentation";
 import {
   ACTIVE_APU_CORE_MANIFEST_PATH,
   ACTIVE_APU_CORE_RELEASE_ID,
@@ -85,8 +87,12 @@ type UsageDetails = {
 type CompletedResponse = {
   id?: string;
   model?: string;
+  service_tier?: string;
+  status?: "completed" | "incomplete" | "failed";
   usage?: UsageDetails;
   output?: Array<{ type?: string }>;
+  error?: { code?: unknown } | null;
+  incomplete_details?: { reason?: unknown } | null;
 };
 
 function buildDiagnostics(
@@ -187,6 +193,7 @@ export async function POST(request: Request) {
     selectedHypothesisId?: unknown;
     activeNeedId?: unknown;
     analysisContext?: unknown;
+    requestId?: unknown;
     turnId?: unknown;
     controllerFastPathEligible?: unknown;
   };
@@ -199,6 +206,7 @@ export async function POST(request: Request) {
   if (typeof body.message !== "string" || !body.message.trim()) {
     return jsonError("Zpráva je prázdná.", 400);
   }
+  if (body.requestId !== undefined && (typeof body.requestId !== "string" || !body.requestId || body.requestId.length > 160)) return jsonError("Neplatný identifikátor požadavku.", 400);
   if (body.turnId !== undefined && (typeof body.turnId !== "string" || body.turnId.length > 160)) return jsonError("Neplatný identifikátor tahu.", 400);
   if (body.controllerFastPathEligible !== undefined && typeof body.controllerFastPathEligible !== "boolean") return jsonError("Neplatný stav intake zpracování.", 400);
   const notebook = validateNotebook(body.notebook ?? []);
@@ -235,7 +243,9 @@ export async function POST(request: Request) {
     return jsonError("Zvolený model backend nepodporuje.", 400);
   }
 
-  const callId = crypto.randomUUID();
+  const requestId = typeof body.requestId === "string" ? body.requestId : crypto.randomUUID();
+  const turnId = typeof body.turnId === "string" ? body.turnId : null;
+  const usageCollector = createRequestUsageCollector();
   const communicationProfile = body.communicationProfile ?? DEFAULT_COMMUNICATION_PROFILE_ID;
   if (!isCommunicationProfile(communicationProfile)) {
     return jsonError("Zvolený komunikační profil backend nepodporuje.", 400);
@@ -272,6 +282,9 @@ export async function POST(request: Request) {
       ? { result: fallbackQuestController(intakeNotebook, phase as ConversationPhase, refinement, applyIntakePolicy), response: null, usedFallback: false, mode: "deterministic_bypass" as const }
     : await runQuestController({
       apiKey,
+      requestId,
+      turnId,
+      collector: usageCollector,
       coreInstructions: instructions,
       message: body.message,
       notebook: intakeNotebook,
@@ -332,6 +345,19 @@ export async function POST(request: Request) {
     payload.previous_response_id = body.previousResponseId;
   }
 
+  const mainLifecycle = createInstrumentedModelCallLifecycle({
+    request_id: requestId,
+    turn_id: turnId,
+    phase: executionPhase === "intake" ? "F1" : "F2",
+    operation: "main_chat",
+    requested_model: execution.model,
+    reasoning_effort: execution.reasoning,
+    requested_service_tier: "default",
+    sink: usageCollector.sink,
+  });
+  const callId = mainLifecycle.call_id;
+  const controllerUsageRecord = usageCollector.records().find((record) => record.operation === "controller") ?? null;
+
   const encoder = new TextEncoder();
   const decoder = new TextDecoder();
   const bufferStructuredF1Prose = isStructuredF1Turn(controllerResult);
@@ -341,40 +367,47 @@ export async function POST(request: Request) {
       let buffer = "";
       let bufferedMainProse = "";
       let firstDeltaAt: number | null = null;
+      let terminalEvent = false;
 
       const emit = (event: unknown) => controller.enqueue(encoder.encode(JSON.stringify(event) + "\n"));
       if (executionPhase === "intake") emit({ type: "status", status: "preparing_response" });
       const mainStarted = performance.now();
       let upstream: Response;
       try {
+        await mainLifecycle.begin();
         upstream = await fetch("https://api.openai.com/v1/responses", {
           method: "POST",
           headers: {
             Authorization: `Bearer ${apiKey}`,
             "Content-Type": "application/json",
+            ...mainLifecycle.headers,
           },
           body: JSON.stringify(payload),
         });
       } catch {
-        emit({ type: "error", message: "Main odpověď se nepodařilo zahájit." });
+        await mainLifecycle.finish_transport("fetch_error");
+        emit({ type: "error", message: "Main odpověď se nepodařilo zahájit.", model_usage_records: usageCollector.records() });
         controller.close();
         return;
       }
 
       if (!upstream.ok || !upstream.body) {
-        const detail = await upstream.json().catch(() => null) as { error?: { message?: string } } | null;
-        emit({ type: "error", message: detail?.error?.message || "OpenAI API request selhal." });
+        const detail = await upstream.json().catch(() => null) as (ProviderResponseBody & { error?: { message?: string; code?: unknown } | null }) | null;
+        if (!upstream.ok) await mainLifecycle.finish_provider({ body: detail ?? {}, headers: upstream.headers, status_code: upstream.status });
+        else await mainLifecycle.finish_transport("missing_stream_body");
+        emit({ type: "error", message: detail?.error?.message || "OpenAI API request selhal.", model_usage_records: usageCollector.records() });
         controller.close();
         return;
       }
 
       const reader = upstream.body.getReader();
 
-      const processSseLine = (rawLine: string) => {
+      const processSseLine = async (rawLine: string) => {
         const line = rawLine.endsWith("\r") ? rawLine.slice(0, -1) : rawLine;
         if (!line.startsWith("data: ") || line === "data: [DONE]") return;
 
         const event = JSON.parse(line.slice(6));
+        if (terminalEvent) return;
         if (event.type === "response.output_text.delta") {
           if (firstDeltaAt === null) firstDeltaAt = performance.now();
           if (bufferStructuredF1Prose) bufferedMainProse += event.delta;
@@ -382,6 +415,8 @@ export async function POST(request: Request) {
         }
         if (event.type === "response.completed") {
           const response = event.response as CompletedResponse;
+          await mainLifecycle.finish_provider({ body: { ...response, status: response.status ?? "completed" }, headers: upstream.headers, status_code: upstream.status });
+          terminalEvent = true;
           const completedAt = performance.now();
           const diagnostics = buildDiagnostics(response, callId, execution);
           const fileSearchCalls = response.output?.filter((item) => item.type === "file_search_call").length ?? 0;
@@ -393,7 +428,7 @@ export async function POST(request: Request) {
             responseId: response?.id,
             ...(isDeveloper ? { diagnostics } : {}),
             ...(isDeveloper && controllerRun.response ? {
-              controllerDiagnostics: buildDiagnostics(controllerRun.response as CompletedResponse, `${callId}-controller`),
+              controllerDiagnostics: buildDiagnostics(controllerRun.response as CompletedResponse, controllerUsageRecord?.call_id ?? `${callId}-controller`),
             } : {}),
             dialogActions: controllerResult.dialog_actions,
             phase: controllerResult.phase,
@@ -401,7 +436,7 @@ export async function POST(request: Request) {
             phaseLabel: controllerResult.phase === "intake" ? "[FÁZE 1]" : controllerResult.phase === "development" ? "[FÁZE 2]" : "[FÁZE 3]",
             controllerFallback: controllerRun.usedFallback,
             ...(isDeveloper ? { telemetry: {
-              turn_id: typeof body.turnId === "string" ? body.turnId : null,
+              turn_id: turnId,
               completed_at: new Date().toISOString(),
               path: [controllerDuration === null ? null : "controller", "main"].filter(Boolean).join("-"),
               latency_ms: {
@@ -414,7 +449,7 @@ export async function POST(request: Request) {
                 generation: firstDeltaAt === null ? null : Math.round(completedAt - firstDeltaAt),
               },
               stages: [
-                ...(controllerDuration === null ? [{ name: "controller", status: "skipped", duration_ms: null }] : [{ name: "controller", status: "completed", duration_ms: controllerDuration, api_request_id: `${callId}-controller`, model: controllerRun.response?.model ?? "gpt-5.6-luna", reasoning: "low", service_tier: "default", usage: controllerRun.response ? { input_tokens: (controllerRun.response as CompletedResponse).usage?.input_tokens ?? null, cached_input_tokens: (controllerRun.response as CompletedResponse).usage?.input_tokens_details?.cached_tokens ?? null, cache_write_tokens: (controllerRun.response as CompletedResponse).usage?.input_tokens_details?.cache_write_tokens ?? null, output_tokens: (controllerRun.response as CompletedResponse).usage?.output_tokens ?? null, reasoning_tokens: (controllerRun.response as CompletedResponse).usage?.output_tokens_details?.reasoning_tokens ?? null, total_tokens: (controllerRun.response as CompletedResponse).usage?.total_tokens ?? null } : undefined }]),
+                ...(controllerDuration === null ? [{ name: "controller", status: "skipped", duration_ms: null }] : [{ name: "controller", status: controllerUsageRecord?.provider_status ?? "unknown", duration_ms: controllerDuration, api_request_id: controllerUsageRecord?.call_id ?? null, model: controllerRun.response?.model ?? "gpt-5.6-luna", reasoning: "low", service_tier: "default", usage: controllerRun.response ? { input_tokens: (controllerRun.response as CompletedResponse).usage?.input_tokens ?? null, cached_input_tokens: (controllerRun.response as CompletedResponse).usage?.input_tokens_details?.cached_tokens ?? null, cache_write_tokens: (controllerRun.response as CompletedResponse).usage?.input_tokens_details?.cache_write_tokens ?? null, output_tokens: (controllerRun.response as CompletedResponse).usage?.output_tokens ?? null, reasoning_tokens: (controllerRun.response as CompletedResponse).usage?.output_tokens_details?.reasoning_tokens ?? null, total_tokens: (controllerRun.response as CompletedResponse).usage?.total_tokens ?? null } : undefined }]),
                 { name: "main", status: "completed", duration_ms: Math.round(completedAt - mainStarted), api_request_id: callId, model: diagnostics.model, reasoning: execution.reasoning, service_tier: "default", usage: { input_tokens: diagnostics.inputTokens, cached_input_tokens: diagnostics.cachedInputTokens ?? null, cache_write_tokens: diagnostics.cacheWriteTokens ?? null, output_tokens: diagnostics.outputTokens, reasoning_tokens: diagnostics.reasoningTokens ?? null, total_tokens: diagnostics.totalTokens } },
               ],
               context_sizes: { unit: "chars", core: instructions.length, runtime_instructions: Math.max(0, composedInstructions.length - instructions.length), notebook: JSON.stringify(notebook).length, previous_analysis: body.analysisContext ? JSON.stringify(body.analysisContext).length : 0, user_message: (body.message as string).length, previous_response_context: typeof body.previousResponseId === "string" ? null : 0 },
@@ -422,9 +457,19 @@ export async function POST(request: Request) {
               controller: { mode: controllerMode },
               streaming: { model: true, backend: true, transport: true, ui: true },
             } } : {}),
+            model_usage_records: usageCollector.records(),
           });
         }
-        if (event.type === "error") emit({ type: "error", message: event.message || "Streaming selhal." });
+        if (event.type === "response.incomplete" || event.type === "response.failed") {
+          await mainLifecycle.finish_provider({ body: { ...(event.response ?? {}), status: event.type === "response.incomplete" ? "incomplete" : "failed" }, headers: upstream.headers, status_code: upstream.status });
+          terminalEvent = true;
+          emit({ type: "error", message: "Model odpověď nedokončil.", model_usage_records: usageCollector.records() });
+        }
+        if (event.type === "error") {
+          await mainLifecycle.finish_provider({ body: { status: "failed", error: { code: typeof event.code === "string" ? event.code : null } }, headers: upstream.headers, status_code: upstream.status });
+          terminalEvent = true;
+          emit({ type: "error", message: event.message || "Streaming selhal.", model_usage_records: usageCollector.records() });
+        }
       };
 
       try {
@@ -434,13 +479,20 @@ export async function POST(request: Request) {
           buffer += decoder.decode(value, { stream: true });
           const lines = buffer.split("\n");
           buffer = lines.pop() ?? "";
-          for (const line of lines) processSseLine(line);
+          for (const line of lines) await processSseLine(line);
         }
 
         buffer += decoder.decode();
-        if (buffer) processSseLine(buffer);
+        if (buffer) await processSseLine(buffer);
+        if (!terminalEvent) {
+          await mainLifecycle.finish_transport("stream_ended_without_terminal_event");
+          emit({ type: "error", message: "Přenos odpovědi skončil bez dokončení.", model_usage_records: usageCollector.records() });
+        }
       } catch {
-        emit({ type: "error", message: "Přenos odpovědi byl přerušen." });
+        if (!terminalEvent) {
+          await mainLifecycle.finish_transport("stream_interrupted");
+          emit({ type: "error", message: "Přenos odpovědi byl přerušen.", model_usage_records: usageCollector.records() });
+        }
       } finally {
         controller.close();
       }

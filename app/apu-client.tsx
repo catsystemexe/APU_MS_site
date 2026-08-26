@@ -939,6 +939,7 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
         ...(functionalMapping ? { functionalMapping } : {}),
         ...(dialogEvent ? { dialogEvent } : {}),
         ...(controllerFastPathEligible ? { controllerFastPathEligible: true } : {}),
+        requestId,
         turnId,
       }),
     });
@@ -959,6 +960,7 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
     const processLine = (line: string) => {
       if (!line.trim()) return;
       const event = JSON.parse(line);
+      collectModelUsageRecords(event);
       if (event.type === "status" && event.status === "preparing_response" && phase === "intake") {
         markF1MainPreparing(assistantId);
       }

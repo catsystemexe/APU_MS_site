@@ -3,7 +3,7 @@ import test from "node:test";
 import { pathToFileURL } from "node:url";
 
 const moduleUrl = pathToFileURL(new URL("../app/model-call-instrumentation.ts", import.meta.url).pathname).href;
-const { InstrumentedModelCallError, runInstrumentedModelCall } = await import(moduleUrl);
+const { createInstrumentedModelCallLifecycle, InstrumentedModelCallError, runInstrumentedModelCall } = await import(moduleUrl);
 
 function baseInput(overrides = {}) {
   const records = [];
@@ -138,4 +138,49 @@ test("rejects an invalid client request id before side effects", async () => {
   await assert.rejects(() => runInstrumentedModelCall(input), /call_id must be/);
   assert.equal(invoked, false);
   assert.equal(records.length, 0);
+});
+
+test("stream lifecycle emits one correlated final record and ignores later terminal signals", async () => {
+  const { input, records } = baseInput();
+  const lifecycleInput = { ...input };
+  delete lifecycleInput.invoke;
+  const lifecycle = createInstrumentedModelCallLifecycle(lifecycleInput);
+
+  await lifecycle.begin();
+  assert.equal(lifecycle.headers["X-Client-Request-Id"], "call-1");
+  assert.equal(records.length, 1);
+
+  const completed = await lifecycle.finish_provider({
+    status_code: 200,
+    headers: { "x-request-id": "provider-stream-1" },
+    body: {
+      id: "resp-stream-1",
+      status: "completed",
+      model: "gpt-5.6-terra",
+      service_tier: "default",
+      usage: { input_tokens: 40, output_tokens: 8 },
+    },
+  });
+  const duplicate = await lifecycle.finish_transport("late_disconnect");
+
+  assert.equal(records.length, 2);
+  assert.equal(completed, duplicate);
+  assert.equal(completed.provider_status, "completed");
+  assert.equal(completed.provider_request_id, "provider-stream-1");
+  assert.equal(completed.usage.normalized_total_tokens, 48);
+  assert.equal(lifecycle.is_finalized(), true);
+});
+
+test("stream lifecycle records an interrupted transport without provider usage", async () => {
+  const { input, records } = baseInput();
+  const lifecycleInput = { ...input };
+  delete lifecycleInput.invoke;
+  const lifecycle = createInstrumentedModelCallLifecycle(lifecycleInput);
+
+  const failed = await lifecycle.finish_transport("stream_ended_without_terminal_event");
+
+  assert.equal(records.length, 2);
+  assert.equal(failed.provider_status, "transport_error");
+  assert.equal(failed.pricing_snapshot.status, "missing_usage");
+  assert.deepEqual(failed.error, { category: "transport", code: "stream_ended_without_terminal_event" });
 });
