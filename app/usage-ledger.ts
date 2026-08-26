@@ -108,7 +108,8 @@ export type UsageLedgerSummary = {
 type PricingBands = { short: PricingRates; long: PricingRates };
 
 // OpenAI API standard pricing, USD per 1M tokens, verified 2026-08-25.
-// This table is intentionally independent from the legacy per-message estimator.
+// This is the single runtime pricing-rate authority. Legacy diagnostics delegate
+// to priceUsageRecord and canonical accounting persists its result as a snapshot.
 export const USAGE_PRICING_CATALOG = {
   "gpt-5.6-sol": {
     short: { input: 4, cached_input: 0.4, cache_write: 5, output: 20 },

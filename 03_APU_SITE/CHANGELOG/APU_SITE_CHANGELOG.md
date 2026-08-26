@@ -4,6 +4,14 @@ Status: CURRENT
 
 Records significant verified product/runtime/project changes. It is not a complete Git log. Historical Sites-era entries are retained where they remain useful; current deployment state must not be inferred from a changelog entry alone.
 
+## 2026-08-26 — Canonical model cost accounting
+
+### Changed
+- Unified canonical model cost accounting on the call-level usage ledger; legacy diagnostics now delegate to that pricing implementation instead of owning independent rates.
+
+### Preserved scope
+- Model routing and the number of model calls are unchanged, and no production deployment was performed.
+
 ## 2026-08-25 — Component-based F2 POCHOPIT Rozbor
 
 ### Added / Changed

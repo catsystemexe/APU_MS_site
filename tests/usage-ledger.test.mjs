@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
   USAGE_FILE_SEARCH_RATE_PER_1000,
@@ -64,6 +65,13 @@ test("pricing uses current standard Sol rates and file-search rate", () => {
   assert.equal(priced.rates_per_million?.output, 20);
 });
 
+test("model metadata cannot reintroduce an independent runtime pricing table", async () => {
+  const modelConfig = await readFile(new URL("../app/model-config.ts", import.meta.url), "utf8");
+  assert.doesNotMatch(modelConfig, /(?:standard|longContext)\s*:/);
+  assert.doesNotMatch(modelConfig, /(?:input|cachedInput|cacheWrite|output)\s*:\s*\d/);
+  assert.match(modelConfig, /priceUsageRecord\s*\(/);
+});
+
 test("reported tier wins, while a missing reported default tier safely uses the requested tier", () => {
   const defaultFallback = record({ reported_service_tier: null }).pricing_snapshot;
   assert.equal(defaultFallback.status, "priced");
@@ -83,7 +91,15 @@ test("invalid cache decomposition and missing usage are never priced as facts", 
   });
   const missing = record({ provider_usage: undefined }).pricing_snapshot;
   assert.equal(invalid.status, "invalid_usage");
+  assert.equal(invalid.estimated_cost_usd, null);
   assert.equal(missing.status, "missing_usage");
+  assert.equal(missing.estimated_cost_usd, null);
+});
+
+test("unknown models are never priced through a fallback", () => {
+  const unknown = record({ requested_model: "unknown", reported_model: "unknown" }).pricing_snapshot;
+  assert.equal(unknown.status, "unknown_model");
+  assert.equal(unknown.estimated_cost_usd, null);
 });
 
 test("finalization preserves billable usage when the application rejects provider output", () => {
