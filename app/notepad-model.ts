@@ -39,6 +39,7 @@ export type ExtractionCandidate = {
   reason: string | null;
   start: number;
   end: number;
+  needMapping?: PedagogicalNeedMapping;
 };
 
 export type ExtractionResult = {
@@ -219,7 +220,7 @@ export function applyCandidates(
         start: candidate.start,
         end: candidate.end,
       },
-      ...(candidate.category === "goals" ? { needMapping: mapPedagogicalNeed(candidate.notebookText) } : {}),
+      ...(candidate.category === "goals" ? { needMapping: candidate.needMapping ?? mapPedagogicalNeed(candidate.notebookText) } : {}),
     };
     next[candidate.category].push(entry);
     added.push(entry);

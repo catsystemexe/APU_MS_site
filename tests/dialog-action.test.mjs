@@ -109,7 +109,9 @@ test("the active teacher-need question offers standard-input quick responses and
   assert.match(card, /onMouseEnter/);
   assert.match(card, /onFocus/);
   assert.match(card, /onClick/);
-  assert.match(client, /await sendMessage\(response\)/);
+  assert.match(client, /await sendMessage\(response, \{ explicitNeed: path \}\)/);
+  assert.match(client, /explicitNeed: options\.explicitNeed/);
+  assert.match(card, /label: "Prozkoumat", path: "POZOROVAT"/);
   assert.match(client, /quickResponseSubmittingRef\.current/);
   assert.match(styles, /\.teacher-need-quick-responses[\s\S]*flex-wrap: wrap/);
 });
