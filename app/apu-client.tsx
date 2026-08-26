@@ -61,7 +61,7 @@ import { findAssistantHighlightRanges } from "./assistant-highlights";
 import ApuLogo from "./apu-logo";
 import DialogActionCard from "./dialog-action-card";
 import { AnalysisQuestionRow } from "./analysis-question-row";
-import { F2EntrySummary, type F2EntryHypothesis } from "./f2-entry-summary";
+import { F2EntrySummary } from "./f2-entry-summary";
 import { resolveF2OutputNavigation, resolveTextDialogEvent, type ConversationPhase, type DialogAction } from "./dialog-action";
 import {
   COLOR_THEMES,
@@ -156,12 +156,14 @@ type Message = {
   createdAt?: string;
   telemetryRefs?: string[];
   analysisNextPrompt?: AnalysisNextPrompt;
-  analysisEntryHypotheses?: F2EntryHypothesis[];
+  analysisEntryHypotheses?: AnalysisState["hypotheses"];
   lifecycleRecords?: CompletedLifecycleRecord[];
 };
 
-function entryHypotheses(analysis: AnalysisState): F2EntryHypothesis[] {
-  return analysis.hypotheses.map(({ id, rank, title, summary }) => ({ id, rank, title, summary }));
+function entryHypotheses(analysis: AnalysisState): AnalysisState["hypotheses"] { return analysis.hypotheses; }
+
+function usesDesktopWorkspaceLayout() {
+  return window.matchMedia("(min-width: 1024px), (min-width: 768px) and (orientation: landscape)").matches;
 }
 
 const WELCOME: Message = {
@@ -934,9 +936,11 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
     const textTransition = resolveTextDialogEvent(rawText, compactNotepad(notepadForChat), phase);
     if (phase === "intake" && (dialogEvent === "continue_to_solution" || textTransition === "continue_to_solution")) {
       setPhase("development");
-      setActivePanel("analysis");
-      setIsF2BuildVisible(true);
       const result = await refreshStructuredAnalysis(notepadForChat, "", turnId, requestId, "F1");
+      if (usesDesktopWorkspaceLayout()) {
+        setActivePanel("analysis");
+        setIsF2BuildVisible(false);
+      }
       setMessages((current) => current.map((message) => message.id === assistantId ? withCompletedLifecycleRecord({
         ...message, content: "", analysisEntryHypotheses: entryHypotheses(result.analysis), analysisNextPrompt: result.analysis.chatUpdate.nextPrompt, phaseLabel: "[FÁZE 2]",
         ...(result.diagnostics ? { diagnostics: result.diagnostics } : {}),
@@ -1095,9 +1099,11 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
     if (buffer.trim()) processLine(buffer);
     if (!completeText || !receivedDone) throw new Error("Model nevrátil dokončenou odpověď s usage daty.");
     if (phase === "intake" && completedPhase === "development") {
-      setActivePanel("analysis");
-      setIsF2BuildVisible(true);
       const result = await refreshStructuredAnalysis(notepadForChat, "", turnId, requestId, "F1");
+      if (usesDesktopWorkspaceLayout()) {
+        setActivePanel("analysis");
+        setIsF2BuildVisible(false);
+      }
       setMessages((current) => current.map((message) => message.id === assistantId ? withCompletedLifecycleRecord({
         ...message, content: "", analysisEntryHypotheses: entryHypotheses(result.analysis), analysisNextPrompt: result.analysis.chatUpdate.nextPrompt,
         phaseLabel: "[FÁZE 2]",
@@ -1654,7 +1660,10 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
                         />
                       )
                     : message.analysisEntryHypotheses
-                      ? <F2EntrySummary hypotheses={message.analysisEntryHypotheses} onOpenAnalysis={() => setActivePanel("analysis")} />
+                      ? <F2EntrySummary
+                          onOpenAnalysis={() => setActivePanel("analysis")}
+                          onOpenBuild={() => { setActivePanel("analysis"); setIsF2BuildVisible(true); }}
+                        />
                       : f1ProcessingStatus?.assistantId === message.id
                       ? <ProcessingStatus stage={f1ProcessingStatus.stage} />
                       : <span className="typing"><i /><i /><i /></span>}

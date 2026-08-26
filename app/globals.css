@@ -528,9 +528,13 @@ button:disabled { cursor: default; opacity: 0.52; }
 .user-response .message-content { max-width: 100%; }
 .f2-entry-summary {
   display: grid;
-  gap: 16px;
+  gap: 10px;
   width: min(620px, 100%);
 }
+.f2-entry-summary p { margin: 0; color: var(--text-secondary); font-size: calc(14px * var(--font-scale)); line-height: 1.5; }
+.f2-entry-build-guidance button { display: none; border: 0; padding: 0; background: transparent; color: var(--accent-strong); font: inherit; font-weight: 700; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.f2-entry-build-guidance button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.f2-entry-build-guidance > span { font-weight: 700; }
 .f2-entry-callout {
   display: grid;
   grid-template-columns: 18px minmax(0, 1fr) 18px;
@@ -553,15 +557,6 @@ button:disabled { cursor: default; opacity: 0.52; }
 .f2-entry-callout:hover { background: color-mix(in srgb, #cfe8f7 62%, var(--bg-surface)); }
 .f2-entry-callout:active { transform: translateY(1px); }
 .f2-entry-callout:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 2px; }
-.f2-entry-hypotheses { display: grid; gap: 8px; }
-.f2-entry-hypotheses h3 { margin: 0; color: var(--text-primary); font-size: calc(14px * var(--font-scale)); line-height: 1.35; }
-.f2-entry-hypotheses ol { display: grid; gap: 10px; margin: 0; padding-left: 25px; }
-.f2-entry-hypotheses li { padding-left: 3px; }
-.f2-entry-hypotheses li::marker { color: var(--accent-strong); font-weight: 700; }
-.f2-entry-hypotheses strong,
-.f2-entry-hypotheses span { display: block; }
-.f2-entry-hypotheses strong { color: var(--text-primary); font-size: calc(14px * var(--font-scale)); line-height: 1.38; }
-.f2-entry-hypotheses span { margin-top: 2px; color: var(--text-secondary); font-size: calc(13px * var(--font-scale)); line-height: 1.46; }
 .message--user .message-content {
   padding: 12px 16px;
   border-radius: 16px 4px 16px 16px;
@@ -1465,6 +1460,8 @@ button:disabled { cursor: default; opacity: 0.52; }
 }
 
 @media (min-width: 1024px), (min-width: 768px) and (orientation: landscape) {
+  .f2-entry-build-guidance button { display: inline; }
+  .f2-entry-build-guidance > span { display: none; }
   .app-shell { padding: 10px; }
   .chat-card {
     width: 100%;

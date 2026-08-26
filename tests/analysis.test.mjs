@@ -98,20 +98,22 @@ test("structured Phase 2 entry does not duplicate the canonical callout text", (
   assert.match(text, /Nejdůležitější nejistota: U/);
 });
 
-test("F2 entry chat uses the shared analysis hypotheses and a single clickable callout", async () => {
+test("F2 entry chat links to Rozbor and Build without duplicating hypotheses", async () => {
   const [client, entry] = await Promise.all([
     readFile(new URL("../app/apu-client.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/f2-entry-summary.tsx", import.meta.url), "utf8"),
   ]);
   assert.match(client, /content: "", analysisEntryHypotheses: entryHypotheses\(result\.analysis\)/);
   assert.match(client, /result\.analysis\.chatUpdate\.kind === "entry"[\s\S]*?analysisEntryHypotheses: entryHypotheses\(result\.analysis\)/);
-  assert.match(client, /<F2EntrySummary hypotheses=\{message\.analysisEntryHypotheses\} onOpenAnalysis=\{\(\) => setActivePanel\("analysis"\)\}/);
+  assert.match(client, /<F2EntrySummary[\s\S]*?onOpenAnalysis=\{\(\) => setActivePanel\("analysis"\)\}[\s\S]*?onOpenBuild=/);
   assert.match(client, /assistant-response--f2-entry/);
   assert.doesNotMatch(await readFile(new URL("../app/analysis-model.ts", import.meta.url), "utf8"), /Připravil jsem kartu Rozbor/);
   assert.doesNotMatch(client, /if \(phase === "intake" && nextPhase === "development"\) setActivePanel\("analysis"\)/);
   assert.match(entry, /Připravil jsem kartu Rozbor z aktuálního Zápisníku/);
-  assert.match(entry, /hypotheses\.map/);
-  assert.match(entry, /value=\{hypothesis\.rank\}/);
+  assert.match(entry, /V kartě Rozbor máte připravené pracovní situační hypotézy/);
+  assert.match(entry, /Jednotlivé směry můžete dál rozpracovat v kartě/);
+  assert.doesNotMatch(entry, /Možné směry k ověření|hypotheses\.map/);
+  assert.match(client, /usesDesktopWorkspaceLayout\(\)[\s\S]*?setActivePanel\("analysis"\);[\s\S]*?setIsF2BuildVisible\(false\)/);
 });
 
 test("F2 chat uses only nextPrompt and strips a legacy emoji prefix", () => {
