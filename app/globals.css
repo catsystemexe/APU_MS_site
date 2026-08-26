@@ -487,6 +487,39 @@ button:disabled { cursor: default; opacity: 0.52; }
   background: var(--bg-surface);
 }
 .assistant-response .message-content { max-width: 100%; padding: 0; }
+.welcome-question { position: relative; display: inline-flex; align-items: center; gap: 7px; }
+.welcome-help-trigger {
+  width: 18px;
+  height: 18px;
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent-soft) 72%, var(--bg-surface));
+  box-shadow: 0 2px 7px color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--text-secondary);
+}
+.welcome-help-trigger:hover { color: var(--accent-dark); box-shadow: 0 3px 9px color-mix(in srgb, var(--accent) 24%, transparent); }
+.welcome-help-trigger:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.welcome-help-trigger svg { width: 12px; height: 12px; stroke-width: 2; }
+.welcome-help {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 8px);
+  left: 0;
+  width: min(390px, calc(100vw - 84px));
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg-surface) 96%, var(--accent-soft));
+  box-shadow: 0 10px 28px var(--shadow-color);
+  color: var(--text-secondary);
+  font-size: calc(12px * var(--font-scale));
+  font-style: italic;
+  line-height: 1.5;
+  white-space: normal;
+}
 .assistant-response.assistant-response--f2-entry { padding: 0; background: transparent; }
 .user-response {
   justify-self: end;

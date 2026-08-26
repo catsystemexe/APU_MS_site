@@ -18,6 +18,7 @@ import {
   Download,
   FilePlus2,
   FolderOpen,
+  Info,
   Mic,
   NotebookPen,
   Plus,
@@ -165,9 +166,43 @@ function entryHypotheses(analysis: AnalysisState): F2EntryHypothesis[] {
 const WELCOME: Message = {
   id: "welcome",
   role: "assistant",
-  content: "Co dnes potřebujete?",
+  content: "Popište mi situaci, se kterou chcete dnes pracovat.",
   createdAt: new Date().toISOString(),
 };
+
+const WELCOME_HELP = "Například: Při ranním kruhu často vstává, odchází od ostatních a při návratu se obtížně znovu zapojuje do společné činnosti.";
+
+function WelcomeQuestion({ content }: { content: string }) {
+  const [helpOpen, setHelpOpen] = useState(false);
+
+  return (
+    <span
+      className="welcome-question"
+      onMouseEnter={() => setHelpOpen(true)}
+      onMouseLeave={() => setHelpOpen(false)}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) setHelpOpen(false);
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") setHelpOpen(false);
+      }}
+    >
+      <span>{content}</span>
+      <button
+        type="button"
+        className="welcome-help-trigger"
+        aria-label="Zobrazit příklad situace"
+        aria-expanded={helpOpen}
+        aria-describedby={helpOpen ? "welcome-help" : undefined}
+        onFocus={() => setHelpOpen(true)}
+        onClick={() => setHelpOpen((open) => !open)}
+      >
+        <Info aria-hidden="true" />
+      </button>
+      {helpOpen && <span id="welcome-help" role="tooltip" className="welcome-help">{WELCOME_HELP}</span>}
+    </span>
+  );
+}
 
 const MODEL_OPTIONS = Object.values(MODEL_CATALOG);
 const AUTO_MODEL_OPTION = { id: AUTO_MODEL_SELECTION, label: "Automaticky · Luna / Terra" } as const;
@@ -1596,7 +1631,9 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
                 ? `assistant-response${message.analysisEntryHypotheses ? " assistant-response--f2-entry" : ""}`
                 : message.role === "user" ? "user-response" : undefined}>
                 <div className="message-content">
-                  {message.content
+                  {message.id === WELCOME.id
+                    ? <WelcomeQuestion content={message.content} />
+                    : message.content
                     ? (
                         <HighlightedMessage
                           message={message}
