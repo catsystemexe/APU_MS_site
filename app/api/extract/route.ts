@@ -1,5 +1,5 @@
 import { estimateCostUsd } from "../../model-config";
-import { CATEGORY_IDS, CategoryId, locateSourceQuote } from "../../notepad-model";
+import { CATEGORY_IDS, F2_PATHS, CategoryId, locateSourceQuote, type F2Path } from "../../notepad-model";
 import { getAccessIdentity } from "../../access-auth";
 import { callOpenAIResponses, createRequestUsageCollector, modelUsagePayload, usageErrorPayload, type RequestUsageCollector } from "../../openai-responses-instrumentation";
 import intakeCore from "../../../apu-core/v1.6/02_OBSERVATION_AND_INTAKE.md?raw";
@@ -150,6 +150,7 @@ type RawCandidate = {
   action: "add" | "duplicate" | "conflict" | "skip";
   relatedEntryId: string | null;
   reason: string | null;
+  needMapping?: { f2Path: F2Path; f3Target: null };
 };
 type RawExtraction = {
   situationRelation: "same" | "related" | "different" | "uncertain";
@@ -252,10 +253,7 @@ export async function POST(request: Request) {
   const identity = await getAccessIdentity(request.headers);
   if (!identity) return jsonError("Chybí platná identita Cloudflare Access.", 401);
 
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) return jsonError("Extrakční vrstva není nakonfigurována.", 503);
-
-  let body: { message?: unknown; notebook?: unknown; answersNeedQuestion?: unknown; turnId?: unknown };
+  let body: { message?: unknown; notebook?: unknown; answersNeedQuestion?: unknown; explicitNeed?: unknown; turnId?: unknown };
   try {
     body = await request.json();
   } catch {
@@ -270,7 +268,35 @@ export async function POST(request: Request) {
   if (body.answersNeedQuestion !== undefined && typeof body.answersNeedQuestion !== "boolean") {
     return jsonError("Neplatný kontext pedagogické potřeby.", 400);
   }
+  if (body.explicitNeed !== undefined && (!F2_PATHS.includes(body.explicitNeed as F2Path) || body.answersNeedQuestion !== true)) {
+    return jsonError("Neplatná explicitní pedagogická potřeba.", 400);
+  }
   if (body.turnId !== undefined && (typeof body.turnId !== "string" || body.turnId.length > 160)) return jsonError("Neplatný identifikátor tahu.", 400);
+
+  if (body.explicitNeed !== undefined) {
+    const matchingGoal = notebook.find((entry) => entry.category === "goals" && entry.text.trim().toLocaleLowerCase("cs-CZ") === (body.message as string).trim().toLocaleLowerCase("cs-CZ"));
+    const sourceQuote = (body.message as string).trim();
+    const location = locateSourceQuote(body.message as string, sourceQuote)!;
+    return Response.json({
+      extraction: {
+        situationRelation: "related",
+        situationReason: null,
+        candidates: [{
+          category: "goals",
+          sourceQuote,
+          notebookText: sourceQuote,
+          action: matchingGoal ? "duplicate" : "add",
+          relatedEntryId: matchingGoal?.id ?? null,
+          reason: null,
+          ...location,
+          needMapping: { f2Path: body.explicitNeed as F2Path, f3Target: null },
+        }],
+      },
+    }, { headers: { "Cache-Control": "no-store" } });
+  }
+
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return jsonError("Extrakční vrstva není nakonfigurována.", 503);
 
   const extractStarted = performance.now();
   const collector = createRequestUsageCollector();

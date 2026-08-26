@@ -42,6 +42,8 @@ test("extract route requests strict structured output and revalidates quotes", a
   assert.match(source, /model: EXTRACTION_MODEL,\s+reasoning: \{ effort: "low" \},\s+instructions: EXTRACTION_INSTRUCTIONS/);
   assert.match(source, /name: "extract"[\s\S]{0,250}?reasoning: "low"/);
   assert.match(source, /name: "grounding"[\s\S]{0,250}?reasoning: "low"/);
+  assert.match(source, /body\.explicitNeed !== undefined/);
+  assert.match(source, /needMapping: \{ f2Path: body\.explicitNeed as F2Path, f3Target: null \}/);
 });
 
 test("Core v1.3 owns semantic extraction of the complete pedagogical need", async () => {

@@ -54,6 +54,7 @@ import {
   mapPedagogicalNeed,
   NotepadEntry,
   NotepadState,
+  type F2Path,
   replaceEntryFromConflict,
 } from "./notepad-model";
 import { findAssistantHighlightRanges } from "./assistant-highlights";
@@ -1131,7 +1132,7 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
     return true;
   }
 
-  async function sendMessage(rawText: string, options?: { dialogEvent?: string; silent?: boolean }) {
+  async function sendMessage(rawText: string, options?: { dialogEvent?: string; silent?: boolean; explicitNeed?: F2Path }) {
     const text = rawText.trim();
     if (!text || isLoading || !isNotepadHydrated) return;
 
@@ -1186,6 +1187,7 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
             message: rawText,
             notebook: compactNotepad(notepad),
             answersNeedQuestion,
+            ...(options?.explicitNeed ? { explicitNeed: options.explicitNeed } : {}),
             turnId,
           }),
         });
@@ -1337,11 +1339,11 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
     void sendMessage(controlledText, { dialogEvent: id, silent: id === "continue_to_solution" });
   }
 
-  async function submitTeacherNeedQuickResponse(response: string) {
+  async function submitTeacherNeedQuickResponse(response: string, path: F2Path) {
     if (quickResponseSubmittingRef.current) return;
     quickResponseSubmittingRef.current = true;
     try {
-      await sendMessage(response);
+      await sendMessage(response, { explicitNeed: path });
     } finally {
       quickResponseSubmittingRef.current = false;
     }
@@ -1666,7 +1668,7 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
                     action={action}
                     active={message.id === activeDialogMessageId && !isLoading}
                     onSelect={selectDialogAction}
-                    onQuickResponse={(response) => void submitTeacherNeedQuickResponse(response)}
+                    onQuickResponse={(response, path) => void submitTeacherNeedQuickResponse(response, path)}
                   />
                 ))}
               </div>

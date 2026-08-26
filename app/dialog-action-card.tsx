@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Info, Lightbulb, Signpost } from "lucide-react";
 import type { DialogAction } from "./dialog-action";
 import { NOTEPAD_CATEGORY_META } from "./notepad-categories";
+import type { F2Path } from "./notepad-model";
 
 const TARGET_META = {
   observed_phenomenon: NOTEPAD_CATEGORY_META.manifestations,
@@ -16,16 +17,20 @@ const TARGET_META = {
   output: { label: "Volba výstupu", icon: Signpost },
 } as const;
 
-const TEACHER_NEED_RESPONSES = ["Pochopit", "Prozkoumat", "Vytvořit"] as const;
+const TEACHER_NEED_RESPONSES: ReadonlyArray<{ label: string; path: F2Path }> = [
+  { label: "Pochopit", path: "POCHOPIT" },
+  { label: "Prozkoumat", path: "POZOROVAT" },
+  { label: "Vytvořit", path: "VYTVOŘIT" },
+];
 const TEACHER_NEED_HELP = "Můžete si vybrat jeden ze směrů, nebo odpovědět vlastními slovy. Pokud si nejste jistí, klidně napište, že to chcete nejdřív probrat.";
 
-function TeacherNeedQuickResponses({ active, onSelect }: { active: boolean; onSelect: (response: string) => void }) {
+function TeacherNeedQuickResponses({ active, onSelect }: { active: boolean; onSelect: (label: string, path: F2Path) => void }) {
   const [helpOpen, setHelpOpen] = useState(false);
 
   return (
     <div className="teacher-need-quick-responses">
-      {TEACHER_NEED_RESPONSES.map((response) => (
-        <button type="button" disabled={!active} key={response} onClick={() => onSelect(response)}>{response}</button>
+      {TEACHER_NEED_RESPONSES.map(({ label, path }) => (
+        <button type="button" disabled={!active} key={path} onClick={() => onSelect(label, path)}>{label}</button>
       ))}
       <span
         className="teacher-need-help-wrap"
@@ -57,7 +62,7 @@ function TeacherNeedQuickResponses({ active, onSelect }: { active: boolean; onSe
 
 export default function DialogActionCard({ action, active, onSelect, onQuickResponse }: {
   action: DialogAction; active: boolean; onSelect: (id: string, label: string) => void;
-  onQuickResponse?: (response: string) => void;
+  onQuickResponse?: (label: string, path: F2Path) => void;
 }) {
   const meta = TARGET_META[action.target as keyof typeof TARGET_META] ?? TARGET_META.phase;
   const Icon = meta.icon;

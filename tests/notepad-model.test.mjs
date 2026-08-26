@@ -38,6 +38,18 @@ test("ambiguous needs fall back to POCHOPIT and a target remains optional", () =
   assert.deepEqual(mapPedagogicalNeed("Chci lépe pochopit, proč se to děje."), { f2Path: "POCHOPIT", f3Target: null });
 });
 
+test("an explicit quick-response path is preserved when its goal candidate is applied", () => {
+  for (const [label, f2Path] of [["Pochopit", "POCHOPIT"], ["Prozkoumat", "POZOROVAT"], ["Vytvořit", "VYTVOŘIT"]]) {
+    const applied = applyCandidates(structuredClone(EMPTY_NOTEPAD), "message-1", [{
+      category: "goals", sourceQuote: label, notebookText: label, action: "add", relatedEntryId: null,
+      reason: null, start: 0, end: label.length, needMapping: { f2Path, f3Target: null },
+    }]);
+    assert.equal(applied.added.length, 1);
+    assert.deepEqual(applied.state.goals[0].needMapping, { f2Path, f3Target: null });
+    assert.equal(getF1ToF2NeedContract(applied.state)?.initialF2Path, f2Path);
+  }
+});
+
 test("canonical need mapping persists and the F1 to F2 adapter consumes it", () => {
   const state = structuredClone(EMPTY_NOTEPAD);
   state.goals.push({ id: "need-1", text: "Připrav mi pracovní karty.", origin: "manual", needMapping: mapPedagogicalNeed("Připrav mi pracovní karty.") });
