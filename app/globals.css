@@ -647,6 +647,31 @@ button:disabled { cursor: default; opacity: 0.52; }
   font-weight: 450;
   line-height: 1.52;
 }
+.teacher-need-quick-responses {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0 0 35px;
+}
+.teacher-need-quick-responses > button:not(.teacher-need-help-trigger) {
+  min-height: 28px;
+  padding: 4px 10px;
+  border: 1px solid color-mix(in srgb, var(--dialog-primary) 34%, var(--border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--dialog-primary) 5%, var(--bg-surface));
+  color: var(--text-secondary);
+  font-size: calc(11px * var(--font-scale));
+  font-weight: 600;
+}
+.teacher-need-quick-responses > button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--dialog-primary) 58%, var(--border));
+  background: color-mix(in srgb, var(--dialog-primary) 10%, var(--bg-surface));
+  color: var(--text-primary);
+}
+.teacher-need-help-wrap { position: relative; display: inline-flex; flex: none; }
+.teacher-need-help-trigger { width: 17px; height: 17px; }
+.teacher-need-help { top: calc(100% + 7px); right: 0; left: auto; font-style: normal; }
 .assistant-response > .message-content + .dialog-action { margin-top: 8px; }
 .assistant-response > .dialog-action + .dialog-action { margin-top: -4px; }
 .dialog-action-nav-wrap { margin: 11px 0 0; }

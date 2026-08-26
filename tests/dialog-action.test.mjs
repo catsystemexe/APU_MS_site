@@ -97,6 +97,23 @@ test("questions are independent structured items with visual type rendering", as
   assert.match(styles, /--dialog-navigation:/);
 });
 
+test("the active teacher-need question offers standard-input quick responses and contextual help", async () => {
+  const [card, client, styles] = await Promise.all([
+    readFile(new URL("../app/dialog-action-card.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/apu-client.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+  for (const label of ["Pochopit", "Prozkoumat", "Vytvořit"]) assert.match(card, new RegExp(label));
+  assert.match(card, /active && action\.type === "MAIN" && action\.target === "teacher_need"/);
+  assert.match(card, /Můžete si vybrat jeden ze směrů, nebo odpovědět vlastními slovy\. Pokud si nejste jistí, klidně napište, že to chcete nejdřív probrat\./);
+  assert.match(card, /onMouseEnter/);
+  assert.match(card, /onFocus/);
+  assert.match(card, /onClick/);
+  assert.match(client, /await sendMessage\(response\)/);
+  assert.match(client, /quickResponseSubmittingRef\.current/);
+  assert.match(styles, /\.teacher-need-quick-responses[\s\S]*flex-wrap: wrap/);
+});
+
 test("structured F1 questions are clean and Main receives a prose-only boundary", async () => {
   assert.equal(cleanStructuredQuestionText("💬 Co jste už vyzkoušeli?"), "Co jste už vyzkoušeli?");
   assert.equal(cleanDialogActionQuestion(side()).question, side().question);

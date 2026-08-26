@@ -412,6 +412,7 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
   const [hasDictationDraft, setHasDictationDraft] = useState(false);
   const [f1ProcessingStatus, setF1ProcessingStatus] = useState<{ assistantId: string; stage: F1ProcessingStage } | null>(null);
   const f1ProcessingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const quickResponseSubmittingRef = useRef(false);
 
   useEffect(() => {
     const stored = Number.parseFloat(window.localStorage.getItem(DESKTOP_SPLIT_STORAGE_KEY) ?? "");
@@ -1336,6 +1337,16 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
     void sendMessage(controlledText, { dialogEvent: id, silent: id === "continue_to_solution" });
   }
 
+  async function submitTeacherNeedQuickResponse(response: string) {
+    if (quickResponseSubmittingRef.current) return;
+    quickResponseSubmittingRef.current = true;
+    try {
+      await sendMessage(response);
+    } finally {
+      quickResponseSubmittingRef.current = false;
+    }
+  }
+
   function confirmSuggestedNeed(need: SuggestedNeed) {
     const normalized = need.title.trim().toLocaleLowerCase("cs-CZ");
     if (notepad.goals.some((item) => item.text.trim().toLocaleLowerCase("cs-CZ") === normalized)) return;
@@ -1655,6 +1666,7 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
                     action={action}
                     active={message.id === activeDialogMessageId && !isLoading}
                     onSelect={selectDialogAction}
+                    onQuickResponse={(response) => void submitTeacherNeedQuickResponse(response)}
                   />
                 ))}
               </div>
