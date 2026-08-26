@@ -4,7 +4,12 @@ import { pathToFileURL } from "node:url";
 
 const collectionUrl = pathToFileURL(new URL("../app/model-usage-collection.ts", import.meta.url).pathname).href;
 const ledgerUrl = pathToFileURL(new URL("../app/usage-ledger.ts", import.meta.url).pathname).href;
-const { appendModelUsageRecords, readModelUsageRecords } = await import(collectionUrl);
+const {
+  appendModelUsageRecords,
+  appendModelUsageSessionRecords,
+  createModelUsageSession,
+  readModelUsageRecords,
+} = await import(collectionUrl);
 const { createModelUsageRecord, finalizeModelUsageRecord } = await import(ledgerUrl);
 
 function record(callId = "call-1") {
@@ -59,4 +64,41 @@ test("keeps the accepted record when a response conflicts on immutable identity"
   const conflicting = { ...record(), phase: "F2" };
   const collected = appendModelUsageRecords([original], [conflicting]);
   assert.deepEqual(collected, [original]);
+});
+
+test("derives the canonical session summary only from accepted unique records", () => {
+  const pending = record();
+  const completed = finalizeModelUsageRecord(pending, {
+    completed_at: "2026-08-25T10:00:01.000Z",
+    provider_status: "completed",
+    application_status: "accepted",
+    provider_usage: { input_tokens: 10, output_tokens: 2 },
+  });
+  const session = appendModelUsageSessionRecords(createModelUsageSession(), [pending, completed, completed]);
+
+  assert.equal(session.records.length, 1);
+  assert.equal(session.summary.call_count, 1);
+  assert.equal(session.summary.completed_call_count, 1);
+  assert.equal(session.summary.normalized_total_tokens, 12);
+  assert.equal(session.summary.complete_estimated_cost_usd, completed.pricing_snapshot.estimated_cost_usd);
+});
+
+test("keeps known session subtotal when an accepted record has unavailable pricing", () => {
+  const priced = finalizeModelUsageRecord(record("priced"), {
+    completed_at: "2026-08-25T10:00:01.000Z",
+    provider_status: "completed",
+    application_status: "accepted",
+    provider_usage: { input_tokens: 10, output_tokens: 2 },
+  });
+  const unpriced = finalizeModelUsageRecord(record("unpriced"), {
+    completed_at: "2026-08-25T10:00:01.000Z",
+    provider_status: "transport_error",
+    application_status: "failed",
+  });
+  const session = appendModelUsageSessionRecords(createModelUsageSession(), [priced, unpriced]);
+
+  assert.equal(session.summary.known_cost_subtotal_usd, priced.pricing_snapshot.estimated_cost_usd);
+  assert.equal(session.summary.unpriced_call_count, 1);
+  assert.equal(session.summary.uncertain_charge_call_count, 1);
+  assert.equal(session.summary.complete_estimated_cost_usd, null);
 });

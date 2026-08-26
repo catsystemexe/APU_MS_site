@@ -1,9 +1,21 @@
-import { upsertUsageRecord, type ModelUsageRecord } from "./usage-ledger.ts";
+import {
+  summarizeUsageRecords,
+  upsertUsageRecord,
+  type ModelUsageRecord,
+  type UsageLedgerSummary,
+} from "./usage-ledger.ts";
 
 export const MODEL_USAGE_RECORDS_FIELD = "model_usage_records" as const;
 
 export type ModelUsageRecordsResponse = {
   model_usage_records?: unknown;
+};
+
+// This stays internal until a later schema/UI step. Records are canonical;
+// the summary is always recomputed from those accepted records.
+export type ModelUsageSession = {
+  records: ModelUsageRecord[];
+  summary: UsageLedgerSummary;
 };
 
 const phases = new Set(["F1", "F2", "F3"]);
@@ -107,4 +119,17 @@ export function appendModelUsageRecords(current: ModelUsageRecord[], incoming: M
     }
   }
   return next;
+}
+
+export function createModelUsageSession(): ModelUsageSession {
+  const records: ModelUsageRecord[] = [];
+  return { records, summary: summarizeUsageRecords(records) };
+}
+
+export function appendModelUsageSessionRecords(
+  current: ModelUsageSession,
+  incoming: ModelUsageRecord[],
+): ModelUsageSession {
+  const records = appendModelUsageRecords(current.records, incoming);
+  return { records, summary: summarizeUsageRecords(records) };
 }

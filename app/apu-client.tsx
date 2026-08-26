@@ -33,8 +33,12 @@ import {
 import { Diagnostics, summarizeDiagnostics } from "./conversation-diagnostics";
 import { ACTIVE_APU_CORE_RELEASE_ID, ACTIVE_APU_CORE_VERSION, APU_SITE_RUNTIME_RELEASE } from "./core-config";
 import { buildSessionExport, createSessionTelemetry, downloadSessionExport, mergeSessionTelemetry, type SessionTelemetry } from "./session-export";
-import { appendModelUsageRecords, readModelUsageRecords, type ModelUsageRecordsResponse } from "./model-usage-collection";
-import type { ModelUsageRecord } from "./usage-ledger";
+import {
+  appendModelUsageSessionRecords,
+  createModelUsageSession,
+  readModelUsageRecords,
+  type ModelUsageRecordsResponse,
+} from "./model-usage-collection";
 import {
   MODEL_CATALOG,
   baseModelName,
@@ -312,7 +316,7 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
   const [highlightedAnalysisKeys, setHighlightedAnalysisKeys] = useState<Set<string>>(() => new Set());
   const [exportStatus, setExportStatus] = useState<"idle" | "downloaded" | "error">("idle");
   const [sessionTelemetry, setSessionTelemetry] = useState<SessionTelemetry[]>([]);
-  const [, setModelUsageRecords] = useState<ModelUsageRecord[]>([]);
+  const [, setModelUsageSession] = useState(createModelUsageSession);
   const sessionRef = useRef({ id: createMessageId(), startedAt: new Date().toISOString() });
   const telemetryClockRef = useRef(new Map<string, { actionStartedAt: number }>());
   const [isDictating, setIsDictating] = useState(false);
@@ -344,7 +348,7 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
   function collectModelUsageRecords(response: unknown) {
     const records = readModelUsageRecords(response);
     if (!records.length) return;
-    setModelUsageRecords((current) => appendModelUsageRecords(current, records));
+    setModelUsageSession((current) => appendModelUsageSessionRecords(current, records));
   }
 
   useEffect(() => {
@@ -1268,7 +1272,7 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
     setIsF2BuildVisible(true);
     setF3State(null); setF3Status("idle"); setF3Error(null);
     setSessionTelemetry([]);
-    setModelUsageRecords([]);
+    setModelUsageSession(createModelUsageSession());
     telemetryClockRef.current.clear();
     sessionRef.current = { id: createMessageId(), startedAt: new Date().toISOString() };
   }
