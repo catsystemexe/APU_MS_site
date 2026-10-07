@@ -1,7 +1,7 @@
 import { getAccessIdentity } from "../../access-auth";
 import { isSupportedModel } from "../../model-config";
 import { F2_PATHS, type F2Path } from "../../notepad-model";
-import { F2_PATH_BASE_SEMANTICS, parseF2BuildResult, parseF2RenderedPreview, parseGeneratedRozborComponents, type F2BuildRequest, type F2PreviewSnapshot, type PochopitBuildConfig, type RequiredRozborComponent, type RozborComponentGenerationRequest } from "../../f2-build-model";
+import { deriveRequiredCurrentRozborComponents, F2_PATH_BASE_SEMANTICS, parseF2BuildResult, parseF2RenderedPreview, parseGeneratedRozborComponents, type F2BuildRequest, type F2PreviewSnapshot, type RequiredRozborComponent, type RozborComponentGenerationRequest } from "../../f2-build-model";
 import { callOpenAIResponses, createRequestUsageCollector, modelUsagePayload, usageErrorPayload, type RequestUsageCollector } from "../../openai-responses-instrumentation";
 
 export const runtime = "edge";
@@ -17,28 +17,75 @@ const resultSchema = (pathResult: typeof understandingResult | typeof observatio
 const BUILD_SCHEMAS = { POCHOPIT: resultSchema(understandingResult), POZOROVAT: resultSchema(observationResult), VYTVOŘIT: resultSchema(creationResult) } as const;
 const PREVIEW_SCHEMA = { type: "object", additionalProperties: false, required: ["title", "introduction", "sections"], properties: { title: { type: "string" }, introduction: { type: "string" }, sections: { type: "array", maxItems: 8, items: { type: "object", additionalProperties: false, required: ["heading", "content"], properties: { heading: { type: "string" }, content: { type: "string" } } } } } } as const;
 
-function componentSchema(spec: RequiredRozborComponent) {
-  const properties: Record<string, object> = { id: { type: "string", enum: [spec.id] }, kind: { type: "string", enum: [spec.kind] }, content: { type: "string", minLength: 1 } };
+const nonEmptyString = { type: "string", minLength: 1 } as const;
+const nonEmptyStringArray = { type: "array", minItems: 1, items: nonEmptyString } as const;
+const strictObject = (required: string[], properties: Record<string, object>) => ({ type: "object", additionalProperties: false, required, properties });
+const objectArray = (items: object) => ({ type: "array", minItems: 1, items });
+
+function componentContentSchema(spec: RequiredRozborComponent, hypothesisIds: string[]) {
+  const hypothesisId = { type: "string", enum: hypothesisIds };
+  const hypothesisIdsArray = { type: "array", items: hypothesisId };
+  const requiredHypothesisIds = { type: "array", minItems: 1, items: hypothesisId };
+  if (["hypothesis-expansion", "hypothesis-comparison", "expert-frame"].includes(spec.kind)) return nonEmptyString;
+  if (spec.kind === "observation-indicators") return strictObject(["purpose", "indicators", "limitations"], {
+    purpose: nonEmptyString,
+    indicators: objectArray(strictObject(["indicator", "observableAs", "situation", "supportSignal", "weakeningSignal", "supportsHypothesisIds", "weakensHypothesisIds", "doesNotDiscriminateWhen", "limitations"], {
+      indicator: nonEmptyString, observableAs: nonEmptyString, situation: nonEmptyString, supportSignal: nonEmptyString, weakeningSignal: nonEmptyString, supportsHypothesisIds: hypothesisIdsArray, weakensHypothesisIds: hypothesisIdsArray, doesNotDiscriminateWhen: nonEmptyString, limitations: stringArray,
+    })),
+    limitations: nonEmptyStringArray,
+  });
+  if (spec.kind === "observation-comparison") return strictObject(["contrasts", "limitations"], {
+    contrasts: objectArray(strictObject(["conditionA", "conditionB", "whatToObserve", "supportSignal", "weakeningSignal", "supportsHypothesisIds", "weakensHypothesisIds", "doesNotDiscriminateWhen", "limitations"], {
+      conditionA: nonEmptyString, conditionB: nonEmptyString, whatToObserve: nonEmptyString, supportSignal: nonEmptyString, weakeningSignal: nonEmptyString, supportsHypothesisIds: hypothesisIdsArray, weakensHypothesisIds: hypothesisIdsArray, doesNotDiscriminateWhen: nonEmptyString, limitations: stringArray,
+    })),
+    limitations: nonEmptyStringArray,
+  });
+  if (spec.kind === "observation-priorities") return strictObject(["priorities", "limitations"], {
+    priorities: objectArray(strictObject(["priority", "focus", "reason", "hypothesisIds"], { priority: { type: "integer", minimum: 1 }, focus: nonEmptyString, reason: nonEmptyString, hypothesisIds: requiredHypothesisIds })),
+    limitations: nonEmptyStringArray,
+  });
+  if (spec.kind === "creation-approaches") {
+    const approach = strictObject(["title", "description", "hypothesisIds", "limitations"], { title: nonEmptyString, description: nonEmptyString, hypothesisIds: requiredHypothesisIds, limitations: stringArray });
+    const workingApproach = strictObject(["title", "rationale", "hypothesisIds", "limitations"], { title: nonEmptyString, rationale: nonEmptyString, hypothesisIds: requiredHypothesisIds, limitations: nonEmptyStringArray });
+    return strictObject(["candidateApproaches", "workingApproach"], { candidateApproaches: objectArray(approach), workingApproach });
+  }
+  if (spec.kind === "creation-objective") return strictObject(["objective", "hypothesisIds", "limitations"], { objective: nonEmptyString, hypothesisIds: requiredHypothesisIds, limitations: nonEmptyStringArray });
+  if (spec.kind === "success-conditions") return strictObject(["conditions", "limitations"], { conditions: objectArray(strictObject(["condition", "whyRequired"], { condition: nonEmptyString, whyRequired: nonEmptyString })), limitations: nonEmptyStringArray });
+  return strictObject(["checks", "limitations"], {
+    checks: objectArray(strictObject(["indicator", "when", "successSignal", "adjustmentSignal", "hypothesisIds"], { indicator: nonEmptyString, when: nonEmptyString, successSignal: nonEmptyString, adjustmentSignal: nonEmptyString, hypothesisIds: requiredHypothesisIds })),
+    limitations: nonEmptyStringArray,
+  });
+}
+
+function componentSchema(spec: RequiredRozborComponent, hypothesisIds: string[]) {
+  const properties: Record<string, object> = { id: { type: "string", enum: [spec.id] }, kind: { type: "string", enum: [spec.kind] }, content: componentContentSchema(spec, hypothesisIds) };
   const required = ["id", "kind", "content"];
   if (spec.hypothesisId) { properties.hypothesisId = { type: "string", enum: [spec.hypothesisId] }; required.push("hypothesisId"); }
   return { type: "object", additionalProperties: false, required, properties };
 }
 
-export function rozborComponentSchema(specs: RequiredRozborComponent[]) {
-  return { type: "object", additionalProperties: false, required: ["components"], properties: { components: { type: "array", minItems: specs.length, maxItems: specs.length, items: { anyOf: specs.map(componentSchema) } } } };
+export function rozborComponentSchema(specs: RequiredRozborComponent[], hypothesisIds: string[]) {
+  return { type: "object", additionalProperties: false, required: ["components"], properties: { components: { type: "array", minItems: specs.length, maxItems: specs.length, items: { anyOf: specs.map((spec) => componentSchema(spec, hypothesisIds)) } } } };
 }
 
-function validConfig(value: unknown): value is PochopitBuildConfig { if (!value || typeof value !== "object") return false; const config = value as Partial<PochopitBuildConfig>; return [0, 1, 2, 3].includes(config.expansionDepth ?? -1) && typeof config.compareHypotheses === "boolean" && typeof config.expertFrame === "boolean"; }
+function validConfig(path: F2Path, value: unknown) {
+  if (!value || typeof value !== "object") return false;
+  const config = value as Record<string, unknown>;
+  if (![0, 1, 2, 3].includes(config.expansionDepth as number)) return false;
+  if (path === "POCHOPIT") return typeof config.compareHypotheses === "boolean" && typeof config.expertFrame === "boolean";
+  if (path === "POZOROVAT") return typeof config.compareHypotheses === "boolean" && typeof config.keyIndicators === "boolean" && typeof config.observationPriorities === "boolean";
+  return typeof config.candidateApproaches === "boolean" && typeof config.refineObjective === "boolean" && typeof config.successConditions === "boolean" && typeof config.followUpVerification === "boolean";
+}
 export function validRozborGeneration(value: unknown): value is RozborComponentGenerationRequest {
   if (!value || typeof value !== "object") return false;
   const body = value as Partial<RozborComponentGenerationRequest>;
-  if (!body.canonicalNeed || typeof body.canonicalNeed.needText !== "string" || !Array.isArray(body.hypotheses) || body.hypotheses.length > 8 || !validConfig(body.config) || !Array.isArray(body.components) || !body.components.length || body.components.length > 10) return false;
-  const hypothesisIds = new Set(body.hypotheses.map(({ id }) => id)); const ids = new Set<string>();
+  if (!isPath(body.activePath) || !body.canonicalNeed || typeof body.canonicalNeed.needText !== "string" || !Array.isArray(body.hypotheses) || body.hypotheses.length > 8 || !validConfig(body.activePath, body.config) || !Array.isArray(body.components) || !body.components.length || body.components.length > 12) return false;
+  const requiredById = new Map(deriveRequiredCurrentRozborComponents(body.activePath, body.canonicalNeed, body.hypotheses, body.config!).map((spec) => [spec.id, spec]));
+  const ids = new Set<string>();
   return body.components.every((spec) => {
     if (!spec || typeof spec.id !== "string" || ids.has(spec.id) || typeof spec.fingerprint !== "string") return false; ids.add(spec.id);
-    if (spec.kind === "hypothesis-expansion") return body.config!.expansionDepth > 0 && typeof spec.hypothesisId === "string" && hypothesisIds.has(spec.hypothesisId) && spec.id === `hypothesis:${spec.hypothesisId}:expansion`;
-    if (spec.kind === "hypothesis-comparison") return body.config!.compareHypotheses && spec.hypothesisId === undefined && spec.id === "comparison:all";
-    return spec.kind === "expert-frame" && body.config!.expertFrame && spec.hypothesisId === undefined && spec.id === "expert-frame:all";
+    const required = requiredById.get(spec.id);
+    return Boolean(required && required.kind === spec.kind && required.hypothesisId === spec.hypothesisId && required.fingerprint === spec.fingerprint);
   });
 }
 
@@ -47,7 +94,10 @@ export function rozborComponentInstructions(request: RozborComponentGenerationRe
   const depthInstruction = depth === 1 ? "Hloubka 1 — Základně: prakticky vysvětli mechanismus a možné relevantní projevy."
     : depth === 2 ? "Hloubka 2 — Podrobně: zahrň základní význam, mechanismy, podmínky, vztahy a co dostupný kontext podporuje nebo oslabuje."
       : depth === 3 ? "Hloubka 3 — Do hloubky: zahrň podrobný význam, kritickou interpretaci, alternativní vysvětlení, limity, komplikující faktory, hraniční podmínky a důsledky pro další uvažování; nevytvářej obecný akademický přehled." : "Rozvinutí hypotéz není požadováno.";
-  return `F2 je pracovní analytický Rozbor, ne finální F3 próza. Každou vyžádanou komponentu zpracuj samostatně, stručně, strukturovaně a pouze pod přesným dodaným ID. Nepřepisuj výchozí hypotézy, nevymýšlej fakta a zachovej nejistotu; kanonická fakta uživatele mají přednost před hypotézami a inferencí.\n\nROZVINUTÍ HYPOTÉZY — pouze lokální případová analýza dané hypotézy. ${depthInstruction}\n\nPOROVNÁNÍ — pouze jedna syntéza napříč hypotézami: rozdíly, průniky, slučitelnost, možné souběžné působení, napětí, vysvětlované aspekty a nerozlišitelnost z dostupných informací. Respektuj analytickou hloubku ${depth}.\n\nODBORNÝ RÁMEC — pouze explicitní relevantní pojmenované teorie, modely, konstrukty a výzkumné koncepty. Terminologii nepřidávej dekorativně; nefabrikuj studie, autory, DOI, velikosti účinku ani empirická tvrzení. Není-li konkrétní evidence spolehlivě známá, zůstaň u obecného teoretického rámce a jasně jej odliš od specifické evidence.`;
+  const shared = `F2 je pracovní analytický Rozbor pro cestu ${request.activePath}, ne finální F3 próza. Každou vyžádanou komponentu zpracuj samostatně a pouze pod přesným dodaným ID. Nepřepisuj výchozí hypotézy, nevymýšlej fakta a zachovej nejistotu; kanonická fakta uživatele mají přednost před hypotézami a inferencí. ROZVINUTÍ HYPOTÉZY je pouze lokální případová analýza dané hypotézy. ${depthInstruction}`;
+  if (request.activePath === "POCHOPIT") return `${shared}\n\nPOROVNÁNÍ — pouze jedna syntéza napříč hypotézami: rozdíly, průniky, slučitelnost, možné souběžné působení, napětí, vysvětlované aspekty a nerozlišitelnost z dostupných informací. Respektuj analytickou hloubku ${depth}.\n\nODBORNÝ RÁMEC — pouze explicitní relevantní pojmenované teorie, modely, konstrukty a výzkumné koncepty. Terminologii nepřidávej dekorativně; nefabrikuj studie, autory, DOI, velikosti účinku ani empirická tvrzení. Není-li konkrétní evidence spolehlivě známá, zůstaň u obecného teoretického rámce a jasně jej odliš od specifické evidence.`;
+  if (request.activePath === "POZOROVAT") return `${shared}\n\nPOZOROVAT má rozlišit pracovní hypotézy pomocí cílené evidence, nikoli vytvořit diagnostický závěr nebo generický checklist.\n\nKONTRASTY PODMÍNEK — odvozuj pouze z konkrétního Zápisníku: podmínka A versus B, přítomnost versus nepřítomnost faktoru, před/během/po události nebo odlišná sociální konfigurace. Uveď, co přesně pozorovat, jaký konkrétní výsledek je podpůrný, jaký oslabující, které hypotézy se tím mění a kdy výsledek nerozlišuje. Explicitní rozdíly ve zdroji, například kratší versus delší situace nebo možnost držet předmět versus bez ní, mají přednost před obecnými kategoriemi.\n\nINDIKÁTORY — každý indikátor musí být přímo pozorovatelný a oddělený od interpretace. Uveď účel pozorování, situaci, konkrétní podpůrný a oslabující signál, vazbu na hypotézy a omezení.\n\nPRIORITY — stanov, co sledovat nejdříve a proč je to nejvíce diskriminační nebo prakticky důležité. Zachovej nejistotu a neprezentuj pozorování jako diagnózu.`;
+  return `${shared}\n\nVYTVOŘIT převádí Rozbor do pracovní pedagogické specifikace, ale nematerializuje finální F3 dokument a nedělá diagnostický závěr.\n\nMOŽNÉ PŘÍSTUPY — navrhni jen přístupy ukotvené ve zdroji. Povinně zvol jeden explicitní pracovní/doporučený přístup a zdůvodni jej; samotný seznam variant je neplatný.\n\nCÍL — formuluj praktický či pedagogický cíl, nikoli formát artefaktu pro F3.\n\nPODMÍNKY ÚSPĚCHU — uveď relevantní podmínky použití a proč jsou potřebné.\n\nNÁSLEDNÉ OVĚŘOVÁNÍ — určuj pozorovatelné signály úspěchu i signály pro úpravu přístupu, jejich načasování, vazby na hypotézy a omezení.`;
 }
 
 export const F2_SKILL_SEMANTICS: Record<string, string> = {
@@ -94,9 +144,9 @@ export async function POST(request: Request) {
     activePath = body.snapshot.activePath; schema = PREVIEW_SCHEMA; name = `f2_${activePath.toLowerCase()}_preview`;
     instructions = `Vyrenderuj náhled výhradně z neměnného F2 snapshotu pro autoritativní cestu ${activePath}. Snapshot nepřehodnocuj z konverzace, neměň pedagogickou potřebu, cestu ani závěry. ${PATH_PROMPTS[activePath]} F3 target smí ovlivnit přehlednost formy, nikdy nesmí vést k finální materializaci F3 dokumentu.`; input = body.snapshot;
   } else if (operation === "generate-rozbor-components" && validRozborGeneration(body.request)) {
-    componentRequest = body.request; schema = rozborComponentSchema(componentRequest.components); name = "f2_pochopit_components";
+    componentRequest = body.request; activePath = componentRequest.activePath; schema = rozborComponentSchema(componentRequest.components, componentRequest.hypotheses.map(({ id }) => id)); name = `f2_${activePath.toLowerCase()}_components`;
     instructions = rozborComponentInstructions(componentRequest);
-    input = { canonicalNeed: componentRequest.canonicalNeed, hypotheses: componentRequest.hypotheses, config: componentRequest.config, components: componentRequest.components.map(({ id, kind, hypothesisId }) => ({ id, kind, ...(hypothesisId ? { hypothesisId } : {}) })) };
+    input = { activePath: componentRequest.activePath, canonicalNeed: componentRequest.canonicalNeed, hypotheses: componentRequest.hypotheses, config: componentRequest.config, components: componentRequest.components.map(({ id, kind, hypothesisId }) => ({ id, kind, ...(hypothesisId ? { hypothesisId } : {}) })) };
   } else return error("Neplatný nebo nepodporovaný F2 požadavek.", 400);
   const collector = createRequestUsageCollector();
   const requestId = crypto.randomUUID();
@@ -115,7 +165,7 @@ export async function POST(request: Request) {
     });
     if (usage_record.provider_status !== "completed" || !application_result) return error("Modelové zpracování F2 se nezdařilo.", 502, collector);
     const reportedModel = typeof response.body.model === "string" ? response.body.model : model;
-    if ("components" in application_result) return Response.json(modelUsagePayload({ components: application_result.components, meta: { action: "F2 POCHOPIT component generation", model: reportedModel } }, collector));
+    if ("components" in application_result) return Response.json(modelUsagePayload({ components: application_result.components, meta: { action: `F2 ${componentRequest!.activePath} component generation`, model: reportedModel } }, collector));
     return Response.json(modelUsagePayload({ result: application_result.result, meta: { action: operation === "build" ? `F2 build execution — ${activePath}` : `F2 preview — ${activePath}`, model: reportedModel } }, collector));
   } catch (cause) {
     const payload = usageErrorPayload(cause, collector);

@@ -1,9 +1,9 @@
 import type { WorkingHypothesis } from "./analysis-model";
 import type { CategoryId, F1ToF2NeedContract, F2Path } from "./notepad-model";
 
-// Legacy F2 path/skill and processed-build contracts remain below for the
-// unchanged POZOROVAT, VYTVOŘIT, Preview and API flows. The focused POCHOPIT
-// component contract is independent and does not use these abstractions.
+// Legacy path/skill, processed-build and Preview contracts remain isolated for
+// later migration. The primary F2 workspace uses the shared current-Rozbor
+// component contract below for all three paths.
 export type F2Skill = { id: string; path: F2Path; label: string; active: boolean; parameterText: string };
 export type F2ContextItem = { id: string; text: string };
 export type F2NotebookContextItem = { category: CategoryId; text: string };
@@ -40,27 +40,111 @@ export type PochopitBuildConfig = {
   compareHypotheses: boolean;
   expertFrame: boolean;
 };
-export type RozborComponentKind = "hypothesis-expansion" | "hypothesis-comparison" | "expert-frame";
+export type PozorovatBuildConfig = {
+  expansionDepth: 0 | 1 | 2 | 3;
+  compareHypotheses: boolean;
+  keyIndicators: boolean;
+  observationPriorities: boolean;
+};
+export type VytvoritBuildConfig = {
+  expansionDepth: 0 | 1 | 2 | 3;
+  candidateApproaches: boolean;
+  refineObjective: boolean;
+  successConditions: boolean;
+  followUpVerification: boolean;
+};
+export type CurrentRozborBuildConfig = PochopitBuildConfig | PozorovatBuildConfig | VytvoritBuildConfig;
+export type RozborComponentKind =
+  | "hypothesis-expansion"
+  | "hypothesis-comparison"
+  | "expert-frame"
+  | "observation-comparison"
+  | "observation-indicators"
+  | "observation-priorities"
+  | "creation-approaches"
+  | "creation-objective"
+  | "success-conditions"
+  | "follow-up-verification";
 export type RequiredRozborComponent = {
   id: string;
   kind: RozborComponentKind;
   hypothesisId?: string;
   fingerprint: string;
 };
+export type ObservationIndicatorsContent = {
+  purpose: string;
+  indicators: Array<{
+    indicator: string;
+    observableAs: string;
+    situation: string;
+    supportSignal: string;
+    weakeningSignal: string;
+    supportsHypothesisIds: string[];
+    weakensHypothesisIds: string[];
+    doesNotDiscriminateWhen: string;
+    limitations: string[];
+  }>;
+  limitations: string[];
+};
+export type ObservationComparisonContent = {
+  contrasts: Array<{
+    conditionA: string;
+    conditionB: string;
+    whatToObserve: string;
+    supportSignal: string;
+    weakeningSignal: string;
+    supportsHypothesisIds: string[];
+    weakensHypothesisIds: string[];
+    doesNotDiscriminateWhen: string;
+    limitations: string[];
+  }>;
+  limitations: string[];
+};
+export type ObservationPrioritiesContent = {
+  priorities: Array<{ priority: number; focus: string; reason: string; hypothesisIds: string[] }>;
+  limitations: string[];
+};
+export type CreationApproachesContent = {
+  candidateApproaches: Array<{ title: string; description: string; hypothesisIds: string[]; limitations: string[] }>;
+  workingApproach: { title: string; rationale: string; hypothesisIds: string[]; limitations: string[] };
+};
+export type CreationObjectiveContent = { objective: string; hypothesisIds: string[]; limitations: string[] };
+export type SuccessConditionsContent = { conditions: Array<{ condition: string; whyRequired: string }>; limitations: string[] };
+export type FollowUpVerificationContent = {
+  checks: Array<{ indicator: string; when: string; successSignal: string; adjustmentSignal: string; hypothesisIds: string[] }>;
+  limitations: string[];
+};
+export type RozborComponentContent =
+  | string
+  | ObservationIndicatorsContent
+  | ObservationComparisonContent
+  | ObservationPrioritiesContent
+  | CreationApproachesContent
+  | CreationObjectiveContent
+  | SuccessConditionsContent
+  | FollowUpVerificationContent;
 export type RozborComponent = RequiredRozborComponent & {
-  content: string;
+  content: RozborComponentContent;
 };
 export type PochopitBuildState = {
   config: PochopitBuildConfig;
   components: RozborComponent[];
 };
+export type PozorovatBuildState = { config: PozorovatBuildConfig; components: RozborComponent[] };
+export type VytvoritBuildState = { config: VytvoritBuildConfig; components: RozborComponent[] };
+export type CurrentRozborState = {
+  POCHOPIT: PochopitBuildState;
+  POZOROVAT: PozorovatBuildState;
+  VYTVOŘIT: VytvoritBuildState;
+};
 export type RozborComponentGenerationRequest = {
+  activePath: F2Path;
   canonicalNeed: F1ToF2NeedContract;
   hypotheses: WorkingHypothesis[];
-  config: PochopitBuildConfig;
+  config: CurrentRozborBuildConfig;
   components: RequiredRozborComponent[];
 };
-export type GeneratedRozborComponent = Pick<RequiredRozborComponent, "id" | "kind" | "hypothesisId"> & { content: string };
+export type GeneratedRozborComponent = Pick<RequiredRozborComponent, "id" | "kind" | "hypothesisId"> & { content: RozborComponentContent };
 export type RozborComponentReconciliation = {
   keep: RozborComponent[];
   remove: RozborComponent[];
@@ -77,9 +161,42 @@ export const DEFAULT_POCHOPIT_BUILD_CONFIG: PochopitBuildConfig = {
   compareHypotheses: false,
   expertFrame: false,
 };
+export const DEFAULT_POZOROVAT_BUILD_CONFIG: PozorovatBuildConfig = {
+  expansionDepth: 0,
+  compareHypotheses: false,
+  keyIndicators: false,
+  observationPriorities: false,
+};
+export const DEFAULT_VYTVORIT_BUILD_CONFIG: VytvoritBuildConfig = {
+  expansionDepth: 0,
+  candidateApproaches: false,
+  refineObjective: false,
+  successConditions: false,
+  followUpVerification: false,
+};
 
 export function createPochopitBuildState(): PochopitBuildState {
   return { config: { ...DEFAULT_POCHOPIT_BUILD_CONFIG }, components: [] };
+}
+
+export function createCurrentRozborState(): CurrentRozborState {
+  return {
+    POCHOPIT: createPochopitBuildState(),
+    POZOROVAT: { config: { ...DEFAULT_POZOROVAT_BUILD_CONFIG }, components: [] },
+    VYTVOŘIT: { config: { ...DEFAULT_VYTVORIT_BUILD_CONFIG }, components: [] },
+  };
+}
+
+export function updateCurrentRozborConfig(
+  state: CurrentRozborState,
+  path: F2Path,
+  change: Partial<PochopitBuildConfig & PozorovatBuildConfig & VytvoritBuildConfig>,
+): CurrentRozborState {
+  const current = state[path];
+  const config = { ...current.config, ...change } as typeof current.config;
+  return JSON.stringify(config) === JSON.stringify(current.config)
+    ? state
+    : { ...state, [path]: { ...current, config } } as CurrentRozborState;
 }
 
 export function updatePochopitBuildConfig(
@@ -171,6 +288,48 @@ export function deriveRequiredRozborComponents(
   return required;
 }
 
+export function deriveRequiredCurrentRozborComponents(
+  path: F2Path,
+  need: F1ToF2NeedContract,
+  hypotheses: WorkingHypothesis[],
+  config: CurrentRozborBuildConfig,
+): RequiredRozborComponent[] {
+  if (path === "POCHOPIT") return deriveRequiredRozborComponents(need, hypotheses, config as PochopitBuildConfig);
+  const required: RequiredRozborComponent[] = [];
+  const expansionDepth = config.expansionDepth;
+  if (expansionDepth > 0) {
+    for (const hypothesis of hypotheses) {
+      required.push({
+        id: `hypothesis:${hypothesis.id}:expansion`,
+        kind: "hypothesis-expansion",
+        hypothesisId: hypothesis.id,
+        fingerprint: JSON.stringify([
+          path,
+          "hypothesis-expansion",
+          canonicalNeedSource(need),
+          hypothesis.id,
+          relevantHypothesisContent(hypothesis),
+          expansionDepth,
+        ]),
+      });
+    }
+  }
+  const baseline = createRozborBaselineFingerprint(need, hypotheses);
+  if (path === "POZOROVAT") {
+    const observation = config as PozorovatBuildConfig;
+    if (observation.compareHypotheses) required.push({ id: "observation-comparison:all", kind: "observation-comparison", fingerprint: JSON.stringify([path, "observation-comparison", baseline, expansionDepth]) });
+    if (observation.keyIndicators) required.push({ id: "observation-indicators:all", kind: "observation-indicators", fingerprint: JSON.stringify([path, "observation-indicators", baseline]) });
+    if (observation.observationPriorities) required.push({ id: "observation-priorities:all", kind: "observation-priorities", fingerprint: JSON.stringify([path, "observation-priorities", baseline]) });
+    return required;
+  }
+  const creation = config as VytvoritBuildConfig;
+  if (creation.candidateApproaches) required.push({ id: "creation-approaches:all", kind: "creation-approaches", fingerprint: JSON.stringify([path, "creation-approaches", baseline]) });
+  if (creation.refineObjective) required.push({ id: "creation-objective:all", kind: "creation-objective", fingerprint: JSON.stringify([path, "creation-objective", baseline]) });
+  if (creation.successConditions) required.push({ id: "success-conditions:all", kind: "success-conditions", fingerprint: JSON.stringify([path, "success-conditions", baseline]) });
+  if (creation.followUpVerification) required.push({ id: "follow-up-verification:all", kind: "follow-up-verification", fingerprint: JSON.stringify([path, "follow-up-verification", baseline]) });
+  return required;
+}
+
 export function reconcileRozborComponents(
   required: RequiredRozborComponent[],
   existing: RozborComponent[],
@@ -214,7 +373,86 @@ export function createRozborGenerationRequest(
   const { missing, stale } = reconcileRozborComponents(required, existing);
   const components = [...missing, ...stale.map(({ spec }) => spec)];
   if (components.length === 0) return null;
-  return structuredClone({ canonicalNeed: need, hypotheses, config, components });
+  return structuredClone({ activePath: "POCHOPIT" as const, canonicalNeed: need, hypotheses, config, components });
+}
+
+export function createCurrentRozborGenerationRequest(
+  path: F2Path,
+  need: F1ToF2NeedContract,
+  hypotheses: WorkingHypothesis[],
+  config: CurrentRozborBuildConfig,
+  existing: RozborComponent[],
+): RozborComponentGenerationRequest | null {
+  const required = deriveRequiredCurrentRozborComponents(path, need, hypotheses, config);
+  const { missing, stale } = reconcileRozborComponents(required, existing);
+  const components = [...missing, ...stale.map(({ spec }) => spec)];
+  if (components.length === 0) return null;
+  return structuredClone({ activePath: path, canonicalNeed: need, hypotheses, config, components });
+}
+
+const isComponentRecord = (value: unknown): value is Record<string, unknown> => Boolean(value && typeof value === "object" && !Array.isArray(value));
+const isComponentStringArray = (value: unknown): value is string[] => Array.isArray(value) && value.every((item) => typeof item === "string" && item.trim().length > 0);
+const isNonEmptyComponentStringArray = (value: unknown): value is string[] => isComponentStringArray(value) && value.length > 0;
+const hasText = (value: unknown): value is string => typeof value === "string" && value.trim().length > 0;
+
+function parseComponentContent(kind: RozborComponentKind, value: unknown): RozborComponentContent {
+  if (["hypothesis-expansion", "hypothesis-comparison", "expert-frame"].includes(kind)) {
+    if (!hasText(value)) throw new Error("Model vrátil prázdný obsah komponenty Rozboru.");
+    return value.trim();
+  }
+  if (!isComponentRecord(value)) throw new Error("Model vrátil neúplný strukturovaný obsah komponenty Rozboru.");
+  if (kind === "observation-indicators") {
+    if (!hasText(value.purpose) || !Array.isArray(value.indicators) || value.indicators.length === 0 || !isNonEmptyComponentStringArray(value.limitations)) throw new Error("Model vrátil neúplné pozorovací indikátory.");
+    const indicators = value.indicators.map((item) => {
+      if (!isComponentRecord(item) || !hasText(item.indicator) || !hasText(item.observableAs) || !hasText(item.situation) || !hasText(item.supportSignal) || !hasText(item.weakeningSignal) || !isComponentStringArray(item.supportsHypothesisIds) || !isComponentStringArray(item.weakensHypothesisIds) || !hasText(item.doesNotDiscriminateWhen) || !isComponentStringArray(item.limitations) || item.supportsHypothesisIds.length + item.weakensHypothesisIds.length === 0) throw new Error("Model vrátil neúplný nebo nediagnostický indikátor.");
+      return item as ObservationIndicatorsContent["indicators"][number];
+    });
+    return { purpose: value.purpose.trim(), indicators, limitations: value.limitations };
+  }
+  if (kind === "observation-comparison") {
+    if (!Array.isArray(value.contrasts) || value.contrasts.length === 0 || !isNonEmptyComponentStringArray(value.limitations)) throw new Error("Model nevrátil úplný kontrast podmínek.");
+    const contrasts = value.contrasts.map((item) => {
+      if (!isComponentRecord(item) || !hasText(item.conditionA) || !hasText(item.conditionB) || !hasText(item.whatToObserve) || !hasText(item.supportSignal) || !hasText(item.weakeningSignal) || !isComponentStringArray(item.supportsHypothesisIds) || !isComponentStringArray(item.weakensHypothesisIds) || item.supportsHypothesisIds.length + item.weakensHypothesisIds.length === 0 || !hasText(item.doesNotDiscriminateWhen) || !isComponentStringArray(item.limitations)) throw new Error("Model vrátil neúplný kontrast podmínek.");
+      return item as ObservationComparisonContent["contrasts"][number];
+    });
+    return { contrasts, limitations: value.limitations };
+  }
+  if (kind === "observation-priorities") {
+    if (!Array.isArray(value.priorities) || value.priorities.length === 0 || !isNonEmptyComponentStringArray(value.limitations)) throw new Error("Model nevrátil priority pozorování.");
+    const priorities = value.priorities.map((item) => {
+      if (!isComponentRecord(item) || !Number.isInteger(item.priority) || (item.priority as number) < 1 || !hasText(item.focus) || !hasText(item.reason) || !isComponentStringArray(item.hypothesisIds) || item.hypothesisIds.length === 0) throw new Error("Model vrátil neúplnou prioritu pozorování.");
+      return item as ObservationPrioritiesContent["priorities"][number];
+    });
+    return { priorities, limitations: value.limitations };
+  }
+  if (kind === "creation-approaches") {
+    if (!Array.isArray(value.candidateApproaches) || value.candidateApproaches.length === 0 || !isComponentRecord(value.workingApproach)) throw new Error("Model nevrátil zvolený pracovní přístup.");
+    const candidateApproaches = value.candidateApproaches.map((item) => {
+      if (!isComponentRecord(item) || !hasText(item.title) || !hasText(item.description) || !isNonEmptyComponentStringArray(item.hypothesisIds) || !isComponentStringArray(item.limitations)) throw new Error("Model vrátil neúplný možný přístup.");
+      return item as CreationApproachesContent["candidateApproaches"][number];
+    });
+    const working = value.workingApproach;
+    if (!hasText(working.title) || !hasText(working.rationale) || !isNonEmptyComponentStringArray(working.hypothesisIds) || !isNonEmptyComponentStringArray(working.limitations)) throw new Error("Model nevrátil zvolený pracovní přístup.");
+    return { candidateApproaches, workingApproach: working as CreationApproachesContent["workingApproach"] };
+  }
+  if (kind === "creation-objective") {
+    if (!hasText(value.objective) || !isNonEmptyComponentStringArray(value.hypothesisIds) || !isNonEmptyComponentStringArray(value.limitations)) throw new Error("Model nevrátil úplný praktický cíl.");
+    return value as CreationObjectiveContent;
+  }
+  if (kind === "success-conditions") {
+    if (!Array.isArray(value.conditions) || value.conditions.length === 0 || !isNonEmptyComponentStringArray(value.limitations)) throw new Error("Model nevrátil podmínky úspěchu.");
+    const conditions = value.conditions.map((item) => {
+      if (!isComponentRecord(item) || !hasText(item.condition) || !hasText(item.whyRequired)) throw new Error("Model vrátil neúplnou podmínku úspěchu.");
+      return item as SuccessConditionsContent["conditions"][number];
+    });
+    return { conditions, limitations: value.limitations };
+  }
+  if (!Array.isArray(value.checks) || value.checks.length === 0 || !isNonEmptyComponentStringArray(value.limitations)) throw new Error("Model nevrátil následné ověřování.");
+  const checks = value.checks.map((item) => {
+    if (!isComponentRecord(item) || !hasText(item.indicator) || !hasText(item.when) || !hasText(item.successSignal) || !hasText(item.adjustmentSignal) || !isComponentStringArray(item.hypothesisIds) || item.hypothesisIds.length === 0) throw new Error("Model vrátil neúplný následný indikátor.");
+    return item as FollowUpVerificationContent["checks"][number];
+  });
+  return { checks, limitations: value.limitations };
 }
 
 export function parseGeneratedRozborComponents(value: unknown, requested: RequiredRozborComponent[]): GeneratedRozborComponent[] {
@@ -227,8 +465,8 @@ export function parseGeneratedRozborComponents(value: unknown, requested: Requir
     if (typeof candidate.id !== "string" || seen.has(candidate.id)) throw new Error("Model vrátil duplicitní nebo neplatné ID komponenty Rozboru.");
     seen.add(candidate.id);
     const spec = requestedById.get(candidate.id);
-    if (!spec || candidate.kind !== spec.kind || candidate.hypothesisId !== spec.hypothesisId || typeof candidate.content !== "string" || !candidate.content.trim()) throw new Error("Model vrátil nevyžádanou nebo neplatnou komponentu Rozboru.");
-    return { id: spec.id, kind: spec.kind, ...(spec.hypothesisId ? { hypothesisId: spec.hypothesisId } : {}), content: candidate.content.trim() };
+    if (!spec || candidate.kind !== spec.kind || candidate.hypothesisId !== spec.hypothesisId) throw new Error("Model vrátil nevyžádanou nebo neplatnou komponentu Rozboru.");
+    return { id: spec.id, kind: spec.kind, ...(spec.hypothesisId ? { hypothesisId: spec.hypothesisId } : {}), content: parseComponentContent(spec.kind, candidate.content) };
   });
   if (components.length !== requested.length || requested.some((spec) => !seen.has(spec.id))) throw new Error("Model nevrátil úplnou sadu komponent Rozboru.");
   return components;
@@ -265,6 +503,17 @@ export function applyRozborComponentUpdate(
     return { ...spec, content: generatedById.get(spec.id)!.content };
   });
   return { ...state, components };
+}
+
+export function applyCurrentRozborComponentUpdate(
+  state: CurrentRozborState,
+  path: F2Path,
+  required: RequiredRozborComponent[],
+  generated: GeneratedRozborComponent[],
+): CurrentRozborState {
+  const current = state[path];
+  const next = applyRozborComponentUpdate(current as PochopitBuildState, required, generated);
+  return { ...state, [path]: next } as CurrentRozborState;
 }
 
 export const F2_PATH_META: Record<F2Path, { label: F2Path; description: string }> = {

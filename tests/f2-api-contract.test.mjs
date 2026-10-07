@@ -27,8 +27,8 @@ test("each VYTVOŘIT skill has distinct semantics, conditional precision and F2/
 test("preview is snapshot-only, path-authoritative and cannot materialize F3", () => { for (const boundary of ["výhradně z neměnného F2 snapshotu", "autoritativní cestu", "nesmí vést k finální materializaci F3 dokumentu"]) assert.ok(route.includes(boundary), boundary); });
 test("zero skills retain a complete base path task and model results are locally validated", () => { for (const text of ["Základní úloha aktivní cesty", "Žádné; proveď pouze základní úlohu", "parseF2BuildResult", "parseF2RenderedPreview"]) assert.ok(route.includes(text), text); assert.equal(route.includes("activeSkills.length > 0"), false); });
 
-test("POCHOPIT component operation is bounded, strict, and returns direct semantic IDs", () => {
-  for (const text of ["generate-rozbor-components", "validRozborGeneration", "rozborComponentSchema", "parseGeneratedRozborComponents", "F2 POCHOPIT component generation"]) assert.ok(route.includes(text), text);
+test("shared current-Rozbor component operation is bounded, strict, and path-aware", () => {
+  for (const text of ["generate-rozbor-components", "validRozborGeneration", "rozborComponentSchema", "parseGeneratedRozborComponents", "deriveRequiredCurrentRozborComponents", "componentRequest.activePath"]) assert.ok(route.includes(text), text);
   assert.match(route, /minItems: specs\.length, maxItems: specs\.length/);
   assert.match(route, /enum: \[spec\.id\]/);
   assert.match(route, /components\.map\(\(\{ id, kind, hypothesisId \}\)/);
@@ -36,4 +36,14 @@ test("POCHOPIT component operation is bounded, strict, and returns direct semant
 
 test("component prompts keep expansion depths, comparison, and expert framing semantically distinct", () => {
   for (const text of ["Hloubka 1 — Základně", "Hloubka 2 — Podrobně", "Hloubka 3 — Do hloubky", "ROZVINUTÍ HYPOTÉZY", "POROVNÁNÍ", "ODBORNÝ RÁMEC", "nefabrikuj studie", "kanonická fakta uživatele mají přednost"]) assert.ok(route.includes(text), text);
+});
+
+test("POZOROVAT component schema and prompt require grounded discriminative observation", () => {
+  for (const field of ["purpose", "indicators", "observableAs", "conditionA", "conditionB", "whatToObserve", "supportSignal", "weakeningSignal", "supportsHypothesisIds", "weakensHypothesisIds", "doesNotDiscriminateWhen", "priorities", "limitations"]) assert.ok(route.includes(field), field);
+  for (const guard of ["nikoli vytvořit diagnostický závěr nebo generický checklist", "pouze z konkrétního Zápisníku", "kratší versus delší situace", "možnost držet předmět versus bez ní", "přímo pozorovatelný", "nejvíce diskriminační"]) assert.ok(route.includes(guard), guard);
+});
+
+test("VYTVOŘIT component schema requires an explicit selected approach before later materialization", () => {
+  for (const field of ["candidateApproaches", "workingApproach", "rationale", "objective", "conditions", "whyRequired", "checks", "successSignal", "adjustmentSignal"]) assert.ok(route.includes(field), field);
+  for (const guard of ["Povinně zvol jeden explicitní pracovní/doporučený přístup", "samotný seznam variant je neplatný", "nematerializuje finální F3 dokument"]) assert.ok(route.includes(guard), guard);
 });

@@ -55,6 +55,7 @@ import {
   mapPedagogicalNeed,
   NotepadEntry,
   NotepadState,
+  F2_PATHS,
   type F2Path,
   replaceEntryFromConflict,
 } from "./notepad-model";
@@ -92,7 +93,7 @@ import { addCompletedLifecycleRecord, withCompletedLifecycleRecord, type Complet
 import { DevLogPanel } from "./dev-log-panel";
 import { DEV_TEST_SCENARIOS, type DevTestScenario } from "./dev-test-scenarios";
 import type { SharedFeedbackResult } from "./shared-feedback";
-import { acceptRenderedPreview, addF2Context, applyF2BuildResult, applyRozborComponentUpdate, canonicalF1NeedFingerprint, createF2BuildRequest, createF2PreviewSnapshot, createPochopitBuildState, createRozborGenerationRequest, deriveRequiredRozborComponents, parameterizeF2Skill, parseF2BuildResult, parseF2RenderedPreview, parseGeneratedRozborComponents, previewStatus, reconcileRozborComponents, removeF2Context, switchF2Path, synchronizeF2BuildWithCanonicalNeed, toggleF2Skill, updatePochopitBuildConfig, type F2BuildState, type F2NotebookContextItem, type F2PreviewState, type PochopitBuildState } from "./f2-build-model";
+import { acceptRenderedPreview, addF2Context, applyCurrentRozborComponentUpdate, applyF2BuildResult, canonicalF1NeedFingerprint, createCurrentRozborGenerationRequest, createCurrentRozborState, createF2BuildRequest, createF2PreviewSnapshot, deriveRequiredCurrentRozborComponents, F2_PATH_META, parameterizeF2Skill, parseF2BuildResult, parseF2RenderedPreview, parseGeneratedRozborComponents, previewStatus, reconcileRozborComponents, removeF2Context, switchF2Path, synchronizeF2BuildWithCanonicalNeed, toggleF2Skill, updateCurrentRozborConfig, type CurrentRozborState, type F2BuildState, type F2NotebookContextItem, type F2PreviewState } from "./f2-build-model";
 import { acceptF3Render, adoptF2Snapshot, createF3RenderRequest, createF3State, parseF3RenderResult, updateF3Config, type F3Config, type F3State } from "./f3-finalization-model";
 
 type SpeechRecognitionEventLike = {
@@ -380,11 +381,11 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
   const [isF2BuildVisible, setIsF2BuildVisible] = useState(true);
   const [analysis, setAnalysis] = useState<AnalysisState>(EMPTY_ANALYSIS);
   const [f2Build, setF2Build] = useState<F2BuildState | null>(null);
-  const [pochopitBuild, setPochopitBuild] = useState<PochopitBuildState>(() => createPochopitBuildState());
-  const [pochopitGenerationStatus, setPochopitGenerationStatus] = useState<"idle" | "loading" | "error">("idle");
-  const [pochopitGenerationError, setPochopitGenerationError] = useState<string | null>(null);
-  const latestPochopitBuildRef = useRef(pochopitBuild);
-  latestPochopitBuildRef.current = pochopitBuild;
+  const [currentRozbor, setCurrentRozbor] = useState<CurrentRozborState>(() => createCurrentRozborState());
+  const [rozborGenerationStatus, setRozborGenerationStatus] = useState<"idle" | "loading" | "error">("idle");
+  const [rozborGenerationError, setRozborGenerationError] = useState<string | null>(null);
+  const latestCurrentRozborRef = useRef(currentRozbor);
+  latestCurrentRozborRef.current = currentRozbor;
   const [f2Preview, setF2Preview] = useState<F2PreviewState>(null);
   const [f2BuildStatus, setF2BuildStatus] = useState<"idle" | "loading" | "error">("idle");
   const [f2BuildError, setF2BuildError] = useState<string | null>(null);
@@ -424,15 +425,17 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
   const dictationShouldContinueRef = useRef(false);
   const dictationPrefixRef = useRef("");
   const canonicalF2Need = useMemo(() => getF1ToF2NeedContract(notepad, activeNeedId), [notepad, activeNeedId]);
-  const latestRozborSourceRef = useRef({ need: canonicalF2Need, hypotheses: analysis.hypotheses });
-  latestRozborSourceRef.current = { need: canonicalF2Need, hypotheses: analysis.hypotheses };
-  const pochopitNeedFingerprintRef = useRef<string | null>(null);
+  const activeF2Path = f2Build?.activePath ?? canonicalF2Need?.initialF2Path ?? "POCHOPIT";
+  const activeRozbor = currentRozbor[activeF2Path];
+  const latestRozborSourceRef = useRef({ need: canonicalF2Need, hypotheses: analysis.hypotheses, activePath: activeF2Path });
+  latestRozborSourceRef.current = { need: canonicalF2Need, hypotheses: analysis.hypotheses, activePath: activeF2Path };
+  const currentRozborNeedFingerprintRef = useRef<string | null>(null);
   const isF2DesktopLayout = phase === "development" && activePanel === "analysis" && f2Build !== null;
-  const hasActivePochopitOperation = pochopitBuild.config.expansionDepth > 0 || pochopitBuild.config.compareHypotheses || pochopitBuild.config.expertFrame;
-  const pochopitReconciliation = useMemo(() => canonicalF2Need
-    ? reconcileRozborComponents(deriveRequiredRozborComponents(canonicalF2Need, analysis.hypotheses, pochopitBuild.config), pochopitBuild.components)
-    : null, [analysis.hypotheses, canonicalF2Need, pochopitBuild]);
-  const isPochopitUpdatePending = Boolean(pochopitReconciliation && !pochopitReconciliation.isRozborCurrent);
+  const currentRozborReconciliation = useMemo(() => canonicalF2Need
+    ? reconcileRozborComponents(deriveRequiredCurrentRozborComponents(activeF2Path, canonicalF2Need, analysis.hypotheses, activeRozbor.config), activeRozbor.components)
+    : null, [activeF2Path, activeRozbor, analysis.hypotheses, canonicalF2Need]);
+  const hasActiveRozborOperation = Boolean(currentRozborReconciliation && (currentRozborReconciliation.keep.length + currentRozborReconciliation.missing.length + currentRozborReconciliation.stale.length > 0));
+  const isCurrentRozborUpdatePending = Boolean(currentRozborReconciliation && !currentRozborReconciliation.isRozborCurrent);
 
   function collectModelUsageRecords(response: unknown) {
     const records = readModelUsageRecords(response);
@@ -452,10 +455,10 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
   useEffect(() => {
     if (!canonicalF2Need) return;
     const needFingerprint = canonicalF1NeedFingerprint(canonicalF2Need);
-    setPochopitBuild((current) => {
-      if (pochopitNeedFingerprintRef.current !== needFingerprint) {
-        pochopitNeedFingerprintRef.current = needFingerprint;
-        return createPochopitBuildState();
+    setCurrentRozbor((current) => {
+      if (currentRozborNeedFingerprintRef.current !== needFingerprint) {
+        currentRozborNeedFingerprintRef.current = needFingerprint;
+        return createCurrentRozborState();
       }
       return current;
     });
@@ -810,19 +813,22 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
     } catch (cause) { setF2BuildError(cause instanceof Error ? cause.message : "Build se nepodařilo rozpracovat."); setF2BuildStatus("error"); }
   }
 
-  async function generatePochopitRozbor() {
-    if (!canonicalF2Need || pochopitGenerationStatus === "loading") return;
-    const required = deriveRequiredRozborComponents(canonicalF2Need, analysis.hypotheses, pochopitBuild.config);
-    const reconciliation = reconcileRozborComponents(required, pochopitBuild.components);
+  async function generateCurrentRozbor() {
+    if (!f2Build || !canonicalF2Need || rozborGenerationStatus === "loading") return;
+    const path = f2Build.activePath;
+    const pathState = currentRozbor[path];
+    const required = deriveRequiredCurrentRozborComponents(path, canonicalF2Need, analysis.hypotheses, pathState.config);
+    const reconciliation = reconcileRozborComponents(required, pathState.components);
     if (reconciliation.isRozborCurrent) return;
-    const request = createRozborGenerationRequest(canonicalF2Need, analysis.hypotheses, pochopitBuild.config, pochopitBuild.components);
-    const updateSignature = JSON.stringify(required.map(({ id, kind, hypothesisId, fingerprint }) => [id, kind, hypothesisId, fingerprint]));
+    const request = createCurrentRozborGenerationRequest(path, canonicalF2Need, analysis.hypotheses, pathState.config, pathState.components);
+    const updateSignature = JSON.stringify([path, required.map(({ id, kind, hypothesisId, fingerprint }) => [id, kind, hypothesisId, fingerprint])]);
     if (!request) {
-      setPochopitGenerationError(null);
-      setPochopitBuild((current) => applyRozborComponentUpdate(current, required, []));
+      setRozborGenerationError(null);
+      setCurrentRozbor((current) => applyCurrentRozborComponentUpdate(current, path, required, []));
+      setRozborGenerationStatus("idle");
       return;
     }
-    setPochopitGenerationStatus("loading"); setPochopitGenerationError(null);
+    setRozborGenerationStatus("loading"); setRozborGenerationError(null);
     try {
       const response = await fetch("/api/f2", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ operation: "generate-rozbor-components", model: selectedModel, request }) });
       const payload = await response.json().catch(() => null) as ({ components?: unknown; error?: string } & ModelUsageRecordsResponse) | null;
@@ -831,14 +837,15 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
       const generated = parseGeneratedRozborComponents({ components: payload.components }, request.components);
       const latest = latestRozborSourceRef.current;
       if (!latest.need) throw new Error("Výsledek byl zahozen, protože se mezitím změnil výchozí Rozbor nebo Build.");
-      const currentSpecs = deriveRequiredRozborComponents(latest.need, latest.hypotheses, latestPochopitBuildRef.current.config);
-      const currentSignature = JSON.stringify(currentSpecs.map(({ id, kind, hypothesisId, fingerprint }) => [id, kind, hypothesisId, fingerprint]));
+      const latestPathState = latestCurrentRozborRef.current[latest.activePath];
+      const currentSpecs = deriveRequiredCurrentRozborComponents(latest.activePath, latest.need, latest.hypotheses, latestPathState.config);
+      const currentSignature = JSON.stringify([latest.activePath, currentSpecs.map(({ id, kind, hypothesisId, fingerprint }) => [id, kind, hypothesisId, fingerprint])]);
       if (currentSignature !== updateSignature) throw new Error("Výsledek byl zahozen, protože se mezitím změnil výchozí Rozbor nebo Build.");
-      setPochopitBuild((current) => JSON.stringify(current.config) === JSON.stringify(request.config)
-        ? applyRozborComponentUpdate(current, required, generated)
+      setCurrentRozbor((current) => JSON.stringify(current[path].config) === JSON.stringify(request.config)
+        ? applyCurrentRozborComponentUpdate(current, path, required, generated)
         : current);
-      setPochopitGenerationStatus("idle");
-    } catch (cause) { setPochopitGenerationError(cause instanceof Error ? cause.message : "Rozbor se nepodařilo vytvořit."); setPochopitGenerationStatus("error"); }
+      setRozborGenerationStatus("idle");
+    } catch (cause) { setRozborGenerationError(cause instanceof Error ? cause.message : "Rozbor se nepodařilo vytvořit."); setRozborGenerationStatus("error"); }
   }
 
   async function renderF2Preview() {
@@ -1396,7 +1403,8 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
     setUnseenAnalysisKeys(new Set());
     setHighlightedAnalysisKeys(new Set());
     setF2Build(null); setF2Preview(null); setF2BuildStatus("idle"); setF2BuildError(null); setF2PreviewStatus("idle"); setF2PreviewError(null);
-    setPochopitBuild(createPochopitBuildState());
+    setCurrentRozbor(createCurrentRozborState());
+    setRozborGenerationStatus("idle"); setRozborGenerationError(null);
     setIsF2BuildVisible(true);
     setF3State(null); setF3Status("idle"); setF3Error(null);
     setSessionTelemetry([]);
@@ -1807,9 +1815,12 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
         </div>
 
         {isF2DesktopLayout && <section className="f2-build-shell" aria-label="Build">
-          <header className="f2-build-header"><div><span>F2 · POCHOPIT</span><h2>Build</h2></div><button type="button" onClick={() => setIsF2BuildVisible(false)} aria-label="Skrýt Build a zobrazit chat" title="Zobrazit chat"><ChevronRight aria-hidden="true" /></button></header>
+          <header className="f2-build-header"><div><span>F2 · {activeF2Path}</span><h2>Build</h2></div><button type="button" onClick={() => setIsF2BuildVisible(false)} aria-label="Skrýt Build a zobrazit chat" title="Zobrazit chat"><ChevronRight aria-hidden="true" /></button></header>
           <div className="f2-build-body">
-            <section className={`f2-operation-card${pochopitBuild.config.expansionDepth > 0 ? " is-active" : ""}`} aria-labelledby="f2-expansion-title">
+            <section><h3>Směr rozboru</h3><div className="f2-paths" role="radiogroup" aria-label="Směr rozboru">
+              {F2_PATHS.map((path) => <button key={path} type="button" role="radio" aria-checked={path === activeF2Path} className={path === activeF2Path ? "is-active" : ""} onClick={() => setF2Build((current) => current ? switchF2Path(current, path) : current)}><strong>{path}</strong><small>{F2_PATH_META[path].description}</small></button>)}
+            </div></section>
+            <section className={`f2-operation-card${activeRozbor.config.expansionDepth > 0 ? " is-active" : ""}`} aria-labelledby="f2-expansion-title">
               <div className="f2-operation-copy"><h3 id="f2-expansion-title">Rozvinout hypotézy</h3></div>
               <div className="f2-depth-options">
                 {([
@@ -1817,22 +1828,35 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
                   [2, "Podrobně", "Mechanismy, podmínky a co hypotézu podporuje či oslabuje."],
                   [3, "Do hloubky", "Kritická interpretace, alternativy, limity a komplikující faktory."],
                 ] as const).map(([depth, label, description]) => {
-                  const selected = pochopitBuild.config.expansionDepth === depth;
-                  return <button key={depth} type="button" aria-pressed={selected} onClick={() => setPochopitBuild((current) => updatePochopitBuildConfig(current, { expansionDepth: selected ? 0 : depth }))}>
+                  const selected = activeRozbor.config.expansionDepth === depth;
+                  return <button key={depth} type="button" aria-pressed={selected} onClick={() => setCurrentRozbor((current) => updateCurrentRozborConfig(current, activeF2Path, { expansionDepth: selected ? 0 : depth }))}>
                     <strong>{label}</strong><span>{description}</span>
                   </button>;
                 })}
               </div>
             </section>
-            <button type="button" className={`f2-operation-card f2-operation-toggle${pochopitBuild.config.compareHypotheses ? " is-active" : ""}`} aria-pressed={pochopitBuild.config.compareHypotheses} onClick={() => setPochopitBuild((current) => updatePochopitBuildConfig(current, { compareHypotheses: !current.config.compareHypotheses }))}>
-              <span className="f2-operation-copy"><strong>Porovnat a propojit hypotézy</strong><span>Rozdíly, průniky, vztahy a možné souběžné působení hypotéz.</span></span>
-            </button>
-            <button type="button" className={`f2-operation-card f2-operation-toggle${pochopitBuild.config.expertFrame ? " is-active" : ""}`} aria-pressed={pochopitBuild.config.expertFrame} onClick={() => setPochopitBuild((current) => updatePochopitBuildConfig(current, { expertFrame: !current.config.expertFrame }))}>
-              <span className="f2-operation-copy"><strong>Doplnit odborný rámec</strong><span>Propojí rozbor s relevantními teoriemi, odbornými koncepty a evidencí.</span></span>
-            </button>
+            {activeF2Path === "POCHOPIT" && <>
+              <button type="button" className={`f2-operation-card f2-operation-toggle${currentRozbor.POCHOPIT.config.compareHypotheses ? " is-active" : ""}`} aria-pressed={currentRozbor.POCHOPIT.config.compareHypotheses} onClick={() => setCurrentRozbor((current) => updateCurrentRozborConfig(current, "POCHOPIT", { compareHypotheses: !current.POCHOPIT.config.compareHypotheses }))}>
+                <span className="f2-operation-copy"><strong>Porovnat a propojit hypotézy</strong><span>Rozdíly, průniky, vztahy a možné souběžné působení hypotéz.</span></span>
+              </button>
+              <button type="button" className={`f2-operation-card f2-operation-toggle${currentRozbor.POCHOPIT.config.expertFrame ? " is-active" : ""}`} aria-pressed={currentRozbor.POCHOPIT.config.expertFrame} onClick={() => setCurrentRozbor((current) => updateCurrentRozborConfig(current, "POCHOPIT", { expertFrame: !current.POCHOPIT.config.expertFrame }))}>
+                <span className="f2-operation-copy"><strong>Doplnit odborný rámec</strong><span>Propojí rozbor s relevantními teoriemi, odbornými koncepty a evidencí.</span></span>
+              </button>
+            </>}
+            {activeF2Path === "POZOROVAT" && <>
+              <button type="button" className={`f2-operation-card f2-operation-toggle${currentRozbor.POZOROVAT.config.compareHypotheses ? " is-active" : ""}`} aria-pressed={currentRozbor.POZOROVAT.config.compareHypotheses} onClick={() => setCurrentRozbor((current) => updateCurrentRozborConfig(current, "POZOROVAT", { compareHypotheses: !current.POZOROVAT.config.compareHypotheses }))}><span className="f2-operation-copy"><strong>Porovnat a propojit hypotézy</strong><span>Odvodí konkrétní kontrasty podmínek, které mohou hypotézy rozlišit.</span></span></button>
+              <button type="button" className={`f2-operation-card f2-operation-toggle${currentRozbor.POZOROVAT.config.keyIndicators ? " is-active" : ""}`} aria-pressed={currentRozbor.POZOROVAT.config.keyIndicators} onClick={() => setCurrentRozbor((current) => updateCurrentRozborConfig(current, "POZOROVAT", { keyIndicators: !current.POZOROVAT.config.keyIndicators }))}><span className="f2-operation-copy"><strong>Určit klíčové indikátory</strong><span>Co je přímo pozorovatelné, kde to sledovat a jak to souvisí s hypotézami.</span></span></button>
+              <button type="button" className={`f2-operation-card f2-operation-toggle${currentRozbor.POZOROVAT.config.observationPriorities ? " is-active" : ""}`} aria-pressed={currentRozbor.POZOROVAT.config.observationPriorities} onClick={() => setCurrentRozbor((current) => updateCurrentRozborConfig(current, "POZOROVAT", { observationPriorities: !current.POZOROVAT.config.observationPriorities }))}><span className="f2-operation-copy"><strong>Stanovit priority pozorování</strong><span>Co sledovat nejdříve a proč je to nejvíce informativní.</span></span></button>
+            </>}
+            {activeF2Path === "VYTVOŘIT" && <>
+              <button type="button" className={`f2-operation-card f2-operation-toggle${currentRozbor.VYTVOŘIT.config.candidateApproaches ? " is-active" : ""}`} aria-pressed={currentRozbor.VYTVOŘIT.config.candidateApproaches} onClick={() => setCurrentRozbor((current) => updateCurrentRozborConfig(current, "VYTVOŘIT", { candidateApproaches: !current.VYTVOŘIT.config.candidateApproaches }))}><span className="f2-operation-copy"><strong>Navrhnout možné přístupy</strong><span>Porovná možnosti a zvolí jeden explicitní pracovní přístup.</span></span></button>
+              <button type="button" className={`f2-operation-card f2-operation-toggle${currentRozbor.VYTVOŘIT.config.refineObjective ? " is-active" : ""}`} aria-pressed={currentRozbor.VYTVOŘIT.config.refineObjective} onClick={() => setCurrentRozbor((current) => updateCurrentRozborConfig(current, "VYTVOŘIT", { refineObjective: !current.VYTVOŘIT.config.refineObjective }))}><span className="f2-operation-copy"><strong>Zpřesnit cíl</strong><span>Vymezí praktický pedagogický cíl odděleně od formátu Výstupu.</span></span></button>
+              <button type="button" className={`f2-operation-card f2-operation-toggle${currentRozbor.VYTVOŘIT.config.successConditions ? " is-active" : ""}`} aria-pressed={currentRozbor.VYTVOŘIT.config.successConditions} onClick={() => setCurrentRozbor((current) => updateCurrentRozborConfig(current, "VYTVOŘIT", { successConditions: !current.VYTVOŘIT.config.successConditions }))}><span className="f2-operation-copy"><strong>Určit podmínky úspěchu</strong><span>Podmínky použití, podpory a přizpůsobení.</span></span></button>
+              <button type="button" className={`f2-operation-card f2-operation-toggle${currentRozbor.VYTVOŘIT.config.followUpVerification ? " is-active" : ""}`} aria-pressed={currentRozbor.VYTVOŘIT.config.followUpVerification} onClick={() => setCurrentRozbor((current) => updateCurrentRozborConfig(current, "VYTVOŘIT", { followUpVerification: !current.VYTVOŘIT.config.followUpVerification }))}><span className="f2-operation-copy"><strong>Určit, co následně ověřovat</strong><span>Signály úspěchu i potřeby přístup upravit.</span></span></button>
+            </>}
           </div>
-          <button type="button" className="f2-build-divider-action" onClick={() => void generatePochopitRozbor()} disabled={pochopitGenerationStatus === "loading" || !isPochopitUpdatePending || (!hasActivePochopitOperation && pochopitBuild.components.length === 0)} aria-label={pochopitBuild.components.length ? "Aktualizovat Rozbor" : "Vytvořit Rozbor"}><span>{pochopitGenerationStatus === "loading" ? "VYTVÁŘÍM ROZBOR" : pochopitBuild.components.length ? "AKTUALIZOVAT ROZBOR" : "VYTVOŘIT ROZBOR"}</span><ChevronLeft aria-hidden="true" /></button>
-          {pochopitGenerationError && <p className="f2-generation-error" role="alert">{pochopitGenerationError}</p>}
+          <button type="button" className="f2-build-divider-action" onClick={() => void generateCurrentRozbor()} disabled={rozborGenerationStatus === "loading" || !isCurrentRozborUpdatePending || (!hasActiveRozborOperation && activeRozbor.components.length === 0)} aria-label={activeRozbor.components.length ? "Aktualizovat Rozbor" : "Vytvořit Rozbor"}><span>{rozborGenerationStatus === "loading" ? "VYTVÁŘÍM ROZBOR" : activeRozbor.components.length ? "AKTUALIZOVAT ROZBOR" : "VYTVOŘIT ROZBOR"}</span><ChevronLeft aria-hidden="true" /></button>
+          {rozborGenerationError && <p className="f2-generation-error" role="alert">{rozborGenerationError}</p>}
         </section>}
 
         <form className="composer" onSubmit={submit}>
@@ -1939,7 +1963,7 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
             silent: true,
           })}
           f2Build={f2Build}
-          pochopitBuild={pochopitBuild}
+          currentRozbor={currentRozbor}
           f2Preview={f2Build ? previewStatus(f2Preview, f2Build) : f2Preview}
           f2BuildStatus={f2BuildStatus}
           f2BuildError={f2BuildError}
