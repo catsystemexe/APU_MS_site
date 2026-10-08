@@ -20,3 +20,8 @@ test("gold-contract audit does not flag an already atomized manifestation/contex
   const report = auditGoldCorpus(await loadCorpus(corpusPath));
   assert.equal(report.findings.some((entry) => entry.caseId === "atomic-manifestation-context"), false);
 });
+
+test("gold-contract audit does not treat a helps projection sharing a source span as category contamination", async () => {
+  const report = auditGoldCorpus(await loadCorpus(corpusPath));
+  assert.equal(report.findings.some((entry) => entry.caseId === "mixed-negation-and-help" && entry.goldFactId === "h1"), false);
+});

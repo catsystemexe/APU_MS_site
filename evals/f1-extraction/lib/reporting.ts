@@ -153,7 +153,7 @@ export function buildResultArtifacts(runs: StageRun[], metadata: Record<string, 
   const verdictRows = runs.flatMap(groundingVerdictRows);
   const verdictJsonl = verdictRows.map((row) => JSON.stringify(row)).join("\n") + (verdictRows.length ? "\n" : "");
   const aggregateJson = `${JSON.stringify({ metadata, aggregate, stageAggregate, dimensions, stageDimensions }, null, 2)}\n`;
-  const headers = ["profile", "pipeline", "cases", "runs", "deterministicRecall", "semanticRecall", "preGroundingSemanticRecall", "postGroundingSemanticRecall", "deterministicPrecision", "semanticPrecision", "preGroundingSemanticPrecision", "postGroundingSemanticPrecision", "extraction_miss_count", "grounding_loss_count", "groundedExtraCount", "groundedExtraRate", "unsupportedCount", "trueUnsupportedRate", "missCount", "missRate", "reviewCount", "candidateReviewCount", "categoryAccuracy", "sourceQuoteValidity", "uncertaintyPreservation", "negationPreservation", "duplicateConflictCorrectness", "stability", "averageLatencyMs", "inputTokens", "outputTokens", "estimatedCostUsd"];
+  const headers = ["profile", "pipeline", "cases", "runs", "deterministicRecall", "semanticRecall", "relationRecall", "preGroundingSemanticRecall", "postGroundingSemanticRecall", "deterministicPrecision", "semanticPrecision", "preGroundingSemanticPrecision", "postGroundingSemanticPrecision", "extraction_miss_count", "grounding_loss_count", "groundedExtraCount", "groundedExtraRate", "unsupportedCount", "trueUnsupportedRate", "missCount", "missRate", "reviewCount", "candidateReviewCount", "categoryAccuracy", "sourceQuoteValidity", "uncertaintyPreservation", "negationPreservation", "duplicateConflictCorrectness", "stability", "averageLatencyMs", "inputTokens", "outputTokens", "estimatedCostUsd"];
   const aggregateCsvRows = aggregate.map((row) => {
     const stage = stageAggregate.find((entry) => entry.profile === row.profile && entry.pipeline === row.pipeline)!;
     const combined: Record<string, unknown> = {
@@ -180,6 +180,7 @@ export function buildResultArtifacts(runs: StageRun[], metadata: Record<string, 
     "",
     "Unsupported canonical facts are a high-severity metric. Grounded extras are reported separately and are not hallucinations.",
     "REVIEW alignments are not counted as semantic equivalents until an explicit judge decision exists.",
+    "Relation recall is unavailable: current F1 output has no explicit relation contract, so the evaluator does not infer or fabricate relation predictions.",
     "",
     "| Profile | Pipeline | Pre sem. recall | Post sem. recall | Extraction misses | Grounding losses | Post sem. precision | Grounded extras | Unsupported | Avg latency | Cost USD |",
     "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",

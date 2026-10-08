@@ -133,11 +133,11 @@ test("judged rescore checkpoints, fails safely, and resumes only missing source 
 });
 
 test("rescore resume rejects checkpoints from the previous scoring contract", async () => {
-  assert.equal(SCORING_CONTRACT_VERSION, 3);
+  assert.equal(SCORING_CONTRACT_VERSION, 4);
   const root = await mkdtemp(join(tmpdir(), "apu-f1-old-scoring-contract-"));
   await mkdir(join(root, "checkpoints"), { recursive: true });
   try {
-    await writeFile(join(root, "rescore-plan.json"), JSON.stringify({ version: 1, scoringContractVersion: 2 }));
+    await writeFile(join(root, "rescore-plan.json"), JSON.stringify({ version: 1, scoringContractVersion: 3 }));
     await writeFile(join(root, "run-state.json"), JSON.stringify({ version: 1, status: "failed", completedRunKeys: [], updatedAt: new Date().toISOString(), lastError: null }));
     await assert.rejects(loadRescoreDirectory(root), /scoring contract version is incompatible/);
   } finally {

@@ -15,7 +15,7 @@ import {
 } from "../../../app/f1-extraction-contract.ts";
 import type { ModelUsageRecord, UsageOperation } from "../../../app/usage-ledger.ts";
 import type { SupportedModelId } from "../../../app/model-config.ts";
-import type { EvalCase, ModelProfile, PipelineId, ReasoningEffort } from "./eval-contract.ts";
+import { goldCanonicalText, type EvalCase, type ModelProfile, type PipelineId, type ReasoningEffort } from "./eval-contract.ts";
 import type { CaseScore, EvaluatedCandidate, SemanticJudgeDecision } from "./scoring.ts";
 import { buildStagedJudgeContext, validateStagedJudgeOutput, type StagedSemanticJudgeOutput } from "./semantic-evidence.ts";
 
@@ -350,7 +350,10 @@ export async function runExtractionPipeline(item: EvalCase, profile: ModelProfil
 
 export async function runSemanticJudge(item: EvalCase, score: CaseScore, candidates: EvaluatedCandidate[], model: SupportedModelId, provider: EvalProvider) {
   const reviewAlignments = score.matches.filter((match) => match.state === "REVIEW" && match.candidateIndexes.length).map((match) => ({
-    goldFact: item.expectedFacts.find((fact) => fact.id === match.goldFactId),
+    goldFact: (() => {
+      const fact = item.expectedFacts.find((candidate) => candidate.id === match.goldFactId);
+      return fact ? { ...fact, text: goldCanonicalText(fact) } : undefined;
+    })(),
     candidates: match.candidateIndexes.map((candidateIndex) => ({ candidateIndex, candidate: candidates[candidateIndex] })),
   }));
   const unmatchedCandidates = score.candidateClassifications.filter((entry) => entry.state === "REVIEW").map((entry) => ({

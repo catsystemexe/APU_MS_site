@@ -1,4 +1,4 @@
-import type { EvalCase } from "./eval-contract.ts";
+import { goldCanonicalText, type EvalCase } from "./eval-contract.ts";
 import type { GroundingTraceVerdict, PipelineTurnTrace, StageCandidate } from "./pipeline.ts";
 import { evaluateSemanticSupportGroup, scoreCase, type CandidateClassification, type CaseScore, type EvaluatedCandidate, type SemanticJudgeDecision, type SemanticSupportRejectionReason } from "./scoring.ts";
 
@@ -85,7 +85,10 @@ export function buildStagedJudgeContext(item: EvalCase, turns: PipelineTurnTrace
   const survivedCandidateIds = new Set(postIds);
   const preScore = scoreCase(item, preCandidates.map(evaluated));
   const reviewAlignments = preScore.matches.filter((match) => match.state === "REVIEW" && match.candidateIndexes.length).map((match) => ({
-    goldFact: item.expectedFacts.find((fact) => fact.id === match.goldFactId)!,
+    goldFact: (() => {
+      const fact = item.expectedFacts.find((candidate) => candidate.id === match.goldFactId)!;
+      return { ...fact, text: goldCanonicalText(fact) };
+    })(),
     candidates: match.candidateIndexes.map((index) => ({
       candidateId: preCandidates[index].candidateId,
       candidate: evaluated(preCandidates[index]),

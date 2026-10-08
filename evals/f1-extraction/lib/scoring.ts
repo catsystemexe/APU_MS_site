@@ -1,5 +1,5 @@
 import type { ExtractionCandidate } from "../../../app/f1-extraction-contract.ts";
-import type { EvalCase, GoldFact, MatchState } from "./eval-contract.ts";
+import { goldCanonicalText, type EvalCase, type GoldFact, type MatchState } from "./eval-contract.ts";
 
 export type EvaluatedCandidate = ExtractionCandidate & { inputIndex: number };
 export type SemanticJudgeDecision = {
@@ -96,6 +96,7 @@ export type CaseScore = {
     uncertaintyPreservation: number;
     negationPreservation: number;
     duplicateConflictCorrectness: number;
+    relationRecall: null;
   };
 };
 
@@ -116,17 +117,21 @@ function overlap(a: string, b: string) {
 }
 
 function evidenceSimilarity(fact: GoldFact, candidate: EvaluatedCandidate) {
-  const goldText = normalize(fact.text);
+  const canonicalText = goldCanonicalText(fact);
+  const goldText = normalize(canonicalText);
   const goldQuote = normalize(fact.source.quote);
   const actualText = normalize(candidate.notebookText);
   if (goldText === actualText || goldQuote === actualText) return 1;
-  return Math.max(overlap(fact.text, candidate.notebookText), overlap(fact.source.quote, candidate.notebookText));
+  return Math.max(overlap(canonicalText, candidate.notebookText), overlap(fact.source.quote, candidate.notebookText));
 }
 
-function exactMatch(fact: GoldFact, candidate: EvaluatedCandidate) {
-  const exactText = normalize(fact.text) === normalize(candidate.notebookText) || normalize(fact.source.quote) === normalize(candidate.notebookText);
+function exactMatch(item: EvalCase, fact: GoldFact, candidate: EvaluatedCandidate) {
+  const actualText = normalize(candidate.notebookText);
+  const canonicalText = normalize(goldCanonicalText(fact));
+  const exactText = canonicalText === actualText || (fact.canonicalText !== undefined && normalize(fact.text) === actualText && isDeterministicallyGrounded(candidate));
   const exactQuote = normalize(fact.source.quote) === normalize(candidate.sourceQuote);
-  return exactText && exactQuote && candidate.category === fact.category && candidate.action === fact.expectedAction && candidate.relatedEntryId === fact.relatedEntryId;
+  const exactMarkers = fact.requiredMarkers.every((marker) => actualText.includes(normalize(marker)));
+  return exactText && exactQuote && exactMarkers && isSourceValid(item, candidate) && candidate.category === fact.category && candidate.action === fact.expectedAction && candidate.relatedEntryId === fact.relatedEntryId;
 }
 
 function markersPreserved(fact: GoldFact, indexes: number[], candidates: EvaluatedCandidate[]) {
@@ -204,7 +209,7 @@ export function scoreCase(item: EvalCase, candidates: EvaluatedCandidate[], sema
       .map(({ candidate, index }) => ({ candidate, index, similarity: evidenceSimilarity(fact, candidate) }))
       .filter(({ similarity }) => similarity >= 0.35)
       .sort((a, b) => b.similarity - a.similarity || Number(b.candidate.category === fact.category) - Number(a.candidate.category === fact.category));
-    const exact = ranked.filter(({ candidate }) => exactMatch(fact, candidate));
+    const exact = ranked.filter(({ candidate }) => exactMatch(item, fact, candidate));
     let candidateIndexes = (exact.length ? exact : ranked).map(({ index }) => index);
     let state: MatchState = exact.length ? "EXACT" : candidateIndexes.length ? "REVIEW" : "MISS";
     let reason = exact.length ? "Exact deterministic fact/category/action match" : candidateIndexes.length ? "Plausible grouped alignment requires semantic review" : "No sufficiently similar candidate";
@@ -323,6 +328,7 @@ export function scoreCase(item: EvalCase, candidates: EvaluatedCandidate[], sema
       uncertaintyPreservation: rate(counts.uncertaintyPreserved, counts.uncertaintyRequired),
       negationPreservation: rate(counts.negationPreserved, counts.negationRequired),
       duplicateConflictCorrectness: rate(counts.actionCorrect, counts.actionRequired),
+      relationRecall: null,
     },
   };
 }
@@ -393,6 +399,7 @@ export function aggregateScores(runs: RunScore[]) {
       uncertaintyPreservation: sum((run) => run.counts.uncertaintyPreserved) / Math.max(1, sum((run) => run.counts.uncertaintyRequired)),
       negationPreservation: sum((run) => run.counts.negationPreserved) / Math.max(1, sum((run) => run.counts.negationRequired)),
       duplicateConflictCorrectness: sum((run) => run.counts.actionRequired) ? sum((run) => run.counts.actionCorrect) / sum((run) => run.counts.actionRequired) : 1,
+      relationRecall: null,
       stability: [...stabilityGroups.values()].reduce((total, caseRuns) => total + stability(caseRuns), 0) / Math.max(1, stabilityGroups.size),
       averageLatencyMs: sum((run) => run.latencyMs) / Math.max(1, group.length),
       inputTokens: sum((run) => run.inputTokens), outputTokens: sum((run) => run.outputTokens),

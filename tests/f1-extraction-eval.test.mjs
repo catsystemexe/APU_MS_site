@@ -34,6 +34,9 @@ test("committed JSON schema exposes evidence, uncertainty, negation and forbidde
   assert.deepEqual(schema.$defs.goldFact.required, ["id", "category", "text", "source", "uncertain", "negated", "requiredMarkers", "expectedAction", "relatedEntryId"]);
   assert.deepEqual(schema.$defs.goldFact.properties.source.required, ["inputIndex", "quote"]);
   assert.ok(schema.$defs.case.properties.forbiddenInferences);
+  assert.deepEqual(schema.properties.version.enum, [1, 2]);
+  assert.ok(schema.$defs.goldFact.properties.canonicalText);
+  assert.ok(schema.$defs.case.properties.expectedRelations);
 });
 
 test("five Human Gate failures are frozen as permanent dense regressions", async () => {
@@ -112,6 +115,7 @@ test("aggregate metrics include stability, latency, tokens and cost", async () =
   assert.equal(aggregate[0].averageLatencyMs, 100);
   assert.equal(aggregate[0].inputTokens, 40);
   assert.equal(aggregate[0].estimatedCostUsd, 0.002);
+  assert.equal(aggregate[0].relationRecall, null);
 });
 
 test("profile, pipeline, filters and call guards parse deterministically", async () => {
@@ -202,9 +206,11 @@ test("result artifacts serialize JSONL, aggregate JSON/CSV and Markdown", async 
   assert.doesNotThrow(() => JSON.parse(artifacts.rawJsonl.trim()));
   assert.doesNotThrow(() => JSON.parse(artifacts.aggregateJson));
   assert.match(artifacts.aggregateCsv, /deterministicRecall/);
+  assert.match(artifacts.aggregateCsv, /relationRecall/);
   assert.match(artifacts.aggregateCsv, /preGroundingSemanticRecall.*extraction_miss_count.*grounding_loss_count/);
   assert.match(artifacts.dimensionCsv, /factCount/);
   assert.match(artifacts.summary, /Unsupported canonical facts/);
+  assert.match(artifacts.summary, /Relation recall is unavailable/);
   const root = await mkdtemp(join(tmpdir(), "apu-f1-eval-"));
   try {
     const directory = await writeResultArtifacts(root, "run", [run], { runId: "test" });

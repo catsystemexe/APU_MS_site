@@ -14,12 +14,25 @@ export type GoldFact = {
   id: string;
   category: CategoryId;
   text: string;
+  canonicalText?: string;
   source: { inputIndex: number; quote: string };
   uncertain: boolean;
   negated: boolean;
   requiredMarkers: string[];
   expectedAction: ExtractionCandidate["action"];
   relatedEntryId: string | null;
+};
+
+export const RELATION_TYPES = ["context_of", "course_of", "condition_effect", "contrast_with"] as const;
+export type RelationType = typeof RELATION_TYPES[number];
+
+export type ExpectedRelation = {
+  id: string;
+  type: RelationType;
+  sourceFactIds: string[];
+  targetFactIds: string[];
+  projectionFactIds: string[];
+  source: { inputIndex: number; quote: string };
 };
 
 export type ForbiddenInference = { text: string; category: CategoryId | null };
@@ -31,6 +44,7 @@ export type EvalCase = {
   inputs: string[];
   startingNotebook: ExtractionNotebookInput[];
   expectedFacts: GoldFact[];
+  expectedRelations?: ExpectedRelation[];
   forbiddenInferences: ForbiddenInference[];
   tags: string[];
   dimensions: {
@@ -40,7 +54,11 @@ export type EvalCase = {
   };
 };
 
-export type EvalCorpus = { version: 1; cases: EvalCase[] };
+export type EvalCorpus = { version: 1 | 2; cases: EvalCase[] };
+
+export function goldCanonicalText(fact: GoldFact) {
+  return fact.canonicalText ?? fact.text;
+}
 
 export type ModelProfile = {
   id: string;
@@ -111,8 +129,9 @@ function assertString(value: unknown, label: string, errors: string[]) {
 
 export function validateCorpus(value: unknown, allowEmptyRealSuite = true): { corpus: EvalCorpus | null; errors: string[] } {
   const errors: string[] = [];
-  if (!value || typeof value !== "object" || (value as { version?: unknown }).version !== 1 || !Array.isArray((value as { cases?: unknown }).cases)) {
-    return { corpus: null, errors: ["corpus must be a version 1 object with a cases array"] };
+  const version = value && typeof value === "object" ? (value as { version?: unknown }).version : null;
+  if (!value || typeof value !== "object" || (version !== 1 && version !== 2) || !Array.isArray((value as { cases?: unknown }).cases)) {
+    return { corpus: null, errors: ["corpus must be a version 1 or 2 object with a cases array"] };
   }
   const cases = (value as { cases: unknown[] }).cases;
   const seenCases = new Set<string>();
@@ -135,20 +154,68 @@ export function validateCorpus(value: unknown, allowEmptyRealSuite = true): { co
       const factLabel = `${label}.expectedFacts[${factIndex}]`;
       if (!fact || typeof fact !== "object") { errors.push(`${factLabel} must be an object`); continue; }
       assertString(fact.id, `${factLabel}.id`, errors);
-      if (factIds.has(fact.id)) errors.push(`${factLabel}.id is duplicated`);
-      factIds.add(fact.id);
+      if (typeof fact.id === "string") {
+        if (factIds.has(fact.id)) errors.push(`${factLabel}.id is duplicated`);
+        factIds.add(fact.id);
+      }
       if (!CATEGORY_IDS.includes(fact.category)) errors.push(`${factLabel}.category is invalid`);
       assertString(fact.text, `${factLabel}.text`, errors);
-      if (!fact.source || !Number.isInteger(fact.source.inputIndex) || typeof fact.source.quote !== "string") errors.push(`${factLabel}.source is invalid`);
+      if (version === 2) assertString(fact.canonicalText, `${factLabel}.canonicalText`, errors);
+      else if (fact.canonicalText !== undefined) assertString(fact.canonicalText, `${factLabel}.canonicalText`, errors);
+      if (!fact.source || !Number.isInteger(fact.source.inputIndex) || typeof fact.source.quote !== "string" || !fact.source.quote) errors.push(`${factLabel}.source is invalid`);
       else if (!item.inputs?.[fact.source.inputIndex]?.includes(fact.source.quote)) errors.push(`${factLabel}.source quote is not present in input ${fact.source.inputIndex}`);
       if (typeof fact.uncertain !== "boolean" || typeof fact.negated !== "boolean") errors.push(`${factLabel} markers must be boolean`);
       if (!Array.isArray(fact.requiredMarkers) || fact.requiredMarkers.some((marker) => typeof marker !== "string" || !marker)) errors.push(`${factLabel}.requiredMarkers is invalid`);
       if (!["add", "duplicate", "conflict", "skip"].includes(fact.expectedAction)) errors.push(`${factLabel}.expectedAction is invalid`);
       if (fact.relatedEntryId !== null && typeof fact.relatedEntryId !== "string") errors.push(`${factLabel}.relatedEntryId is invalid`);
     }
+    if (version === 2 && !Array.isArray(item.expectedRelations)) errors.push(`${label}.expectedRelations must be an array for corpus version 2`);
+    if (item.expectedRelations !== undefined && !Array.isArray(item.expectedRelations)) errors.push(`${label}.expectedRelations must be an array`);
+    if (Array.isArray(item.expectedRelations)) {
+      const relationIds = new Set<string>();
+      const factsById = new Map(item.expectedFacts.filter((fact): fact is GoldFact => Boolean(fact) && typeof fact === "object" && typeof fact.id === "string").map((fact) => [fact.id, fact]));
+      for (const [relationIndex, relation] of item.expectedRelations.entries()) {
+        const relationLabel = `${label}.expectedRelations[${relationIndex}]`;
+        if (!relation || typeof relation !== "object") { errors.push(`${relationLabel} must be an object`); continue; }
+        assertString(relation.id, `${relationLabel}.id`, errors);
+        if (relationIds.has(relation.id)) errors.push(`${relationLabel}.id is duplicated`);
+        if (factIds.has(relation.id)) errors.push(`${relationLabel}.id duplicates a fact id`);
+        relationIds.add(relation.id);
+        if (!RELATION_TYPES.includes(relation.type)) errors.push(`${relationLabel}.type is invalid`);
+        for (const field of ["sourceFactIds", "targetFactIds", "projectionFactIds"] as const) {
+          const ids = relation[field];
+          if (!Array.isArray(ids) || ids.some((id) => typeof id !== "string" || !id)) {
+            errors.push(`${relationLabel}.${field} is invalid`);
+            continue;
+          }
+          if (new Set(ids).size !== ids.length) errors.push(`${relationLabel}.${field} contains duplicate fact ids`);
+          for (const id of ids) if (!factsById.has(id)) errors.push(`${relationLabel}.${field} references unknown fact: ${id}`);
+        }
+        if (!relation.sourceFactIds?.length) errors.push(`${relationLabel}.sourceFactIds must not be empty`);
+        if (!relation.targetFactIds?.length) errors.push(`${relationLabel}.targetFactIds must not be empty`);
+        if (!relation.source || !Number.isInteger(relation.source.inputIndex) || typeof relation.source.quote !== "string" || !relation.source.quote) {
+          errors.push(`${relationLabel}.source is invalid`);
+        } else if (!item.inputs?.[relation.source.inputIndex]?.includes(relation.source.quote)) {
+          errors.push(`${relationLabel}.source quote is not present in input ${relation.source.inputIndex}`);
+        }
+        const referencedIds = [...(relation.sourceFactIds ?? []), ...(relation.targetFactIds ?? []), ...(relation.projectionFactIds ?? [])];
+        if (relation.source && Number.isInteger(relation.source.inputIndex)) {
+          for (const id of referencedIds) {
+            const fact = factsById.get(id);
+            if (fact && fact.source.inputIndex !== relation.source.inputIndex) errors.push(`${relationLabel} references fact ${id} from a different input turn`);
+          }
+        }
+        const sourceFacts = (relation.sourceFactIds ?? []).map((id) => factsById.get(id)).filter((fact): fact is GoldFact => Boolean(fact));
+        const projectionFacts = (relation.projectionFactIds ?? []).map((id) => factsById.get(id)).filter((fact): fact is GoldFact => Boolean(fact));
+        if (relation.type === "context_of" && sourceFacts.some((fact) => fact.category !== "context")) errors.push(`${relationLabel}.sourceFactIds must all reference context facts`);
+        if (relation.type === "course_of" && sourceFacts.some((fact) => fact.category !== "course")) errors.push(`${relationLabel}.sourceFactIds must all reference course facts`);
+        if (relation.type === "condition_effect" && projectionFacts.some((fact) => fact.category !== "helps")) errors.push(`${relationLabel}.projectionFactIds must all reference helps facts`);
+        if (relation.type === "contrast_with" && relation.sourceFactIds?.some((id) => relation.targetFactIds?.includes(id))) errors.push(`${relationLabel}.sourceFactIds and targetFactIds must be disjoint`);
+      }
+    }
     if (!Array.isArray(item.forbiddenInferences) || item.forbiddenInferences.some((forbidden) => !forbidden || typeof forbidden.text !== "string" || (forbidden.category !== null && !CATEGORY_IDS.includes(forbidden.category)))) errors.push(`${label}.forbiddenInferences is invalid`);
     if (!Array.isArray(item.tags) || item.tags.some((tag) => typeof tag !== "string" || !tag)) errors.push(`${label}.tags is invalid`);
-    const categories = new Set(item.expectedFacts.map((fact) => fact.category));
+    const categories = new Set(item.expectedFacts.filter((fact) => fact && typeof fact === "object").map((fact) => fact.category));
     if (!item.dimensions || item.dimensions.factCount !== item.expectedFacts.length || item.dimensions.categoryCount !== categories.size) errors.push(`${label}.dimensions do not match gold facts`);
     const allowedLinguistic = ["simple", "compound", "contrast", "conditional", "negation", "uncertainty", "coreference"];
     if (!Array.isArray(item.dimensions?.linguistic) || item.dimensions.linguistic.some((tag) => !allowedLinguistic.includes(tag))) errors.push(`${label}.dimensions.linguistic is invalid`);

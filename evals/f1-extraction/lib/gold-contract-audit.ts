@@ -1,5 +1,5 @@
 import type { CategoryId } from "../../../app/notepad-model.ts";
-import type { EvalCase, EvalCorpus, GoldFact } from "./eval-contract.ts";
+import { goldCanonicalText, validateCorpus, type EvalCase, type EvalCorpus, type GoldFact } from "./eval-contract.ts";
 
 export type GoldContractAuditSeverity = "definite contract mismatch" | "probable mismatch" | "review required";
 
@@ -8,6 +8,7 @@ export type GoldContractAuditFinding = {
   goldFactId: string;
   currentCategory: CategoryId;
   currentText: string;
+  canonicalText: string;
   currentSourceQuote: string;
   suspectedAdditionalDimensions: CategoryId[];
   reason: string;
@@ -21,6 +22,10 @@ export type GoldContractAuditReport = {
   factsAudited: number;
   counts: Record<GoldContractAuditSeverity, number>;
   findings: GoldContractAuditFinding[];
+  heuristicFindings: GoldContractAuditFinding[];
+  relationFindings: Array<{ caseId: string; relationId: string; reason: string; severity: "review required" }>;
+  deterministicViolations: Array<{ caseId: string | null; relationId: string | null; code: "contract_validation" | "duplicate_relation"; reason: string }>;
+  relationAware: true;
 };
 
 const severityRank: Record<GoldContractAuditSeverity, number> = {
@@ -31,7 +36,7 @@ const severityRank: Record<GoldContractAuditSeverity, number> = {
 
 const contextPattern = /\b(?:hlavně\s+)?při\b|\bběhem\b|\b(?:ve|v)\s+(?:třídě|jídelně|šatně|skupině|vyučování|hodině)\b|\b(?:před|po)\s+(?:obědem|vyučováním|víkendu|přesazení)\b|\bbez\s+přípravy\b|\bna\s+opravu\b/u;
 const strongContextPattern = /\bhlavně\s+při\s+hluku\b/u;
-const coursePattern = /\b(?:občas|někdy|jindy|často|častěji|denně|týdně|několikrát)\b|\b(?:každý|každé)\s+\p{L}+\b|\bpo\s+(?:pár|jedné|dvou|třech|čtyřech|pěti|\d+)\s+minut|\bvelmi\s+siln\p{L}*/u;
+const coursePattern = /\b(?:občas|často|častěji|denně|týdně|několikrát)\b|\b(?:každý|každé)\s+\p{L}+\b|\bpo\s+(?:pár|jedné|dvou|třech|čtyřech|pěti|\d+)\s+minut|\bvelmi\s+siln\p{L}*/u;
 
 function normalize(value: string) {
   return value.normalize("NFKC").toLocaleLowerCase("cs-CZ").replace(/[^\p{L}\p{N}]+/gu, " ").trim();
@@ -43,7 +48,7 @@ function overlapSeverity(current: GoldFact, other: GoldFact): GoldContractAuditS
 }
 
 function lexicalSignals(fact: GoldFact) {
-  const text = normalize(fact.text);
+  const text = normalize(goldCanonicalText(fact));
   const signals: Array<{ dimension: CategoryId; reason: string; severity: GoldContractAuditSeverity }> = [];
   if (fact.category === "manifestations" && contextPattern.test(text)) signals.push({
     dimension: "context",
@@ -68,14 +73,23 @@ function lexicalSignals(fact: GoldFact) {
   return signals;
 }
 
+function relationCoversDimension(item: EvalCase, factId: string, otherFactId: string | null, dimension: CategoryId) {
+  const expectedType = dimension === "context" ? "context_of" : dimension === "course" ? "course_of" : null;
+  if (!expectedType) return false;
+  return (item.expectedRelations ?? []).some((relation) => relation.type === expectedType
+    && relation.targetFactIds.includes(factId)
+    && (otherFactId === null || relation.sourceFactIds.includes(otherFactId)));
+}
+
 function auditFact(item: EvalCase, fact: GoldFact): GoldContractAuditFinding | null {
   const dimensions = new Set<CategoryId>();
   const reasons = new Set<string>();
   let severity: GoldContractAuditSeverity = "review required";
-  const factText = normalize(fact.text);
+  const factText = normalize(goldCanonicalText(fact));
   for (const other of item.expectedFacts) {
     if (other.id === fact.id || other.category === fact.category || other.source.inputIndex !== fact.source.inputIndex) continue;
-    const otherText = normalize(other.text);
+    if (fact.category === "helps" || other.category === "helps") continue;
+    const otherText = normalize(goldCanonicalText(other));
     if (otherText.length < 4 || !factText.includes(otherText)) continue;
     dimensions.add(other.category);
     reasons.add(`Gold text contains separately expected ${other.category} fact ${other.id}, indicating that the current ${fact.category} fact is not atomized by category.`);
@@ -87,12 +101,26 @@ function auditFact(item: EvalCase, fact: GoldFact): GoldContractAuditFinding | n
     reasons.add(signal.reason);
     if (severityRank[signal.severity] > severityRank[severity]) severity = signal.severity;
   }
+  if (fact.canonicalText) {
+    const surfaceFact = { ...fact, canonicalText: undefined };
+    for (const signal of lexicalSignals(surfaceFact)) {
+      if (lexicalSignals(fact).some((canonicalSignal) => canonicalSignal.dimension === signal.dimension)) continue;
+      if (relationCoversDimension(item, fact.id, null, signal.dimension)) continue;
+      const companionExists = item.expectedFacts.some((candidate) => candidate.id !== fact.id && candidate.category === signal.dimension && candidate.source.inputIndex === fact.source.inputIndex);
+      dimensions.add(signal.dimension);
+      reasons.add(companionExists
+        ? `Relation-preserving surface text contains ${signal.dimension} meaning, but no expectedRelation links its companion fact to ${fact.id}.`
+        : `Relation-preserving surface text contains material ${signal.dimension} meaning without a companion fact or expectedRelation.`);
+      if (severityRank["review required"] > severityRank[severity]) severity = "review required";
+    }
+  }
   if (!dimensions.size) return null;
   return {
     caseId: item.id,
     goldFactId: fact.id,
     currentCategory: fact.category,
     currentText: fact.text,
+    canonicalText: goldCanonicalText(fact),
     currentSourceQuote: fact.source.quote,
     suspectedAdditionalDimensions: [...dimensions].sort(),
     reason: [...reasons].join(" "),
@@ -105,6 +133,27 @@ export function auditGoldCorpus(corpus: EvalCorpus): GoldContractAuditReport {
     const finding = auditFact(item, fact);
     return finding ? [finding] : [];
   })).sort((left, right) => left.caseId.localeCompare(right.caseId) || left.goldFactId.localeCompare(right.goldFactId));
+  const validation = validateCorpus(corpus);
+  const deterministicViolations: GoldContractAuditReport["deterministicViolations"] = validation.errors.map((reason) => {
+    const caseIndex = Number(reason.match(/^cases\[(\d+)\]/)?.[1]);
+    return { caseId: Number.isInteger(caseIndex) ? corpus.cases[caseIndex]?.id ?? null : null, relationId: null, code: "contract_validation", reason };
+  });
+  for (const item of corpus.cases) {
+    const signatures = new Map<string, string>();
+    for (const relation of item.expectedRelations ?? []) {
+      if (!relation || typeof relation !== "object" || !Array.isArray(relation.sourceFactIds) || !Array.isArray(relation.targetFactIds) || !Array.isArray(relation.projectionFactIds)) continue;
+      const sourceIds = [...relation.sourceFactIds].sort().join(",");
+      const targetIds = [...relation.targetFactIds].sort().join(",");
+      const sides = relation.type === "contrast_with" ? [sourceIds, targetIds].sort() : [sourceIds, targetIds];
+      const signature = [relation.type, ...sides, [...relation.projectionFactIds].sort().join(",")].join("|");
+      const previous = signatures.get(signature);
+      if (previous) deterministicViolations.push({ caseId: item.id, relationId: relation.id, code: "duplicate_relation", reason: `Relation ${relation.id} duplicates ${previous}.` });
+      else signatures.set(signature, relation.id);
+    }
+  }
+  const relationFindings = corpus.cases.flatMap((item) => (item.expectedRelations ?? []).flatMap((relation) => relation && typeof relation === "object" && relation.type === "condition_effect" && Array.isArray(relation.projectionFactIds) && relation.projectionFactIds.length === 0
+    ? [{ caseId: item.id, relationId: relation.id, reason: "Condition/effect relation has no helps projection; review whether the explicit observed relationship requires one.", severity: "review required" as const }]
+    : []));
   return {
     contractSource: "app/f1-extraction-contract.ts",
     corpusVersion: corpus.version,
@@ -115,6 +164,10 @@ export function auditGoldCorpus(corpus: EvalCorpus): GoldContractAuditReport {
       "probable mismatch": findings.filter((finding) => finding.severity === "probable mismatch").length,
       "review required": findings.filter((finding) => finding.severity === "review required").length,
     },
+    relationAware: true,
     findings,
+    heuristicFindings: findings,
+    relationFindings,
+    deterministicViolations,
   };
 }
