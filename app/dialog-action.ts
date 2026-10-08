@@ -99,15 +99,15 @@ export function resolveTextDialogEvent(
   return explicitContinuation || (action && destination) || directRecommendation ? "continue_to_solution" : null;
 }
 
-export type F2OutputNavigationResolution = "stay_for_preview" | "enter_f3";
+export type F2OutputNavigationResolution = "stay_for_rozbor" | "enter_f3";
 
 export function resolveF2OutputNavigation(
   textEvent: ReturnType<typeof resolveTextDialogEvent>,
   dialogEvent: string | undefined,
-  hasAcceptedPreview: boolean,
+  hasCurrentRozborSnapshot: boolean,
 ): F2OutputNavigationResolution | null {
   if (textEvent !== "continue_to_output" && dialogEvent !== "continue_to_output") return null;
-  return hasAcceptedPreview ? "enter_f3" : "stay_for_preview";
+  return hasCurrentRozborSnapshot ? "enter_f3" : "stay_for_rozbor";
 }
 
 const CONTINUE_OPTION: DialogActionOption = {

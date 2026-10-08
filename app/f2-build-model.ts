@@ -137,6 +137,21 @@ export type CurrentRozborState = {
   POZOROVAT: PozorovatBuildState;
   VYTVOŘIT: VytvoritBuildState;
 };
+export type F2ToF3Snapshot = {
+  kind: "f2-to-f3-snapshot";
+  snapshotId: string;
+  sourceFingerprint: string;
+  sourceRevision: string;
+  canonicalNeed: F1ToF2NeedContract;
+  activePath: F2Path;
+  baselineHypotheses: WorkingHypothesis[];
+  currentRozbor: {
+    config: CurrentRozborBuildConfig;
+    components: RozborComponent[];
+  };
+  uncertainties: string[];
+  f3Target: string | null;
+};
 export type RozborComponentGenerationRequest = {
   activePath: F2Path;
   canonicalNeed: F1ToF2NeedContract;
@@ -514,6 +529,109 @@ export function applyCurrentRozborComponentUpdate(
   const current = state[path];
   const next = applyRozborComponentUpdate(current as PochopitBuildState, required, generated);
   return { ...state, [path]: next } as CurrentRozborState;
+}
+
+function collectCurrentRozborUncertainties(hypotheses: WorkingHypothesis[], components: RozborComponent[]) {
+  const collected = hypotheses.flatMap((hypothesis) => [...hypothesis.limitations, ...hypothesis.unknowns]);
+  const visit = (value: unknown) => {
+    if (Array.isArray(value)) {
+      for (const item of value) visit(item);
+      return;
+    }
+    if (!isComponentRecord(value)) return;
+    if (Array.isArray(value.limitations)) {
+      for (const limitation of value.limitations) if (hasText(limitation)) collected.push(limitation.trim());
+    }
+    for (const [key, item] of Object.entries(value)) if (key !== "limitations") visit(item);
+  };
+  for (const component of components) visit(component.content);
+  return [...new Set(collected.map((item) => item.trim()).filter(Boolean))];
+}
+
+function sourceRevision(fingerprint: string) {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < fingerprint.length; index += 1) {
+    hash ^= fingerprint.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
+}
+
+export function createF2ToF3SourceFingerprint(
+  activePath: F2Path,
+  canonicalNeed: F1ToF2NeedContract,
+  hypotheses: WorkingHypothesis[],
+  config: CurrentRozborBuildConfig,
+  components: RozborComponent[],
+) {
+  return JSON.stringify([
+    "current-rozbor-to-f3-v1",
+    canonicalF1NeedFingerprint(canonicalNeed),
+    activePath,
+    createRozborBaselineFingerprint(canonicalNeed, hypotheses),
+    config,
+    components.map(({ id, kind, hypothesisId, fingerprint, content }) => [id, kind, hypothesisId ?? null, fingerprint, content]),
+    canonicalNeed.f3Target,
+  ]);
+}
+
+function assertF2ToF3Readiness(
+  activePath: F2Path,
+  canonicalNeed: F1ToF2NeedContract,
+  hypotheses: WorkingHypothesis[],
+  config: CurrentRozborBuildConfig,
+  components: RozborComponent[],
+) {
+  if (!canonicalNeed.needText.trim() || hypotheses.length === 0) throw new Error("Aktuální Rozbor nemá úplný výchozí obsah pro Výstup.");
+  const required = deriveRequiredCurrentRozborComponents(activePath, canonicalNeed, hypotheses, config);
+  const reconciliation = reconcileRozborComponents(required, components);
+  if (!reconciliation.isRozborCurrent) throw new Error("Rozbor není aktuální vůči svému zdroji nebo nastavení.");
+  parseGeneratedRozborComponents({ components }, required);
+  if (activePath === "POZOROVAT" && !components.some(({ kind }) => kind.startsWith("observation-"))) {
+    throw new Error("Rozbor POZOROVAT zatím neobsahuje pozorovací specifikaci pro Výstup.");
+  }
+  if (activePath === "VYTVOŘIT") {
+    const approaches = components.find(({ kind }) => kind === "creation-approaches")?.content;
+    const workingApproach = isComponentRecord(approaches) ? (approaches as Record<string, unknown>).workingApproach : null;
+    if (!isComponentRecord(workingApproach) || !hasText(workingApproach.title) || !hasText(workingApproach.rationale)) {
+      throw new Error("Rozbor VYTVOŘIT musí před Výstupem obsahovat explicitní pracovní / doporučený přístup.");
+    }
+  }
+}
+
+export function createF2ToF3Snapshot(
+  activePath: F2Path,
+  canonicalNeed: F1ToF2NeedContract,
+  hypotheses: WorkingHypothesis[],
+  config: CurrentRozborBuildConfig,
+  components: RozborComponent[],
+): F2ToF3Snapshot {
+  assertF2ToF3Readiness(activePath, canonicalNeed, hypotheses, config, components);
+  const sourceFingerprint = createF2ToF3SourceFingerprint(activePath, canonicalNeed, hypotheses, config, components);
+  return structuredClone({
+    kind: "f2-to-f3-snapshot" as const,
+    snapshotId: crypto.randomUUID(),
+    sourceFingerprint,
+    sourceRevision: sourceRevision(sourceFingerprint),
+    canonicalNeed,
+    activePath,
+    baselineHypotheses: hypotheses,
+    currentRozbor: { config, components },
+    uncertainties: collectCurrentRozborUncertainties(hypotheses, components),
+    f3Target: canonicalNeed.f3Target,
+  });
+}
+
+export function parseF2ToF3Snapshot(value: unknown): F2ToF3Snapshot {
+  if (!isComponentRecord(value) || value.kind !== "f2-to-f3-snapshot" || !hasText(value.snapshotId) || !hasText(value.sourceFingerprint) || !hasText(value.sourceRevision)) throw new Error("Neplatný snapshot aktuálního Rozboru.");
+  if (!isComponentRecord(value.canonicalNeed) || !hasText(value.canonicalNeed.needId) || !hasText(value.canonicalNeed.needText) || !["POCHOPIT", "POZOROVAT", "VYTVOŘIT"].includes(String(value.canonicalNeed.initialF2Path)) || !(value.canonicalNeed.f3Target === null || typeof value.canonicalNeed.f3Target === "string")) throw new Error("Snapshot neobsahuje platnou pedagogickou potřebu.");
+  if (!["POCHOPIT", "POZOROVAT", "VYTVOŘIT"].includes(String(value.activePath)) || !Array.isArray(value.baselineHypotheses) || !value.baselineHypotheses.every((hypothesis) => isComponentRecord(hypothesis) && hasText(hypothesis.id) && typeof hypothesis.rank === "number" && hasText(hypothesis.title) && hasText(hypothesis.summary) && isComponentStringArray(hypothesis.relevantNeeds) && isComponentStringArray(hypothesis.supportingInformation) && isComponentStringArray(hypothesis.limitations) && isComponentStringArray(hypothesis.unknowns) && Array.isArray(hypothesis.questions))) throw new Error("Snapshot neobsahuje platné výchozí hypotézy.");
+  if (!isComponentRecord(value.currentRozbor) || !isComponentRecord(value.currentRozbor.config) || !Array.isArray(value.currentRozbor.components) || !isComponentStringArray(value.uncertainties) || !(value.f3Target === null || typeof value.f3Target === "string")) throw new Error("Snapshot neobsahuje platný aktuální Rozbor.");
+  const snapshot = value as F2ToF3Snapshot;
+  assertF2ToF3Readiness(snapshot.activePath, snapshot.canonicalNeed, snapshot.baselineHypotheses, snapshot.currentRozbor.config, snapshot.currentRozbor.components);
+  const fingerprint = createF2ToF3SourceFingerprint(snapshot.activePath, snapshot.canonicalNeed, snapshot.baselineHypotheses, snapshot.currentRozbor.config, snapshot.currentRozbor.components);
+  if (snapshot.sourceFingerprint !== fingerprint || snapshot.sourceRevision !== sourceRevision(fingerprint) || snapshot.f3Target !== snapshot.canonicalNeed.f3Target) throw new Error("Snapshot neodpovídá deklarovanému zdroji Rozboru.");
+  return structuredClone(snapshot);
 }
 
 export const F2_PATH_META: Record<F2Path, { label: F2Path; description: string }> = {

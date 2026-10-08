@@ -142,6 +142,8 @@ import {
   DEFAULT_POZOROVAT_BUILD_CONFIG,
   DEFAULT_VYTVORIT_BUILD_CONFIG,
   applyCurrentRozborComponentUpdate,
+  createF2ToF3Snapshot,
+  createF2ToF3SourceFingerprint,
   createRozborBaselineFingerprint,
   createCurrentRozborGenerationRequest,
   createCurrentRozborState,
@@ -154,6 +156,7 @@ import {
   applyRozborComponentUpdate,
   createRozborGenerationRequest,
   parseGeneratedRozborComponents,
+  parseF2ToF3Snapshot,
   updateCurrentRozborConfig,
 } from "../app/f2-build-model.ts";
 
@@ -471,4 +474,57 @@ test("VYTVOŘIT requires a selected working approach and represents objective, c
   assert.throws(() => parseGeneratedRozborComponents({ components: noSelection }, requested), /zvolený pracovní přístup/);
   const noLimit = structuredClone(valid); noLimit.find(({ kind }) => kind === "creation-objective").content.limitations = [];
   assert.throws(() => parseGeneratedRozborComponents({ components: noLimit }, requested), /praktický cíl/);
+});
+
+// Milestone 2A: immutable current-Rozbor handoff to F3.
+function currentComponents(path, sourceNeed, hypotheses, config, content) {
+  return deriveRequiredCurrentRozborComponents(path, sourceNeed, hypotheses, config).map((spec) => ({
+    ...spec,
+    content: spec.kind === "hypothesis-expansion" ? `Rozvinutí ${spec.hypothesisId}` : content[spec.kind],
+  }));
+}
+
+test("all three current-Rozbor paths create direct F3 snapshots without legacy PREVIEW", () => {
+  const hypotheses = [hypothesis("h1")];
+  const pochopit = createF2ToF3Snapshot("POCHOPIT", pochopitNeed, hypotheses, pochopitConfig(), []);
+  const observationConfig = pozorovatConfig({ compareHypotheses: true, keyIndicators: true, observationPriorities: true });
+  const observationComponents = currentComponents("POZOROVAT", pozorovatNeed, hypotheses, observationConfig, observationContent);
+  const pozorovat = createF2ToF3Snapshot("POZOROVAT", pozorovatNeed, hypotheses, observationConfig, observationComponents);
+  const creationConfig = vytvoritConfig({ candidateApproaches: true, refineObjective: true, successConditions: true, followUpVerification: true });
+  const creationComponents = currentComponents("VYTVOŘIT", vytvoritNeed, hypotheses, creationConfig, creationContent);
+  const vytvorit = createF2ToF3Snapshot("VYTVOŘIT", vytvoritNeed, hypotheses, creationConfig, creationComponents);
+
+  assert.equal(pochopit.activePath, "POCHOPIT");
+  assert.equal(pozorovat.currentRozbor.components.some(({ kind }) => kind === "observation-indicators"), true);
+  assert.equal(vytvorit.currentRozbor.components.find(({ kind }) => kind === "creation-approaches").content.workingApproach.title, "Krátký kruh s aktivní rolí");
+  for (const snapshot of [pochopit, pozorovat, vytvorit]) assert.deepEqual(parseF2ToF3Snapshot(snapshot), snapshot);
+});
+
+test("F3 handoff identity is stable by source and the snapshot is isolated from later F2 mutation", () => {
+  const hypotheses = [hypothesis("h1")];
+  const config = pozorovatConfig({ keyIndicators: true });
+  const components = currentComponents("POZOROVAT", pozorovatNeed, hypotheses, config, observationContent);
+  const first = createF2ToF3Snapshot("POZOROVAT", pozorovatNeed, hypotheses, config, components);
+  const second = createF2ToF3Snapshot("POZOROVAT", pozorovatNeed, hypotheses, config, components);
+  assert.notEqual(first.snapshotId, second.snapshotId);
+  assert.equal(first.sourceFingerprint, second.sourceFingerprint);
+  assert.equal(first.sourceRevision, second.sourceRevision);
+
+  hypotheses[0].title = "Pozdější změna";
+  components[0].content.purpose = "Pozdější změna účelu";
+  assert.equal(first.baselineHypotheses[0].title, "h1");
+  assert.equal(first.currentRozbor.components[0].content.purpose, "Rozlišit vliv délky činnosti a podpory.");
+  assert.notEqual(createF2ToF3SourceFingerprint("POZOROVAT", pozorovatNeed, hypotheses, config, components), first.sourceFingerprint);
+});
+
+test("stale current-Rozbor content and VYTVOŘIT without a working approach cannot cross the F3 boundary", () => {
+  const hypotheses = [hypothesis("h1")];
+  const observationConfig = pozorovatConfig({ keyIndicators: true });
+  const observationComponents = currentComponents("POZOROVAT", pozorovatNeed, hypotheses, observationConfig, observationContent);
+  assert.throws(() => createF2ToF3Snapshot("POZOROVAT", pozorovatNeed, [hypothesis("h1", "Změněná")], observationConfig, observationComponents), /není aktuální/);
+
+  const objectiveOnly = vytvoritConfig({ refineObjective: true });
+  const objectiveComponents = currentComponents("VYTVOŘIT", vytvoritNeed, hypotheses, objectiveOnly, creationContent);
+  assert.throws(() => createF2ToF3Snapshot("VYTVOŘIT", vytvoritNeed, hypotheses, objectiveOnly, objectiveComponents), /pracovní \/ doporučený přístup/);
+  assert.throws(() => createF2ToF3Snapshot("POZOROVAT", pozorovatNeed, hypotheses, pozorovatConfig(), []), /pozorovací specifikaci/);
 });
