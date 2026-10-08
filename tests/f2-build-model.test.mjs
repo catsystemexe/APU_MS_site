@@ -503,6 +503,7 @@ test("current Rozbor creates an immutable direct F3 snapshot for every path", ()
     assert.equal(snapshot.currentRozbor.components.length, source.state.components.length);
     assert.equal(snapshot.sourceRevision, 7);
     assert.equal(isF2ToF3Snapshot(snapshot), true);
+    assert.equal(isF2ToF3Snapshot(JSON.parse(JSON.stringify(snapshot))), true);
     assert.equal(Object.isFrozen(snapshot), true);
     assert.equal(Object.isFrozen(snapshot.currentRozbor.components[0]), true);
     const originalNeed = snapshot.canonicalNeed.needText;

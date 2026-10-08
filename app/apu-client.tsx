@@ -896,9 +896,9 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
     try {
       const renderRequest = createF3RenderRequest(f3State, selectedModel);
       const response = await fetch("/api/f3", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(renderRequest) });
-      const payload = await response.json().catch(() => null) as ({ result?: unknown; error?: string } & ModelUsageRecordsResponse) | null;
+      const payload = await response.json().catch(() => null) as ({ result?: unknown; error?: string; diagnostic?: string } & ModelUsageRecordsResponse) | null;
       collectModelUsageRecords(payload);
-      if (!response.ok || !payload?.result) throw new Error(payload?.error || "Finální výstup se nepodařilo vytvořit.");
+      if (!response.ok || !payload?.result) throw new Error(isDeveloper && payload?.diagnostic ? `${payload.error ?? "Finální výstup se nepodařilo vytvořit."} ${payload.diagnostic}` : payload?.error || "Finální výstup se nepodařilo vytvořit.");
       const result = parseF3RenderResult(payload.result);
       if (renderRequest.sourceSnapshot.sourceFingerprint !== latestF2ToF3FingerprintRef.current) throw new Error("Výsledek byl zahozen, protože se mezitím změnil zdrojový Rozbor.");
       setF3State((current) => current ? acceptF3Render(current, result, renderRequest) : current); setF3Status("idle");
