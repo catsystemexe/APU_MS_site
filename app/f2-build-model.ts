@@ -585,22 +585,22 @@ function parseComponentContent(kind: RozborComponentKind, value: unknown): Rozbo
       return item as CreationApproachesContent["candidateApproaches"][number];
     });
     const working = value.workingApproach;
-    if (!hasText(working.title) || !hasText(working.rationale) || !isNonEmptyComponentStringArray(working.hypothesisIds) || !isNonEmptyComponentStringArray(working.limitations)) throw new Error("Model nevrátil zvolený pracovní přístup.");
+    if (!hasText(working.title) || !hasText(working.rationale) || !isNonEmptyComponentStringArray(working.hypothesisIds) || !isComponentStringArray(working.limitations)) throw new Error("Model nevrátil zvolený pracovní přístup.");
     return { candidateApproaches, workingApproach: working as CreationApproachesContent["workingApproach"] };
   }
   if (kind === "creation-objective") {
-    if (!hasText(value.objective) || !isNonEmptyComponentStringArray(value.hypothesisIds) || !isNonEmptyComponentStringArray(value.limitations)) throw new Error("Model nevrátil úplný praktický cíl.");
+    if (!hasText(value.objective) || !isNonEmptyComponentStringArray(value.hypothesisIds) || !isComponentStringArray(value.limitations)) throw new Error("Model nevrátil úplný praktický cíl.");
     return value as CreationObjectiveContent;
   }
   if (kind === "success-conditions") {
-    if (!Array.isArray(value.conditions) || value.conditions.length === 0 || !isNonEmptyComponentStringArray(value.limitations)) throw new Error("Model nevrátil podmínky úspěchu.");
+    if (!Array.isArray(value.conditions) || value.conditions.length === 0 || !isComponentStringArray(value.limitations)) throw new Error("Model nevrátil podmínky úspěchu.");
     const conditions = value.conditions.map((item) => {
       if (!isComponentRecord(item) || !hasText(item.condition) || !hasText(item.whyRequired)) throw new Error("Model vrátil neúplnou podmínku úspěchu.");
       return item as SuccessConditionsContent["conditions"][number];
     });
     return { conditions, limitations: value.limitations };
   }
-  if (!Array.isArray(value.checks) || value.checks.length === 0 || !isNonEmptyComponentStringArray(value.limitations)) throw new Error("Model nevrátil následné ověřování.");
+  if (!Array.isArray(value.checks) || value.checks.length === 0 || !isComponentStringArray(value.limitations)) throw new Error("Model nevrátil následné ověřování.");
   const checks = value.checks.map((item) => {
     if (!isComponentRecord(item) || !hasText(item.indicator) || !hasText(item.when) || !hasText(item.successSignal) || !hasText(item.adjustmentSignal) || !isComponentStringArray(item.hypothesisIds) || item.hypothesisIds.length === 0) throw new Error("Model vrátil neúplný následný indikátor.");
     return item as FollowUpVerificationContent["checks"][number];

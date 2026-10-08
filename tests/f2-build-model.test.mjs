@@ -472,8 +472,18 @@ test("VYTVOŘIT requires a selected working approach and represents objective, c
   assert.equal(parsed.find(({ kind }) => kind === "creation-approaches").content.workingApproach.title, "Krátký kruh s aktivní rolí");
   const noSelection = structuredClone(valid); delete noSelection.find(({ kind }) => kind === "creation-approaches").content.workingApproach;
   assert.throws(() => parseGeneratedRozborComponents({ components: noSelection }, requested), /zvolený pracovní přístup/);
-  const noLimit = structuredClone(valid); noLimit.find(({ kind }) => kind === "creation-objective").content.limitations = [];
-  assert.throws(() => parseGeneratedRozborComponents({ components: noLimit }, requested), /praktický cíl/);
+  const noLimit = structuredClone(valid);
+  noLimit.find(({ kind }) => kind === "creation-approaches").content.workingApproach.limitations = [];
+  noLimit.find(({ kind }) => kind === "creation-objective").content.limitations = [];
+  noLimit.find(({ kind }) => kind === "success-conditions").content.limitations = [];
+  noLimit.find(({ kind }) => kind === "follow-up-verification").content.limitations = [];
+  assert.equal(parseGeneratedRozborComponents({ components: noLimit }, requested).length, requested.length);
+  const emptyObjective = structuredClone(noLimit); emptyObjective.find(({ kind }) => kind === "creation-objective").content.objective = "";
+  assert.throws(() => parseGeneratedRozborComponents({ components: emptyObjective }, requested), /praktický cíl/);
+  const noConditions = structuredClone(noLimit); noConditions.find(({ kind }) => kind === "success-conditions").content.conditions = [];
+  assert.throws(() => parseGeneratedRozborComponents({ components: noConditions }, requested), /podmínky úspěchu/);
+  const noChecks = structuredClone(noLimit); noChecks.find(({ kind }) => kind === "follow-up-verification").content.checks = [];
+  assert.throws(() => parseGeneratedRozborComponents({ components: noChecks }, requested), /následné ověřování/);
 });
 
 function readyF3Source(path) {

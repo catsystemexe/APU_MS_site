@@ -1,7 +1,8 @@
 import { getAccessIdentity } from "../../access-auth";
+import { parseProviderRozborComponents, rozborComponentProviderSchema } from "../../f2-component-provider-contract";
 import { isSupportedModel } from "../../model-config";
 import { F2_PATHS, type F2Path } from "../../notepad-model";
-import { deriveRequiredCurrentRozborComponents, F2_PATH_BASE_SEMANTICS, parseF2BuildResult, parseF2RenderedPreview, parseGeneratedRozborComponents, type F2BuildRequest, type F2PreviewSnapshot, type RequiredRozborComponent, type RozborComponentGenerationRequest } from "../../f2-build-model";
+import { deriveRequiredCurrentRozborComponents, F2_PATH_BASE_SEMANTICS, parseF2BuildResult, parseF2RenderedPreview, type F2BuildRequest, type F2PreviewSnapshot, type RozborComponentGenerationRequest } from "../../f2-build-model";
 import { callOpenAIResponses, createRequestUsageCollector, modelUsagePayload, usageErrorPayload, type RequestUsageCollector } from "../../openai-responses-instrumentation";
 
 export const runtime = "edge";
@@ -16,57 +17,6 @@ const creationResult = { type: "object", additionalProperties: false, required: 
 const resultSchema = (pathResult: typeof understandingResult | typeof observationResult | typeof creationResult) => ({ type: "object", additionalProperties: false, required: ["hypotheses", "pathResult", "decisions", "uncertainties", "missingInformation"], properties: { ...common, pathResult } } as const);
 const BUILD_SCHEMAS = { POCHOPIT: resultSchema(understandingResult), POZOROVAT: resultSchema(observationResult), VYTVOŘIT: resultSchema(creationResult) } as const;
 const PREVIEW_SCHEMA = { type: "object", additionalProperties: false, required: ["title", "introduction", "sections"], properties: { title: { type: "string" }, introduction: { type: "string" }, sections: { type: "array", maxItems: 8, items: { type: "object", additionalProperties: false, required: ["heading", "content"], properties: { heading: { type: "string" }, content: { type: "string" } } } } } } as const;
-
-const nonEmptyString = { type: "string", minLength: 1 } as const;
-const nonEmptyStringArray = { type: "array", minItems: 1, items: nonEmptyString } as const;
-const strictObject = (required: string[], properties: Record<string, object>) => ({ type: "object", additionalProperties: false, required, properties });
-const objectArray = (items: object) => ({ type: "array", minItems: 1, items });
-
-function componentContentSchema(spec: RequiredRozborComponent, hypothesisIds: string[]) {
-  const hypothesisId = { type: "string", enum: hypothesisIds };
-  const hypothesisIdsArray = { type: "array", items: hypothesisId };
-  const requiredHypothesisIds = { type: "array", minItems: 1, items: hypothesisId };
-  if (["hypothesis-expansion", "hypothesis-comparison", "expert-frame"].includes(spec.kind)) return nonEmptyString;
-  if (spec.kind === "observation-indicators") return strictObject(["purpose", "indicators", "limitations"], {
-    purpose: nonEmptyString,
-    indicators: objectArray(strictObject(["indicator", "observableAs", "situation", "supportSignal", "weakeningSignal", "supportsHypothesisIds", "weakensHypothesisIds", "doesNotDiscriminateWhen", "limitations"], {
-      indicator: nonEmptyString, observableAs: nonEmptyString, situation: nonEmptyString, supportSignal: nonEmptyString, weakeningSignal: nonEmptyString, supportsHypothesisIds: hypothesisIdsArray, weakensHypothesisIds: hypothesisIdsArray, doesNotDiscriminateWhen: nonEmptyString, limitations: stringArray,
-    })),
-    limitations: nonEmptyStringArray,
-  });
-  if (spec.kind === "observation-comparison") return strictObject(["contrasts", "limitations"], {
-    contrasts: objectArray(strictObject(["conditionA", "conditionB", "whatToObserve", "supportSignal", "weakeningSignal", "supportsHypothesisIds", "weakensHypothesisIds", "doesNotDiscriminateWhen", "limitations"], {
-      conditionA: nonEmptyString, conditionB: nonEmptyString, whatToObserve: nonEmptyString, supportSignal: nonEmptyString, weakeningSignal: nonEmptyString, supportsHypothesisIds: hypothesisIdsArray, weakensHypothesisIds: hypothesisIdsArray, doesNotDiscriminateWhen: nonEmptyString, limitations: stringArray,
-    })),
-    limitations: nonEmptyStringArray,
-  });
-  if (spec.kind === "observation-priorities") return strictObject(["priorities", "limitations"], {
-    priorities: objectArray(strictObject(["priority", "focus", "reason", "hypothesisIds"], { priority: { type: "integer", minimum: 1 }, focus: nonEmptyString, reason: nonEmptyString, hypothesisIds: requiredHypothesisIds })),
-    limitations: nonEmptyStringArray,
-  });
-  if (spec.kind === "creation-approaches") {
-    const approach = strictObject(["title", "description", "hypothesisIds", "limitations"], { title: nonEmptyString, description: nonEmptyString, hypothesisIds: requiredHypothesisIds, limitations: stringArray });
-    const workingApproach = strictObject(["title", "rationale", "hypothesisIds", "limitations"], { title: nonEmptyString, rationale: nonEmptyString, hypothesisIds: requiredHypothesisIds, limitations: nonEmptyStringArray });
-    return strictObject(["candidateApproaches", "workingApproach"], { candidateApproaches: objectArray(approach), workingApproach });
-  }
-  if (spec.kind === "creation-objective") return strictObject(["objective", "hypothesisIds", "limitations"], { objective: nonEmptyString, hypothesisIds: requiredHypothesisIds, limitations: nonEmptyStringArray });
-  if (spec.kind === "success-conditions") return strictObject(["conditions", "limitations"], { conditions: objectArray(strictObject(["condition", "whyRequired"], { condition: nonEmptyString, whyRequired: nonEmptyString })), limitations: nonEmptyStringArray });
-  return strictObject(["checks", "limitations"], {
-    checks: objectArray(strictObject(["indicator", "when", "successSignal", "adjustmentSignal", "hypothesisIds"], { indicator: nonEmptyString, when: nonEmptyString, successSignal: nonEmptyString, adjustmentSignal: nonEmptyString, hypothesisIds: requiredHypothesisIds })),
-    limitations: nonEmptyStringArray,
-  });
-}
-
-function componentSchema(spec: RequiredRozborComponent, hypothesisIds: string[]) {
-  const properties: Record<string, object> = { id: { type: "string", enum: [spec.id] }, kind: { type: "string", enum: [spec.kind] }, content: componentContentSchema(spec, hypothesisIds) };
-  const required = ["id", "kind", "content"];
-  if (spec.hypothesisId) { properties.hypothesisId = { type: "string", enum: [spec.hypothesisId] }; required.push("hypothesisId"); }
-  return { type: "object", additionalProperties: false, required, properties };
-}
-
-export function rozborComponentSchema(specs: RequiredRozborComponent[], hypothesisIds: string[]) {
-  return { type: "object", additionalProperties: false, required: ["components"], properties: { components: { type: "array", minItems: specs.length, maxItems: specs.length, items: { anyOf: specs.map((spec) => componentSchema(spec, hypothesisIds)) } } } };
-}
 
 function validConfig(path: F2Path, value: unknown) {
   if (!value || typeof value !== "object") return false;
@@ -126,12 +76,18 @@ const SHARED_PROMPT = "Jednotkou práce je jedna situace jako celek. Fakta Zápi
 
 function error(message: string, status = 500, collector?: RequestUsageCollector) { return Response.json(collector ? modelUsagePayload({ error: message }, collector) : { error: message }, { status }); }
 function outputText(response: Record<string, unknown>) { if (typeof response.output_text === "string") return response.output_text; const output = Array.isArray(response.output) ? response.output : []; for (const item of output) for (const part of Array.isArray((item as { content?: unknown[] }).content) ? (item as { content: unknown[] }).content : []) if (part && typeof part === "object" && typeof (part as { text?: unknown }).text === "string") return (part as { text: string }).text; return null; }
+function providerDiagnostic(record: ReturnType<RequestUsageCollector["records"]>[number] | undefined) {
+  const code = record?.error?.code;
+  const safeCode = typeof code === "string" && /^[a-z0-9_.-]{1,80}$/i.test(code) ? code : "unknown";
+  return `F2 component provider request failed: status=${record?.provider_status ?? "unknown"}; category=${record?.error?.category ?? "unknown"}; code=${safeCode}`;
+}
 function isPath(value: unknown): value is F2Path { return typeof value === "string" && F2_PATHS.includes(value as F2Path); }
 export function validBuild(value: unknown): value is F2BuildRequest { if (!value || typeof value !== "object") return false; const body = value as Partial<F2BuildRequest>; return body.kind === "f2-build" && isPath(body.activePath) && body.canonicalNeed?.initialF2Path !== undefined && Array.isArray(body.canonicalNotebookContext) && body.canonicalNotebookContext.length <= 80 && Array.isArray(body.workingHypotheses) && Array.isArray(body.activeSkills) && body.activeSkills.every((skill) => skill.id.startsWith(`${body.activePath!.toLowerCase()}-`) && skill.id in F2_SKILL_SEMANTICS) && typeof body.buildRevision === "number" && Number.isInteger(body.buildRevision) && body.buildRevision >= 0; }
 function validSnapshot(value: unknown): value is F2PreviewSnapshot { if (!value || typeof value !== "object") return false; const snapshot = value as Partial<F2PreviewSnapshot>; return typeof snapshot.snapshotId === "string" && snapshot.snapshotId.length > 0 && isPath(snapshot.activePath) && snapshot.canonicalNeed?.needText !== undefined && Number.isInteger(snapshot.buildRevision) && snapshot.processedRevision === snapshot.buildRevision && snapshot.processedBuild?.path === snapshot.activePath && typeof snapshot.processedBuild.processedResultId === "string" && snapshot.processedBuild.processedResultId.length > 0 && snapshot.processedBuild.processedRevision === snapshot.processedRevision && Array.isArray(snapshot.hypotheses) && Array.isArray(snapshot.activeSkills); }
 
 export async function POST(request: Request) {
-  if (!await getAccessIdentity(request.headers)) return error("Chybí platná identita Cloudflare Access.", 401);
+  const identity = await getAccessIdentity(request.headers);
+  if (!identity) return error("Chybí platná identita Cloudflare Access.", 401);
   const apiKey = process.env.OPENAI_API_KEY; if (!apiKey) return error("APU není dokončeno: chybí serverová konfigurace.", 503);
   let body: Record<string, unknown>; try { body = await request.json(); } catch { return error("Neplatný formát požadavku.", 400); }
   const operation = body.operation; const model = isSupportedModel(body.model) ? body.model : "gpt-5.6-terra";
@@ -144,8 +100,8 @@ export async function POST(request: Request) {
     activePath = body.snapshot.activePath; schema = PREVIEW_SCHEMA; name = `f2_${activePath.toLowerCase()}_preview`;
     instructions = `Vyrenderuj náhled výhradně z neměnného F2 snapshotu pro autoritativní cestu ${activePath}. Snapshot nepřehodnocuj z konverzace, neměň pedagogickou potřebu, cestu ani závěry. ${PATH_PROMPTS[activePath]} F3 target smí ovlivnit přehlednost formy, nikdy nesmí vést k finální materializaci F3 dokumentu.`; input = body.snapshot;
   } else if (operation === "generate-rozbor-components" && validRozborGeneration(body.request)) {
-    componentRequest = body.request; activePath = componentRequest.activePath; schema = rozborComponentSchema(componentRequest.components, componentRequest.hypotheses.map(({ id }) => id)); name = `f2_${activePath.toLowerCase()}_components`;
-    instructions = rozborComponentInstructions(componentRequest);
+    componentRequest = body.request; activePath = componentRequest.activePath; schema = rozborComponentProviderSchema(componentRequest.components, componentRequest.hypotheses.map(({ id }) => id)); name = `f2_${activePath.toLowerCase()}_components`;
+    instructions = `${rozborComponentInstructions(componentRequest)}\n\nVe výstupním objektu components použij každý přesný požadovaný component ID právě jednou jako klíč a pod něj vlož pouze jeho obsah.`;
     input = { activePath: componentRequest.activePath, canonicalNeed: componentRequest.canonicalNeed, hypotheses: componentRequest.hypotheses, config: componentRequest.config, components: componentRequest.components.map(({ id, kind, hypothesisId }) => ({ id, kind, ...(hypothesisId ? { hypothesisId } : {}) })) };
   } else return error("Neplatný nebo nepodporovaný F2 požadavek.", 400);
   const collector = createRequestUsageCollector();
@@ -159,16 +115,20 @@ export async function POST(request: Request) {
       validate_application_response: (providerResponse) => {
         const text = outputText(providerResponse); if (!text) throw new Error("missing structured output");
         const parsed = JSON.parse(text);
-        if (componentRequest) return { components: parseGeneratedRozborComponents(parsed, componentRequest.components) };
+        if (componentRequest) return { components: parseProviderRozborComponents(parsed, componentRequest.components) };
         return { result: operation === "build" ? parseF2BuildResult(parsed, activePath!) : parseF2RenderedPreview(parsed) };
       },
     });
-    if (usage_record.provider_status !== "completed" || !application_result) return error("Modelové zpracování F2 se nezdařilo.", 502, collector);
+    if (usage_record.provider_status !== "completed" || !application_result) return Response.json(modelUsagePayload({
+      error: "Modelové zpracování F2 se nezdařilo.",
+      ...(componentRequest && identity.role === "developer" ? { diagnostic: providerDiagnostic(usage_record) } : {}),
+    }, collector), { status: 502 });
     const reportedModel = typeof response.body.model === "string" ? response.body.model : model;
     if ("components" in application_result) return Response.json(modelUsagePayload({ components: application_result.components, meta: { action: `F2 ${componentRequest!.activePath} component generation`, model: reportedModel } }, collector));
     return Response.json(modelUsagePayload({ result: application_result.result, meta: { action: operation === "build" ? `F2 build execution — ${activePath}` : `F2 preview — ${activePath}`, model: reportedModel } }, collector));
   } catch (cause) {
     const payload = usageErrorPayload(cause, collector);
-    return Response.json(payload ?? modelUsagePayload({ error: "Model vrátil neplatný strukturovaný F2 výsledek." }, collector), { status: 502 });
+    const diagnostic = componentRequest && identity.role === "developer" ? { diagnostic: providerDiagnostic(collector.records().at(-1)) } : {};
+    return Response.json(payload ? { ...payload, ...diagnostic } : modelUsagePayload({ error: "Model vrátil neplatný strukturovaný F2 výsledek.", ...diagnostic }, collector), { status: 502 });
   }
 }

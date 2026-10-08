@@ -854,9 +854,9 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
     setRozborGenerationStatus("loading"); setRozborGenerationError(null);
     try {
       const response = await fetch("/api/f2", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ operation: "generate-rozbor-components", model: selectedModel, request }) });
-      const payload = await response.json().catch(() => null) as ({ components?: unknown; error?: string } & ModelUsageRecordsResponse) | null;
+      const payload = await response.json().catch(() => null) as ({ components?: unknown; error?: string; diagnostic?: string } & ModelUsageRecordsResponse) | null;
       collectModelUsageRecords(payload);
-      if (!response.ok || !payload?.components) throw new Error(payload?.error || "Rozbor se nepodařilo vytvořit.");
+      if (!response.ok || !payload?.components) throw new Error(isDeveloper && payload?.diagnostic ? `${payload.error ?? "Rozbor se nepodařilo vytvořit."} ${payload.diagnostic}` : payload?.error || "Rozbor se nepodařilo vytvořit.");
       const generated = parseGeneratedRozborComponents({ components: payload.components }, request.components);
       const latest = latestRozborSourceRef.current;
       if (!latest.need) throw new Error("Výsledek byl zahozen, protože se mezitím změnil výchozí Rozbor nebo Build.");
