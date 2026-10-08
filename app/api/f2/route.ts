@@ -1,9 +1,9 @@
 import { getAccessIdentity } from "../../access-auth";
-import { parseProviderRozborComponents, rozborComponentProviderSchema } from "../../f2-component-provider-contract";
+import { parseProviderRozborComponents, rozborComponentProviderSchema, rozborComponentResponseFormatName } from "../../f2-component-provider-contract";
 import { isSupportedModel } from "../../model-config";
 import { F2_PATHS, type F2Path } from "../../notepad-model";
 import { deriveRequiredCurrentRozborComponents, F2_PATH_BASE_SEMANTICS, parseF2BuildResult, parseF2RenderedPreview, type F2BuildRequest, type F2PreviewSnapshot, type RozborComponentGenerationRequest } from "../../f2-build-model";
-import { callOpenAIResponses, createRequestUsageCollector, modelUsagePayload, usageErrorPayload, type RequestUsageCollector } from "../../openai-responses-instrumentation";
+import { callOpenAIResponses, createRequestUsageCollector, modelUsagePayload, providerResponseDiagnostic, usageErrorPayload, type RequestUsageCollector } from "../../openai-responses-instrumentation";
 
 export const runtime = "edge";
 
@@ -76,11 +76,6 @@ const SHARED_PROMPT = "Jednotkou práce je jedna situace jako celek. Fakta Zápi
 
 function error(message: string, status = 500, collector?: RequestUsageCollector) { return Response.json(collector ? modelUsagePayload({ error: message }, collector) : { error: message }, { status }); }
 function outputText(response: Record<string, unknown>) { if (typeof response.output_text === "string") return response.output_text; const output = Array.isArray(response.output) ? response.output : []; for (const item of output) for (const part of Array.isArray((item as { content?: unknown[] }).content) ? (item as { content: unknown[] }).content : []) if (part && typeof part === "object" && typeof (part as { text?: unknown }).text === "string") return (part as { text: string }).text; return null; }
-function providerDiagnostic(record: ReturnType<RequestUsageCollector["records"]>[number] | undefined) {
-  const code = record?.error?.code;
-  const safeCode = typeof code === "string" && /^[a-z0-9_.-]{1,80}$/i.test(code) ? code : "unknown";
-  return `F2 component provider request failed: status=${record?.provider_status ?? "unknown"}; category=${record?.error?.category ?? "unknown"}; code=${safeCode}`;
-}
 function isPath(value: unknown): value is F2Path { return typeof value === "string" && F2_PATHS.includes(value as F2Path); }
 export function validBuild(value: unknown): value is F2BuildRequest { if (!value || typeof value !== "object") return false; const body = value as Partial<F2BuildRequest>; return body.kind === "f2-build" && isPath(body.activePath) && body.canonicalNeed?.initialF2Path !== undefined && Array.isArray(body.canonicalNotebookContext) && body.canonicalNotebookContext.length <= 80 && Array.isArray(body.workingHypotheses) && Array.isArray(body.activeSkills) && body.activeSkills.every((skill) => skill.id.startsWith(`${body.activePath!.toLowerCase()}-`) && skill.id in F2_SKILL_SEMANTICS) && typeof body.buildRevision === "number" && Number.isInteger(body.buildRevision) && body.buildRevision >= 0; }
 function validSnapshot(value: unknown): value is F2PreviewSnapshot { if (!value || typeof value !== "object") return false; const snapshot = value as Partial<F2PreviewSnapshot>; return typeof snapshot.snapshotId === "string" && snapshot.snapshotId.length > 0 && isPath(snapshot.activePath) && snapshot.canonicalNeed?.needText !== undefined && Number.isInteger(snapshot.buildRevision) && snapshot.processedRevision === snapshot.buildRevision && snapshot.processedBuild?.path === snapshot.activePath && typeof snapshot.processedBuild.processedResultId === "string" && snapshot.processedBuild.processedResultId.length > 0 && snapshot.processedBuild.processedRevision === snapshot.processedRevision && Array.isArray(snapshot.hypotheses) && Array.isArray(snapshot.activeSkills); }
@@ -100,7 +95,7 @@ export async function POST(request: Request) {
     activePath = body.snapshot.activePath; schema = PREVIEW_SCHEMA; name = `f2_${activePath.toLowerCase()}_preview`;
     instructions = `Vyrenderuj náhled výhradně z neměnného F2 snapshotu pro autoritativní cestu ${activePath}. Snapshot nepřehodnocuj z konverzace, neměň pedagogickou potřebu, cestu ani závěry. ${PATH_PROMPTS[activePath]} F3 target smí ovlivnit přehlednost formy, nikdy nesmí vést k finální materializaci F3 dokumentu.`; input = body.snapshot;
   } else if (operation === "generate-rozbor-components" && validRozborGeneration(body.request)) {
-    componentRequest = body.request; activePath = componentRequest.activePath; schema = rozborComponentProviderSchema(componentRequest.components, componentRequest.hypotheses.map(({ id }) => id)); name = `f2_${activePath.toLowerCase()}_components`;
+    componentRequest = body.request; activePath = componentRequest.activePath; schema = rozborComponentProviderSchema(componentRequest.components, componentRequest.hypotheses.map(({ id }) => id)); name = rozborComponentResponseFormatName(activePath);
     instructions = `${rozborComponentInstructions(componentRequest)}\n\nVe výstupním objektu components použij každý přesný požadovaný component ID právě jednou jako klíč a pod něj vlož pouze jeho obsah.`;
     input = { activePath: componentRequest.activePath, canonicalNeed: componentRequest.canonicalNeed, hypotheses: componentRequest.hypotheses, config: componentRequest.config, components: componentRequest.components.map(({ id, kind, hypothesisId }) => ({ id, kind, ...(hypothesisId ? { hypothesisId } : {}) })) };
   } else return error("Neplatný nebo nepodporovaný F2 požadavek.", 400);
@@ -121,14 +116,14 @@ export async function POST(request: Request) {
     });
     if (usage_record.provider_status !== "completed" || !application_result) return Response.json(modelUsagePayload({
       error: "Modelové zpracování F2 se nezdařilo.",
-      ...(componentRequest && identity.role === "developer" ? { diagnostic: providerDiagnostic(usage_record) } : {}),
+      ...(componentRequest && identity.role === "developer" ? { diagnostic: `F2 component provider request failed: ${providerResponseDiagnostic(usage_record, response)}` } : {}),
     }, collector), { status: 502 });
     const reportedModel = typeof response.body.model === "string" ? response.body.model : model;
     if ("components" in application_result) return Response.json(modelUsagePayload({ components: application_result.components, meta: { action: `F2 ${componentRequest!.activePath} component generation`, model: reportedModel } }, collector));
     return Response.json(modelUsagePayload({ result: application_result.result, meta: { action: operation === "build" ? `F2 build execution — ${activePath}` : `F2 preview — ${activePath}`, model: reportedModel } }, collector));
   } catch (cause) {
     const payload = usageErrorPayload(cause, collector);
-    const diagnostic = componentRequest && identity.role === "developer" ? { diagnostic: providerDiagnostic(collector.records().at(-1)) } : {};
+    const diagnostic = componentRequest && identity.role === "developer" ? { diagnostic: `F2 component provider request failed: ${providerResponseDiagnostic(collector.records().at(-1))}` } : {};
     return Response.json(payload ? { ...payload, ...diagnostic } : modelUsagePayload({ error: "Model vrátil neplatný strukturovaný F2 výsledek.", ...diagnostic }, collector), { status: 502 });
   }
 }

@@ -18,7 +18,7 @@ export type ProviderResponseBody = {
   status?: unknown;
   usage?: ProviderUsageInput;
   output?: unknown;
-  error?: { code?: unknown } | null;
+  error?: { type?: unknown; code?: unknown; param?: unknown; message?: unknown } | null;
   incomplete_details?: { reason?: unknown } | null;
 };
 

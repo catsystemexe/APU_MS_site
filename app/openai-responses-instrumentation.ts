@@ -1,6 +1,7 @@
 import {
   InstrumentedModelCallError,
   runInstrumentedModelCall,
+  type InstrumentedProviderResponse,
   type ProviderResponseBody,
 } from "./model-call-instrumentation.ts";
 import { upsertUsageRecord, type ModelUsageRecord, type TelemetryPhase, type UsageOperation } from "./usage-ledger.ts";
@@ -20,6 +21,40 @@ export function createRequestUsageCollector(): RequestUsageCollector {
 
 export function modelUsagePayload<T extends Record<string, unknown>>(payload: T, collector: RequestUsageCollector) {
   return { ...payload, model_usage_records: collector.records() };
+}
+
+function diagnosticToken(value: unknown, fallback = "unknown") {
+  return typeof value === "string" && /^[a-z0-9_.\[\]-]{1,120}$/i.test(value) ? value : fallback;
+}
+
+function diagnosticMessage(value: unknown) {
+  if (typeof value !== "string") return null;
+  const safe = value
+    .replace(/[\u0000-\u001f\u007f]+/g, " ")
+    .replace(/\bAuthorization\s*[:=]\s*\S+(?:\s+\S+)?/gi, "Authorization=[redacted]")
+    .replace(/\bBearer\s+\S+/gi, "Bearer [redacted]")
+    .replace(/\bsk-[a-z0-9_-]+/gi, "[redacted]")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!safe) return null;
+  return safe.length <= 300 ? safe : `${safe.slice(0, 299)}…`;
+}
+
+export function providerResponseDiagnostic(
+  record: ModelUsageRecord | undefined,
+  response?: Pick<InstrumentedProviderResponse<ProviderResponseBody>, "body" | "status_code">,
+) {
+  const providerError = response?.body.error;
+  const message = diagnosticMessage(providerError?.message);
+  return [
+    `http_status=${response?.status_code ?? "unknown"}`,
+    `provider_status=${record?.provider_status ?? "unknown"}`,
+    `category=${diagnosticToken(record?.error?.category)}`,
+    `code=${diagnosticToken(providerError?.code ?? record?.error?.code)}`,
+    `type=${diagnosticToken(providerError?.type)}`,
+    `param=${diagnosticToken(providerError?.param)}`,
+    ...(message ? [`message=${message}`] : []),
+  ].join("; ");
 }
 
 type OpenAIResponse = Pick<Response, "headers" | "json" | "status">;

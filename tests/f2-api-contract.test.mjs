@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { parseProviderRozborComponents, rozborComponentProviderSchema } from "../app/f2-component-provider-contract.ts";
+import { parseProviderRozborComponents, rozborComponentProviderSchema, rozborComponentResponseFormatName } from "../app/f2-component-provider-contract.ts";
 import { deriveRequiredCurrentRozborComponents } from "../app/f2-build-model.ts";
 
 const [route, providerContract, client] = await Promise.all([
@@ -56,10 +56,11 @@ test("VYTVOŘIT component schema requires an explicit selected approach before l
   for (const guard of ["Povinně zvol jeden explicitní pracovní/doporučený přístup", "samotný seznam variant je neplatný", "nematerializuje finální F3 dokument"]) assert.ok(route.includes(guard), guard);
 });
 
-test("provider contract uses deterministic slots for the real six-component VYTVOŘIT request", () => {
+test("provider contract uses a valid format name and deterministic slots for the real seven-component VYTVOŘIT request", () => {
   const hypotheses = [
     { id: "h1", rank: 1, title: "Citlivost na opravu", summary: "Reakce může souviset s prožitkem chyby.", relevantNeeds: [], question: null, supportingInformation: [], limitations: [], unknowns: [], questions: [] },
     { id: "h2", rank: 2, title: "Konflikt očekávání", summary: "Reakce může souviset s nesouladem záměru a zpětné vazby.", relevantNeeds: [], question: null, supportingInformation: [], limitations: [], unknowns: [], questions: [] },
+    { id: "h3", rank: 3, title: "Zátěž při přepnutí", summary: "Reakce může souviset s nárokem na rychlou změnu postupu.", relevantNeeds: [], question: null, supportingInformation: [], limitations: [], unknowns: [], questions: [] },
   ];
   const need = { needId: "n-klarka", needText: "Podpořit Klárku při protichůdné reakci na korekci a zpětnou vazbu.", initialF2Path: "VYTVOŘIT", f3Target: "Praktický materiál" };
   const config = { expansionDepth: 3, candidateApproaches: true, refineObjective: true, successConditions: true, followUpVerification: true };
@@ -67,6 +68,7 @@ test("provider contract uses deterministic slots for the real six-component VYTV
   assert.deepEqual(requested.map(({ id }) => id), [
     "hypothesis:h1:expansion",
     "hypothesis:h2:expansion",
+    "hypothesis:h3:expansion",
     "creation-approaches:all",
     "creation-objective:all",
     "success-conditions:all",
@@ -87,13 +89,16 @@ test("provider contract uses deterministic slots for the real six-component VYTV
     for (const nested of Object.values(value)) if (nested && typeof nested === "object") Array.isArray(nested) ? nested.forEach(countProperties) : countProperties(nested);
   };
   countProperties(schema);
-  assert.equal(requested.length, 6);
+  assert.equal(requested.length, 7);
   assert.ok(declaredProperties <= 100);
   assert.ok(Buffer.byteLength(JSON.stringify(schema)) < 15_000);
+  assert.equal(rozborComponentResponseFormatName("VYTVOŘIT"), "f2_vytvorit_components");
+  assert.match(rozborComponentResponseFormatName("VYTVOŘIT"), /^[a-zA-Z0-9_-]{1,64}$/);
 
   const providerResult = { components: {
     "hypothesis:h1:expansion": "Rozvinutí první hypotézy.",
     "hypothesis:h2:expansion": "Rozvinutí druhé hypotézy.",
+    "hypothesis:h3:expansion": "Rozvinutí třetí hypotézy.",
     "creation-approaches:all": {
       candidateApproaches: [{ title: "Předvídatelná korekce", description: "Oddělit informaci od hodnocení.", hypothesisIds: ["h1", "h2"], limitations: [] }],
       workingApproach: { title: "Krátká neutrální zpětná vazba", rationale: "Zachová informaci a snižuje tlak.", hypothesisIds: ["h1", "h2"], limitations: [] },
@@ -103,7 +108,7 @@ test("provider contract uses deterministic slots for the real six-component VYTV
     "follow-up-verification:all": { checks: [{ indicator: "Návrat k činnosti", when: "Po korekci", successSignal: "Klárka pokračuje nebo si vyžádá upřesnění.", adjustmentSignal: "Reakce se opakovaně stupňuje.", hypothesisIds: ["h1", "h2"] }], limitations: [] },
   } };
   const parsed = parseProviderRozborComponents(providerResult, requested);
-  assert.equal(parsed.length, 6);
+  assert.equal(parsed.length, 7);
   assert.deepEqual(parsed.map(({ id }) => id), requested.map(({ id }) => id));
   const missingSlot = structuredClone(providerResult); delete missingSlot.components["success-conditions:all"];
   assert.throws(() => parseProviderRozborComponents(missingSlot, requested), /úplnou sadu/);
@@ -121,13 +126,14 @@ test("provider-safe fixed slots preserve POCHOPIT and POZOROVAT component schema
     const schema = rozborComponentProviderSchema(requested, ["h1"]);
     assert.deepEqual(Object.keys(schema.properties.components.properties), requested.map(({ id }) => id));
     assert.equal(JSON.stringify(schema).includes('"anyOf"'), false);
+    assert.match(rozborComponentResponseFormatName(path), /^[a-zA-Z0-9_-]{1,64}$/);
   }
 });
 
 test("F2 component provider failures expose only sanitized developer diagnostics", () => {
   assert.match(route, /componentRequest && identity\.role === "developer"/);
-  assert.match(route, /\^\[a-z0-9_\.-\]\{1,80\}\$/i);
-  assert.match(route, /F2 component provider request failed: status=/);
+  assert.match(route, /providerResponseDiagnostic\(usage_record, response\)/);
+  assert.match(route, /F2 component provider request failed:/);
   const generation = client.slice(client.indexOf("async function generateCurrentRozbor"), client.indexOf("async function renderF2Preview"));
   assert.match(generation, /isDeveloper && payload\?\.diagnostic/);
 });

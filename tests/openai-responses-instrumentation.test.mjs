@@ -3,7 +3,7 @@ import test from "node:test";
 import { pathToFileURL } from "node:url";
 
 const moduleUrl = pathToFileURL(new URL("../app/openai-responses-instrumentation.ts", import.meta.url).pathname).href;
-const { callOpenAIResponses, createRequestUsageCollector, modelUsagePayload } = await import(moduleUrl);
+const { callOpenAIResponses, createRequestUsageCollector, modelUsagePayload, providerResponseDiagnostic } = await import(moduleUrl);
 
 test("records a completed OpenAI Responses call and forwards its correlation header", async () => {
   const collector = createRequestUsageCollector();
@@ -39,4 +39,26 @@ test("preserves provider failure usage when the HTTP status is non-success", asy
   assert.equal(result.usage_record.usage.normalized_total_tokens, 7);
   assert.deepEqual(result.usage_record.error, { category: "provider_response", code: "rate_limit_exceeded" });
   assert.equal(collector.records().length, 1);
+});
+
+test("provides bounded sanitized provider failure detail without adding it to usage telemetry", async () => {
+  const collector = createRequestUsageCollector();
+  const result = await callOpenAIResponses({
+    api_key: "not-a-real-key", request_id: "request-format", phase: "F2", operation: "f2_component_generation",
+    requested_model: "gpt-5.6-terra", reasoning_effort: "low", requested_service_tier: "default", collector,
+    payload: { model: "gpt-5.6-terra" },
+    fetcher: async () => new Response(JSON.stringify({ error: {
+      type: "invalid_request_error",
+      code: "invalid_value",
+      param: "text.format.name",
+      message: "Invalid 'text.format.name': string does not match pattern. Expected a string that matches the pattern '^[a-zA-Z0-9_-]+$'.",
+    } }), { status: 400 }),
+  });
+  assert.equal(providerResponseDiagnostic(result.usage_record, result.response), "http_status=400; provider_status=failed; category=provider_response; code=invalid_value; type=invalid_request_error; param=text.format.name; message=Invalid 'text.format.name': string does not match pattern. Expected a string that matches the pattern '^[a-zA-Z0-9_-]+$'.");
+  assert.deepEqual(result.usage_record.error, { category: "provider_response", code: "invalid_value" });
+  assert.equal("message" in result.usage_record.error, false);
+  const redacted = providerResponseDiagnostic(result.usage_record, { status_code: 400, body: { error: { message: `Authorization: Bearer fake-token sk-fake ${"x".repeat(400)}` } } });
+  assert.doesNotMatch(redacted, /fake-token|sk-fake/);
+  assert.ok(redacted.length < 600);
+  assert.match(redacted, /…$/);
 });
