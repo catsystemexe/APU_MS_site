@@ -277,7 +277,7 @@ export function resolveDialogEvent(id: string, notebook: IntakeNotebookItem[], c
       }, navAction()],
     };
   }
-  // F2 output intent is resolved locally against the accepted PREVIEW. The
+  // F2 output intent is resolved locally against a valid current-Rozbor snapshot. The
   // controller must never advance directly to output without that snapshot.
   const phase: ConversationPhase = id === "continue_to_output" ? currentPhase : "development";
   return { phase, transition_ready: false, intake_question_policy_applies: false, dialog_actions: [] };

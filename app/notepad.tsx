@@ -17,7 +17,7 @@ import {
 import { NOTEPAD_CATEGORIES } from "./notepad-categories";
 import type { AnalysisState, SuggestedNeed } from "./analysis-model";
 import type { ConversationPhase } from "./dialog-action";
-import type { CreationApproachesContent, CreationObjectiveContent, CurrentRozborState, F2BuildState, F2ToF3Snapshot, FollowUpVerificationContent, ObservationComparisonContent, ObservationIndicatorsContent, ObservationPrioritiesContent, SuccessConditionsContent } from "./f2-build-model";
+import type { CreationApproachesContent, CreationObjectiveContent, CurrentRozborState, F2BuildState, F2PreviewState, F2ToF3Snapshot, FollowUpVerificationContent, ObservationComparisonContent, ObservationIndicatorsContent, ObservationPrioritiesContent, SuccessConditionsContent } from "./f2-build-model";
 import { F3Finalization } from "./f3-finalization";
 import type { F3Config, F3State } from "./f3-finalization-model";
 import { GeneratedMarkdown } from "./generated-markdown";
@@ -47,9 +47,20 @@ type WorkspacePanelProps = {
   onContinueToOutput: () => void;
   f2Build: F2BuildState | null;
   currentRozbor: CurrentRozborState;
+  f2Preview: F2PreviewState;
   f2ToF3Snapshot: F2ToF3Snapshot | null;
-  f2ToF3SourceFingerprint: string | null;
-  f2ToF3SourceIssue: string | null;
+  f2ToF3SourceError: string | null;
+  f2BuildStatus: "idle" | "loading" | "error";
+  f2BuildError: string | null;
+  f2PreviewStatus: "idle" | "loading" | "error";
+  f2PreviewError: string | null;
+  onF2PathChange: (path: F2BuildState["activePath"]) => void;
+  onF2SkillToggle: (id: string) => void;
+  onF2ParameterChange: (id: string, value: string) => void;
+  onF2ContextAdd: (text: string) => void;
+  onF2ContextRemove: (id: string) => void;
+  onF2Execute: () => void;
+  onF2Preview: () => void;
   f3State: F3State | null;
   f3Status: "idle" | "loading" | "error";
   f3Error: string | null;
@@ -304,7 +315,7 @@ function CurrentRozborComponents({ build, currentRozbor }: { build: F2BuildState
   </>;
 }
 
-function AnalysisPanel(props: Pick<WorkspacePanelProps, "phase" | "analysis" | "analysisStatus" | "analysisError" | "onRetryAnalysis" | "f2Build" | "currentRozbor" | "f2ToF3Snapshot" | "f2ToF3SourceIssue" | "onContinueToOutput">) {
+function AnalysisPanel(props: Pick<WorkspacePanelProps, "phase" | "analysis" | "analysisStatus" | "analysisError" | "onRetryAnalysis" | "f2Build" | "currentRozbor" | "f2ToF3Snapshot" | "f2ToF3SourceError" | "onContinueToOutput">) {
   if (props.phase === "intake") return <div id="workspace-analysis" className="notepad-scroll workspace-panel-body" role="tabpanel" aria-label="Rozbor"><div className="workspace-empty-state"><ScanSearch aria-hidden="true" /><h2>Rozbor začne ve Fázi 2</h2><p>Otevření panelu fázi nemění. Do Rozboru přejdete až svým potvrzením.</p></div></div>;
   if (props.analysisStatus === "loading" && !props.analysis.hypotheses.length) return <div className="analysis-state"><span className="analysis-spinner" />Vytvářím Rozbor z aktuálního Zápisníku…</div>;
   if (props.analysisStatus === "error" && !props.analysis.hypotheses.length) return <div className="analysis-state"><p>{props.analysisError}</p><button type="button" onClick={props.onRetryAnalysis}>Zkusit znovu</button></div>;
@@ -339,16 +350,16 @@ function AnalysisPanel(props: Pick<WorkspacePanelProps, "phase" | "analysis" | "
     </section>
     <CurrentRozborComponents build={props.f2Build} currentRozbor={props.currentRozbor} />
     <div className="f2-preview-action">
-      <span>{props.f2ToF3Snapshot ? `Aktuální Rozbor ${props.f2ToF3Snapshot.sourceRevision} je připraven pro Výstup.` : props.f2ToF3SourceIssue}</span>
+      <span>{props.f2ToF3Snapshot ? `Aktuální Rozbor revize ${props.f2ToF3Snapshot.sourceRevision} je připraven pro Výstup.` : props.f2ToF3SourceError}</span>
       <button type="button" disabled={!props.f2ToF3Snapshot} onClick={props.onContinueToOutput}>PŘEJÍT K VÝSTUPU</button>
     </div>
   </div>;
 }
 
-function OutputPanel(props: Pick<WorkspacePanelProps, "f2ToF3Snapshot" | "f2ToF3SourceFingerprint" | "f2ToF3SourceIssue" | "f3State" | "f3Status" | "f3Error" | "onF3Enter" | "onF3Config" | "onF3Render" | "onF3Adopt" | "onF3Return">) {
+function OutputPanel(props: Pick<WorkspacePanelProps, "f2ToF3Snapshot" | "f2ToF3SourceError" | "f3State" | "f3Status" | "f3Error" | "onF3Enter" | "onF3Config" | "onF3Render" | "onF3Adopt" | "onF3Return">) {
   return (
     <div id="workspace-output" className="notepad-scroll workspace-panel-body" role="tabpanel" aria-label="Výstup">
-      <F3Finalization snapshot={props.f2ToF3Snapshot} currentSourceFingerprint={props.f2ToF3SourceFingerprint} sourceIssue={props.f2ToF3SourceIssue} state={props.f3State} status={props.f3Status} error={props.f3Error} onEnter={props.onF3Enter} onConfig={props.onF3Config} onRender={props.onF3Render} onAdopt={props.onF3Adopt} onReturn={props.onF3Return} />
+      <F3Finalization snapshot={props.f2ToF3Snapshot} sourceError={props.f2ToF3SourceError} state={props.f3State} status={props.f3Status} error={props.f3Error} onEnter={props.onF3Enter} onConfig={props.onF3Config} onRender={props.onF3Render} onAdopt={props.onF3Adopt} onReturn={props.onF3Return} />
     </div>
   );
 }

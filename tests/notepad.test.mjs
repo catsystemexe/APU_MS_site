@@ -28,7 +28,9 @@ test("notepad uses local persistence and floating Lucide tool buttons", () => {
   assert.match(component, /function AnalysisPanel/);
   assert.match(component, /function OutputPanel/);
   assert.match(component, /<F3Finalization snapshot=/);
-  assert.doesNotMatch(component, /<F3Finalization preview=/);
+  assert.doesNotMatch(component, /Nejprve v Rozboru vytvořte explicitní PREVIEW/);
+  assert.match(page, /createF2ToF3Snapshot/);
+  assert.match(page, /markF3SourceStale/);
   assert.doesNotMatch(page, /activeWorkspacePanel/);
   assert.doesNotMatch(page, /composer-workspace-indicator/);
   assert.match(page, /function togglePanel\(panel: WorkspacePanelId\)/);

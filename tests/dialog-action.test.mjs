@@ -188,7 +188,7 @@ test("chat navigation cannot bypass Intake minimum and Phase 3 needs an explicit
   assert.equal(resolveTextDialogEvent("Přejdi do fáze 3 a připrav výstup.", [manifestation, goal], "development"), "continue_to_output");
 });
 
-test("F2 output intent stays in Rozbor without a current handoff and enters F3 directly with one", () => {
+test("F2 output intent stays in Rozbor without a current snapshot and enters F3 only with one", () => {
   const event = resolveTextDialogEvent("Přejdi k výstupu.", [manifestation, goal], "development");
   assert.equal(event, "continue_to_output");
   assert.equal(resolveF2OutputNavigation(event, undefined, false), "stay_for_rozbor");
@@ -206,9 +206,7 @@ test("F2 output navigation is handled before extraction/chat and chat rejects ou
     readFile(new URL("../app/api/chat/route.ts", import.meta.url), "utf8"),
   ]);
   assert.ok(client.indexOf("handleF2OutputNavigation(rawText") < client.indexOf('fetch("/api/extract"'));
-  assert.match(client, /current \?\? createF3State\(currentF2ToF3Handoff\.snapshot\)/);
-  assert.match(client, /Boolean\(currentF2ToF3Handoff\.snapshot\)/);
-  assert.doesNotMatch(client, /resolveF2OutputNavigation\([^\n]+Boolean\(f2Preview\)/);
+  assert.match(client, /current \?\? createF3State\(currentF2ToF3Source\.snapshot\)/);
   assert.match(client, /setPhase\("output"\)/);
   assert.match(route, /if \(phase === "output"\).*409/);
   assert.match(route, /textDialogEvent === "continue_to_output"/);

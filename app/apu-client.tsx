@@ -93,7 +93,7 @@ import { addCompletedLifecycleRecord, withCompletedLifecycleRecord, type Complet
 import { DevLogPanel } from "./dev-log-panel";
 import { DEV_TEST_SCENARIOS, DEV_TEST_SCENARIO_PATHS, type DevTestScenario } from "./dev-test-scenarios";
 import type { SharedFeedbackResult } from "./shared-feedback";
-import { acceptRenderedPreview, applyCurrentRozborComponentUpdate, applyF2BuildResult, canonicalF1NeedFingerprint, createCurrentRozborGenerationRequest, createCurrentRozborState, createF2BuildRequest, createF2PreviewSnapshot, createF2ToF3Snapshot, createF2ToF3SourceFingerprint, deriveRequiredCurrentRozborComponents, F2_PATH_META, parseF2BuildResult, parseF2RenderedPreview, parseGeneratedRozborComponents, reconcileRozborComponents, switchF2Path, synchronizeF2BuildWithCanonicalNeed, updateCurrentRozborConfig, type CurrentRozborState, type F2BuildState, type F2NotebookContextItem, type F2PreviewState } from "./f2-build-model";
+import { acceptRenderedPreview, addF2Context, applyCurrentRozborComponentUpdate, applyF2BuildResult, canonicalF1NeedFingerprint, createCurrentRozborGenerationRequest, createCurrentRozborState, createF2BuildRequest, createF2PreviewSnapshot, createF2ToF3Snapshot, currentRozborSourceFingerprint, deriveRequiredCurrentRozborComponents, F2_PATH_META, parameterizeF2Skill, parseF2BuildResult, parseF2RenderedPreview, parseGeneratedRozborComponents, previewStatus, reconcileRozborComponents, removeF2Context, switchF2Path, synchronizeF2BuildWithCanonicalNeed, toggleF2Skill, updateCurrentRozborConfig, type CurrentRozborState, type F2BuildState, type F2NotebookContextItem, type F2PreviewState } from "./f2-build-model";
 import { acceptF3Render, adoptF2Snapshot, createF3RenderRequest, createF3State, markF3SourceStale, parseF3RenderResult, updateF3Config, type F3Config, type F3State } from "./f3-finalization-model";
 
 type SpeechRecognitionEventLike = {
@@ -440,25 +440,21 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
   const currentRozborReconciliation = useMemo(() => canonicalF2Need
     ? reconcileRozborComponents(deriveRequiredCurrentRozborComponents(activeF2Path, canonicalF2Need, analysis.hypotheses, activeRozbor.config), activeRozbor.components)
     : null, [activeF2Path, activeRozbor, analysis.hypotheses, canonicalF2Need]);
+  const currentF2ToF3SourceFingerprint = useMemo(() => canonicalF2Need
+    ? currentRozborSourceFingerprint(canonicalF2Need, analysis.hypotheses, activeF2Path, activeRozbor)
+    : null, [activeF2Path, activeRozbor, analysis.hypotheses, canonicalF2Need]);
+  const latestF2ToF3FingerprintRef = useRef(currentF2ToF3SourceFingerprint);
+  latestF2ToF3FingerprintRef.current = currentF2ToF3SourceFingerprint;
+  const currentF2ToF3Source = useMemo(() => {
+    if (!canonicalF2Need || !f2Build) return { snapshot: null, error: "Rozbor čeká na kanonickou pedagogickou potřebu." };
+    try {
+      return { snapshot: createF2ToF3Snapshot(canonicalF2Need, analysis.hypotheses, activeF2Path, activeRozbor, f2Build.buildRevision), error: null };
+    } catch (cause) {
+      return { snapshot: null, error: cause instanceof Error ? cause.message : "Aktuální Rozbor zatím není připraven pro Výstup." };
+    }
+  }, [activeF2Path, activeRozbor, analysis.hypotheses, canonicalF2Need, f2Build]);
   const hasActiveRozborOperation = Boolean(currentRozborReconciliation && (currentRozborReconciliation.keep.length + currentRozborReconciliation.missing.length + currentRozborReconciliation.stale.length > 0));
   const isCurrentRozborUpdatePending = Boolean(currentRozborReconciliation && !currentRozborReconciliation.isRozborCurrent);
-  const currentF2ToF3Fingerprint = useMemo(() => canonicalF2Need
-    ? createF2ToF3SourceFingerprint(activeF2Path, canonicalF2Need, analysis.hypotheses, activeRozbor.config, activeRozbor.components)
-    : null, [activeF2Path, activeRozbor, analysis.hypotheses, canonicalF2Need]);
-  const latestF2ToF3FingerprintRef = useRef(currentF2ToF3Fingerprint);
-  latestF2ToF3FingerprintRef.current = currentF2ToF3Fingerprint;
-  const currentF2ToF3Handoff = useMemo(() => {
-    if (!canonicalF2Need) return { snapshot: null, issue: "Rozbor nemá aktuální pedagogickou potřebu pro Výstup." };
-    try {
-      return { snapshot: createF2ToF3Snapshot(activeF2Path, canonicalF2Need, analysis.hypotheses, activeRozbor.config, activeRozbor.components), issue: null };
-    } catch (cause) {
-      return { snapshot: null, issue: cause instanceof Error ? cause.message : "Aktuální Rozbor zatím nelze předat do Výstupu." };
-    }
-  }, [activeF2Path, activeRozbor, analysis.hypotheses, canonicalF2Need]);
-
-  useEffect(() => {
-    setF3State((current) => current ? markF3SourceStale(current, currentF2ToF3Fingerprint) : current);
-  }, [currentF2ToF3Fingerprint]);
 
   function collectModelUsageRecords(response: unknown) {
     const records = readModelUsageRecords(response);
@@ -486,6 +482,10 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
       return current;
     });
   }, [canonicalF2Need]);
+  useEffect(() => {
+    if (!currentF2ToF3SourceFingerprint) return;
+    setF3State((current) => current ? markF3SourceStale(current, currentF2ToF3SourceFingerprint) : current);
+  }, [currentF2ToF3SourceFingerprint]);
   const dictationTranscriptRef = useRef("");
   const dictationFinalizedSessionRef = useRef(0);
   const dictationRestartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -885,16 +885,16 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
   }
 
   function enterF3() {
-    if (!currentF2ToF3Handoff.snapshot) return;
-    setF3State((current) => current ?? createF3State(currentF2ToF3Handoff.snapshot));
+    if (!currentF2ToF3Source.snapshot) return;
+    setF3State((current) => current ?? createF3State(currentF2ToF3Source.snapshot));
     setF3Error(null); setPhase("output");
   }
 
   async function renderF3() {
-    if (!f3State || f3State.sourceOutdated) return;
-    const renderRequest = createF3RenderRequest(f3State, selectedModel);
+    if (!f3State) return;
     setF3Status("loading"); setF3Error(null);
     try {
+      const renderRequest = createF3RenderRequest(f3State, selectedModel);
       const response = await fetch("/api/f3", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(renderRequest) });
       const payload = await response.json().catch(() => null) as ({ result?: unknown; error?: string } & ModelUsageRecordsResponse) | null;
       collectModelUsageRecords(payload);
@@ -1211,21 +1211,21 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
   function handleF2OutputNavigation(rawText: string, dialogEvent?: string, silent = false) {
     if (phase !== "development") return false;
     const textEvent = dialogEvent ? null : resolveTextDialogEvent(rawText, compactNotepad(notepad), phase);
-    const resolution = resolveF2OutputNavigation(textEvent, dialogEvent, Boolean(currentF2ToF3Handoff.snapshot));
+    const resolution = resolveF2OutputNavigation(textEvent, dialogEvent, Boolean(currentF2ToF3Source.snapshot));
     if (!resolution) return false;
 
     const turnId = `turn-${createMessageId()}`;
     const userMessage: Message = { id: createMessageId(), role: "user", content: rawText, turnId, createdAt: new Date().toISOString(), phaseLabel: "[FÁZE 2]" };
     const content = resolution === "enter_f3"
-      ? "Otevírám Výstup nad snapshotem aktuálního Rozboru. Samotný výstup vznikne až vaším explicitním pokynem."
-      : currentF2ToF3Handoff.issue ?? "Nejprve dokončete aktuální Rozbor; pak jej lze přímo otevřít ve Výstupu.";
+      ? "Otevírám Výstup nad neměnným snapshotem aktuálního Rozboru. Samotný výstup vznikne až vaším explicitním pokynem."
+      : (currentF2ToF3Source.error ?? "Nejprve vytvořte a aktualizujte aktuální Rozbor; potom jej lze otevřít ve Výstupu.");
     setMessages((current) => [...current, ...(silent ? [] : [userMessage]), { id: createMessageId(), role: "assistant", content, turnId, createdAt: new Date().toISOString(), communicationProfile }]);
     setComposerInput("");
     setIsComposerExpanded(false);
     setError(null);
     setFailedInput(null);
-    if (resolution === "enter_f3" && currentF2ToF3Handoff.snapshot) {
-      setF3State((current) => current ?? createF3State(currentF2ToF3Handoff.snapshot));
+    if (resolution === "enter_f3" && currentF2ToF3Source.snapshot) {
+      setF3State((current) => current ?? createF3State(currentF2ToF3Source.snapshot));
       setPhase("output");
       setActivePanel("output");
     } else {
@@ -1988,16 +1988,27 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
           })}
           f2Build={f2Build}
           currentRozbor={currentRozbor}
-          f2ToF3Snapshot={currentF2ToF3Handoff.snapshot}
-          f2ToF3SourceFingerprint={currentF2ToF3Fingerprint}
-          f2ToF3SourceIssue={currentF2ToF3Handoff.issue}
+          f2Preview={f2Build ? previewStatus(f2Preview, f2Build) : f2Preview}
+          f2ToF3Snapshot={currentF2ToF3Source.snapshot}
+          f2ToF3SourceError={currentF2ToF3Source.error}
+          f2BuildStatus={f2BuildStatus}
+          f2BuildError={f2BuildError}
+          f2PreviewStatus={f2PreviewStatus}
+          f2PreviewError={f2PreviewError}
+          onF2PathChange={(path) => setF2Build((current) => current ? switchF2Path(current, path) : current)}
+          onF2SkillToggle={(id) => setF2Build((current) => current ? toggleF2Skill(current, id) : current)}
+          onF2ParameterChange={(id, value) => setF2Build((current) => current ? parameterizeF2Skill(current, id, value) : current)}
+          onF2ContextAdd={(text) => setF2Build((current) => current ? addF2Context(current, { id: createLocalId("f2-context"), text }) : current)}
+          onF2ContextRemove={(id) => setF2Build((current) => current ? removeF2Context(current, id) : current)}
+          onF2Execute={() => void executeF2Build()}
+          onF2Preview={() => void renderF2Preview()}
           f3State={f3State}
           f3Status={f3Status}
           f3Error={f3Error}
           onF3Enter={enterF3}
           onF3Config={(change: Partial<F3Config>) => setF3State((current) => current ? updateF3Config(current, change) : current)}
           onF3Render={() => void renderF3()}
-          onF3Adopt={() => setF3State((current) => current && currentF2ToF3Handoff.snapshot ? adoptF2Snapshot(current, currentF2ToF3Handoff.snapshot) : current)}
+          onF3Adopt={() => setF3State((current) => current && currentF2ToF3Source.snapshot ? adoptF2Snapshot(current, currentF2ToF3Source.snapshot) : current)}
           onF3Return={() => { setPhase("development"); setActivePanel("analysis"); setF3Error(null); }}
         />
 
