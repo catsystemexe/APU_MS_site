@@ -44,9 +44,13 @@ Rozbor
 
 Výstup
 • F3 remains the downstream realization layer for concrete recommendations, plans and documents.
-• Product direction is that F3 should consume the current Rozbor substance and decide composition, audience, form and style without changing substantive F2 logic.
-• The verified current-Rozbor F2 flow has not yet migrated the existing immediate F2→F3 source contract. Legacy Preview-bound F3 implementation still exists in the repository.
-• Therefore none of the three current F2 paths should yet be described as entering F3 through the new current-Rozbor contract.
+• POCHOPIT, POZOROVAT and VYTVOŘIT can all hand off directly from the current Rozbor to F3; the primary F2→F3 pipeline no longer requires legacy PREVIEW.
+• F3 consumes an immutable, validated snapshot of the current Rozbor plus its canonical pedagogical need, hypotheses, limitations and F3 target.
+• F3 materializes, structures and reformulates that snapshot for the selected audience and form; it must not re-decide substantive F2 logic.
+• VYTVOŘIT requires one explicit working/recommended approach before F3 materialization; alternatives alone are insufficient.
+• Source or F3 presentation changes mark an existing Output stale while keeping the previous valid Output visible.
+• A changed current Rozbor must be explicitly adopted, and generation or regeneration of Output is always explicit.
+• Stale in-flight F3 responses cannot silently replace the current source/configuration state or the previous valid Output.
 
 PHASE BEHAVIOR
 F1 — Intake
@@ -69,9 +73,11 @@ F2 — Rozbor
 • The old five-skill track, processed path build and explicit PREVIEW generation remain legacy contracts and are not the primary current-Rozbor interaction model.
 
 F2 → F3
-• The intended product boundary is current Rozbor substance → F3 materialization.
-• Immediate contract migration is still pending and was not implemented in the completed POCHOPIT slice.
-• No product documentation should imply that this migration is already complete.
+• The verified product boundary is current Rozbor substance → F3 materialization for POCHOPIT, POZOROVAT and VYTVOŘIT.
+• The handoff creates an immutable validated current-Rozbor snapshot; conversation history and legacy PREVIEW are not sources for the primary F3 request.
+• Opening F3 or adopting a newer snapshot does not implicitly generate Output. Initial generation and regeneration remain explicit user actions.
+• A newer source is detected as stale, the previous Output remains visible, and the current Rozbor must be explicitly adopted before regeneration.
+• Response acceptance is bound to the requested source fingerprint and F3 configuration revision so stale in-flight work cannot overwrite current state.
 
 CURRENT INTERACTION PRINCIPLES
 • Communication profiles Operátor, Kolega and Metodik change presentation style, not the underlying pedagogical decision structure.
@@ -81,8 +87,8 @@ CURRENT INTERACTION PRINCIPLES
 
 CURRENT LIMITATIONS
 • Long-term project persistence, multi-project history, rich document editing, arbitrary templates and multiple saved F3 versions remain separate capabilities.
-• The shared F2 current-Rozbor source contract has not yet been wired into the existing F3 implementation.
-• POCHOPIT, POZOROVAT and VYTVOŘIT are verified as F2 core prototypes, but F3 still consumes the legacy Preview-bound contract until the planned handoff migration is completed.
+• APU Session JSON does not yet include the real F3 Output state; its `output` field is still exported as `null`.
+• Legacy PREVIEW implementation remains isolated in the repository for compatibility but is not required by the primary current-Rozbor → F3 pipeline.
 • Integrations or deployment-specific access mechanisms are not product invariants and belong in technical current documentation.
 
 DOCUMENT OWNERSHIP

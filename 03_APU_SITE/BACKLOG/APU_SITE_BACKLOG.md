@@ -6,10 +6,9 @@ Contains only unfinished or explicitly undecided work. Completed work belongs in
 
 ## ACTIVE
 
-### B-01 — Structured F3 Output
-- Introduce a standalone structured Output state and actual Output workspace.
-- Generate/update output from the current Zápisník and Rozbor while preserving uncertainty.
-- Update APU Session JSON when a real Output state exists.
+### B-01 — Structured F3 Output — Session JSON completion
+- Include the real F3 Output state in APU Session JSON instead of exporting `output: null`.
+- Add focused export validation/regression coverage for the resulting Output payload.
 
 ### B-02 — Durable project Save/Open
 - Add durable project persistence beyond browser-local state.
