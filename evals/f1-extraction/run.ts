@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-import { resolve } from "node:path";
+import { resolve, win32 } from "node:path";
+import { pathToFileURL } from "node:url";
 import { MODEL_PROFILES, estimateCallCount, loadCorpus, parseCliArgs, resolveProfile, selectCases } from "./lib/eval-contract.ts";
 import { createOpenAIProvider, runExtractionPipeline, runSemanticJudge } from "./lib/pipeline.ts";
 import { scoreCase, type RunScore } from "./lib/scoring.ts";
@@ -75,7 +76,13 @@ export async function execute(argv = process.argv.slice(2), cwd = process.cwd(),
   return { kind: "completed" as const, plan, directory, runs: runs.length };
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+export function isCliEntrypoint(moduleUrl: string, entryPath: string | undefined, windows = process.platform === "win32") {
+  if (typeof entryPath !== "string") return false;
+  const absoluteEntryPath = windows ? win32.resolve(entryPath) : resolve(entryPath);
+  return moduleUrl === pathToFileURL(absoluteEntryPath, { windows }).href;
+}
+
+if (isCliEntrypoint(import.meta.url, process.argv[1])) {
   execute().then((result) => {
     if (result.kind === "help") console.log(result.text);
     else console.log(JSON.stringify(result, null, 2));

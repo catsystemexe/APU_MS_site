@@ -3,16 +3,18 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { buildExtractionInstructions, buildGroundingInstructions, normalizeExtractionCandidates } from "../app/f1-extraction-contract.ts";
 import { DEV_TEST_SCENARIOS } from "../app/dev-test-scenarios.ts";
 import { MODEL_PROFILES, estimateCallCount, loadCorpus, parseCliArgs, resolveProfile, selectCases, validateCorpus } from "../evals/f1-extraction/lib/eval-contract.ts";
 import { COVERAGE_SCHEMA, runExtractionPipeline } from "../evals/f1-extraction/lib/pipeline.ts";
 import { aggregateScores, scoreCase } from "../evals/f1-extraction/lib/scoring.ts";
 import { buildResultArtifacts, writeResultArtifacts } from "../evals/f1-extraction/lib/reporting.ts";
-import { execute } from "../evals/f1-extraction/run.ts";
+import { execute, isCliEntrypoint } from "../evals/f1-extraction/run.ts";
 
 const corpusPath = new URL("../evals/f1-extraction/fixtures/corpus.json", import.meta.url).pathname;
 const suite4Path = new URL("../evals/f1-extraction/fixtures/suite4-real-case-studies.json", import.meta.url).pathname;
+const runUrl = new URL("../evals/f1-extraction/run.ts", import.meta.url).href;
 
 test("gold corpus has 48 valid auditable cases and the required suite distribution", async () => {
   const corpus = await loadCorpus(corpusPath);
@@ -137,6 +139,18 @@ test("CLI dry run reports scope without requiring provider credentials", async (
   assert.equal(result.plan.cases, 15);
   assert.equal(result.plan.configurations, 4);
   assert.equal(result.plan.estimatedProviderCalls, 300);
+});
+
+test("CLI entrypoint detection normalizes native Windows paths", () => {
+  const windowsPath = String.raw`C:\repo\evals\f1-extraction\run.ts`;
+  const windowsUrl = pathToFileURL(windowsPath, { windows: true }).href;
+  assert.equal(isCliEntrypoint(windowsUrl, windowsPath, true), true);
+  assert.equal(isCliEntrypoint(windowsUrl, String.raw`C:\repo\evals\f1-extraction\other.ts`, true), false);
+});
+
+test("importing run.ts from the test runner is not treated as a CLI launch", () => {
+  assert.notEqual(pathToFileURL(fileURLToPath(import.meta.url)).href, runUrl);
+  assert.equal(isCliEntrypoint(runUrl, process.argv[1]), false);
 });
 
 test("live CLI fails before provider setup when OPENAI_API_KEY is absent", async () => {
