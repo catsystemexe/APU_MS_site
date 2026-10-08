@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { runSemanticJudge } from "../evals/f1-extraction/lib/pipeline.ts";
+import { SEMANTIC_JUDGE_MAX_OUTPUT_TOKENS, SEMANTIC_JUDGE_MIN_OUTPUT_TOKENS, runSemanticJudge, semanticJudgeOutputBudget } from "../evals/f1-extraction/lib/pipeline.ts";
 import { scoreCase } from "../evals/f1-extraction/lib/scoring.ts";
 
 function fact(id, category, text, quote, overrides = {}) {
@@ -105,6 +105,29 @@ test("semantic judge receives grouped ambiguous alignments and records explicit 
   const judged = await runSemanticJudge(item, initial, candidates, "gpt-5.6-luna", provider);
   assert.deepEqual(judged.decisions, [alignment("leave", [0])]);
   assert.equal(scoreCase(item, candidates, judged.decisions).metrics.semanticRecall, 1);
+});
+
+test("semantic judge output budget scales for dense decisions and remains bounded", async () => {
+  assert.equal(semanticJudgeOutputBudget(1), SEMANTIC_JUDGE_MIN_OUTPUT_TOKENS);
+  assert.ok(semanticJudgeOutputBudget(12) > semanticJudgeOutputBudget(1));
+  assert.ok(semanticJudgeOutputBudget(12) > 1_200);
+  assert.equal(semanticJudgeOutputBudget(10_000), SEMANTIC_JUDGE_MAX_OUTPUT_TOKENS);
+
+  const item = evalCase("Adam kopne do židle.", [fact("m1", "manifestations", "Kopne do židle.", "kopne do židle")]);
+  const candidate = { inputIndex: 0, category: "manifestations", sourceQuote: "kopne do židle", notebookText: "Do židle kope.", action: "add", relatedEntryId: null, reason: null };
+  const budgets = [];
+  const provider = { async call(input) {
+    budgets.push(input.maxOutputTokens);
+    return { value: { decisions: [] }, latencyMs: 1, usage: null };
+  } };
+  const scoreWithReviews = (alignments, unmatched) => ({
+    matches: Array.from({ length: alignments }, (_, index) => ({ goldFactId: `g${index}`, candidateIndexes: [0], state: "REVIEW" })),
+    candidateClassifications: Array.from({ length: unmatched }, () => ({ candidateIndex: 0, state: "REVIEW" })),
+  });
+  await runSemanticJudge(item, scoreWithReviews(1, 0), [candidate], "gpt-5.6-sol", provider);
+  await runSemanticJudge(item, scoreWithReviews(8, 4), [candidate], "gpt-5.6-sol", provider);
+  await runSemanticJudge(item, scoreWithReviews(50, 50), [candidate], "gpt-5.6-sol", provider);
+  assert.deepEqual(budgets, [SEMANTIC_JUDGE_MIN_OUTPUT_TOKENS, semanticJudgeOutputBudget(12), SEMANTIC_JUDGE_MAX_OUTPUT_TOKENS]);
 });
 
 test("not-equivalent judge decision remains a miss", () => {

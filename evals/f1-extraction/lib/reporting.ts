@@ -73,6 +73,8 @@ export function buildResultArtifacts(runs: StageRun[], metadata: Record<string, 
     stageTurns: run.stageTurns,
     stageCalls: run.stageCalls,
     stageAccounting: run.stageAccounting,
+    rescoreJudgeCalls: run.rescoreJudgeCalls,
+    rescoreJudgeAccounting: run.rescoreJudgeAccounting,
   })).join("\n") + (runs.length ? "\n" : "");
   const scoreJsonl = runs.map((run) => JSON.stringify({
     caseId: run.caseId, profile: run.profile, pipeline: run.pipeline, repetition: run.repetition,
@@ -88,6 +90,7 @@ export function buildResultArtifacts(runs: StageRun[], metadata: Record<string, 
     },
     totals: { latencyMs: run.latencyMs, inputTokens: run.inputTokens, outputTokens: run.outputTokens, estimatedCostUsd: run.estimatedCostUsd },
     stageMetrics: run.stageMetrics, stageTurns: run.stageTurns, stageCalls: run.stageCalls, stageAccounting: run.stageAccounting,
+    rescoreJudgeCalls: run.rescoreJudgeCalls, rescoreJudgeAccounting: run.rescoreJudgeAccounting,
   })).join("\n") + (runs.some((run) => run.preGroundingScore && run.stageMetrics) ? "\n" : "");
   const verdictRows = runs.flatMap(groundingVerdictRows);
   const verdictJsonl = verdictRows.map((row) => JSON.stringify(row)).join("\n") + (verdictRows.length ? "\n" : "");

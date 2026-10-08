@@ -6,12 +6,14 @@ import { resolve, win32 } from "node:path";
 import { pathToFileURL } from "node:url";
 import { MODEL_PROFILES, estimateCallCount, loadCorpus, parseCliArgs, resolveProfile, selectCases } from "./lib/eval-contract.ts";
 import { createOpenAIProvider, recordUsage, runExtractionPipeline, runSemanticJudge, type EvalProvider } from "./lib/pipeline.ts";
-import { loadSavedRawRuns, rescoreSavedRuns } from "./lib/rescore.ts";
+import { loadSavedRawRuns, rescoreSavedRun, rescoreSavedRuns, type SavedRawRun } from "./lib/rescore.ts";
 import { scoreCase } from "./lib/scoring.ts";
 import { writeResultArtifacts, writeResultArtifactsToDirectory } from "./lib/reporting.ts";
 import { assertResumeArguments, initializeRunDirectory, loadRunDirectory, runKey, saveCompletedRun, saveRunState, type RunPlan } from "./lib/checkpoint.ts";
 import { calculateStageMetrics, summarizeStageCalls, type JudgeCallAccounting, type StageRun } from "./lib/stage-analysis.ts";
 import { formatRunFailure } from "./lib/diagnostics.ts";
+import { assertResumeRescoreArguments, initializeRescoreDirectory, loadRescoreDirectory, saveRescoredRun, SCORING_CONTRACT_VERSION, type RescorePlan } from "./lib/rescore-checkpoint.ts";
+import type { SupportedModelId } from "../../app/model-config.ts";
 
 export const HELP = `F1 extraction evaluation
 
@@ -19,12 +21,14 @@ Usage:
   npm run eval:f1 -- --dry-run [options]
   npm run eval:f1 -- [options]
   npm run eval:f1 -- --resume <run-directory>
+  npm run eval:f1 -- --resume-rescore <judged-result-directory> [--max-calls <n>]
   npm run eval:f1 -- --rescore <result-directory|raw-runs.jsonl> [options]
 
 Options:
   --corpus <path>              Corpus JSON (default: evals/f1-extraction/fixtures/corpus.json)
   --rescore <path>             Rescore saved raw runs without rerunning extraction
   --resume <path>              Resume an interrupted run from its checkpoints
+  --resume-rescore <path>      Resume an interrupted provider-backed semantic rescore
   --suite <csv>                atomic,mixed,dense,real
   --case <csv>                 Exact case ids
   --profiles <csv>             baseline,terra-extract,terra-both,terra-medium,sol-reference
@@ -36,7 +40,7 @@ Options:
   --repetitions <n>            1–20
   --run-id <id>                Result directory name
   --output-dir <path>          Local result root
-  --max-calls <n>              Refuse a larger estimated provider sweep
+  --max-calls <n>              Refuse a larger estimated sweep or resume remainder
   --judge-model <model|none>   Optional judge for ambiguous alignments/extras
   --dry-run                    Print scope and estimated calls; make no provider calls
   --help                       Show this help
@@ -58,9 +62,81 @@ async function sha256(path: string) {
   return createHash("sha256").update(await readFile(path)).digest("hex");
 }
 
+function savedRunKey(run: SavedRawRun) {
+  return runKey(run);
+}
+
+function maximumJudgeCalls(runs: SavedRawRun[]) {
+  return runs.reduce((total, run) => total + 1 + Number(Boolean(run.preGroundingCandidates)), 0);
+}
+
+async function executeJudgedRescore(input: {
+  corpus: Awaited<ReturnType<typeof loadCorpus>>;
+  savedRuns: SavedRawRun[];
+  directory: string;
+  plan: RescorePlan;
+  state: Awaited<ReturnType<typeof initializeRescoreDirectory>>;
+  completedRuns: StageRun[];
+  provider: EvalProvider;
+  maxCalls: number | null;
+}) {
+  const completedKeys = new Set(input.completedRuns.map(runKey));
+  const missing = input.savedRuns.filter((run) => !completedKeys.has(savedRunKey(run)));
+  const remainingMaximumCalls = maximumJudgeCalls(missing);
+  if (input.maxCalls !== null && remainingMaximumCalls > input.maxCalls) throw new Error(`Estimated remaining semantic judge calls ${remainingMaximumCalls} exceed --max-calls ${input.maxCalls}.`);
+  const runs = [...input.completedRuns];
+  const metadata = {
+    generatedAt: new Date().toISOString(), corpusPath: input.plan.corpusPath,
+    rescoredFrom: input.plan.sourceRawRunsPath, semanticJudgeModel: input.plan.judgeModel,
+    originalProviderUsagePreserved: true, rescorePlan: input.plan,
+  };
+  await writeResultArtifactsToDirectory(input.directory, runs, metadata);
+  for (const saved of missing) {
+    try {
+      const run = await rescoreSavedRun(input.corpus, saved, async (item, score, candidates, stage) => {
+        const judged = await runSemanticJudge(item, score, candidates, input.plan.judgeModel, input.provider);
+        return {
+          decisions: judged.decisions,
+          call: judged.called ? { stage, model: input.plan.judgeModel, reasoning: "low", latencyMs: judged.latencyMs, usage: judged.usage } : null,
+        };
+      });
+      runs.push(run);
+      completedKeys.add(runKey(run));
+      await saveRescoredRun(input.directory, run, input.state);
+      await writeResultArtifactsToDirectory(input.directory, runs, metadata);
+    } catch (error) {
+      const diagnostic = error instanceof Error ? error.message : "Semantic rescore failed.";
+      await saveRunState(input.directory, input.state, "failed", diagnostic);
+      throw error;
+    }
+  }
+  if (completedKeys.size !== input.plan.totalRuns) {
+    const diagnostic = `Semantic rescore incomplete: ${completedKeys.size}/${input.plan.totalRuns} source runs completed.`;
+    await saveRunState(input.directory, input.state, "failed", diagnostic);
+    throw new Error(diagnostic);
+  }
+  await saveRunState(input.directory, input.state, "completed");
+  await writeResultArtifactsToDirectory(input.directory, runs, metadata);
+  return { kind: "rescored" as const, directory: input.directory, runs: runs.length, source: input.plan.sourceRawRunsPath, resumed: input.completedRuns.length > 0 };
+}
+
 export async function execute(argv = process.argv.slice(2), cwd = process.cwd(), environment: NodeJS.ProcessEnv = process.env, dependencies: { provider?: EvalProvider } = {}) {
   const options = parseCliArgs(argv, cwd);
   if (options.help) return { kind: "help" as const, text: HELP };
+  if (options.resumeRescorePath !== null) {
+    assertResumeRescoreArguments(argv);
+    const resumed = await loadRescoreDirectory(options.resumeRescorePath);
+    if (await sha256(resumed.plan.sourceRawRunsPath) !== resumed.plan.sourceSha256) throw new Error("Rescore resume rejected: source raw-runs content changed.");
+    if (await sha256(resumed.plan.corpusPath) !== resumed.plan.corpusSha256) throw new Error("Rescore resume rejected: corpus content changed.");
+    const saved = await loadSavedRawRuns(resumed.plan.sourceRawRunsPath);
+    const sourceKeys = saved.runs.map(savedRunKey);
+    if (JSON.stringify(sourceKeys) !== JSON.stringify(resumed.plan.sourceRunKeys)) throw new Error("Rescore resume rejected: source run identity/order changed.");
+    const corpus = await loadCorpus(resumed.plan.corpusPath);
+    const apiKey = environment.OPENAI_API_KEY;
+    if (!dependencies.provider && !apiKey) throw new Error("OPENAI_API_KEY is unavailable. Judged rescoring requires an approved local environment; no provider call was made.");
+    const provider = dependencies.provider ?? createOpenAIProvider(apiKey!, resumed.plan.runId);
+    return executeJudgedRescore({ corpus, savedRuns: saved.runs, directory: resumed.directory, plan: resumed.plan, state: resumed.state, completedRuns: resumed.runs, provider, maxCalls: options.maxCalls });
+  }
   if (options.rescorePath !== null) {
     const corpus = await loadCorpus(resolve(options.corpusPath));
     const saved = await loadSavedRawRuns(resolve(options.rescorePath));
@@ -70,14 +146,21 @@ export async function execute(argv = process.argv.slice(2), cwd = process.cwd(),
     if (options.judgeModel) {
       const apiKey = environment.OPENAI_API_KEY;
       if (!dependencies.provider && !apiKey) throw new Error("OPENAI_API_KEY is unavailable. Saved runs can be rescored offline without --judge-model; no provider call was made.");
-      const judgeCalls = saved.runs.reduce((total, run) => total + 1 + Number(Boolean(run.preGroundingCandidates)), 0);
+      const judgeCalls = maximumJudgeCalls(saved.runs);
       if (options.maxCalls !== null && judgeCalls > options.maxCalls) throw new Error(`Estimated semantic judge calls ${judgeCalls} exceed --max-calls ${options.maxCalls}.`);
       provider = dependencies.provider ?? createOpenAIProvider(apiKey!, options.runId);
+      const sourceRunKeys = saved.runs.map(savedRunKey);
+      if (new Set(sourceRunKeys).size !== sourceRunKeys.length) throw new Error("Source raw-runs contains duplicate run identities.");
+      const corpusPath = resolve(options.corpusPath);
+      const plan: RescorePlan = {
+        version: 1, scoringContractVersion: SCORING_CONTRACT_VERSION, runId: options.runId, createdAt: new Date().toISOString(),
+        sourceRawRunsPath: saved.rawRunsPath, sourceSha256: await sha256(saved.rawRunsPath), sourceRunKeys,
+        corpusPath, corpusSha256: await sha256(corpusPath), judgeModel: options.judgeModel as SupportedModelId, totalRuns: saved.runs.length,
+      };
+      const state = await initializeRescoreDirectory(outputDirectory, plan);
+      return executeJudgedRescore({ corpus, savedRuns: saved.runs, directory: outputDirectory, plan, state, completedRuns: [], provider, maxCalls: options.maxCalls });
     }
-    const runs = await rescoreSavedRuns(corpus, saved.runs, provider && options.judgeModel ? async (item, score, candidates) => {
-      const judged = await runSemanticJudge(item, score, candidates, options.judgeModel!, provider!);
-      return judged.decisions;
-    } : undefined);
+    const runs = await rescoreSavedRuns(corpus, saved.runs);
     const directory = await writeResultArtifacts(resolve(options.outputDir), options.runId, runs, {
       generatedAt: new Date().toISOString(), corpusPath: resolve(options.corpusPath),
       rescoredFrom: saved.rawRunsPath, semanticJudgeModel: options.judgeModel,

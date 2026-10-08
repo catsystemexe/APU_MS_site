@@ -185,7 +185,7 @@ test("rescoring a new staged run preserves and recomputes stage metrics", async 
     } };
     const rescored = await execute([
       "--rescore", original.directory, "--corpus", corpusPath, "--run-id", "rescored", "--output-dir", root,
-      "--judge-model", "gpt-5.6-luna",
+      "--judge-model", "gpt-5.6-luna", "--max-calls", "2",
     ], process.cwd(), {}, { provider: judgeProvider });
     const aggregate = JSON.parse(await readFile(join(rescored.directory, "aggregate.json"), "utf8"));
     assert.equal(judgeCalls, 2, "staged rescore judges pre- and post-grounding candidates");

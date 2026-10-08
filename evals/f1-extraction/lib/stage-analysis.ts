@@ -33,6 +33,8 @@ export type StageRun = RunScore & {
   stageMetrics?: StageMetrics;
   stageCalls?: Array<PipelineCall | JudgeCallAccounting>;
   stageAccounting?: Record<string, { calls: number; latencyMs: number; inputTokens: number; outputTokens: number; estimatedCostUsd: number | null }>;
+  rescoreJudgeCalls?: JudgeCallAccounting[];
+  rescoreJudgeAccounting?: Record<string, { calls: number; latencyMs: number; inputTokens: number; outputTokens: number; estimatedCostUsd: number | null }>;
 };
 
 export function summarizeStageCalls(calls: NonNullable<StageRun["stageCalls"]>) {

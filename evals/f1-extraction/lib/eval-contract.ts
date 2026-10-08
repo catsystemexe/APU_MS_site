@@ -85,6 +85,7 @@ export type EvalCliOptions = {
   corpusPath: string;
   rescorePath: string | null;
   resumePath: string | null;
+  resumeRescorePath: string | null;
   suites: EvalSuite[];
   caseIds: string[];
   profiles: ModelProfileId[];
@@ -175,7 +176,7 @@ function requiredValue(argv: string[], index: number, flag: string) {
 export function parseCliArgs(argv: string[], cwd = process.cwd()): EvalCliOptions {
   const defaults: EvalCliOptions = {
     corpusPath: `${cwd}/evals/f1-extraction/fixtures/corpus.json`,
-    rescorePath: null, resumePath: null,
+    rescorePath: null, resumePath: null, resumeRescorePath: null,
     suites: ["atomic", "mixed", "dense"], caseIds: [], profiles: ["baseline"], pipelines: ["baseline"],
     repetitions: 1, runId: `f1-extraction-${new Date().toISOString().replace(/[:.]/g, "-")}`,
     outputDir: `${cwd}/evals/f1-extraction/results`, maxCalls: null, dryRun: false, judgeModel: null,
@@ -190,6 +191,7 @@ export function parseCliArgs(argv: string[], cwd = process.cwd()): EvalCliOption
     if (flag === "--corpus") options.corpusPath = value;
     else if (flag === "--rescore") options.rescorePath = value;
     else if (flag === "--resume") options.resumePath = value;
+    else if (flag === "--resume-rescore") options.resumeRescorePath = value;
     else if (flag === "--suite") options.suites = values(value) as EvalSuite[];
     else if (flag === "--case") options.caseIds = values(value);
     else if (flag === "--profiles") options.profiles = values(value) as ModelProfileId[];
@@ -218,6 +220,7 @@ export function parseCliArgs(argv: string[], cwd = process.cwd()): EvalCliOption
   if (options.rescorePath !== null && options.dryRun) throw new Error("--rescore cannot be combined with --dry-run");
   if (options.resumePath !== null && options.rescorePath !== null) throw new Error("--resume cannot be combined with --rescore");
   if (options.resumePath !== null && options.dryRun) throw new Error("--resume cannot be combined with --dry-run");
+  if (options.resumeRescorePath !== null && (options.rescorePath !== null || options.resumePath !== null || options.dryRun)) throw new Error("--resume-rescore cannot be combined with --rescore, --resume, or --dry-run");
   if (options.rescorePath !== null && !argv.includes("--run-id")) options.runId = `rescore-${new Date().toISOString().replace(/[:.]/g, "-")}`;
   return options;
 }

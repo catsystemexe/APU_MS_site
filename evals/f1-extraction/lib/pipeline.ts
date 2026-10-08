@@ -64,6 +64,14 @@ const SEMANTIC_JUDGE_SCHEMA = {
   },
 } as const;
 
+export const SEMANTIC_JUDGE_MIN_OUTPUT_TOKENS = 2_500;
+export const SEMANTIC_JUDGE_MAX_OUTPUT_TOKENS = 8_000;
+
+export function semanticJudgeOutputBudget(expectedDecisionCount: number) {
+  const decisionCount = Math.max(0, Math.floor(expectedDecisionCount));
+  return Math.min(SEMANTIC_JUDGE_MAX_OUTPUT_TOKENS, Math.max(SEMANTIC_JUDGE_MIN_OUTPUT_TOKENS, 1_800 + decisionCount * 240));
+}
+
 export type ProviderCall<T> = {
   stage: "extraction" | "coverage" | "grounding" | "judge";
   model: SupportedModelId;
@@ -300,16 +308,17 @@ export async function runSemanticJudge(item: EvalCase, score: CaseScore, candida
     candidateIndex: entry.candidateIndex,
     candidate: candidates[entry.candidateIndex],
   }));
-  if (!reviewAlignments.length && !unmatchedCandidates.length) return { decisions: [] as SemanticJudgeDecision[], usage: null as ModelUsageRecord | null, latencyMs: 0 };
+  if (!reviewAlignments.length && !unmatchedCandidates.length) return { decisions: [] as SemanticJudgeDecision[], usage: null as ModelUsageRecord | null, latencyMs: 0, called: false };
+  const expectedDecisionCount = reviewAlignments.length + unmatchedCandidates.length;
   const judged = await provider.call({
     stage: "judge", model, reasoning: "low", instructions: SEMANTIC_JUDGE_INSTRUCTIONS,
     input: { messageInputs: item.inputs, reviewAlignments, unmatchedCandidates }, schema: SEMANTIC_JUDGE_SCHEMA,
-    formatName: "apu_f1_eval_semantic_judge", maxOutputTokens: 1_200,
+    formatName: "apu_f1_eval_semantic_judge", maxOutputTokens: semanticJudgeOutputBudget(expectedDecisionCount),
     parse(value) {
       const object = parseObject(value, "semantic judge result");
       if (!Array.isArray(object.decisions)) throw new Error("invalid semantic judge decisions");
       return object as { decisions: SemanticJudgeDecision[] };
     },
   });
-  return { decisions: judged.value.decisions, usage: judged.usage, latencyMs: judged.latencyMs };
+  return { decisions: judged.value.decisions, usage: judged.usage, latencyMs: judged.latencyMs, called: true };
 }
