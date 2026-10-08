@@ -130,6 +130,7 @@ test("profile, pipeline, filters and call guards parse deterministically", async
   const selected = selectCases(corpus, options);
   assert.deepEqual(selected.map((item) => item.id), ["atomic-manifestation"]);
   assert.deepEqual(estimateCallCount(selected, options), { cases: 1, turns: 1, repetitions: 3, configurations: 4, providerCalls: 30, semanticJudgeCalls: 0 });
+  assert.deepEqual(estimateCallCount(selected, { ...options, judgeModel: "gpt-5.6-luna" }), { cases: 1, turns: 1, repetitions: 3, configurations: 4, providerCalls: 54, semanticJudgeCalls: 24 });
   assert.throws(() => parseCliArgs(["--profiles", "unknown"], "/repo"), /unsupported profile/);
 });
 
@@ -201,6 +202,7 @@ test("result artifacts serialize JSONL, aggregate JSON/CSV and Markdown", async 
   assert.doesNotThrow(() => JSON.parse(artifacts.rawJsonl.trim()));
   assert.doesNotThrow(() => JSON.parse(artifacts.aggregateJson));
   assert.match(artifacts.aggregateCsv, /deterministicRecall/);
+  assert.match(artifacts.aggregateCsv, /preGroundingSemanticRecall.*extraction_miss_count.*grounding_loss_count/);
   assert.match(artifacts.dimensionCsv, /factCount/);
   assert.match(artifacts.summary, /Unsupported canonical facts/);
   const root = await mkdtemp(join(tmpdir(), "apu-f1-eval-"));

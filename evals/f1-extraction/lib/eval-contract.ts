@@ -84,6 +84,7 @@ export type ModelProfileId = keyof typeof MODEL_PROFILES;
 export type EvalCliOptions = {
   corpusPath: string;
   rescorePath: string | null;
+  resumePath: string | null;
   suites: EvalSuite[];
   caseIds: string[];
   profiles: ModelProfileId[];
@@ -174,7 +175,7 @@ function requiredValue(argv: string[], index: number, flag: string) {
 export function parseCliArgs(argv: string[], cwd = process.cwd()): EvalCliOptions {
   const defaults: EvalCliOptions = {
     corpusPath: `${cwd}/evals/f1-extraction/fixtures/corpus.json`,
-    rescorePath: null,
+    rescorePath: null, resumePath: null,
     suites: ["atomic", "mixed", "dense"], caseIds: [], profiles: ["baseline"], pipelines: ["baseline"],
     repetitions: 1, runId: `f1-extraction-${new Date().toISOString().replace(/[:.]/g, "-")}`,
     outputDir: `${cwd}/evals/f1-extraction/results`, maxCalls: null, dryRun: false, judgeModel: null,
@@ -188,6 +189,7 @@ export function parseCliArgs(argv: string[], cwd = process.cwd()): EvalCliOption
     const value = requiredValue(argv, index, flag); index += 1;
     if (flag === "--corpus") options.corpusPath = value;
     else if (flag === "--rescore") options.rescorePath = value;
+    else if (flag === "--resume") options.resumePath = value;
     else if (flag === "--suite") options.suites = values(value) as EvalSuite[];
     else if (flag === "--case") options.caseIds = values(value);
     else if (flag === "--profiles") options.profiles = values(value) as ModelProfileId[];
@@ -214,6 +216,8 @@ export function parseCliArgs(argv: string[], cwd = process.cwd()): EvalCliOption
   if (options.overrides.extractionReasoning !== null && !["low", "medium"].includes(options.overrides.extractionReasoning)) throw new Error("--extraction-reasoning must be low or medium");
   if (options.overrides.groundingReasoning !== null && !["low", "medium"].includes(options.overrides.groundingReasoning)) throw new Error("--grounding-reasoning must be low or medium");
   if (options.rescorePath !== null && options.dryRun) throw new Error("--rescore cannot be combined with --dry-run");
+  if (options.resumePath !== null && options.rescorePath !== null) throw new Error("--resume cannot be combined with --rescore");
+  if (options.resumePath !== null && options.dryRun) throw new Error("--resume cannot be combined with --dry-run");
   if (options.rescorePath !== null && !argv.includes("--run-id")) options.runId = `rescore-${new Date().toISOString().replace(/[:.]/g, "-")}`;
   return options;
 }
@@ -241,6 +245,6 @@ export function estimateCallCount(cases: EvalCase[], options: Pick<EvalCliOption
   const turns = cases.reduce((sum, item) => sum + item.inputs.length, 0);
   const pipelineCalls = options.pipelines.reduce((sum, pipeline) => sum + (pipeline === "coverage" ? 3 : 2), 0);
   const pipelineProviderCalls = turns * options.profiles.length * options.repetitions * pipelineCalls;
-  const semanticJudgeCalls = options.judgeModel ? cases.length * options.profiles.length * options.pipelines.length * options.repetitions : 0;
+  const semanticJudgeCalls = options.judgeModel ? 2 * cases.length * options.profiles.length * options.pipelines.length * options.repetitions : 0;
   return { cases: cases.length, turns, repetitions: options.repetitions, configurations: options.profiles.length * options.pipelines.length, providerCalls: pipelineProviderCalls + semanticJudgeCalls, semanticJudgeCalls };
 }

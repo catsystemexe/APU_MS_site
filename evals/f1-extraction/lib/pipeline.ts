@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
-import { callOpenAIResponses, createRequestUsageCollector } from "../../../app/openai-responses-instrumentation.ts";
+import { callOpenAIResponses, createRequestUsageCollector, providerResponseDiagnostic } from "../../../app/openai-responses-instrumentation.ts";
+import { InstrumentedModelCallError } from "../../../app/model-call-instrumentation.ts";
 import {
   EXTRACTION_SCHEMA,
   GROUNDING_SCHEMA,
@@ -78,6 +79,20 @@ export type ProviderCall<T> = {
 export type ProviderCallResult<T> = { value: T; latencyMs: number; usage: ModelUsageRecord | null };
 export type EvalProvider = { call<T>(input: ProviderCall<T>): Promise<ProviderCallResult<T>> };
 
+export class EvalProviderCallError extends Error {
+  readonly stage: ProviderCall<unknown>["stage"];
+  readonly model: string;
+  readonly reasoning: ReasoningEffort;
+
+  constructor(input: Pick<ProviderCall<unknown>, "stage" | "model" | "reasoning">, diagnostic: string) {
+    super(`stage=${input.stage}; model=${input.model}; reasoning=${input.reasoning}; ${diagnostic}`);
+    this.name = "EvalProviderCallError";
+    this.stage = input.stage;
+    this.model = input.model;
+    this.reasoning = input.reasoning;
+  }
+}
+
 function parseObject(value: unknown, label: string) {
   if (!value || typeof value !== "object") throw new Error(`${label} is not an object`);
   return value as Record<string, unknown>;
@@ -110,55 +125,87 @@ export function createOpenAIProvider(apiKey: string, requestPrefix: string): Eva
     async call<T>(input: ProviderCall<T>) {
       const collector = createRequestUsageCollector();
       const started = performance.now();
-      const result = await callOpenAIResponses<T>({
-        api_key: apiKey,
-        request_id: `${requestPrefix}-${input.stage}-${crypto.randomUUID()}`,
-        phase: "F1",
-        operation: usageOperation(input.stage),
-        requested_model: input.model,
-        reasoning_effort: input.reasoning,
-        requested_service_tier: "default",
-        collector,
-        payload: {
-          model: input.model,
-          reasoning: { effort: input.reasoning },
-          instructions: input.instructions,
-          input: JSON.stringify(input.input),
-          text: { format: { type: "json_schema", name: input.formatName, strict: true, schema: input.schema } },
-          max_output_tokens: input.maxOutputTokens,
-          service_tier: "default",
-          store: false,
-        },
-        validate_application_response: (body) => {
-          const text = extractResponseText(body); if (!text) throw new Error("missing structured output");
-          return input.parse(JSON.parse(text));
-        },
-      });
-      if (result.usage_record.provider_status !== "completed" || !result.application_result) throw new Error(`${input.stage} provider call failed`);
-      return { value: result.application_result, latencyMs: Math.round(performance.now() - started), usage: result.usage_record };
+      try {
+        const result = await callOpenAIResponses<T>({
+          api_key: apiKey,
+          request_id: `${requestPrefix}-${input.stage}-${crypto.randomUUID()}`,
+          phase: "F1",
+          operation: usageOperation(input.stage),
+          requested_model: input.model,
+          reasoning_effort: input.reasoning,
+          requested_service_tier: "default",
+          collector,
+          payload: {
+            model: input.model,
+            reasoning: { effort: input.reasoning },
+            instructions: input.instructions,
+            input: JSON.stringify(input.input),
+            text: { format: { type: "json_schema", name: input.formatName, strict: true, schema: input.schema } },
+            max_output_tokens: input.maxOutputTokens,
+            service_tier: "default",
+            store: false,
+          },
+          validate_application_response: (body) => {
+            const text = extractResponseText(body); if (!text) throw new Error("missing structured output");
+            return input.parse(JSON.parse(text));
+          },
+        });
+        if (result.usage_record.provider_status !== "completed" || !result.application_result) {
+          throw new EvalProviderCallError(input, providerResponseDiagnostic(result.usage_record, result.response));
+        }
+        return { value: result.application_result, latencyMs: Math.round(performance.now() - started), usage: result.usage_record };
+      } catch (error) {
+        if (error instanceof EvalProviderCallError) throw error;
+        const record = error instanceof InstrumentedModelCallError ? error.usage_record : collector.records().at(-1);
+        throw new EvalProviderCallError(input, providerResponseDiagnostic(record));
+      }
     },
   };
 }
 
-type PipelineRun = {
+export type PipelineCall = { stage: "extraction" | "coverage" | "grounding"; model: string; reasoning: string; latencyMs: number; usage: ModelUsageRecord | null };
+export type StageCandidate = EvaluatedCandidate & { candidateId: string; origin: "extraction" | "coverage" };
+export type GroundingTraceVerdict = {
+  candidateId: string;
+  submittedIndex: number;
+  accepted: boolean;
+  reason: string | null;
+  providerVerdict: GroundingVerdict | null;
+};
+export type PipelineTurnTrace = {
+  inputIndex: number;
+  rawExtraction: RawExtraction;
+  normalizedExtractionCandidates: StageCandidate[];
+  rawCoverageCandidates: ExtractionCandidate[] | null;
+  normalizedCoverageCandidates: StageCandidate[];
+  preGroundingCandidates: StageCandidate[];
+  groundingSubmittedCandidates: StageCandidate[];
+  groundingVerdicts: GroundingTraceVerdict[];
+  finalCandidates: StageCandidate[];
+};
+export type PipelineRun = {
+  preGroundingCandidates: EvaluatedCandidate[];
   candidates: EvaluatedCandidate[];
+  turns: PipelineTurnTrace[];
   latencyMs: number;
   inputTokens: number;
   outputTokens: number;
   estimatedCostUsd: number | null;
-  calls: Array<{ stage: string; model: string; reasoning: string; latencyMs: number; usage: ModelUsageRecord | null }>;
+  calls: PipelineCall[];
 };
 
 function candidateKey(candidate: ExtractionCandidate) {
   return `${candidate.category}\u0000${candidate.sourceQuote}\u0000${candidate.notebookText}\u0000${candidate.action}\u0000${candidate.relatedEntryId ?? ""}`;
 }
 
-function mergeCandidates(primary: ExtractionCandidate[], recovered: ExtractionCandidate[]) {
-  const seen = new Set(primary.map(candidateKey));
-  return [...primary, ...recovered.filter((candidate) => !seen.has(candidateKey(candidate)))];
+function toEvaluated(candidate: StageCandidate): EvaluatedCandidate {
+  const { candidateId, origin, ...evaluated } = candidate;
+  void candidateId;
+  void origin;
+  return evaluated;
 }
 
-function recordUsage(calls: PipelineRun["calls"]) {
+export function recordUsage(calls: Array<{ latencyMs: number; usage: ModelUsageRecord | null }>) {
   const records = calls.map((call) => call.usage).filter((record): record is ModelUsageRecord => record !== null);
   const costs = records.map((record) => record.pricing_snapshot.estimated_cost_usd);
   return {
@@ -174,8 +221,10 @@ export async function runExtractionPipeline(item: EvalCase, profile: ModelProfil
   const extractionInstructions = buildExtractionInstructions(intakeCore);
   const groundingInstructions = buildGroundingInstructions(intakeCore);
   const notebook: ExtractionNotebookInput[] = structuredClone(item.startingNotebook);
+  const allPreGroundingCandidates: EvaluatedCandidate[] = [];
   const allCandidates: EvaluatedCandidate[] = [];
   const calls: PipelineRun["calls"] = [];
+  const turns: PipelineTurnTrace[] = [];
   for (const [inputIndex, message] of item.inputs.entries()) {
     const extraction = await provider.call({
       stage: "extraction", model: profile.extractionModel, reasoning: profile.extractionReasoning,
@@ -183,37 +232,63 @@ export async function runExtractionPipeline(item: EvalCase, profile: ModelProfil
       schema: EXTRACTION_SCHEMA, formatName: "apu_f1_eval_extraction", maxOutputTokens: 2_000, parse: parseRawExtraction,
     });
     calls.push({ stage: "extraction", model: profile.extractionModel, reasoning: profile.extractionReasoning, latencyMs: extraction.latencyMs, usage: extraction.usage });
-    let candidates = normalizeExtractionCandidates(message, notebook, extraction.value.candidates);
+    const normalizedExtractionCandidates: StageCandidate[] = normalizeExtractionCandidates(message, notebook, extraction.value.candidates).map((candidate, index) => ({
+      ...candidate, inputIndex, candidateId: `turn-${inputIndex}-extract-${index}`, origin: "extraction",
+    }));
+    let rawCoverageCandidates: ExtractionCandidate[] | null = null;
+    let normalizedCoverageCandidates: StageCandidate[] = [];
     if (pipeline === "coverage") {
       const coverage = await provider.call({
         stage: "coverage", model: profile.extractionModel, reasoning: profile.extractionReasoning,
         instructions: COVERAGE_INSTRUCTIONS,
-        input: { currentNotebook: notebook, newUserMessage: message, alreadyExtractedCandidates: candidates },
+        input: { currentNotebook: notebook, newUserMessage: message, alreadyExtractedCandidates: normalizedExtractionCandidates.map(toEvaluated) },
         schema: COVERAGE_SCHEMA, formatName: "apu_f1_eval_coverage", maxOutputTokens: 1_500, parse: parseCandidates,
       });
       calls.push({ stage: "coverage", model: profile.extractionModel, reasoning: profile.extractionReasoning, latencyMs: coverage.latencyMs, usage: coverage.usage });
-      candidates = normalizeExtractionCandidates(message, notebook, mergeCandidates(candidates, coverage.value.candidates));
+      rawCoverageCandidates = structuredClone(coverage.value.candidates);
+      const seen = new Set(normalizedExtractionCandidates.map(candidateKey));
+      normalizedCoverageCandidates = normalizeExtractionCandidates(message, notebook, coverage.value.candidates)
+        .filter((candidate) => !seen.has(candidateKey(candidate)))
+        .map((candidate, index) => ({ ...candidate, inputIndex, candidateId: `turn-${inputIndex}-coverage-${index}`, origin: "coverage" }));
     }
-    const requiringGrounding = candidates.filter((candidate) => candidate.action === "add" || candidate.action === "conflict");
-    let accepted = new Set<number>();
+    const preGroundingCandidates = [...normalizedExtractionCandidates, ...normalizedCoverageCandidates];
+    const requiringGrounding = preGroundingCandidates.filter((candidate) => candidate.action === "add" || candidate.action === "conflict");
+    let verdicts: GroundingVerdict[] = [];
     if (requiringGrounding.length) {
       const grounding = await provider.call({
         stage: "grounding", model: profile.groundingModel, reasoning: profile.groundingReasoning,
         instructions: groundingInstructions,
-        input: { currentNotebook: notebook, newUserMessage: message, candidates: requiringGrounding.map((candidate, index) => ({ index, ...candidate })) },
+        input: { currentNotebook: notebook, newUserMessage: message, candidates: requiringGrounding.map((candidate, index) => ({ index, ...toEvaluated(candidate) })) },
         schema: GROUNDING_SCHEMA, formatName: "apu_f1_eval_grounding", maxOutputTokens: 1_200, parse: parseVerdicts,
       });
       calls.push({ stage: "grounding", model: profile.groundingModel, reasoning: profile.groundingReasoning, latencyMs: grounding.latencyMs, usage: grounding.usage });
-      accepted = new Set(grounding.value.verdicts.filter((verdict) => verdict.accepted && Number.isInteger(verdict.index) && verdict.index >= 0 && verdict.index < requiringGrounding.length).map((verdict) => verdict.index));
+      verdicts = grounding.value.verdicts;
     }
-    const acceptedKeys = new Set([...accepted].map((index) => requiringGrounding[index]).filter(Boolean).map(candidateKey));
-    const finalCandidates = candidates.filter((candidate) => candidate.action === "duplicate" || candidate.action === "skip" || acceptedKeys.has(candidateKey(candidate)));
-    allCandidates.push(...finalCandidates.map((candidate) => ({ ...candidate, inputIndex })));
+    const verdictByIndex = new Map(verdicts.filter((verdict) => Number.isInteger(verdict.index) && verdict.index >= 0 && verdict.index < requiringGrounding.length).map((verdict) => [verdict.index, verdict]));
+    const groundingVerdicts: GroundingTraceVerdict[] = requiringGrounding.map((candidate, submittedIndex) => {
+      const verdict = verdictByIndex.get(submittedIndex) ?? null;
+      return { candidateId: candidate.candidateId, submittedIndex, accepted: verdict?.accepted === true, reason: verdict?.reason ?? null, providerVerdict: verdict };
+    });
+    const acceptedIds = new Set(groundingVerdicts.filter((verdict) => verdict.accepted).map((verdict) => verdict.candidateId));
+    const finalCandidates = preGroundingCandidates.filter((candidate) => candidate.action === "duplicate" || candidate.action === "skip" || acceptedIds.has(candidate.candidateId));
+    allPreGroundingCandidates.push(...preGroundingCandidates.map(toEvaluated));
+    allCandidates.push(...finalCandidates.map(toEvaluated));
+    turns.push({
+      inputIndex,
+      rawExtraction: structuredClone(extraction.value),
+      normalizedExtractionCandidates,
+      rawCoverageCandidates,
+      normalizedCoverageCandidates,
+      preGroundingCandidates,
+      groundingSubmittedCandidates: requiringGrounding,
+      groundingVerdicts,
+      finalCandidates,
+    });
     for (const candidate of finalCandidates) if (candidate.action === "add") notebook.push({
       id: `eval-${item.id}-${inputIndex}-${notebook.length}`, category: candidate.category, text: candidate.notebookText, trust: "unconfirmed",
     });
   }
-  return { candidates: allCandidates, calls, ...recordUsage(calls) };
+  return { preGroundingCandidates: allPreGroundingCandidates, candidates: allCandidates, turns, calls, ...recordUsage(calls) };
 }
 
 export async function runSemanticJudge(item: EvalCase, score: CaseScore, candidates: EvaluatedCandidate[], model: SupportedModelId, provider: EvalProvider) {

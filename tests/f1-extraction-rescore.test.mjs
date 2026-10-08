@@ -45,7 +45,10 @@ test("rescore reads saved raw runs, preserves provider usage, and never mutates 
     const score = JSON.parse((await readFile(join(outputRoot, "rescored", "case-scores.jsonl"), "utf8")).trim());
     assert.equal(score.metrics.deterministicRecall, 1);
     assert.equal(score.metrics.semanticRecall, 1);
-    assert.match(await readFile(join(outputRoot, "rescored", "summary.md"), "utf8"), /Det\. Recall.*Sem\. Recall.*Grounded Extras.*Unsupported.*Review/);
+    const summary = await readFile(join(outputRoot, "rescored", "summary.md"), "utf8");
+    assert.match(summary, /Det\. Recall.*Sem\. Recall.*Grounded Extras.*Unsupported.*Review/);
+    assert.match(summary, /unavailable/, "historical runs must not fabricate pre-grounding metrics");
+    assert.equal(await readFile(join(outputRoot, "rescored", "stage-runs.jsonl"), "utf8"), "");
 
     await assert.rejects(
       execute(["--rescore", sourceDirectory, "--corpus", corpusPath, "--output-dir", outputRoot, "--run-id", "judged", "--judge-model", "gpt-5.6-luna"], process.cwd(), {}),
