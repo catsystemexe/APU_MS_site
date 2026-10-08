@@ -5,6 +5,7 @@ import { F2_PATHS, type F2Path } from "../../notepad-model";
 import type { F3RenderRequest } from "../../f3-finalization-model";
 import { F3_PROVIDER_SCHEMA, parseF3ProviderResult } from "../../f3-provider-contract";
 import { callOpenAIResponses, createRequestUsageCollector, modelUsagePayload, usageErrorPayload, type RequestUsageCollector } from "../../openai-responses-instrumentation";
+import { F3_PROVIDER_FORMAT_NAMES } from "../../provider-format-names";
 
 export const runtime = "edge";
 const BOUNDARY = `Snapshot aktuálního Rozboru je autoritativní věcný zdroj. F3 pouze materializuje, strukturuje a přeformuluje dodaný kontrakt. Neměň pedagogický cíl, nepřidávej ani nevyřazuj hypotézy, nevol jinou analytickou interpretaci, nenahrazuj vybraný přístup, neměň účel ani evidenci pozorování a neřeš nejistotu vymyšlenou jistotou. Hypotézy lze pro adresáta zjednodušit nebo vynechat, nikdy zesílit, oslabit, sloučit či prohlásit za potvrzené. Pokud požadovaná materializace vyžaduje věcnou volbu, která ve snapshotu není (zejména praktický přístup pro VYTVOŘIT), vrať boundary_issue; nic nevymýšlej.`;
@@ -28,7 +29,7 @@ export async function POST(request: Request) {
     const source = body.sourceSnapshot;
     const { response, usage_record, application_result } = await callOpenAIResponses({
       api_key: apiKey, request_id: crypto.randomUUID(), phase: "F3", operation: "f3_render", requested_model: model, reasoning_effort: "low", requested_service_tier: "default", collector,
-      payload: { model, reasoning: { effort: "low" }, service_tier: "default", store: false, instructions: `${BOUNDARY}\n\n${PATH[path]}\nCíl a formát přizpůsob pouze parametrům požadavku. Relevantní omezení zachovej stručnou poznámkou. V kořenovém objektu nastav kind a právě jednu odpovídající větev material nebo boundaryIssue; druhá větev musí být null.`, input: JSON.stringify({ source: { canonicalNeed: source.canonicalNeed, activePath: source.activePath, baselineHypotheses: source.baselineHypotheses, currentRozbor: source.currentRozbor, limitations: source.limitations, f3Target: source.f3Target }, presentation: body.config }), text: { format: { type: "json_schema", name: `f3_${path.toLowerCase()}_final_render`, strict: true, schema: F3_PROVIDER_SCHEMA } } },
+      payload: { model, reasoning: { effort: "low" }, service_tier: "default", store: false, instructions: `${BOUNDARY}\n\n${PATH[path]}\nCíl a formát přizpůsob pouze parametrům požadavku. Relevantní omezení zachovej stručnou poznámkou. V kořenovém objektu nastav kind a právě jednu odpovídající větev material nebo boundaryIssue; druhá větev musí být null.`, input: JSON.stringify({ source: { canonicalNeed: source.canonicalNeed, activePath: source.activePath, baselineHypotheses: source.baselineHypotheses, currentRozbor: source.currentRozbor, limitations: source.limitations, f3Target: source.f3Target }, presentation: body.config }), text: { format: { type: "json_schema", name: F3_PROVIDER_FORMAT_NAMES[path], strict: true, schema: F3_PROVIDER_SCHEMA } } },
       validate_application_response: (providerResponse) => {
         const text = outputText(providerResponse); if (!text) throw new Error("missing structured output");
         return parseF3ProviderResult(JSON.parse(text));

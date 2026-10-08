@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { F3_PROVIDER_SCHEMA, parseF3ProviderResult } from "../app/f3-provider-contract.ts";
+import { F3_PROVIDER_FORMAT_NAMES } from "../app/provider-format-names.ts";
 const route = await readFile(new URL("../app/api/f3/route.ts", import.meta.url), "utf8");
 function assertStrictObjects(schema, path = "root") {
   if (!schema || typeof schema !== "object") return;
@@ -19,6 +20,19 @@ test("F3 API is current-Rozbor snapshot-only, path-aware and emits distinct tele
 test("F3 prompt protects substantive F2 decisions and returns a boundary issue", () => { for (const text of ["autoritativní věcný zdroj", "pouze materializuje", "Neměň pedagogický cíl", "nepřidávej ani nevyřazuj hypotézy", "nenahrazuj vybraný přístup", "neměň účel ani evidenci pozorování", "vymyšlenou jistotou", "boundary_issue"]) assert.ok(route.includes(text), text); });
 test("path rules permit materialization without selecting new substance", () => { assert.match(route, /skutečný materiál podle již zvoleného cíle/); assert.match(route, /tabulka smí obsahovat jen dodané indikátory/); assert.match(route, /bez nové intervence/); });
 test("parsed F3 output crosses a local runtime validation boundary", () => { assert.match(route, /parseF3ProviderResult\(JSON\.parse\(text\)\)/); });
+test("all F3 provider format names are explicit ASCII-safe values", () => {
+  assert.deepEqual(F3_PROVIDER_FORMAT_NAMES, {
+    POCHOPIT: "f3_pochopit_final_render",
+    POZOROVAT: "f3_pozorovat_final_render",
+    VYTVOŘIT: "f3_vytvorit_final_render",
+  });
+  for (const name of Object.values(F3_PROVIDER_FORMAT_NAMES)) {
+    assert.match(name, /^[a-zA-Z0-9_-]+$/);
+    assert.doesNotMatch(name, /vytvořit/);
+  }
+  assert.match(route, /name: F3_PROVIDER_FORMAT_NAMES\[path\]/);
+  assert.doesNotMatch(route, /toLowerCase\(\).*final_render/);
+});
 test("F3 strict structured output uses a supported root object instead of a top-level union", () => {
   assert.equal(F3_PROVIDER_SCHEMA.type, "object");
   assert.equal("anyOf" in F3_PROVIDER_SCHEMA, false);

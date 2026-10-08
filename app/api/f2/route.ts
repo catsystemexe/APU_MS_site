@@ -1,9 +1,10 @@
 import { getAccessIdentity } from "../../access-auth";
-import { parseProviderRozborComponents, rozborComponentProviderSchema, rozborComponentResponseFormatName } from "../../f2-component-provider-contract";
+import { parseProviderRozborComponents, rozborComponentProviderSchema } from "../../f2-component-provider-contract";
 import { isSupportedModel } from "../../model-config";
 import { F2_PATHS, type F2Path } from "../../notepad-model";
 import { deriveRequiredCurrentRozborComponents, F2_PATH_BASE_SEMANTICS, parseF2BuildResult, parseF2RenderedPreview, type F2BuildRequest, type F2PreviewSnapshot, type RozborComponentGenerationRequest } from "../../f2-build-model";
 import { callOpenAIResponses, createRequestUsageCollector, modelUsagePayload, providerResponseDiagnostic, usageErrorPayload, type RequestUsageCollector } from "../../openai-responses-instrumentation";
+import { F2_PROVIDER_FORMAT_NAMES } from "../../provider-format-names";
 
 export const runtime = "edge";
 
@@ -88,14 +89,14 @@ export async function POST(request: Request) {
   const operation = body.operation; const model = isSupportedModel(body.model) ? body.model : "gpt-5.6-terra";
   let schema: object; let name: string; let instructions: string; let input: unknown; let activePath: F2Path | undefined; let componentRequest: RozborComponentGenerationRequest | undefined;
   if (operation === "build" && validBuild(body.build)) {
-    const build = body.build; activePath = build.activePath; schema = BUILD_SCHEMAS[activePath]; name = `f2_${activePath.toLowerCase()}_build`;
+    const build = body.build; activePath = build.activePath; schema = BUILD_SCHEMAS[activePath]; name = F2_PROVIDER_FORMAT_NAMES[activePath].build;
     const operations = build.activeSkills.length ? build.activeSkills.map((skill) => `- ${skill.label}: ${F2_SKILL_SEMANTICS[skill.id]}${skill.parameterText ? ` Zaměření uživatele: ${skill.parameterText}` : ""}`).join("\n") : "- Žádné; proveď pouze základní úlohu cesty a neaktivuj skrytě žádnou volitelnou operaci.";
     instructions = `${SHARED_PROMPT}\n\nZákladní úloha aktivní cesty: ${F2_PATH_BASE_SEMANTICS[activePath]}\n${PATH_PROMPTS[activePath]}\n\nVolitelné aktivní operace:\n${operations}`; input = build;
   } else if (operation === "preview" && validSnapshot(body.snapshot)) {
-    activePath = body.snapshot.activePath; schema = PREVIEW_SCHEMA; name = `f2_${activePath.toLowerCase()}_preview`;
+    activePath = body.snapshot.activePath; schema = PREVIEW_SCHEMA; name = F2_PROVIDER_FORMAT_NAMES[activePath].preview;
     instructions = `Vyrenderuj náhled výhradně z neměnného F2 snapshotu pro autoritativní cestu ${activePath}. Snapshot nepřehodnocuj z konverzace, neměň pedagogickou potřebu, cestu ani závěry. ${PATH_PROMPTS[activePath]} F3 target smí ovlivnit přehlednost formy, nikdy nesmí vést k finální materializaci F3 dokumentu.`; input = body.snapshot;
   } else if (operation === "generate-rozbor-components" && validRozborGeneration(body.request)) {
-    componentRequest = body.request; activePath = componentRequest.activePath; schema = rozborComponentProviderSchema(componentRequest.components, componentRequest.hypotheses.map(({ id }) => id)); name = rozborComponentResponseFormatName(activePath);
+    componentRequest = body.request; activePath = componentRequest.activePath; schema = rozborComponentProviderSchema(componentRequest.components, componentRequest.hypotheses.map(({ id }) => id)); name = F2_PROVIDER_FORMAT_NAMES[activePath].components;
     instructions = `${rozborComponentInstructions(componentRequest)}\n\nVe výstupním objektu components použij každý přesný požadovaný component ID právě jednou jako klíč a pod něj vlož pouze jeho obsah.`;
     input = { activePath: componentRequest.activePath, canonicalNeed: componentRequest.canonicalNeed, hypotheses: componentRequest.hypotheses, config: componentRequest.config, components: componentRequest.components.map(({ id, kind, hypothesisId }) => ({ id, kind, ...(hypothesisId ? { hypothesisId } : {}) })) };
   } else return error("Neplatný nebo nepodporovaný F2 požadavek.", 400);

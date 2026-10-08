@@ -3,22 +3,12 @@ import {
   type GeneratedRozborComponent,
   type RequiredRozborComponent,
 } from "./f2-build-model.ts";
-import type { F2Path } from "./notepad-model.ts";
 
 const stringArray = { type: "array", items: { type: "string" } } as const;
 const nonEmptyString = { type: "string", minLength: 1 } as const;
 const nonEmptyStringArray = { type: "array", minItems: 1, items: nonEmptyString } as const;
 const strictObject = (required: string[], properties: Record<string, object>) => ({ type: "object", additionalProperties: false, required, properties });
 const objectArray = (items: object) => ({ type: "array", minItems: 1, items });
-const RESPONSE_FORMAT_PATH_NAMES: Record<F2Path, string> = {
-  POCHOPIT: "pochopit",
-  POZOROVAT: "pozorovat",
-  VYTVOŘIT: "vytvorit",
-};
-
-export function rozborComponentResponseFormatName(path: F2Path) {
-  return `f2_${RESPONSE_FORMAT_PATH_NAMES[path]}_components`;
-}
 
 function componentContentSchema(spec: RequiredRozborComponent, hypothesisIds: string[]) {
   const hypothesisId = { type: "string", enum: hypothesisIds };

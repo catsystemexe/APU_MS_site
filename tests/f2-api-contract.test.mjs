@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { parseProviderRozborComponents, rozborComponentProviderSchema, rozborComponentResponseFormatName } from "../app/f2-component-provider-contract.ts";
+import { parseProviderRozborComponents, rozborComponentProviderSchema } from "../app/f2-component-provider-contract.ts";
 import { deriveRequiredCurrentRozborComponents } from "../app/f2-build-model.ts";
+import { F2_PROVIDER_FORMAT_NAMES } from "../app/provider-format-names.ts";
 
 const [route, providerContract, client] = await Promise.all([
   readFile(new URL("../app/api/f2/route.ts", import.meta.url), "utf8"),
@@ -92,8 +93,7 @@ test("provider contract uses a valid format name and deterministic slots for the
   assert.equal(requested.length, 7);
   assert.ok(declaredProperties <= 100);
   assert.ok(Buffer.byteLength(JSON.stringify(schema)) < 15_000);
-  assert.equal(rozborComponentResponseFormatName("VYTVOŘIT"), "f2_vytvorit_components");
-  assert.match(rozborComponentResponseFormatName("VYTVOŘIT"), /^[a-zA-Z0-9_-]{1,64}$/);
+  assert.equal(F2_PROVIDER_FORMAT_NAMES.VYTVOŘIT.components, "f2_vytvorit_components");
 
   const providerResult = { components: {
     "hypothesis:h1:expansion": "Rozvinutí první hypotézy.",
@@ -126,8 +126,22 @@ test("provider-safe fixed slots preserve POCHOPIT and POZOROVAT component schema
     const schema = rozborComponentProviderSchema(requested, ["h1"]);
     assert.deepEqual(Object.keys(schema.properties.components.properties), requested.map(({ id }) => id));
     assert.equal(JSON.stringify(schema).includes('"anyOf"'), false);
-    assert.match(rozborComponentResponseFormatName(path), /^[a-zA-Z0-9_-]{1,64}$/);
   }
+});
+
+test("all F2 provider format names are explicit ASCII-safe values", () => {
+  for (const path of ["POCHOPIT", "POZOROVAT", "VYTVOŘIT"]) {
+    for (const name of Object.values(F2_PROVIDER_FORMAT_NAMES[path])) {
+      assert.match(name, /^[a-zA-Z0-9_-]+$/);
+      assert.doesNotMatch(name, /vytvořit/);
+    }
+  }
+  assert.deepEqual(F2_PROVIDER_FORMAT_NAMES.VYTVOŘIT, {
+    build: "f2_vytvorit_build",
+    preview: "f2_vytvorit_preview",
+    components: "f2_vytvorit_components",
+  });
+  assert.doesNotMatch(route, /toLowerCase\(\).*_(?:build|preview|components)/);
 });
 
 test("F2 component provider failures expose only sanitized developer diagnostics", () => {
