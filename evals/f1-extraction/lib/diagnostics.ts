@@ -17,6 +17,6 @@ export function formatRunFailure(identity: RunIdentity, error: unknown) {
   const context = `case=${identity.caseId}; profile=${identity.profile}; pipeline=${identity.pipeline}; repetition=${identity.repetition}`;
   const detail = error instanceof EvalProviderCallError
     ? sanitizeDiagnostic(error.message)
-    : `category=eval_internal; type=${error instanceof Error ? error.name : "UnknownError"}; message=Evaluation run failed`;
+    : `category=eval_internal; type=${error instanceof Error ? error.name : "UnknownError"}; message=${error instanceof Error ? sanitizeDiagnostic(error.message) : "Evaluation run failed"}`;
   return `${context}; ${detail}`;
 }

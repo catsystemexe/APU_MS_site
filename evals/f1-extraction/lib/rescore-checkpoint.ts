@@ -5,7 +5,7 @@ import { atomicWriteJson, runKey, type RunState } from "./checkpoint.ts";
 import type { StageRun } from "./stage-analysis.ts";
 
 export const RESCORE_PLAN_VERSION = 1;
-export const SCORING_CONTRACT_VERSION = 2;
+export const SCORING_CONTRACT_VERSION = 3;
 
 export type RescorePlan = {
   version: typeof RESCORE_PLAN_VERSION;

@@ -5,6 +5,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { execute } from "../evals/f1-extraction/run.ts";
 import { EvalProviderCallError } from "../evals/f1-extraction/lib/pipeline.ts";
+import { loadRescoreDirectory, SCORING_CONTRACT_VERSION } from "../evals/f1-extraction/lib/rescore-checkpoint.ts";
 
 const corpusPath = new URL("../evals/f1-extraction/fixtures/corpus.json", import.meta.url).pathname;
 
@@ -126,6 +127,19 @@ test("judged rescore checkpoints, fails safely, and resumes only missing source 
 
     await writeFile(rawPath, `${original}\n`);
     await assert.rejects(execute(["--resume-rescore", target, "--max-calls", "1"], process.cwd(), {}, { provider: resumedProvider }), /source raw-runs content changed/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("rescore resume rejects checkpoints from the previous scoring contract", async () => {
+  assert.equal(SCORING_CONTRACT_VERSION, 3);
+  const root = await mkdtemp(join(tmpdir(), "apu-f1-old-scoring-contract-"));
+  await mkdir(join(root, "checkpoints"), { recursive: true });
+  try {
+    await writeFile(join(root, "rescore-plan.json"), JSON.stringify({ version: 1, scoringContractVersion: 2 }));
+    await writeFile(join(root, "run-state.json"), JSON.stringify({ version: 1, status: "failed", completedRunKeys: [], updatedAt: new Date().toISOString(), lastError: null }));
+    await assert.rejects(loadRescoreDirectory(root), /scoring contract version is incompatible/);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

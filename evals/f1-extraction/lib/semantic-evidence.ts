@@ -1,6 +1,6 @@
 import type { EvalCase } from "./eval-contract.ts";
 import type { GroundingTraceVerdict, PipelineTurnTrace, StageCandidate } from "./pipeline.ts";
-import { scoreCase, type CandidateClassification, type CaseScore, type EvaluatedCandidate, type SemanticJudgeDecision } from "./scoring.ts";
+import { evaluateSemanticSupportGroup, scoreCase, type CandidateClassification, type CaseScore, type EvaluatedCandidate, type SemanticJudgeDecision, type SemanticSupportRejectionReason } from "./scoring.ts";
 
 export type SemanticSupportGroup = { candidateIds: string[] };
 export type StagedFactDecision = {
@@ -31,7 +31,14 @@ export type SemanticGoldEvidence = {
   goldFactId: string;
   decision: "exact" | "equivalent" | "not_equivalent" | "uncertain" | "missing";
   reason: string;
+  rawSupportGroups: SemanticSupportGroup[];
   supportGroups: SemanticSupportGroup[];
+  rejectedSupportGroups: Array<{
+    candidateIds: string[];
+    code: "inadmissible_semantic_support";
+    reasons: SemanticSupportRejectionReason[];
+  }>;
+  rejectionCode: "inadmissible_semantic_support" | null;
   postSupportGroups: SemanticSupportGroup[];
   preCovered: boolean;
   postCovered: boolean;
@@ -134,7 +141,7 @@ function legacyFactDecisions(output: StagedSemanticJudgeOutput | null, idToIndex
     if (decision.decision === "equivalent" && survivingGroups.length) return survivingGroups.map((group) => ({
       kind: "alignment" as const, goldFactId: decision.goldFactId, candidateIndexes: group.candidateIds.map((id) => idToIndex.get(id)!), decision: "equivalent" as const, reason: decision.reason,
     }));
-    if (decision.decision === "not_equivalent" || (post && decision.decision === "equivalent")) return [{
+    if (decision.decision === "not_equivalent" || (post && decision.decision === "equivalent" && decision.supportGroups.length > 0)) return [{
       kind: "alignment" as const, goldFactId: decision.goldFactId, candidateIndexes: [], decision: "not_equivalent" as const, reason: post ? "No sufficient PRE support group survived grounding." : decision.reason,
     }];
     return [];
@@ -192,15 +199,22 @@ export function validateStagedSemanticEvidence(evidence: StagedSemanticEvidence)
   for (const id of post) if (!pre.has(id)) throw new Error(`POST support candidate ${id} is absent from PRE evidence.`);
   for (const candidate of evidence.candidates) if (!pre.has(candidate.candidateId)) throw new Error(`Semantic candidate classification references unknown candidate ${candidate.candidateId}.`);
   for (const fact of evidence.goldFacts) {
+    const rawSupportGroups = fact.rawSupportGroups ?? [];
+    const rejectedSupportGroups = fact.rejectedSupportGroups ?? [];
+    for (const group of rawSupportGroups) for (const id of group.candidateIds) if (!pre.has(id)) throw new Error(`Raw semantic support for ${fact.goldFactId} references unknown candidate ${id}.`);
+    for (const group of rejectedSupportGroups) for (const id of group.candidateIds) if (!pre.has(id)) throw new Error(`Rejected semantic support for ${fact.goldFactId} references unknown candidate ${id}.`);
     for (const group of fact.supportGroups) {
       if (!group.candidateIds.length) throw new Error(`Semantic support for ${fact.goldFactId} contains an empty support group.`);
       assertUnique(group.candidateIds, `semantic support for ${fact.goldFactId}`);
       for (const id of group.candidateIds) if (!pre.has(id)) throw new Error(`Semantic support for ${fact.goldFactId} references unknown candidate ${id}.`);
     }
+    const supportKeys = new Set(fact.supportGroups.map((group) => [...group.candidateIds].sort().join("\u0000")));
     for (const group of fact.postSupportGroups) for (const id of group.candidateIds) {
       if (!pre.has(id)) throw new Error(`POST support for ${fact.goldFactId} references candidate absent from PRE universe: ${id}.`);
       if (!post.has(id)) throw new Error(`POST support for ${fact.goldFactId} references candidate that did not survive grounding: ${id}.`);
     }
+    for (const group of fact.postSupportGroups) if (!supportKeys.has([...group.candidateIds].sort().join("\u0000"))) throw new Error(`POST support for ${fact.goldFactId} was not admitted in PRE evidence.`);
+    if (fact.rejectionCode === "inadmissible_semantic_support" && (fact.supportGroups.length > 0 || rawSupportGroups.length === 0 || rejectedSupportGroups.length === 0)) throw new Error(`Inadmissible-support state for ${fact.goldFactId} is inconsistent.`);
     if (fact.postCovered && !fact.preCovered) throw new Error(`POST-covered gold fact ${fact.goldFactId} is not PRE-covered.`);
     if (fact.postCovered && !fact.postSupportGroups.length) throw new Error(`POST-covered gold fact ${fact.goldFactId} has no surviving support group.`);
     if (!fact.postCovered && fact.postSupportGroups.length) throw new Error(`POST-uncovered gold fact ${fact.goldFactId} has a surviving support group.`);
@@ -217,20 +231,43 @@ export function deriveStagedSemanticEvaluation(item: EvalCase, turns: PipelineTu
   const postIndex = new Map(postIds.map((id, index) => [id, index]));
   const preSet = new Set(preIds);
   const postSet = new Set(postIds);
-  const preDecisions = [...legacyFactDecisions(validatedOutput, preIndex, preSet, false), ...legacyCandidateDecisions(validatedOutput, preIndex)];
+  const allowedIndexesByFact = new Map(context.reviewAlignments.map((alignment) => [alignment.goldFact.id, alignment.candidates.map((candidate) => preIndex.get(candidate.candidateId)!)]));
+  const rejectedGroupsByFact = new Map<string, SemanticGoldEvidence["rejectedSupportGroups"]>();
+  const admissibleOutput = validatedOutput ? {
+    ...validatedOutput,
+    factDecisions: validatedOutput.factDecisions.map((decision) => {
+      if (decision.decision !== "equivalent") return decision;
+      const fact = item.expectedFacts.find((candidate) => candidate.id === decision.goldFactId)!;
+      const admissibleGroups: SemanticSupportGroup[] = [];
+      const rejectedGroups: SemanticGoldEvidence["rejectedSupportGroups"] = [];
+      for (const group of decision.supportGroups) {
+        const indexes = group.candidateIds.map((id) => preIndex.get(id)!);
+        const validity = evaluateSemanticSupportGroup(item, fact, context.preCandidates.map(evaluated), indexes, allowedIndexesByFact.get(fact.id));
+        if (validity.admissible) admissibleGroups.push(structuredClone(group));
+        else rejectedGroups.push({ candidateIds: [...group.candidateIds], code: "inadmissible_semantic_support", reasons: validity.rejectionReasons });
+      }
+      rejectedGroupsByFact.set(decision.goldFactId, rejectedGroups);
+      return { ...decision, supportGroups: admissibleGroups };
+    }),
+  } : null;
+  const preDecisions = [...legacyFactDecisions(admissibleOutput, preIndex, preSet, false), ...legacyCandidateDecisions(admissibleOutput, preIndex)];
   const preScore = scoreCase(item, context.preCandidates.map(evaluated), preDecisions);
-  const postDecisions = [...legacyFactDecisions(validatedOutput, postIndex, postSet, true), ...legacyCandidateDecisions(validatedOutput, postIndex)];
+  const postDecisions = [...legacyFactDecisions(admissibleOutput, postIndex, postSet, true), ...legacyCandidateDecisions(admissibleOutput, postIndex)];
   const postBase = scoreCase(item, context.postCandidates.map(evaluated), postDecisions);
   const postScore = filterPostClassifications(postBase, preScore, preIds, postIds);
-  const outputByFact = new Map((validatedOutput?.factDecisions ?? []).map((decision) => [decision.goldFactId, decision]));
+  const rawOutputByFact = new Map((validatedOutput?.factDecisions ?? []).map((decision) => [decision.goldFactId, decision]));
+  const admissibleOutputByFact = new Map((admissibleOutput?.factDecisions ?? []).map((decision) => [decision.goldFactId, decision]));
   const verdictById = new Map(turns.flatMap((turn) => turn.groundingVerdicts).map((verdict) => [verdict.candidateId, verdict]));
   const goldFacts: SemanticGoldEvidence[] = item.expectedFacts.map((fact) => {
     const preMatch = preScore.matches.find((match) => match.goldFactId === fact.id)!;
     const postMatch = postScore.matches.find((match) => match.goldFactId === fact.id)!;
-    const judged = outputByFact.get(fact.id);
+    const judged = rawOutputByFact.get(fact.id);
+    const admissible = admissibleOutputByFact.get(fact.id);
+    const rawSupportGroups = judged?.decision === "equivalent" ? structuredClone(judged.supportGroups) : [];
     const supportGroups = preMatch.state === "EXACT"
       ? preMatch.candidateIndexes.map((index) => ({ candidateIds: [preIds[index]] }))
-      : judged?.decision === "equivalent" ? structuredClone(judged.supportGroups) : [];
+      : admissible?.decision === "equivalent" ? structuredClone(admissible.supportGroups) : [];
+    const rejectedSupportGroups = rejectedGroupsByFact.get(fact.id) ?? [];
     const postSupportGroups = supportGroups.filter((group) => group.candidateIds.every((id) => postSet.has(id)));
     const preCovered = preMatch.state === "EXACT" || preMatch.state === "SEMANTIC_EQUIVALENT";
     const postCovered = postMatch.state === "EXACT" || postMatch.state === "SEMANTIC_EQUIVALENT";
@@ -240,7 +277,10 @@ export function deriveStagedSemanticEvaluation(item: EvalCase, turns: PipelineTu
       goldFactId: fact.id,
       decision: preMatch.state === "EXACT" ? "exact" : judged?.decision ?? "missing",
       reason: preMatch.state === "EXACT" ? preMatch.reason : judged?.reason ?? preMatch.reason,
+      rawSupportGroups,
       supportGroups,
+      rejectedSupportGroups,
+      rejectionCode: judged?.decision === "equivalent" && rawSupportGroups.length > 0 && supportGroups.length === 0 ? "inadmissible_semantic_support" : null,
       postSupportGroups,
       preCovered,
       postCovered,

@@ -56,6 +56,30 @@ test("one semantic support candidate survives for PRE and POST coverage", () => 
   assert.equal(result.evidence.goldFacts[0].postCovered, true);
 });
 
+test("atomic-uncertainty cross-category judge support is auditable but cannot create coverage", () => {
+  const atomicInput = "Možná odejde hlavně při hluku.";
+  const item = {
+    id: "atomic-uncertainty", suite: "atomic", description: "Uncertainty plus context", inputs: [atomicInput], startingNotebook: [],
+    expectedFacts: [{ id: "m1", category: "manifestations", text: atomicInput, source: { inputIndex: 0, quote: "Možná odejde hlavně při hluku" }, uncertain: true, negated: false, requiredMarkers: ["Možná"], expectedAction: "add", relatedEntryId: null }],
+    forbiddenInferences: [], tags: [], dimensions: { factCount: 1, categoryCount: 1, linguistic: ["uncertainty"] },
+  };
+  const manifestation = { ...candidate("turn-0-extract-0", "Možná odejde."), sourceQuote: "Možná odejde" };
+  const context = { ...candidate("turn-0-extract-1", "Hlavně při hluku.", "context"), sourceQuote: "hlavně při hluku" };
+  const turns = turn([manifestation, context], [manifestation.candidateId, context.candidateId]);
+  const judged = output([equivalent("m1", [[manifestation.candidateId, context.candidateId]])], [manifestation.candidateId, context.candidateId]);
+  const result = deriveStagedSemanticEvaluation(item, turns, judged);
+  const evidence = result.evidence.goldFacts[0];
+  assert.equal(result.preScore.counts.semanticCovered, 0);
+  assert.equal(result.postScore.counts.semanticCovered, 0);
+  assert.deepEqual(evidence.rawSupportGroups, [{ candidateIds: [manifestation.candidateId, context.candidateId] }]);
+  assert.deepEqual(evidence.supportGroups, []);
+  assert.deepEqual(evidence.postSupportGroups, []);
+  assert.equal(evidence.preCovered, false);
+  assert.equal(evidence.postCovered, false);
+  assert.equal(evidence.rejectionCode, "inadmissible_semantic_support");
+  assert.deepEqual(evidence.rejectedSupportGroups[0].reasons, ["category_mismatch"]);
+});
+
 test("rejected semantic support becomes a traceable grounding loss", () => {
   const a = candidate("candidate-a", "Zajistit klid a krátké úkoly.");
   const turns = turn([a], []);

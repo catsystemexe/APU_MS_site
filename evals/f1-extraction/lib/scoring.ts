@@ -26,6 +26,25 @@ export type CandidateClassification = {
   reason: string;
 };
 
+export type SemanticSupportRejectionReason =
+  | "empty_support_group"
+  | "duplicate_candidate_index"
+  | "unknown_candidate"
+  | "candidate_not_in_alignment"
+  | "input_mismatch"
+  | "invalid_source_quote"
+  | "forbidden_inference"
+  | "category_mismatch"
+  | "action_mismatch"
+  | "related_entry_mismatch"
+  | "required_marker_missing";
+
+export type SemanticSupportAdmissibility = {
+  admissible: boolean;
+  candidateIndexes: number[];
+  rejectionReasons: SemanticSupportRejectionReason[];
+};
+
 export type CaseScore = {
   caseId: string;
   matches: MatchResult[];
@@ -125,7 +144,7 @@ function incidenceRate(numerator: number, denominator: number) {
 }
 
 function isSourceValid(item: EvalCase, candidate: EvaluatedCandidate) {
-  return item.inputs[candidate.inputIndex]?.includes(candidate.sourceQuote) ?? false;
+  return candidate.sourceQuote.length > 0 && (item.inputs[candidate.inputIndex]?.includes(candidate.sourceQuote) ?? false);
 }
 
 function isDeterministicallyGrounded(candidate: EvaluatedCandidate) {
@@ -138,9 +157,36 @@ function isDeterministicallyGrounded(candidate: EvaluatedCandidate) {
   return textTokens.size > 0 && [...textTokens].every((token) => quoteTokens.has(token));
 }
 
-function decisionIndexes(decision: SemanticJudgeDecision, allowed: number[]) {
-  const indexes = [...new Set(decision.candidateIndexes)].filter((index) => Number.isInteger(index) && allowed.includes(index));
-  return indexes.length === decision.candidateIndexes.length ? indexes : [];
+export function evaluateSemanticSupportGroup(
+  item: EvalCase,
+  fact: GoldFact,
+  candidates: EvaluatedCandidate[],
+  candidateIndexes: number[],
+  allowedCandidateIndexes?: Iterable<number>,
+): SemanticSupportAdmissibility {
+  const rejectionReasons = new Set<SemanticSupportRejectionReason>();
+  const uniqueIndexes = [...new Set(candidateIndexes)];
+  const allowed = allowedCandidateIndexes ? new Set(allowedCandidateIndexes) : null;
+  if (!candidateIndexes.length) rejectionReasons.add("empty_support_group");
+  if (uniqueIndexes.length !== candidateIndexes.length) rejectionReasons.add("duplicate_candidate_index");
+  const groupCandidates = uniqueIndexes.flatMap((index) => {
+    if (!Number.isInteger(index) || !candidates[index]) {
+      rejectionReasons.add("unknown_candidate");
+      return [];
+    }
+    if (allowed && !allowed.has(index)) rejectionReasons.add("candidate_not_in_alignment");
+    return [{ index, candidate: candidates[index] }];
+  });
+  for (const { candidate } of groupCandidates) {
+    if (candidate.inputIndex !== fact.source.inputIndex) rejectionReasons.add("input_mismatch");
+    if (!isSourceValid(item, candidate)) rejectionReasons.add("invalid_source_quote");
+    if (item.forbiddenInferences.some((forbidden) => (forbidden.category === null || forbidden.category === candidate.category) && normalize(candidate.notebookText).includes(normalize(forbidden.text)))) rejectionReasons.add("forbidden_inference");
+    if (candidate.category !== fact.category) rejectionReasons.add("category_mismatch");
+    if (candidate.action !== fact.expectedAction) rejectionReasons.add("action_mismatch");
+    if (candidate.relatedEntryId !== fact.relatedEntryId) rejectionReasons.add("related_entry_mismatch");
+  }
+  if (groupCandidates.length === uniqueIndexes.length && !markersPreserved(fact, uniqueIndexes, candidates)) rejectionReasons.add("required_marker_missing");
+  return { admissible: rejectionReasons.size === 0, candidateIndexes: uniqueIndexes, rejectionReasons: [...rejectionReasons] };
 }
 
 export function scoreCase(item: EvalCase, candidates: EvaluatedCandidate[], semanticDecisions: SemanticJudgeDecision[] = []): CaseScore {
@@ -166,11 +212,8 @@ export function scoreCase(item: EvalCase, candidates: EvaluatedCandidate[], sema
     if (state === "REVIEW") {
       const decisions = semanticDecisions.filter((decision) => decision.kind === "alignment" && decision.goldFactId === fact.id);
       const equivalentGroups = decisions.filter((decision) => decision.decision === "equivalent").map((decision) => {
-        const decidedIndexes = decisionIndexes(decision, candidateIndexes);
-        const safe = decidedIndexes.length > 0
-          && decidedIndexes.every((index) => sourceValidity[index] && !forbiddenIndexes.has(index) && candidates[index].inputIndex === fact.source.inputIndex && candidates[index].category === fact.category && candidates[index].action === fact.expectedAction && candidates[index].relatedEntryId === fact.relatedEntryId)
-          && markersPreserved(fact, decidedIndexes, candidates);
-        return safe ? { indexes: decidedIndexes, reason: decision.reason } : null;
+        const support = evaluateSemanticSupportGroup(item, fact, candidates, decision.candidateIndexes, candidateIndexes);
+        return support.admissible ? { indexes: support.candidateIndexes, reason: decision.reason } : null;
       }).filter((group): group is { indexes: number[]; reason: string } => group !== null);
       if (equivalentGroups.length) {
         candidateIndexes = [...new Set(equivalentGroups.flatMap((group) => group.indexes))];
