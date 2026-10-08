@@ -91,12 +91,12 @@ test("deterministic scorer separates pass, review, miss, unsupported facts and m
   const item = corpus.cases.find((entry) => entry.id === "atomic-uncertainty");
   const exact = { inputIndex: 0, category: "manifestations", sourceQuote: "Možná odejde hlavně při hluku", notebookText: "Možná odejde hlavně při hluku.", action: "add", relatedEntryId: null, reason: null };
   const pass = scoreCase(item, [exact]);
-  assert.equal(pass.matches[0].state, "AUTO_PASS");
-  assert.equal(pass.metrics.explicitFactRecall, 1);
+  assert.equal(pass.matches[0].state, "EXACT");
+  assert.equal(pass.metrics.deterministicRecall, 1);
   assert.equal(pass.metrics.uncertaintyPreservation, 1);
   const review = scoreCase(item, [{ ...exact, sourceQuote: "odejde hlavně při hluku", notebookText: "Při hluku pravděpodobně odchází." }]);
   assert.equal(review.matches[0].state, "REVIEW");
-  assert.equal(review.metrics.explicitFactRecall, 0, "REVIEW is not silently counted as pass");
+  assert.equal(review.metrics.semanticRecall, 0, "REVIEW is not silently counted as a semantic equivalent");
   const unsupported = scoreCase(item, [...[exact], { ...exact, sourceQuote: "při hluku", notebookText: "Má diagnózu.", category: "context" }]);
   assert.equal(unsupported.counts.unsupported, 1);
 });
@@ -200,7 +200,7 @@ test("result artifacts serialize JSONL, aggregate JSON/CSV and Markdown", async 
   const artifacts = buildResultArtifacts([run], { runId: "test" });
   assert.doesNotThrow(() => JSON.parse(artifacts.rawJsonl.trim()));
   assert.doesNotThrow(() => JSON.parse(artifacts.aggregateJson));
-  assert.match(artifacts.aggregateCsv, /explicitFactRecall/);
+  assert.match(artifacts.aggregateCsv, /deterministicRecall/);
   assert.match(artifacts.dimensionCsv, /factCount/);
   assert.match(artifacts.summary, /Unsupported canonical facts/);
   const root = await mkdtemp(join(tmpdir(), "apu-f1-eval-"));

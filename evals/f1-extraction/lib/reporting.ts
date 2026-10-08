@@ -23,25 +23,27 @@ export function buildResultArtifacts(runs: RunScore[], metadata: Record<string, 
   })).join("\n") + (runs.length ? "\n" : "");
   const scoreJsonl = runs.map((run) => JSON.stringify({
     caseId: run.caseId, profile: run.profile, pipeline: run.pipeline, repetition: run.repetition,
-    matches: run.matches, unsupportedCandidateIndexes: run.unsupportedCandidateIndexes,
+    matches: run.matches, candidateClassifications: run.candidateClassifications,
+    groundedExtraCandidateIndexes: run.groundedExtraCandidateIndexes,
+    unsupportedCandidateIndexes: run.unsupportedCandidateIndexes, reviewCandidateIndexes: run.reviewCandidateIndexes,
     forbiddenInferenceHits: run.forbiddenInferenceHits, counts: run.counts, metrics: run.metrics,
   })).join("\n") + (runs.length ? "\n" : "");
   const aggregateJson = `${JSON.stringify({ metadata, aggregate, dimensions }, null, 2)}\n`;
-  const headers = ["profile", "pipeline", "cases", "runs", "explicitFactRecall", "precision", "categoryAccuracy", "unsupportedFactRate", "sourceQuoteValidity", "uncertaintyPreservation", "negationPreservation", "duplicateConflictCorrectness", "reviewCount", "stability", "averageLatencyMs", "inputTokens", "outputTokens", "estimatedCostUsd"];
+  const headers = ["profile", "pipeline", "cases", "runs", "deterministicRecall", "semanticRecall", "deterministicPrecision", "semanticPrecision", "groundedExtraCount", "groundedExtraRate", "unsupportedCount", "trueUnsupportedRate", "missCount", "missRate", "reviewCount", "candidateReviewCount", "categoryAccuracy", "sourceQuoteValidity", "uncertaintyPreservation", "negationPreservation", "duplicateConflictCorrectness", "stability", "averageLatencyMs", "inputTokens", "outputTokens", "estimatedCostUsd"];
   const aggregateCsv = [headers.join(","), ...aggregate.map((row) => headers.map((header) => csvCell(row[header as keyof typeof row])).join(","))].join("\n") + "\n";
-  const dimensionHeaders = ["profile", "pipeline", "dimension", "value", "gold", "actual", "autoPass", "unsupported", "explicitFactRecall", "precision", "unsupportedFactRate"];
+  const dimensionHeaders = ["profile", "pipeline", "dimension", "value", "gold", "actual", "deterministicCovered", "semanticCovered", "groundedExtra", "unsupported", "deterministicRecall", "semanticRecall", "deterministicPrecision", "semanticPrecision", "groundedExtraRate", "trueUnsupportedRate"];
   const dimensionCsv = [dimensionHeaders.join(","), ...dimensions.map((row) => dimensionHeaders.map((header) => csvCell(row[header as keyof typeof row])).join(","))].join("\n") + "\n";
   const summary = [
     "# F1 extraction evaluation",
     "",
     `Runs: ${runs.length}`,
     "",
-    "Unsupported canonical facts are a high-severity metric and are reported separately from recall.",
-    "REVIEW matches are not counted as automatic passes.",
+    "Unsupported canonical facts are a high-severity metric. Grounded extras are reported separately and are not hallucinations.",
+    "REVIEW alignments are not counted as semantic equivalents until an explicit judge decision exists.",
     "",
-    "| Profile | Pipeline | Recall | Precision | Unsupported | Category | Stability | Avg latency | Cost USD |",
-    "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
-    ...aggregate.map((row) => `| ${row.profile} | ${row.pipeline} | ${percentage(row.explicitFactRecall)} | ${percentage(row.precision)} | ${percentage(row.unsupportedFactRate)} | ${percentage(row.categoryAccuracy)} | ${percentage(row.stability)} | ${row.averageLatencyMs.toFixed(0)} ms | ${row.estimatedCostUsd === null ? "n/a" : row.estimatedCostUsd.toFixed(6)} |`),
+    "| Profile | Pipeline | Det. Recall | Sem. Recall | Det. Precision | Sem. Precision | Grounded Extras | Unsupported | Review | Avg latency | Cost USD |",
+    "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+    ...aggregate.map((row) => `| ${row.profile} | ${row.pipeline} | ${percentage(row.deterministicRecall)} | ${percentage(row.semanticRecall)} | ${percentage(row.deterministicPrecision)} | ${percentage(row.semanticPrecision)} | ${row.groundedExtraCount} (${percentage(row.groundedExtraRate)}) | ${row.unsupportedCount} (${percentage(row.trueUnsupportedRate)}) | ${row.reviewCount} | ${row.averageLatencyMs.toFixed(0)} ms | ${row.estimatedCostUsd === null ? "n/a" : row.estimatedCostUsd.toFixed(6)} |`),
     "",
     "## Boundary dimensions",
     "",

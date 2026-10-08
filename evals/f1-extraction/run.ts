@@ -1,8 +1,10 @@
 #!/usr/bin/env node
+import { access } from "node:fs/promises";
 import { resolve, win32 } from "node:path";
 import { pathToFileURL } from "node:url";
 import { MODEL_PROFILES, estimateCallCount, loadCorpus, parseCliArgs, resolveProfile, selectCases } from "./lib/eval-contract.ts";
 import { createOpenAIProvider, runExtractionPipeline, runSemanticJudge } from "./lib/pipeline.ts";
+import { loadSavedRawRuns, rescoreSavedRuns } from "./lib/rescore.ts";
 import { scoreCase, type RunScore } from "./lib/scoring.ts";
 import { writeResultArtifacts } from "./lib/reporting.ts";
 
@@ -11,9 +13,11 @@ export const HELP = `F1 extraction evaluation
 Usage:
   npm run eval:f1 -- --dry-run [options]
   npm run eval:f1 -- [options]
+  npm run eval:f1 -- --rescore <result-directory|raw-runs.jsonl> [options]
 
 Options:
   --corpus <path>              Corpus JSON (default: evals/f1-extraction/fixtures/corpus.json)
+  --rescore <path>             Rescore saved raw runs without rerunning extraction
   --suite <csv>                atomic,mixed,dense,real
   --case <csv>                 Exact case ids
   --profiles <csv>             baseline,terra-extract,terra-both,terra-medium,sol-reference
@@ -26,16 +30,49 @@ Options:
   --run-id <id>                Result directory name
   --output-dir <path>          Local result root
   --max-calls <n>              Refuse a larger estimated provider sweep
-  --judge-model <model|none>   Optional isolated semantic judge for REVIEW matches
+  --judge-model <model|none>   Optional judge for ambiguous alignments/extras
   --dry-run                    Print scope and estimated calls; make no provider calls
   --help                       Show this help
 
-OPENAI_API_KEY is read only from the process environment for non-dry runs.`;
+OPENAI_API_KEY is read only from the process environment for provider-backed extraction or judged rescoring. Offline rescoring needs no key.`;
+
+async function assertNewRescoreDestination(sourceDirectory: string, outputDirectory: string) {
+  if (resolve(sourceDirectory) === resolve(outputDirectory)) throw new Error("Rescore output must not overwrite the original result directory.");
+  try {
+    await access(outputDirectory);
+    throw new Error(`Rescore output already exists: ${outputDirectory}`);
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") return;
+    throw error;
+  }
+}
 
 export async function execute(argv = process.argv.slice(2), cwd = process.cwd(), environment: NodeJS.ProcessEnv = process.env) {
   const options = parseCliArgs(argv, cwd);
   if (options.help) return { kind: "help" as const, text: HELP };
   const corpus = await loadCorpus(resolve(options.corpusPath));
+  if (options.rescorePath !== null) {
+    const saved = await loadSavedRawRuns(resolve(options.rescorePath));
+    const outputDirectory = resolve(options.outputDir, options.runId);
+    await assertNewRescoreDestination(saved.sourceDirectory, outputDirectory);
+    let provider: ReturnType<typeof createOpenAIProvider> | null = null;
+    if (options.judgeModel) {
+      const apiKey = environment.OPENAI_API_KEY;
+      if (!apiKey) throw new Error("OPENAI_API_KEY is unavailable. Saved runs can be rescored offline without --judge-model; no provider call was made.");
+      if (options.maxCalls !== null && saved.runs.length > options.maxCalls) throw new Error(`Estimated semantic judge calls ${saved.runs.length} exceed --max-calls ${options.maxCalls}.`);
+      provider = createOpenAIProvider(apiKey, options.runId);
+    }
+    const runs = await rescoreSavedRuns(corpus, saved.runs, provider && options.judgeModel ? async (item, score, candidates) => {
+      const judged = await runSemanticJudge(item, score, candidates, options.judgeModel!, provider!);
+      return judged.decisions;
+    } : undefined);
+    const directory = await writeResultArtifacts(resolve(options.outputDir), options.runId, runs, {
+      generatedAt: new Date().toISOString(), corpusPath: resolve(options.corpusPath),
+      rescoredFrom: saved.rawRunsPath, semanticJudgeModel: options.judgeModel,
+      originalProviderUsagePreserved: true,
+    });
+    return { kind: "rescored" as const, directory, runs: runs.length, source: saved.rawRunsPath };
+  }
   const cases = selectCases(corpus, options);
   const estimate = estimateCallCount(cases, options);
   const plan = {
@@ -59,8 +96,9 @@ export async function execute(argv = process.argv.slice(2), cwd = process.cwd(),
   const runs: RunScore[] = [];
   for (const profileId of options.profiles) for (const pipeline of options.pipelines) for (let repetition = 1; repetition <= options.repetitions; repetition += 1) for (const item of cases) {
     const pipelineRun = await runExtractionPipeline(item, resolveProfile(MODEL_PROFILES[profileId], options.overrides), pipeline, provider);
-    const score = scoreCase(item, pipelineRun.candidates);
-    const semantic = options.judgeModel ? await runSemanticJudge(item, score, pipelineRun.candidates, options.judgeModel, provider) : null;
+    const initialScore = scoreCase(item, pipelineRun.candidates);
+    const semantic = options.judgeModel ? await runSemanticJudge(item, initialScore, pipelineRun.candidates, options.judgeModel, provider) : null;
+    const score = semantic ? scoreCase(item, pipelineRun.candidates, semantic.decisions) : initialScore;
     runs.push({
       ...score, profile: profileId, pipeline, repetition, candidates: pipelineRun.candidates,
       suite: item.suite, factCount: item.dimensions.factCount, categoryCount: item.dimensions.categoryCount, linguistic: item.dimensions.linguistic,

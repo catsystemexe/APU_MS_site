@@ -2,28 +2,52 @@ import type { ExtractionCandidate } from "../../../app/f1-extraction-contract.ts
 import type { EvalCase, GoldFact, MatchState } from "./eval-contract.ts";
 
 export type EvaluatedCandidate = ExtractionCandidate & { inputIndex: number };
+export type SemanticJudgeDecision = {
+  kind: "alignment" | "candidate";
+  goldFactId: string | null;
+  candidateIndexes: number[];
+  decision: "equivalent" | "not_equivalent" | "grounded_extra" | "unsupported" | "uncertain";
+  reason: string;
+};
 export type MatchResult = {
   goldFactId: string;
   candidateIndex: number | null;
+  candidateIndexes: number[];
   state: MatchState;
   reason: string;
   categoryCorrect: boolean | null;
   uncertaintyPreserved: boolean | null;
   negationPreserved: boolean | null;
 };
+export type CandidateClassification = {
+  candidateIndex: number;
+  state: "ALIGNED" | "GROUNDED_EXTRA" | "UNSUPPORTED" | "REVIEW" | "SKIPPED";
+  basis: "deterministic" | "semantic";
+  reason: string;
+};
 
 export type CaseScore = {
   caseId: string;
   matches: MatchResult[];
+  candidateClassifications: CandidateClassification[];
+  groundedExtraCandidateIndexes: number[];
   unsupportedCandidateIndexes: number[];
+  reviewCandidateIndexes: number[];
   forbiddenInferenceHits: Array<{ candidateIndex: number; forbiddenText: string }>;
   counts: {
     gold: number;
     actual: number;
+    exact: number;
+    semanticEquivalent: number;
+    deterministicCovered: number;
+    semanticCovered: number;
+    miss: number;
+    review: number;
     autoPass: number;
     autoFail: number;
-    review: number;
+    groundedExtra: number;
     unsupported: number;
+    candidateReview: number;
     sourceCandidates: number;
     invalidSourceQuote: number;
     correctCategory: number;
@@ -34,8 +58,17 @@ export type CaseScore = {
     negationPreserved: number;
     actionRequired: number;
     actionCorrect: number;
+    deterministicCorrectCandidates: number;
+    semanticCorrectCandidates: number;
   };
   metrics: {
+    deterministicRecall: number;
+    semanticRecall: number;
+    deterministicPrecision: number;
+    semanticPrecision: number;
+    trueUnsupportedRate: number;
+    groundedExtraRate: number;
+    missRate: number;
     explicitFactRecall: number;
     precision: number;
     categoryAccuracy: number;
@@ -67,14 +100,19 @@ function evidenceSimilarity(fact: GoldFact, candidate: EvaluatedCandidate) {
   const goldText = normalize(fact.text);
   const goldQuote = normalize(fact.source.quote);
   const actualText = normalize(candidate.notebookText);
-  const actualQuote = normalize(candidate.sourceQuote);
-  if (goldText === actualText || goldQuote === actualQuote || goldQuote === actualText || goldText === actualQuote) return 1;
-  return Math.max(overlap(fact.text, candidate.notebookText), overlap(fact.source.quote, candidate.sourceQuote), overlap(fact.source.quote, candidate.notebookText));
+  if (goldText === actualText || goldQuote === actualText) return 1;
+  return Math.max(overlap(fact.text, candidate.notebookText), overlap(fact.source.quote, candidate.notebookText));
 }
 
-function markerPreserved(fact: GoldFact, candidate: EvaluatedCandidate) {
+function exactMatch(fact: GoldFact, candidate: EvaluatedCandidate) {
+  const exactText = normalize(fact.text) === normalize(candidate.notebookText) || normalize(fact.source.quote) === normalize(candidate.notebookText);
+  const exactQuote = normalize(fact.source.quote) === normalize(candidate.sourceQuote);
+  return exactText && exactQuote && candidate.category === fact.category && candidate.action === fact.expectedAction && candidate.relatedEntryId === fact.relatedEntryId;
+}
+
+function markersPreserved(fact: GoldFact, indexes: number[], candidates: EvaluatedCandidate[]) {
   if (!fact.requiredMarkers.length) return true;
-  const actual = normalize(`${candidate.sourceQuote} ${candidate.notebookText}`);
+  const actual = normalize(indexes.map((index) => candidates[index]?.notebookText ?? "").join(" "));
   return fact.requiredMarkers.every((marker) => actual.includes(normalize(marker)));
 }
 
@@ -82,82 +120,162 @@ function rate(numerator: number, denominator: number) {
   return denominator ? numerator / denominator : 1;
 }
 
-export function scoreCase(item: EvalCase, candidates: EvaluatedCandidate[]): CaseScore {
-  const eligible = candidates.filter((candidate) => candidate.action !== "skip");
-  const used = new Set<number>();
-  const matches: MatchResult[] = [];
-  for (const fact of item.expectedFacts) {
-    const ranked = eligible
-      .map((candidate) => ({ candidate, index: candidates.indexOf(candidate), similarity: evidenceSimilarity(fact, candidate) }))
-      .filter(({ candidate, index }) => candidate.inputIndex === fact.source.inputIndex && !used.has(index))
-      .sort((a, b) => {
-        const aCategory = a.candidate.category === fact.category ? 1 : 0;
-        const bCategory = b.candidate.category === fact.category ? 1 : 0;
-        return b.similarity - a.similarity || bCategory - aCategory;
-      });
-    const best = ranked[0];
-    if (!best || best.similarity < 0.45) {
-      matches.push({ goldFactId: fact.id, candidateIndex: null, state: "AUTO_FAIL", reason: "No sufficiently similar candidate", categoryCorrect: null, uncertaintyPreserved: null, negationPreserved: null });
-      continue;
-    }
-    used.add(best.index);
-    const categoryCorrect = best.candidate.category === fact.category;
-    const actionCorrect = best.candidate.action === fact.expectedAction && best.candidate.relatedEntryId === fact.relatedEntryId;
-    const markers = markerPreserved(fact, best.candidate);
-    const exactText = normalize(fact.text) === normalize(best.candidate.notebookText) || normalize(fact.source.quote) === normalize(best.candidate.notebookText);
-    const exactQuote = normalize(fact.source.quote) === normalize(best.candidate.sourceQuote);
-    const exact = exactText && exactQuote && categoryCorrect && actionCorrect;
-    matches.push({
-      goldFactId: fact.id,
-      candidateIndex: best.index,
-      state: exact ? "AUTO_PASS" : "REVIEW",
-      reason: exact ? "Exact deterministic fact/category/action match" : `Semantic similarity ${best.similarity.toFixed(2)} requires review`,
-      categoryCorrect,
-      uncertaintyPreserved: fact.uncertain ? markers : null,
-      negationPreserved: fact.negated ? markers : null,
-    });
-  }
-  const unsupportedCandidateIndexes = candidates.map((candidate, index) => ({ candidate, index }))
-    .filter(({ candidate, index }) => candidate.action !== "skip" && !used.has(index))
-    .map(({ index }) => index);
+function incidenceRate(numerator: number, denominator: number) {
+  return denominator ? numerator / denominator : 0;
+}
+
+function isSourceValid(item: EvalCase, candidate: EvaluatedCandidate) {
+  return item.inputs[candidate.inputIndex]?.includes(candidate.sourceQuote) ?? false;
+}
+
+function isDeterministicallyGrounded(candidate: EvaluatedCandidate) {
+  const quote = normalize(candidate.sourceQuote);
+  const text = normalize(candidate.notebookText);
+  if (!quote || !text) return false;
+  if (quote === text || quote.includes(text)) return true;
+  const quoteTokens = tokens(candidate.sourceQuote);
+  const textTokens = tokens(candidate.notebookText);
+  return textTokens.size > 0 && [...textTokens].every((token) => quoteTokens.has(token));
+}
+
+function decisionIndexes(decision: SemanticJudgeDecision, allowed: number[]) {
+  const indexes = [...new Set(decision.candidateIndexes)].filter((index) => Number.isInteger(index) && allowed.includes(index));
+  return indexes.length === decision.candidateIndexes.length ? indexes : [];
+}
+
+export function scoreCase(item: EvalCase, candidates: EvaluatedCandidate[], semanticDecisions: SemanticJudgeDecision[] = []): CaseScore {
+  const eligibleEntries = candidates.map((candidate, index) => ({ candidate, index })).filter(({ candidate }) => candidate.action !== "skip");
+  const sourceValidity = candidates.map((candidate) => isSourceValid(item, candidate));
   const forbiddenInferenceHits = candidates.flatMap((candidate, candidateIndex) => item.forbiddenInferences
     .filter((forbidden) => (forbidden.category === null || forbidden.category === candidate.category) && normalize(candidate.notebookText).includes(normalize(forbidden.text)))
     .map((forbidden) => ({ candidateIndex, forbiddenText: forbidden.text })));
-  const unsupportedIndexes = new Set([...unsupportedCandidateIndexes, ...forbiddenInferenceHits.map((hit) => hit.candidateIndex)]);
-  const sourceValidity = candidates.map((candidate) => item.inputs[candidate.inputIndex]?.includes(candidate.sourceQuote) ?? false);
+  const forbiddenIndexes = new Set(forbiddenInferenceHits.map((hit) => hit.candidateIndex));
+  const matches: MatchResult[] = [];
+
+  for (const fact of item.expectedFacts) {
+    const ranked = eligibleEntries
+      .filter(({ candidate }) => candidate.inputIndex === fact.source.inputIndex)
+      .map(({ candidate, index }) => ({ candidate, index, similarity: evidenceSimilarity(fact, candidate) }))
+      .filter(({ similarity }) => similarity >= 0.35)
+      .sort((a, b) => b.similarity - a.similarity || Number(b.candidate.category === fact.category) - Number(a.candidate.category === fact.category));
+    const exact = ranked.filter(({ candidate }) => exactMatch(fact, candidate));
+    let candidateIndexes = (exact.length ? exact : ranked).map(({ index }) => index);
+    let state: MatchState = exact.length ? "EXACT" : candidateIndexes.length ? "REVIEW" : "MISS";
+    let reason = exact.length ? "Exact deterministic fact/category/action match" : candidateIndexes.length ? "Plausible grouped alignment requires semantic review" : "No sufficiently similar candidate";
+
+    if (state === "REVIEW") {
+      const decisions = semanticDecisions.filter((decision) => decision.kind === "alignment" && decision.goldFactId === fact.id);
+      const equivalent = decisions.find((decision) => decision.decision === "equivalent");
+      if (equivalent) {
+        const decidedIndexes = decisionIndexes(equivalent, candidateIndexes);
+        const safe = decidedIndexes.length > 0
+          && decidedIndexes.every((index) => sourceValidity[index] && !forbiddenIndexes.has(index) && candidates[index].inputIndex === fact.source.inputIndex && candidates[index].category === fact.category && candidates[index].action === fact.expectedAction && candidates[index].relatedEntryId === fact.relatedEntryId)
+          && markersPreserved(fact, decidedIndexes, candidates);
+        if (safe) {
+          candidateIndexes = decidedIndexes;
+          state = "SEMANTIC_EQUIVALENT";
+          reason = equivalent.reason;
+        }
+      }
+      if (state === "REVIEW" && decisions.some((decision) => decision.decision === "not_equivalent")) {
+        state = "MISS";
+        reason = decisions.find((decision) => decision.decision === "not_equivalent")!.reason;
+      }
+    }
+
+    const categoryCorrect = candidateIndexes.length ? candidateIndexes.every((index) => candidates[index].category === fact.category) : null;
+    const markerStatus = candidateIndexes.length ? markersPreserved(fact, candidateIndexes, candidates) : false;
+    matches.push({
+      goldFactId: fact.id,
+      candidateIndex: candidateIndexes[0] ?? null,
+      candidateIndexes,
+      state,
+      reason,
+      categoryCorrect,
+      uncertaintyPreserved: fact.uncertain ? markerStatus : null,
+      negationPreserved: fact.negated ? markerStatus : null,
+    });
+  }
+
+  const deterministicAlignedIndexes = new Set(matches.filter((match) => match.state === "EXACT").flatMap((match) => match.candidateIndexes));
+  const semanticAlignedIndexes = new Set(matches.filter((match) => match.state === "EXACT" || match.state === "SEMANTIC_EQUIVALENT").flatMap((match) => match.candidateIndexes));
+  const reviewIndexes = new Set(matches.filter((match) => match.state === "REVIEW").flatMap((match) => match.candidateIndexes));
+  const candidateDecisions = semanticDecisions.filter((decision) => decision.kind === "candidate" && decision.goldFactId === null && decision.candidateIndexes.length === 1);
+  const candidateClassifications: CandidateClassification[] = candidates.map((candidate, candidateIndex) => {
+    if (candidate.action === "skip") return { candidateIndex, state: "SKIPPED", basis: "deterministic", reason: "Candidate action is skip" };
+    if (!sourceValidity[candidateIndex]) return { candidateIndex, state: "UNSUPPORTED", basis: "deterministic", reason: "sourceQuote is not an exact input substring" };
+    if (forbiddenIndexes.has(candidateIndex)) return { candidateIndex, state: "UNSUPPORTED", basis: "deterministic", reason: "Forbidden inference matched" };
+    if (semanticAlignedIndexes.has(candidateIndex)) return {
+      candidateIndex, state: "ALIGNED", basis: deterministicAlignedIndexes.has(candidateIndex) ? "deterministic" : "semantic",
+      reason: deterministicAlignedIndexes.has(candidateIndex) ? "Participates in an exact alignment" : "Participates in a judged semantic alignment",
+    };
+    const judged = candidateDecisions.find((decision) => decision.candidateIndexes[0] === candidateIndex);
+    if (judged?.decision === "unsupported") return { candidateIndex, state: "UNSUPPORTED", basis: "semantic", reason: judged.reason };
+    if (judged?.decision === "grounded_extra") return { candidateIndex, state: "GROUNDED_EXTRA", basis: "semantic", reason: judged.reason };
+    if (reviewIndexes.has(candidateIndex) || judged?.decision === "uncertain") return { candidateIndex, state: "REVIEW", basis: judged ? "semantic" : "deterministic", reason: judged?.reason ?? "Candidate participates in an unresolved alignment" };
+    if (isDeterministicallyGrounded(candidate)) return { candidateIndex, state: "GROUNDED_EXTRA", basis: "deterministic", reason: "Candidate meaning is contained in its valid sourceQuote" };
+    if (overlap(candidate.sourceQuote, candidate.notebookText) < 0.2) return { candidateIndex, state: "UNSUPPORTED", basis: "deterministic", reason: "Candidate text has no material support in its sourceQuote" };
+    return { candidateIndex, state: "REVIEW", basis: "deterministic", reason: "Grounding is plausible but not deterministically provable" };
+  });
+
+  const groundedExtraCandidateIndexes = candidateClassifications.filter((entry) => entry.state === "GROUNDED_EXTRA").map((entry) => entry.candidateIndex);
+  const unsupportedCandidateIndexes = candidateClassifications.filter((entry) => entry.state === "UNSUPPORTED").map((entry) => entry.candidateIndex);
+  const reviewCandidateIndexes = candidateClassifications.filter((entry) => entry.state === "REVIEW").map((entry) => entry.candidateIndex);
   const actionRequiredFacts = item.expectedFacts.filter((fact) => fact.expectedAction === "duplicate" || fact.expectedAction === "conflict");
-  const actionMatches = matches.filter((match) => {
-    if (match.candidateIndex === null) return false;
+  const coveredMatches = matches.filter((match) => match.state === "EXACT" || match.state === "SEMANTIC_EQUIVALENT");
+  const actionMatches = coveredMatches.filter((match) => {
     const fact = item.expectedFacts.find((entry) => entry.id === match.goldFactId)!;
-    if (fact.expectedAction !== "duplicate" && fact.expectedAction !== "conflict") return false;
-    const candidate = candidates[match.candidateIndex];
-    return candidate.action === fact.expectedAction && candidate.relatedEntryId === fact.relatedEntryId;
+    return (fact.expectedAction === "duplicate" || fact.expectedAction === "conflict")
+      && match.candidateIndexes.length > 0
+      && match.candidateIndexes.every((index) => candidates[index].action === fact.expectedAction && candidates[index].relatedEntryId === fact.relatedEntryId);
   }).length;
+  const deterministicCorrectIndexes = new Set([
+    ...deterministicAlignedIndexes,
+    ...candidateClassifications.filter((entry) => entry.state === "GROUNDED_EXTRA" && entry.basis === "deterministic").map((entry) => entry.candidateIndex),
+  ]);
+  const semanticCorrectIndexes = new Set([...semanticAlignedIndexes, ...groundedExtraCandidateIndexes]);
   const counts = {
     gold: item.expectedFacts.length,
-    actual: eligible.length,
-    autoPass: matches.filter((match) => match.state === "AUTO_PASS").length,
-    autoFail: matches.filter((match) => match.state === "AUTO_FAIL").length,
+    actual: eligibleEntries.length,
+    exact: matches.filter((match) => match.state === "EXACT").length,
+    semanticEquivalent: matches.filter((match) => match.state === "SEMANTIC_EQUIVALENT").length,
+    deterministicCovered: matches.filter((match) => match.state === "EXACT").length,
+    semanticCovered: coveredMatches.length,
+    miss: matches.filter((match) => match.state === "MISS").length,
     review: matches.filter((match) => match.state === "REVIEW").length,
-    unsupported: unsupportedIndexes.size,
+    autoPass: matches.filter((match) => match.state === "EXACT").length,
+    autoFail: matches.filter((match) => match.state === "MISS").length,
+    groundedExtra: groundedExtraCandidateIndexes.length,
+    unsupported: unsupportedCandidateIndexes.length,
+    candidateReview: reviewCandidateIndexes.length,
     sourceCandidates: candidates.length,
     invalidSourceQuote: sourceValidity.filter((valid) => !valid).length,
     correctCategory: matches.filter((match) => match.categoryCorrect === true).length,
     categoryComparable: matches.filter((match) => match.categoryCorrect !== null).length,
     uncertaintyRequired: item.expectedFacts.filter((fact) => fact.uncertain).length,
-    uncertaintyPreserved: matches.filter((match) => match.uncertaintyPreserved === true).length,
+    uncertaintyPreserved: coveredMatches.filter((match) => match.uncertaintyPreserved === true).length,
     negationRequired: item.expectedFacts.filter((fact) => fact.negated).length,
-    negationPreserved: matches.filter((match) => match.negationPreserved === true).length,
+    negationPreserved: coveredMatches.filter((match) => match.negationPreserved === true).length,
     actionRequired: actionRequiredFacts.length,
     actionCorrect: actionMatches,
+    deterministicCorrectCandidates: deterministicCorrectIndexes.size,
+    semanticCorrectCandidates: semanticCorrectIndexes.size,
   };
+  const deterministicRecall = rate(counts.deterministicCovered, counts.gold);
+  const semanticRecall = rate(counts.semanticCovered, counts.gold);
+  const deterministicPrecision = rate(counts.deterministicCorrectCandidates, counts.actual);
+  const semanticPrecision = rate(counts.semanticCorrectCandidates, counts.actual);
+  const trueUnsupportedRate = incidenceRate(counts.unsupported, counts.actual);
   return {
-    caseId: item.id, matches, unsupportedCandidateIndexes, forbiddenInferenceHits, counts,
+    caseId: item.id, matches, candidateClassifications, groundedExtraCandidateIndexes, unsupportedCandidateIndexes, reviewCandidateIndexes, forbiddenInferenceHits, counts,
     metrics: {
-      explicitFactRecall: rate(counts.autoPass, counts.gold),
-      precision: rate(counts.autoPass, counts.actual),
+      deterministicRecall, semanticRecall, deterministicPrecision, semanticPrecision, trueUnsupportedRate,
+      groundedExtraRate: incidenceRate(counts.groundedExtra, counts.actual),
+      missRate: incidenceRate(counts.miss, counts.gold),
+      explicitFactRecall: deterministicRecall,
+      precision: deterministicPrecision,
       categoryAccuracy: rate(counts.correctCategory, counts.categoryComparable),
-      unsupportedFactRate: rate(counts.unsupported, counts.actual),
+      unsupportedFactRate: trueUnsupportedRate,
       sourceQuoteValidity: rate(counts.sourceCandidates - counts.invalidSourceQuote, counts.sourceCandidates),
       uncertaintyPreservation: rate(counts.uncertaintyPreserved, counts.uncertaintyRequired),
       negationPreservation: rate(counts.negationPreserved, counts.negationRequired),
@@ -179,7 +297,7 @@ export type RunScore = CaseScore & {
   factCount?: number;
   categoryCount?: number;
   linguistic?: string[];
-  semanticJudgeDecisions?: Array<{ goldFactId: string; decision: "equivalent" | "not_equivalent" | "uncertain"; reason: string }>;
+  semanticJudgeDecisions?: SemanticJudgeDecision[];
 };
 
 export function candidateKey(candidate: EvaluatedCandidate) {
@@ -211,17 +329,27 @@ export function aggregateScores(runs: RunScore[]) {
     const costs = group.map((run) => run.estimatedCostUsd).filter((value): value is number => value !== null);
     const stabilityGroups = new Map<string, RunScore[]>();
     for (const run of group) stabilityGroups.set(run.caseId, [...(stabilityGroups.get(run.caseId) ?? []), run]);
+    const deterministicRecall = sum((run) => run.counts.deterministicCovered) / Math.max(1, sum((run) => run.counts.gold));
+    const semanticRecall = sum((run) => run.counts.semanticCovered) / Math.max(1, sum((run) => run.counts.gold));
+    const deterministicPrecision = sum((run) => run.counts.deterministicCorrectCandidates) / Math.max(1, sum((run) => run.counts.actual));
+    const semanticPrecision = sum((run) => run.counts.semanticCorrectCandidates) / Math.max(1, sum((run) => run.counts.actual));
+    const trueUnsupportedRate = sum((run) => run.counts.unsupported) / Math.max(1, sum((run) => run.counts.actual));
     return {
       profile, pipeline, cases: new Set(group.map((run) => run.caseId)).size, runs: group.length,
-      explicitFactRecall: sum((run) => run.counts.autoPass) / Math.max(1, sum((run) => run.counts.gold)),
-      precision: sum((run) => run.counts.autoPass) / Math.max(1, sum((run) => run.counts.actual)),
+      deterministicRecall, semanticRecall, deterministicPrecision, semanticPrecision,
+      explicitFactRecall: deterministicRecall, precision: deterministicPrecision,
+      groundedExtraCount: sum((run) => run.counts.groundedExtra),
+      groundedExtraRate: sum((run) => run.counts.groundedExtra) / Math.max(1, sum((run) => run.counts.actual)),
+      unsupportedCount: sum((run) => run.counts.unsupported),
+      trueUnsupportedRate, unsupportedFactRate: trueUnsupportedRate,
+      missCount: sum((run) => run.counts.miss),
+      missRate: sum((run) => run.counts.miss) / Math.max(1, sum((run) => run.counts.gold)),
+      reviewCount: sum((run) => run.counts.review), candidateReviewCount: sum((run) => run.counts.candidateReview),
       categoryAccuracy: sum((run) => run.counts.correctCategory) / Math.max(1, sum((run) => run.counts.categoryComparable)),
-      unsupportedFactRate: sum((run) => run.counts.unsupported) / Math.max(1, sum((run) => run.counts.actual)),
       sourceQuoteValidity: (sum((run) => run.counts.sourceCandidates) - sum((run) => run.counts.invalidSourceQuote)) / Math.max(1, sum((run) => run.counts.sourceCandidates)),
       uncertaintyPreservation: sum((run) => run.counts.uncertaintyPreserved) / Math.max(1, sum((run) => run.counts.uncertaintyRequired)),
       negationPreservation: sum((run) => run.counts.negationPreserved) / Math.max(1, sum((run) => run.counts.negationRequired)),
       duplicateConflictCorrectness: sum((run) => run.counts.actionRequired) ? sum((run) => run.counts.actionCorrect) / sum((run) => run.counts.actionRequired) : 1,
-      reviewCount: sum((run) => run.counts.review),
       stability: [...stabilityGroups.values()].reduce((total, caseRuns) => total + stability(caseRuns), 0) / Math.max(1, stabilityGroups.size),
       averageLatencyMs: sum((run) => run.latencyMs) / Math.max(1, group.length),
       inputTokens: sum((run) => run.inputTokens), outputTokens: sum((run) => run.outputTokens),
@@ -231,7 +359,7 @@ export function aggregateScores(runs: RunScore[]) {
 }
 
 export function aggregateDimensionScores(runs: RunScore[]) {
-  const rows: Array<{ profile: string; pipeline: string; dimension: string; value: string; gold: number; actual: number; autoPass: number; unsupported: number; explicitFactRecall: number; precision: number; unsupportedFactRate: number }> = [];
+  const rows: Array<Record<string, string | number>> = [];
   const dimensions = [
     { name: "suite", values: (run: RunScore) => run.suite ? [run.suite] : [] },
     { name: "factCount", values: (run: RunScore) => run.factCount === undefined ? [] : [String(run.factCount)] },
@@ -246,12 +374,21 @@ export function aggregateDimensionScores(runs: RunScore[]) {
     }
     for (const [key, group] of groups) {
       const [profile, pipeline, value] = key.split("\u0000");
-      const gold = group.reduce((sum, run) => sum + run.counts.gold, 0);
-      const actual = group.reduce((sum, run) => sum + run.counts.actual, 0);
-      const autoPass = group.reduce((sum, run) => sum + run.counts.autoPass, 0);
-      const unsupported = group.reduce((sum, run) => sum + run.counts.unsupported, 0);
-      rows.push({ profile, pipeline, dimension: dimension.name, value, gold, actual, autoPass, unsupported, explicitFactRecall: autoPass / Math.max(1, gold), precision: autoPass / Math.max(1, actual), unsupportedFactRate: unsupported / Math.max(1, actual) });
+      const sum = (selector: (run: RunScore) => number) => group.reduce((total, run) => total + selector(run), 0);
+      const gold = sum((run) => run.counts.gold);
+      const actual = sum((run) => run.counts.actual);
+      const deterministicCovered = sum((run) => run.counts.deterministicCovered);
+      const semanticCovered = sum((run) => run.counts.semanticCovered);
+      const groundedExtra = sum((run) => run.counts.groundedExtra);
+      const unsupported = sum((run) => run.counts.unsupported);
+      rows.push({
+        profile, pipeline, dimension: dimension.name, value, gold, actual, deterministicCovered, semanticCovered, groundedExtra, unsupported,
+        deterministicRecall: deterministicCovered / Math.max(1, gold), semanticRecall: semanticCovered / Math.max(1, gold),
+        deterministicPrecision: sum((run) => run.counts.deterministicCorrectCandidates) / Math.max(1, actual),
+        semanticPrecision: sum((run) => run.counts.semanticCorrectCandidates) / Math.max(1, actual),
+        groundedExtraRate: groundedExtra / Math.max(1, actual), trueUnsupportedRate: unsupported / Math.max(1, actual),
+      });
     }
   }
-  return rows.sort((a, b) => a.profile.localeCompare(b.profile) || a.pipeline.localeCompare(b.pipeline) || a.dimension.localeCompare(b.dimension) || Number(a.value) - Number(b.value) || a.value.localeCompare(b.value));
+  return rows.sort((a, b) => String(a.profile).localeCompare(String(b.profile)) || String(a.pipeline).localeCompare(String(b.pipeline)) || String(a.dimension).localeCompare(String(b.dimension)) || Number(a.value) - Number(b.value) || String(a.value).localeCompare(String(b.value)));
 }

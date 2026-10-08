@@ -8,7 +8,7 @@ export type EvalSuite = typeof EVAL_SUITES[number];
 export const PIPELINE_IDS = ["baseline", "coverage"] as const;
 export type PipelineId = typeof PIPELINE_IDS[number];
 export type ReasoningEffort = "low" | "medium";
-export type MatchState = "AUTO_PASS" | "AUTO_FAIL" | "REVIEW";
+export type MatchState = "EXACT" | "SEMANTIC_EQUIVALENT" | "MISS" | "REVIEW";
 
 export type GoldFact = {
   id: string;
@@ -83,6 +83,7 @@ export type ModelProfileId = keyof typeof MODEL_PROFILES;
 
 export type EvalCliOptions = {
   corpusPath: string;
+  rescorePath: string | null;
   suites: EvalSuite[];
   caseIds: string[];
   profiles: ModelProfileId[];
@@ -173,6 +174,7 @@ function requiredValue(argv: string[], index: number, flag: string) {
 export function parseCliArgs(argv: string[], cwd = process.cwd()): EvalCliOptions {
   const defaults: EvalCliOptions = {
     corpusPath: `${cwd}/evals/f1-extraction/fixtures/corpus.json`,
+    rescorePath: null,
     suites: ["atomic", "mixed", "dense"], caseIds: [], profiles: ["baseline"], pipelines: ["baseline"],
     repetitions: 1, runId: `f1-extraction-${new Date().toISOString().replace(/[:.]/g, "-")}`,
     outputDir: `${cwd}/evals/f1-extraction/results`, maxCalls: null, dryRun: false, judgeModel: null,
@@ -185,6 +187,7 @@ export function parseCliArgs(argv: string[], cwd = process.cwd()): EvalCliOption
     if (flag === "--help" || flag === "-h") { options.help = true; continue; }
     const value = requiredValue(argv, index, flag); index += 1;
     if (flag === "--corpus") options.corpusPath = value;
+    else if (flag === "--rescore") options.rescorePath = value;
     else if (flag === "--suite") options.suites = values(value) as EvalSuite[];
     else if (flag === "--case") options.caseIds = values(value);
     else if (flag === "--profiles") options.profiles = values(value) as ModelProfileId[];
@@ -210,6 +213,8 @@ export function parseCliArgs(argv: string[], cwd = process.cwd()): EvalCliOption
   if (options.overrides.groundingModel !== null && !isSupportedModel(options.overrides.groundingModel)) throw new Error("--grounding-model must be a current catalog model");
   if (options.overrides.extractionReasoning !== null && !["low", "medium"].includes(options.overrides.extractionReasoning)) throw new Error("--extraction-reasoning must be low or medium");
   if (options.overrides.groundingReasoning !== null && !["low", "medium"].includes(options.overrides.groundingReasoning)) throw new Error("--grounding-reasoning must be low or medium");
+  if (options.rescorePath !== null && options.dryRun) throw new Error("--rescore cannot be combined with --dry-run");
+  if (options.rescorePath !== null && !argv.includes("--run-id")) options.runId = `rescore-${new Date().toISOString().replace(/[:.]/g, "-")}`;
   return options;
 }
 

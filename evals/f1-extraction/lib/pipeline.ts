@@ -15,7 +15,7 @@ import {
 import type { ModelUsageRecord, UsageOperation } from "../../../app/usage-ledger.ts";
 import type { SupportedModelId } from "../../../app/model-config.ts";
 import type { EvalCase, ModelProfile, PipelineId, ReasoningEffort } from "./eval-contract.ts";
-import type { CaseScore, EvaluatedCandidate } from "./scoring.ts";
+import type { CaseScore, EvaluatedCandidate, SemanticJudgeDecision } from "./scoring.ts";
 
 const intakeCorePromise = readFile(new URL("../../../apu-core/v1.6/02_OBSERVATION_AND_INTAKE.md", import.meta.url), "utf8");
 
@@ -34,9 +34,11 @@ export const COVERAGE_SCHEMA = {
   properties: { candidates: EXTRACTION_SCHEMA.properties.candidates },
 } as const;
 
-const SEMANTIC_JUDGE_INSTRUCTIONS = `Jsi izolovaný sekundární hodnotitel ekvivalence pro eval F1 extrakce.
-Nehodnotíš správnost gold dat a nesmíš je přepisovat. Posuzuj pouze, zda candidate vyjadřuje tentýž explicitní fakt jako goldFact bez přidání významu.
-Při pochybnosti vrať uncertain. Kategorie a action musí odpovídat, jinak equivalent=false.`;
+const SEMANTIC_JUDGE_INSTRUCTIONS = `Jsi izolovaný sekundární hodnotitel pro eval F1 extrakce.
+Nehodnotíš správnost gold dat a nesmíš je přepisovat ani vytvářet nové gold fakty.
+U každého alignment posuď, zda uvedená skupina candidates společně významově pokrývá goldFact bez přidání významu. Jedna skupina může obsahovat fragmenty jednoho faktu; jeden candidate může být posouzen vůči více gold faktům.
+U každého unmatched candidate posuď, zda jde o explicitní, zdrojově doložený fakt navíc (grounded_extra), nebo o nepodložený význam (unsupported).
+Při pochybnosti vrať uncertain. Kategorie, action, nejistota a negace musí zůstat zachovány. Nikdy nepřekrývej neplatný sourceQuote ani explicitní forbidden inference.`;
 
 const SEMANTIC_JUDGE_SCHEMA = {
   type: "object",
@@ -48,10 +50,12 @@ const SEMANTIC_JUDGE_SCHEMA = {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["goldFactId", "decision", "reason"],
+        required: ["kind", "goldFactId", "candidateIndexes", "decision", "reason"],
         properties: {
-          goldFactId: { type: "string" },
-          decision: { type: "string", enum: ["equivalent", "not_equivalent", "uncertain"] },
+          kind: { type: "string", enum: ["alignment", "candidate"] },
+          goldFactId: { type: ["string", "null"] },
+          candidateIndexes: { type: "array", items: { type: "integer", minimum: 0 } },
+          decision: { type: "string", enum: ["equivalent", "not_equivalent", "grounded_extra", "unsupported", "uncertain"] },
           reason: { type: "string" },
         },
       },
@@ -212,17 +216,19 @@ export async function runExtractionPipeline(item: EvalCase, profile: ModelProfil
   return { candidates: allCandidates, calls, ...recordUsage(calls) };
 }
 
-export type SemanticJudgeDecision = { goldFactId: string; decision: "equivalent" | "not_equivalent" | "uncertain"; reason: string };
-
 export async function runSemanticJudge(item: EvalCase, score: CaseScore, candidates: EvaluatedCandidate[], model: SupportedModelId, provider: EvalProvider) {
-  const reviewPairs = score.matches.filter((match) => match.state === "REVIEW" && match.candidateIndex !== null).map((match) => ({
+  const reviewAlignments = score.matches.filter((match) => match.state === "REVIEW" && match.candidateIndexes.length).map((match) => ({
     goldFact: item.expectedFacts.find((fact) => fact.id === match.goldFactId),
-    candidate: candidates[match.candidateIndex!],
+    candidates: match.candidateIndexes.map((candidateIndex) => ({ candidateIndex, candidate: candidates[candidateIndex] })),
   }));
-  if (!reviewPairs.length) return { decisions: [] as SemanticJudgeDecision[], usage: null as ModelUsageRecord | null, latencyMs: 0 };
+  const unmatchedCandidates = score.candidateClassifications.filter((entry) => entry.state === "REVIEW").map((entry) => ({
+    candidateIndex: entry.candidateIndex,
+    candidate: candidates[entry.candidateIndex],
+  }));
+  if (!reviewAlignments.length && !unmatchedCandidates.length) return { decisions: [] as SemanticJudgeDecision[], usage: null as ModelUsageRecord | null, latencyMs: 0 };
   const judged = await provider.call({
     stage: "judge", model, reasoning: "low", instructions: SEMANTIC_JUDGE_INSTRUCTIONS,
-    input: { messageInputs: item.inputs, reviewPairs }, schema: SEMANTIC_JUDGE_SCHEMA,
+    input: { messageInputs: item.inputs, reviewAlignments, unmatchedCandidates }, schema: SEMANTIC_JUDGE_SCHEMA,
     formatName: "apu_f1_eval_semantic_judge", maxOutputTokens: 1_200,
     parse(value) {
       const object = parseObject(value, "semantic judge result");
