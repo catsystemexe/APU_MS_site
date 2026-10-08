@@ -1,0 +1,3562 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "atomic-manifestation",
+      "suite": "atomic",
+      "description": "One observable manifestation.",
+      "inputs": [
+        "Adam kopne do židle."
+      ],
+      "startingNotebook": [],
+      "expectedFacts": [
+        {
+          "id": "m1",
+          "category": "manifestations",
+          "text": "Kopne do židle.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "kopne do židle"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        }
+      ],
+      "forbiddenInferences": [],
+      "tags": [
+        "category:manifestations"
+      ],
+      "dimensions": {
+        "factCount": 1,
+        "categoryCount": 1,
+        "linguistic": [
+          "simple"
+        ]
+      }
+    },
+    {
+      "id": "atomic-context",
+      "suite": "atomic",
+      "description": "One explicit context.",
+      "inputs": [
+        "Děje se to během ranního kruhu."
+      ],
+      "startingNotebook": [
+        {
+          "id": "n1",
+          "category": "manifestations",
+          "text": "Odchází od skupiny.",
+          "trust": "confirmed"
+        }
+      ],
+      "expectedFacts": [
+        {
+          "id": "x1",
+          "category": "context",
+          "text": "Během ranního kruhu.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "během ranního kruhu"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        }
+      ],
+      "forbiddenInferences": [],
+      "tags": [
+        "category:context"
+      ],
+      "dimensions": {
+        "factCount": 1,
+        "categoryCount": 1,
+        "linguistic": [
+          "simple",
+          "coreference"
+        ]
+      }
+    },
+    {
+      "id": "atomic-course-frequency",
+      "suite": "atomic",
+      "description": "One explicit frequency.",
+      "inputs": [
+        "Opakuje se to třikrát týdně."
+      ],
+      "startingNotebook": [
+        {
+          "id": "n1",
+          "category": "manifestations",
+          "text": "Křičí při přechodu.",
+          "trust": "confirmed"
+        }
+      ],
+      "expectedFacts": [
+        {
+          "id": "c1",
+          "category": "course",
+          "text": "Třikrát týdně.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "třikrát týdně"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        }
+      ],
+      "forbiddenInferences": [],
+      "tags": [
+        "category:course"
+      ],
+      "dimensions": {
+        "factCount": 1,
+        "categoryCount": 1,
+        "linguistic": [
+          "simple",
+          "coreference"
+        ]
+      }
+    },
+    {
+      "id": "atomic-goal",
+      "suite": "atomic",
+      "description": "One explicit pedagogical need.",
+      "inputs": [
+        "Potřebuji zjistit, co reakci spouští."
+      ],
+      "startingNotebook": [],
+      "expectedFacts": [
+        {
+          "id": "g1",
+          "category": "goals",
+          "text": "Zjistit, co reakci spouští.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "Potřebuji zjistit, co reakci spouští"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        }
+      ],
+      "forbiddenInferences": [],
+      "tags": [
+        "category:goals"
+      ],
+      "dimensions": {
+        "factCount": 1,
+        "categoryCount": 1,
+        "linguistic": [
+          "simple"
+        ]
+      }
+    },
+    {
+      "id": "atomic-helps",
+      "suite": "atomic",
+      "description": "One tried condition and observed effect.",
+      "inputs": [
+        "Předchozí upozornění mu pomáhá začít bez protestu."
+      ],
+      "startingNotebook": [],
+      "expectedFacts": [
+        {
+          "id": "h1",
+          "category": "helps",
+          "text": "Předchozí upozornění pomáhá začít bez protestu.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "Předchozí upozornění mu pomáhá začít bez protestu"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        }
+      ],
+      "forbiddenInferences": [],
+      "tags": [
+        "category:helps"
+      ],
+      "dimensions": {
+        "factCount": 1,
+        "categoryCount": 1,
+        "linguistic": [
+          "simple",
+          "conditional"
+        ]
+      }
+    },
+    {
+      "id": "atomic-manifestation-context",
+      "suite": "atomic",
+      "description": "Observable behavior with its situation.",
+      "inputs": [
+        "Ve třídě si zakrývá uši."
+      ],
+      "startingNotebook": [],
+      "expectedFacts": [
+        {
+          "id": "m1",
+          "category": "manifestations",
+          "text": "Zakrývá si uši.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "zakrývá uši"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "x1",
+          "category": "context",
+          "text": "Ve třídě.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "Ve třídě"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        }
+      ],
+      "forbiddenInferences": [],
+      "tags": [
+        "categories:2"
+      ],
+      "dimensions": {
+        "factCount": 2,
+        "categoryCount": 2,
+        "linguistic": [
+          "simple"
+        ]
+      }
+    },
+    {
+      "id": "atomic-course-intensity",
+      "suite": "atomic",
+      "description": "Frequency and intensity remain distinct.",
+      "inputs": [
+        "Výbuch přichází denně a bývá velmi silný."
+      ],
+      "startingNotebook": [],
+      "expectedFacts": [
+        {
+          "id": "c1",
+          "category": "course",
+          "text": "Přichází denně.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "denně"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "c2",
+          "category": "course",
+          "text": "Bývá velmi silný.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "velmi silný"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        }
+      ],
+      "forbiddenInferences": [],
+      "tags": [
+        "category:course"
+      ],
+      "dimensions": {
+        "factCount": 2,
+        "categoryCount": 1,
+        "linguistic": [
+          "compound"
+        ]
+      }
+    },
+    {
+      "id": "atomic-uncertainty",
+      "suite": "atomic",
+      "description": "Uncertainty is explicit and must be preserved.",
+      "inputs": [
+        "Možná odejde hlavně při hluku."
+      ],
+      "startingNotebook": [],
+      "expectedFacts": [
+        {
+          "id": "m1",
+          "category": "manifestations",
+          "text": "Možná odejde hlavně při hluku.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "Možná odejde hlavně při hluku"
+          },
+          "uncertain": true,
+          "negated": false,
+          "requiredMarkers": [
+            "Možná"
+          ],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        }
+      ],
+      "forbiddenInferences": [],
+      "tags": [
+        "uncertainty"
+      ],
+      "dimensions": {
+        "factCount": 1,
+        "categoryCount": 1,
+        "linguistic": [
+          "uncertainty"
+        ]
+      }
+    },
+    {
+      "id": "atomic-negation",
+      "suite": "atomic",
+      "description": "Explicit negation is preserved.",
+      "inputs": [
+        "Při práci už neodchází od stolu."
+      ],
+      "startingNotebook": [],
+      "expectedFacts": [
+        {
+          "id": "m1",
+          "category": "manifestations",
+          "text": "Už neodchází od stolu.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "už neodchází od stolu"
+          },
+          "uncertain": false,
+          "negated": true,
+          "requiredMarkers": [
+            "neodchází"
+          ],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        }
+      ],
+      "forbiddenInferences": [],
+      "tags": [
+        "negation"
+      ],
+      "dimensions": {
+        "factCount": 1,
+        "categoryCount": 1,
+        "linguistic": [
+          "negation"
+        ]
+      }
+    },
+    {
+      "id": "atomic-context-course",
+      "suite": "atomic",
+      "description": "One context and one duration.",
+      "inputs": [
+        "Po obědě pláče asi pět minut."
+      ],
+      "startingNotebook": [],
+      "expectedFacts": [
+        {
+          "id": "x1",
+          "category": "context",
+          "text": "Po obědě.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "Po obědě"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "c1",
+          "category": "course",
+          "text": "Asi pět minut.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "asi pět minut"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        }
+      ],
+      "forbiddenInferences": [],
+      "tags": [
+        "categories:2"
+      ],
+      "dimensions": {
+        "factCount": 2,
+        "categoryCount": 2,
+        "linguistic": [
+          "simple"
+        ]
+      }
+    },
+    {
+      "id": "atomic-unhelpful",
+      "suite": "atomic",
+      "description": "A tried action with a negative observed effect.",
+      "inputs": [
+        "Napomenutí před třídou situaci obvykle zhorší."
+      ],
+      "startingNotebook": [],
+      "expectedFacts": [
+        {
+          "id": "h1",
+          "category": "helps",
+          "text": "Napomenutí před třídou situaci obvykle zhoršuje.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "Napomenutí před třídou situaci obvykle zhorší"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        }
+      ],
+      "forbiddenInferences": [],
+      "tags": [
+        "category:helps"
+      ],
+      "dimensions": {
+        "factCount": 1,
+        "categoryCount": 1,
+        "linguistic": [
+          "simple"
+        ]
+      }
+    },
+    {
+      "id": "atomic-label-negative-control",
+      "suite": "atomic",
+      "description": "A value label must not become canonical behavior.",
+      "inputs": [
+        "Myslím, že je líný."
+      ],
+      "startingNotebook": [],
+      "expectedFacts": [],
+      "forbiddenInferences": [
+        {
+          "text": "pasivní",
+          "category": null
+        },
+        {
+          "text": "nesoustředí se",
+          "category": null
+        },
+        {
+          "text": "odmítá pracovat",
+          "category": null
+        }
+      ],
+      "tags": [
+        "negative-control"
+      ],
+      "dimensions": {
+        "factCount": 0,
+        "categoryCount": 0,
+        "linguistic": [
+          "simple"
+        ]
+      }
+    },
+    {
+      "id": "atomic-no-implied-goal",
+      "suite": "atomic",
+      "description": "A problem statement must not create an implicit pedagogical goal.",
+      "inputs": [
+        "Žák každé ráno usíná."
+      ],
+      "startingNotebook": [],
+      "expectedFacts": [
+        {
+          "id": "m1",
+          "category": "manifestations",
+          "text": "Žák usíná.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "Žák každé ráno usíná"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "c1",
+          "category": "course",
+          "text": "Každé ráno.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "každé ráno"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        }
+      ],
+      "forbiddenInferences": [
+        {
+          "text": "potřebuji poradit",
+          "category": "goals"
+        },
+        {
+          "text": "chci pochopit",
+          "category": "goals"
+        }
+      ],
+      "tags": [
+        "no-implied-goal"
+      ],
+      "dimensions": {
+        "factCount": 2,
+        "categoryCount": 2,
+        "linguistic": [
+          "simple"
+        ]
+      }
+    },
+    {
+      "id": "atomic-same-span-two-categories",
+      "suite": "atomic",
+      "description": "A sentence may support separate manifestation and context facts.",
+      "inputs": [
+        "Při skupinové práci odmítne začít."
+      ],
+      "startingNotebook": [],
+      "expectedFacts": [
+        {
+          "id": "m1",
+          "category": "manifestations",
+          "text": "Odmítne začít.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "odmítne začít"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "x1",
+          "category": "context",
+          "text": "Při skupinové práci.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "Při skupinové práci"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        }
+      ],
+      "forbiddenInferences": [],
+      "tags": [
+        "shared-source-sentence"
+      ],
+      "dimensions": {
+        "factCount": 2,
+        "categoryCount": 2,
+        "linguistic": [
+          "simple"
+        ]
+      }
+    },
+    {
+      "id": "atomic-conditional-help",
+      "suite": "atomic",
+      "description": "Observed conditional improvement.",
+      "inputs": [
+        "Když dostane obrázkový plán, přechod zvládne klidněji."
+      ],
+      "startingNotebook": [],
+      "expectedFacts": [
+        {
+          "id": "h1",
+          "category": "helps",
+          "text": "S obrázkovým plánem zvládne přechod klidněji.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "Když dostane obrázkový plán, přechod zvládne klidněji"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        }
+      ],
+      "forbiddenInferences": [],
+      "tags": [
+        "conditional"
+      ],
+      "dimensions": {
+        "factCount": 1,
+        "categoryCount": 1,
+        "linguistic": [
+          "conditional"
+        ]
+      }
+    },
+    {
+      "id": "mixed-multiple-manifestations",
+      "suite": "mixed",
+      "description": "Three distinct manifestations in one compound sentence.",
+      "inputs": [
+        "Při úkolu vstane, odstrčí sešit a začne hlasitě protestovat."
+      ],
+      "startingNotebook": [],
+      "expectedFacts": [
+        {
+          "id": "m1",
+          "category": "manifestations",
+          "text": "Vstane.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "vstane"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "m2",
+          "category": "manifestations",
+          "text": "Odstrčí sešit.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "odstrčí sešit"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "m3",
+          "category": "manifestations",
+          "text": "Začne hlasitě protestovat.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "začne hlasitě protestovat"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "x1",
+          "category": "context",
+          "text": "Při úkolu.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "Při úkolu"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        }
+      ],
+      "forbiddenInferences": [],
+      "tags": [
+        "multiple-manifestations"
+      ],
+      "dimensions": {
+        "factCount": 4,
+        "categoryCount": 2,
+        "linguistic": [
+          "compound"
+        ]
+      }
+    },
+    {
+      "id": "mixed-manifestation-course",
+      "suite": "mixed",
+      "description": "Behavior, frequency and duration.",
+      "inputs": [
+        "Ema při čtení odchází od stolu skoro každý den a vrací se přibližně po dvou minutách."
+      ],
+      "startingNotebook": [],
+      "expectedFacts": [
+        {
+          "id": "m1",
+          "category": "manifestations",
+          "text": "Odchází od stolu.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "odchází od stolu"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "x1",
+          "category": "context",
+          "text": "Při čtení.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "při čtení"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "c1",
+          "category": "course",
+          "text": "Skoro každý den.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "skoro každý den"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "c2",
+          "category": "course",
+          "text": "Vrací se přibližně po dvou minutách.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "vrací se přibližně po dvou minutách"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        }
+      ],
+      "forbiddenInferences": [],
+      "tags": [
+        "manifestation-course"
+      ],
+      "dimensions": {
+        "factCount": 4,
+        "categoryCount": 3,
+        "linguistic": [
+          "compound"
+        ]
+      }
+    },
+    {
+      "id": "mixed-goal-embedded",
+      "suite": "mixed",
+      "description": "Explicit need embedded after situation facts.",
+      "inputs": [
+        "Kuba před obědem pobíhá po třídě a já potřebuji zjistit, co mu pomůže čekání zvládnout."
+      ],
+      "startingNotebook": [],
+      "expectedFacts": [
+        {
+          "id": "m1",
+          "category": "manifestations",
+          "text": "Pobíhá po třídě.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "pobíhá po třídě"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "x1",
+          "category": "context",
+          "text": "Před obědem.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "před obědem"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "g1",
+          "category": "goals",
+          "text": "Zjistit, co mu pomůže čekání zvládnout.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "potřebuji zjistit, co mu pomůže čekání zvládnout"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        }
+      ],
+      "forbiddenInferences": [],
+      "tags": [
+        "embedded-goal"
+      ],
+      "dimensions": {
+        "factCount": 3,
+        "categoryCount": 3,
+        "linguistic": [
+          "compound"
+        ]
+      }
+    },
+    {
+      "id": "mixed-condition-result",
+      "suite": "mixed",
+      "description": "Tried condition and observed result plus baseline behavior.",
+      "inputs": [
+        "Bez přípravy začne při změně protestovat, ale po krátkém upozornění přejde bez křiku."
+      ],
+      "startingNotebook": [],
+      "expectedFacts": [
+        {
+          "id": "m1",
+          "category": "manifestations",
+          "text": "Bez přípravy začne při změně protestovat.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "Bez přípravy začne při změně protestovat"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "h1",
+          "category": "helps",
+          "text": "Po krátkém upozornění přejde bez křiku.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "po krátkém upozornění přejde bez křiku"
+          },
+          "uncertain": false,
+          "negated": true,
+          "requiredMarkers": [
+            "bez křiku"
+          ],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "x1",
+          "category": "context",
+          "text": "Při změně.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "při změně"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        }
+      ],
+      "forbiddenInferences": [],
+      "tags": [
+        "condition-result"
+      ],
+      "dimensions": {
+        "factCount": 3,
+        "categoryCount": 3,
+        "linguistic": [
+          "contrast",
+          "conditional",
+          "negation"
+        ]
+      }
+    },
+    {
+      "id": "mixed-contrast-situations",
+      "suite": "mixed",
+      "description": "Contrast between group and individual work.",
+      "inputs": [
+        "Ve skupině úkol odmítne, jednotlivě ho dokončí a požádá o další."
+      ],
+      "startingNotebook": [],
+      "expectedFacts": [
+        {
+          "id": "m1",
+          "category": "manifestations",
+          "text": "Ve skupině úkol odmítne.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "Ve skupině úkol odmítne"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "x1",
+          "category": "context",
+          "text": "Ve skupině.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "Ve skupině"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "h1",
+          "category": "helps",
+          "text": "Jednotlivě úkol dokončí a požádá o další.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "jednotlivě ho dokončí a požádá o další"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        }
+      ],
+      "forbiddenInferences": [],
+      "tags": [
+        "contrast"
+      ],
+      "dimensions": {
+        "factCount": 3,
+        "categoryCount": 3,
+        "linguistic": [
+          "contrast"
+        ]
+      }
+    },
+    {
+      "id": "mixed-uncertainty-confirmed",
+      "suite": "mixed",
+      "description": "Uncertain interpretation mixed with confirmed observations.",
+      "inputs": [
+        "Nela si zakrývá oči a odvrací hlavu; nejsem si jistá, zda jí vadí světlo."
+      ],
+      "startingNotebook": [],
+      "expectedFacts": [
+        {
+          "id": "m1",
+          "category": "manifestations",
+          "text": "Zakrývá si oči.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "zakrývá oči"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "m2",
+          "category": "manifestations",
+          "text": "Odvrací hlavu.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "odvrací hlavu"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "g1",
+          "category": "goals",
+          "text": "Zjistit, zda jí vadí světlo.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "nejsem si jistá, zda jí vadí světlo"
+          },
+          "uncertain": true,
+          "negated": false,
+          "requiredMarkers": [
+            "nejsem si jistá"
+          ],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        }
+      ],
+      "forbiddenInferences": [
+        {
+          "text": "Přecitlivělost na světlo",
+          "category": null
+        }
+      ],
+      "tags": [
+        "uncertainty"
+      ],
+      "dimensions": {
+        "factCount": 3,
+        "categoryCount": 2,
+        "linguistic": [
+          "compound",
+          "uncertainty"
+        ]
+      }
+    },
+    {
+      "id": "mixed-duplicate",
+      "suite": "mixed",
+      "description": "Semantic duplicate against a same-category notebook item.",
+      "inputs": [
+        "Při ranním kruhu znovu vstává ze židle."
+      ],
+      "startingNotebook": [
+        {
+          "id": "existing-m1",
+          "category": "manifestations",
+          "text": "Vstává ze židle při ranním kruhu.",
+          "trust": "confirmed"
+        }
+      ],
+      "expectedFacts": [
+        {
+          "id": "m1",
+          "category": "manifestations",
+          "text": "Vstává ze židle při ranním kruhu.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "Při ranním kruhu znovu vstává ze židle"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "duplicate",
+          "relatedEntryId": "existing-m1"
+        }
+      ],
+      "forbiddenInferences": [],
+      "tags": [
+        "duplicate"
+      ],
+      "dimensions": {
+        "factCount": 1,
+        "categoryCount": 1,
+        "linguistic": [
+          "simple"
+        ]
+      }
+    },
+    {
+      "id": "mixed-conflict",
+      "suite": "mixed",
+      "description": "New course fact conflicts with an existing course entry.",
+      "inputs": [
+        "Teď se to děje každý den."
+      ],
+      "startingNotebook": [
+        {
+          "id": "existing-m1",
+          "category": "manifestations",
+          "text": "Křičí při přechodu.",
+          "trust": "confirmed"
+        },
+        {
+          "id": "existing-c1",
+          "category": "course",
+          "text": "Dvakrát týdně.",
+          "trust": "confirmed"
+        }
+      ],
+      "expectedFacts": [
+        {
+          "id": "c1",
+          "category": "course",
+          "text": "Teď každý den.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "každý den"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "conflict",
+          "relatedEntryId": "existing-c1"
+        }
+      ],
+      "forbiddenInferences": [],
+      "tags": [
+        "conflict",
+        "coreference"
+      ],
+      "dimensions": {
+        "factCount": 1,
+        "categoryCount": 1,
+        "linguistic": [
+          "coreference"
+        ]
+      }
+    },
+    {
+      "id": "mixed-multi-turn-addition",
+      "suite": "mixed",
+      "description": "Two turns add separate course and context facts.",
+      "inputs": [
+        "Jonáš při psaní odloží tužku.",
+        "Děje se to hlavně odpoledne a asi čtyřikrát týdně."
+      ],
+      "startingNotebook": [],
+      "expectedFacts": [
+        {
+          "id": "m1",
+          "category": "manifestations",
+          "text": "Odloží tužku.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "odloží tužku"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "x1",
+          "category": "context",
+          "text": "Při psaní.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "při psaní"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "x2",
+          "category": "context",
+          "text": "Hlavně odpoledne.",
+          "source": {
+            "inputIndex": 1,
+            "quote": "hlavně odpoledne"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "c1",
+          "category": "course",
+          "text": "Asi čtyřikrát týdně.",
+          "source": {
+            "inputIndex": 1,
+            "quote": "asi čtyřikrát týdně"
+          },
+          "uncertain": true,
+          "negated": false,
+          "requiredMarkers": [
+            "asi"
+          ],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        }
+      ],
+      "forbiddenInferences": [],
+      "tags": [
+        "multi-turn",
+        "coreference"
+      ],
+      "dimensions": {
+        "factCount": 4,
+        "categoryCount": 3,
+        "linguistic": [
+          "compound",
+          "coreference",
+          "uncertainty"
+        ]
+      }
+    },
+    {
+      "id": "mixed-negation-and-help",
+      "suite": "mixed",
+      "description": "Negated behavior plus an observed helpful condition.",
+      "inputs": [
+        "Po přesazení už nekřičí a při samostatné práci vydrží deset minut."
+      ],
+      "startingNotebook": [],
+      "expectedFacts": [
+        {
+          "id": "m1",
+          "category": "manifestations",
+          "text": "Po přesazení už nekřičí.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "Po přesazení už nekřičí"
+          },
+          "uncertain": false,
+          "negated": true,
+          "requiredMarkers": [
+            "nekřičí"
+          ],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "h1",
+          "category": "helps",
+          "text": "Po přesazení už nekřičí.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "Po přesazení už nekřičí"
+          },
+          "uncertain": false,
+          "negated": true,
+          "requiredMarkers": [
+            "nekřičí"
+          ],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "c1",
+          "category": "course",
+          "text": "Vydrží deset minut.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "vydrží deset minut"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "x1",
+          "category": "context",
+          "text": "Při samostatné práci.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "při samostatné práci"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        }
+      ],
+      "forbiddenInferences": [],
+      "tags": [
+        "negation",
+        "same-span-multiple-categories"
+      ],
+      "dimensions": {
+        "factCount": 4,
+        "categoryCount": 4,
+        "linguistic": [
+          "compound",
+          "negation"
+        ]
+      }
+    },
+    {
+      "id": "mixed-course-trend",
+      "suite": "mixed",
+      "description": "Onset, trend and frequency stay atomic.",
+      "inputs": [
+        "Potíže začaly v září, postupně zesílily a tento měsíc se objevují čtyřikrát týdně."
+      ],
+      "startingNotebook": [],
+      "expectedFacts": [
+        {
+          "id": "c1",
+          "category": "course",
+          "text": "Potíže začaly v září.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "začaly v září"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "c2",
+          "category": "course",
+          "text": "Postupně zesílily.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "postupně zesílily"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "c3",
+          "category": "course",
+          "text": "Tento měsíc čtyřikrát týdně.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "tento měsíc se objevují čtyřikrát týdně"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        }
+      ],
+      "forbiddenInferences": [],
+      "tags": [
+        "course-trend"
+      ],
+      "dimensions": {
+        "factCount": 3,
+        "categoryCount": 1,
+        "linguistic": [
+          "compound"
+        ]
+      }
+    },
+    {
+      "id": "mixed-context-help-goal",
+      "suite": "mixed",
+      "description": "Context, tried support and explicit need.",
+      "inputs": [
+        "V jídelně se schová pod stůl. Klidné místo pomohlo, ale potřebuji zjistit, jak bezpečně zvládnout návrat."
+      ],
+      "startingNotebook": [],
+      "expectedFacts": [
+        {
+          "id": "m1",
+          "category": "manifestations",
+          "text": "Schová se pod stůl.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "schová pod stůl"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "x1",
+          "category": "context",
+          "text": "V jídelně.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "V jídelně"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "h1",
+          "category": "helps",
+          "text": "Klidné místo pomohlo.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "Klidné místo pomohlo"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "g1",
+          "category": "goals",
+          "text": "Zjistit, jak bezpečně zvládnout návrat.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "potřebuji zjistit, jak bezpečně zvládnout návrat"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        }
+      ],
+      "forbiddenInferences": [],
+      "tags": [
+        "categories:4"
+      ],
+      "dimensions": {
+        "factCount": 4,
+        "categoryCount": 4,
+        "linguistic": [
+          "compound"
+        ]
+      }
+    },
+    {
+      "id": "mixed-unhelpful-contrast",
+      "suite": "mixed",
+      "description": "Contrasting effects of two tried approaches.",
+      "inputs": [
+        "Dlouhé vysvětlování protest prodlouží, zatímco jedna krátká instrukce mu obvykle pomůže začít."
+      ],
+      "startingNotebook": [],
+      "expectedFacts": [
+        {
+          "id": "h1",
+          "category": "helps",
+          "text": "Dlouhé vysvětlování protest prodlouží.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "Dlouhé vysvětlování protest prodlouží"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "h2",
+          "category": "helps",
+          "text": "Jedna krátká instrukce mu obvykle pomůže začít.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "jedna krátká instrukce mu obvykle pomůže začít"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        }
+      ],
+      "forbiddenInferences": [],
+      "tags": [
+        "contrast",
+        "helps"
+      ],
+      "dimensions": {
+        "factCount": 2,
+        "categoryCount": 1,
+        "linguistic": [
+          "contrast"
+        ]
+      }
+    },
+    {
+      "id": "mixed-ellipsis-existing-notebook",
+      "suite": "mixed",
+      "description": "Elliptical follow-up adds no duplicate manifestation.",
+      "inputs": [
+        "Děje se to ve vyučování, každý den, zejména odpoledne."
+      ],
+      "startingNotebook": [
+        {
+          "id": "existing-m1",
+          "category": "manifestations",
+          "text": "Žák usíná.",
+          "trust": "confirmed"
+        }
+      ],
+      "expectedFacts": [
+        {
+          "id": "x1",
+          "category": "context",
+          "text": "Ve vyučování.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "ve vyučování"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "c1",
+          "category": "course",
+          "text": "Každý den.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "každý den"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "x2",
+          "category": "context",
+          "text": "Zejména odpoledne.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "zejména odpoledne"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        }
+      ],
+      "forbiddenInferences": [],
+      "tags": [
+        "ellipsis",
+        "no-duplicate"
+      ],
+      "dimensions": {
+        "factCount": 3,
+        "categoryCount": 2,
+        "linguistic": [
+          "compound",
+          "coreference"
+        ]
+      }
+    },
+    {
+      "id": "mixed-separate-same-category",
+      "suite": "mixed",
+      "description": "Related but distinct states remain separate facts.",
+      "inputs": [
+        "Je unavený, apatický, málo komunikuje a odmítá úkoly."
+      ],
+      "startingNotebook": [],
+      "expectedFacts": [
+        {
+          "id": "m1",
+          "category": "manifestations",
+          "text": "Je unavený.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "unavený"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "m2",
+          "category": "manifestations",
+          "text": "Je apatický.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "apatický"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "m3",
+          "category": "manifestations",
+          "text": "Málo komunikuje.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "málo komunikuje"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "m4",
+          "category": "manifestations",
+          "text": "Odmítá úkoly.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "odmítá úkoly"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        }
+      ],
+      "forbiddenInferences": [
+        {
+          "text": "diagnóza",
+          "category": null
+        }
+      ],
+      "tags": [
+        "multiple-manifestations"
+      ],
+      "dimensions": {
+        "factCount": 4,
+        "categoryCount": 1,
+        "linguistic": [
+          "compound"
+        ]
+      }
+    },
+    {
+      "id": "mixed-uncertain-frequency-goal",
+      "suite": "mixed",
+      "description": "Approximate frequency and explicit inquiry.",
+      "inputs": [
+        "Asi dvakrát týdně uteče ze třídy; potřebuji ověřit, zda tomu předchází hluk."
+      ],
+      "startingNotebook": [],
+      "expectedFacts": [
+        {
+          "id": "c1",
+          "category": "course",
+          "text": "Asi dvakrát týdně.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "Asi dvakrát týdně"
+          },
+          "uncertain": true,
+          "negated": false,
+          "requiredMarkers": [
+            "Asi"
+          ],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "m1",
+          "category": "manifestations",
+          "text": "Uteče ze třídy.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "uteče ze třídy"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "g1",
+          "category": "goals",
+          "text": "Ověřit, zda tomu předchází hluk.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "potřebuji ověřit, zda tomu předchází hluk"
+          },
+          "uncertain": true,
+          "negated": false,
+          "requiredMarkers": [
+            "zda"
+          ],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        }
+      ],
+      "forbiddenInferences": [],
+      "tags": [
+        "uncertainty",
+        "goal"
+      ],
+      "dimensions": {
+        "factCount": 3,
+        "categoryCount": 3,
+        "linguistic": [
+          "compound",
+          "uncertainty"
+        ]
+      }
+    },
+    {
+      "id": "dense-fact-count-1",
+      "suite": "dense",
+      "description": "Controlled 1-fact manifestation sweep.",
+      "inputs": [
+        "Robin při práci vstane."
+      ],
+      "startingNotebook": [],
+      "expectedFacts": [
+        {
+          "id": "m1",
+          "category": "manifestations",
+          "text": "Vstane.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "vstane"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        }
+      ],
+      "forbiddenInferences": [],
+      "tags": [
+        "sweep:fact-count",
+        "fact-count:1"
+      ],
+      "dimensions": {
+        "factCount": 1,
+        "categoryCount": 1,
+        "linguistic": [
+          "simple"
+        ]
+      }
+    },
+    {
+      "id": "dense-fact-count-2",
+      "suite": "dense",
+      "description": "Controlled 2-fact manifestation sweep.",
+      "inputs": [
+        "Robin při práci vstane a odloží tužku."
+      ],
+      "startingNotebook": [],
+      "expectedFacts": [
+        {
+          "id": "m1",
+          "category": "manifestations",
+          "text": "Vstane.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "vstane"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "m2",
+          "category": "manifestations",
+          "text": "Odloží tužku.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "odloží tužku"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        }
+      ],
+      "forbiddenInferences": [],
+      "tags": [
+        "sweep:fact-count",
+        "fact-count:2"
+      ],
+      "dimensions": {
+        "factCount": 2,
+        "categoryCount": 1,
+        "linguistic": [
+          "compound"
+        ]
+      }
+    },
+    {
+      "id": "dense-fact-count-3",
+      "suite": "dense",
+      "description": "Controlled 3-fact manifestation sweep.",
+      "inputs": [
+        "Robin při práci vstane, odloží tužku a řekne, že pokračovat nechce."
+      ],
+      "startingNotebook": [],
+      "expectedFacts": [
+        {
+          "id": "m1",
+          "category": "manifestations",
+          "text": "Vstane.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "vstane"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "m2",
+          "category": "manifestations",
+          "text": "Odloží tužku.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "odloží tužku"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "m3",
+          "category": "manifestations",
+          "text": "Řekne, že pokračovat nechce.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "řekne, že pokračovat nechce"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        }
+      ],
+      "forbiddenInferences": [],
+      "tags": [
+        "sweep:fact-count",
+        "fact-count:3"
+      ],
+      "dimensions": {
+        "factCount": 3,
+        "categoryCount": 1,
+        "linguistic": [
+          "compound"
+        ]
+      }
+    },
+    {
+      "id": "dense-fact-count-4",
+      "suite": "dense",
+      "description": "Controlled 4-fact manifestation sweep.",
+      "inputs": [
+        "Robin při práci vstane, odloží tužku, řekne, že pokračovat nechce, a odejde ke dveřím."
+      ],
+      "startingNotebook": [],
+      "expectedFacts": [
+        {
+          "id": "m1",
+          "category": "manifestations",
+          "text": "Vstane.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "vstane"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "m2",
+          "category": "manifestations",
+          "text": "Odloží tužku.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "odloží tužku"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "m3",
+          "category": "manifestations",
+          "text": "Řekne, že pokračovat nechce.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "řekne, že pokračovat nechce"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "m4",
+          "category": "manifestations",
+          "text": "Odejde ke dveřím.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "odejde ke dveřím"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        }
+      ],
+      "forbiddenInferences": [],
+      "tags": [
+        "sweep:fact-count",
+        "fact-count:4"
+      ],
+      "dimensions": {
+        "factCount": 4,
+        "categoryCount": 1,
+        "linguistic": [
+          "compound"
+        ]
+      }
+    },
+    {
+      "id": "dense-fact-count-6",
+      "suite": "dense",
+      "description": "Controlled 6-fact manifestation sweep.",
+      "inputs": [
+        "Robin při práci vstane, odloží tužku, řekne, že pokračovat nechce, odejde ke dveřím, začne hlasitě mluvit a zavře sešit."
+      ],
+      "startingNotebook": [],
+      "expectedFacts": [
+        {
+          "id": "m1",
+          "category": "manifestations",
+          "text": "Vstane.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "vstane"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "m2",
+          "category": "manifestations",
+          "text": "Odloží tužku.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "odloží tužku"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "m3",
+          "category": "manifestations",
+          "text": "Řekne, že pokračovat nechce.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "řekne, že pokračovat nechce"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "m4",
+          "category": "manifestations",
+          "text": "Odejde ke dveřím.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "odejde ke dveřím"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "m5",
+          "category": "manifestations",
+          "text": "Začne hlasitě mluvit.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "začne hlasitě mluvit"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "m6",
+          "category": "manifestations",
+          "text": "Zavře sešit.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "zavře sešit"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        }
+      ],
+      "forbiddenInferences": [],
+      "tags": [
+        "sweep:fact-count",
+        "fact-count:6"
+      ],
+      "dimensions": {
+        "factCount": 6,
+        "categoryCount": 1,
+        "linguistic": [
+          "compound"
+        ]
+      }
+    },
+    {
+      "id": "dense-fact-count-8",
+      "suite": "dense",
+      "description": "Controlled 8-fact manifestation sweep.",
+      "inputs": [
+        "Robin při práci vstane, odloží tužku, řekne, že pokračovat nechce, odejde ke dveřím, začne hlasitě mluvit, zavře sešit, odstrčí židli a přestane odpovídat."
+      ],
+      "startingNotebook": [],
+      "expectedFacts": [
+        {
+          "id": "m1",
+          "category": "manifestations",
+          "text": "Vstane.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "vstane"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "m2",
+          "category": "manifestations",
+          "text": "Odloží tužku.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "odloží tužku"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "m3",
+          "category": "manifestations",
+          "text": "Řekne, že pokračovat nechce.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "řekne, že pokračovat nechce"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "m4",
+          "category": "manifestations",
+          "text": "Odejde ke dveřím.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "odejde ke dveřím"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "m5",
+          "category": "manifestations",
+          "text": "Začne hlasitě mluvit.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "začne hlasitě mluvit"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "m6",
+          "category": "manifestations",
+          "text": "Zavře sešit.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "zavře sešit"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "m7",
+          "category": "manifestations",
+          "text": "Odstrčí židli.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "odstrčí židli"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "m8",
+          "category": "manifestations",
+          "text": "Přestane odpovídat.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "přestane odpovídat"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        }
+      ],
+      "forbiddenInferences": [],
+      "tags": [
+        "sweep:fact-count",
+        "fact-count:8"
+      ],
+      "dimensions": {
+        "factCount": 8,
+        "categoryCount": 1,
+        "linguistic": [
+          "compound"
+        ]
+      }
+    },
+    {
+      "id": "dense-fact-count-10",
+      "suite": "dense",
+      "description": "Controlled 10-fact manifestation sweep.",
+      "inputs": [
+        "Robin při práci vstane, odloží tužku, řekne, že pokračovat nechce, odejde ke dveřím, začne hlasitě mluvit, zavře sešit, odstrčí židli, přestane odpovídat, zakryje si oči a začne plakat."
+      ],
+      "startingNotebook": [],
+      "expectedFacts": [
+        {
+          "id": "m1",
+          "category": "manifestations",
+          "text": "Vstane.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "vstane"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "m2",
+          "category": "manifestations",
+          "text": "Odloží tužku.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "odloží tužku"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "m3",
+          "category": "manifestations",
+          "text": "Řekne, že pokračovat nechce.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "řekne, že pokračovat nechce"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "m4",
+          "category": "manifestations",
+          "text": "Odejde ke dveřím.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "odejde ke dveřím"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "m5",
+          "category": "manifestations",
+          "text": "Začne hlasitě mluvit.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "začne hlasitě mluvit"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "m6",
+          "category": "manifestations",
+          "text": "Zavře sešit.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "zavře sešit"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "m7",
+          "category": "manifestations",
+          "text": "Odstrčí židli.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "odstrčí židli"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "m8",
+          "category": "manifestations",
+          "text": "Přestane odpovídat.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "přestane odpovídat"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "m9",
+          "category": "manifestations",
+          "text": "Zakryje si oči.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "zakryje si oči"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "m10",
+          "category": "manifestations",
+          "text": "Začne plakat.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "začne plakat"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        }
+      ],
+      "forbiddenInferences": [],
+      "tags": [
+        "sweep:fact-count",
+        "fact-count:10"
+      ],
+      "dimensions": {
+        "factCount": 10,
+        "categoryCount": 1,
+        "linguistic": [
+          "compound"
+        ]
+      }
+    },
+    {
+      "id": "dense-category-count-1",
+      "suite": "dense",
+      "description": "Controlled one-category boundary.",
+      "inputs": [
+        "Sára křičí a bouchá do stolu."
+      ],
+      "startingNotebook": [],
+      "expectedFacts": [
+        {
+          "id": "m1",
+          "category": "manifestations",
+          "text": "Křičí.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "křičí"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "m2",
+          "category": "manifestations",
+          "text": "Bouchá do stolu.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "bouchá do stolu"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        }
+      ],
+      "forbiddenInferences": [],
+      "tags": [
+        "sweep:category-count",
+        "category-count:1"
+      ],
+      "dimensions": {
+        "factCount": 2,
+        "categoryCount": 1,
+        "linguistic": [
+          "compound"
+        ]
+      }
+    },
+    {
+      "id": "dense-category-count-2",
+      "suite": "dense",
+      "description": "Controlled two-category boundary.",
+      "inputs": [
+        "Sára při obědě křičí a bouchá do stolu."
+      ],
+      "startingNotebook": [],
+      "expectedFacts": [
+        {
+          "id": "m1",
+          "category": "manifestations",
+          "text": "Křičí.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "křičí"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "m2",
+          "category": "manifestations",
+          "text": "Bouchá do stolu.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "bouchá do stolu"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "x1",
+          "category": "context",
+          "text": "Při obědě.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "při obědě"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        }
+      ],
+      "forbiddenInferences": [],
+      "tags": [
+        "sweep:category-count",
+        "category-count:2"
+      ],
+      "dimensions": {
+        "factCount": 3,
+        "categoryCount": 2,
+        "linguistic": [
+          "compound"
+        ]
+      }
+    },
+    {
+      "id": "dense-category-count-3",
+      "suite": "dense",
+      "description": "Controlled three-category boundary.",
+      "inputs": [
+        "Sára při obědě křičí a bouchá do stolu skoro každý den."
+      ],
+      "startingNotebook": [],
+      "expectedFacts": [
+        {
+          "id": "m1",
+          "category": "manifestations",
+          "text": "Křičí.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "křičí"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "m2",
+          "category": "manifestations",
+          "text": "Bouchá do stolu.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "bouchá do stolu"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "x1",
+          "category": "context",
+          "text": "Při obědě.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "při obědě"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "c1",
+          "category": "course",
+          "text": "Skoro každý den.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "skoro každý den"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        }
+      ],
+      "forbiddenInferences": [],
+      "tags": [
+        "sweep:category-count",
+        "category-count:3"
+      ],
+      "dimensions": {
+        "factCount": 4,
+        "categoryCount": 3,
+        "linguistic": [
+          "compound"
+        ]
+      }
+    },
+    {
+      "id": "dense-category-count-4",
+      "suite": "dense",
+      "description": "Controlled four-category boundary.",
+      "inputs": [
+        "Sára při obědě křičí a bouchá do stolu skoro každý den, ale přesazení ke kraji stolu reakci zkrátí."
+      ],
+      "startingNotebook": [],
+      "expectedFacts": [
+        {
+          "id": "m1",
+          "category": "manifestations",
+          "text": "Křičí.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "křičí"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "m2",
+          "category": "manifestations",
+          "text": "Bouchá do stolu.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "bouchá do stolu"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "x1",
+          "category": "context",
+          "text": "Při obědě.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "při obědě"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "c1",
+          "category": "course",
+          "text": "Skoro každý den.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "skoro každý den"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "h1",
+          "category": "helps",
+          "text": "Přesazení ke kraji stolu reakci zkrátí.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "přesazení ke kraji stolu reakci zkrátí"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        }
+      ],
+      "forbiddenInferences": [],
+      "tags": [
+        "sweep:category-count",
+        "category-count:4"
+      ],
+      "dimensions": {
+        "factCount": 5,
+        "categoryCount": 4,
+        "linguistic": [
+          "compound",
+          "contrast"
+        ]
+      }
+    },
+    {
+      "id": "dense-category-count-5",
+      "suite": "dense",
+      "description": "Controlled five-category boundary.",
+      "inputs": [
+        "Sára při obědě křičí a bouchá do stolu skoro každý den, ale přesazení ke kraji stolu reakci zkrátí. Potřebuji zjistit, jak návrat k jídlu bezpečně podpořit."
+      ],
+      "startingNotebook": [],
+      "expectedFacts": [
+        {
+          "id": "m1",
+          "category": "manifestations",
+          "text": "Křičí.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "křičí"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "m2",
+          "category": "manifestations",
+          "text": "Bouchá do stolu.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "bouchá do stolu"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "x1",
+          "category": "context",
+          "text": "Při obědě.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "při obědě"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "c1",
+          "category": "course",
+          "text": "Skoro každý den.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "skoro každý den"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "h1",
+          "category": "helps",
+          "text": "Přesazení ke kraji stolu reakci zkrátí.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "přesazení ke kraji stolu reakci zkrátí"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "g1",
+          "category": "goals",
+          "text": "Zjistit, jak návrat k jídlu bezpečně podpořit.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "Potřebuji zjistit, jak návrat k jídlu bezpečně podpořit"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        }
+      ],
+      "forbiddenInferences": [],
+      "tags": [
+        "sweep:category-count",
+        "category-count:5"
+      ],
+      "dimensions": {
+        "factCount": 6,
+        "categoryCount": 5,
+        "linguistic": [
+          "compound",
+          "contrast"
+        ]
+      }
+    },
+    {
+      "id": "human-gate-david",
+      "suite": "dense",
+      "description": "Permanent Human Gate regression: David.",
+      "inputs": [
+        "David má občas velmi silné výbuchy. Začne křičet, odstrkuje věci i lidi kolem sebe a snaží se opustit místnost. Někdy tomu předchází konflikt s dítětem, jindy požadavek učitelky nebo velký hluk. Nevíme, jestli jde pokaždé o stejný problém. Potřebuji situaci pochopit bez rychlého závěru, rozlišit možná vysvětlení a zároveň zachovat prioritu bezpečí a stabilizace."
+      ],
+      "startingNotebook": [],
+      "expectedFacts": [
+        {
+          "id": "m1",
+          "category": "manifestations",
+          "text": "Má občas velmi silné výbuchy.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "má občas velmi silné výbuchy"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "m2",
+          "category": "manifestations",
+          "text": "Začne křičet.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "Začne křičet"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "m3",
+          "category": "manifestations",
+          "text": "Odstrkuje věci.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "odstrkuje věci"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "m4",
+          "category": "manifestations",
+          "text": "Odstrkuje lidi kolem sebe.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "lidi kolem sebe"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "m5",
+          "category": "manifestations",
+          "text": "Snaží se opustit místnost.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "snaží se opustit místnost"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "x1",
+          "category": "context",
+          "text": "Někdy tomu předchází konflikt s dítětem.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "Někdy tomu předchází konflikt s dítětem"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "x2",
+          "category": "context",
+          "text": "Jindy tomu předchází požadavek učitelky.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "jindy požadavek učitelky"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "x3",
+          "category": "context",
+          "text": "Jindy tomu předchází velký hluk.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "velký hluk"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "g1",
+          "category": "goals",
+          "text": "Pochopit situaci bez rychlého závěru a rozlišit možná vysvětlení.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "Potřebuji situaci pochopit bez rychlého závěru, rozlišit možná vysvětlení"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "g2",
+          "category": "goals",
+          "text": "Zachovat prioritu bezpečí a stabilizace.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "zachovat prioritu bezpečí a stabilizace"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "u1",
+          "category": "goals",
+          "text": "Není jisté, zda jde pokaždé o stejný problém.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "Nevíme, jestli jde pokaždé o stejný problém"
+          },
+          "uncertain": true,
+          "negated": false,
+          "requiredMarkers": [
+            "Nevíme"
+          ],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        }
+      ],
+      "forbiddenInferences": [
+        {
+          "text": "diagnóza",
+          "category": null
+        }
+      ],
+      "tags": [
+        "human-gate",
+        "regression:david"
+      ],
+      "dimensions": {
+        "factCount": 11,
+        "categoryCount": 3,
+        "linguistic": [
+          "compound",
+          "contrast",
+          "uncertainty"
+        ]
+      }
+    },
+    {
+      "id": "human-gate-anicka",
+      "suite": "dense",
+      "description": "Permanent Human Gate regression: Anička.",
+      "inputs": [
+        "Anička se při velkém hluku v šatně začala výrazně rozrušovat, snažila se rychle odejít a nereagovala na běžné pokyny. Pomohlo až klidnější místo a přítomnost známé učitelky. Potřebuji určit, co bezpečně sledovat před reakcí, během ní a při uklidňování, abychom lépe rozlišili vliv hluku, možnosti odejít do klidu a přítomnosti známé osoby."
+      ],
+      "startingNotebook": [],
+      "expectedFacts": [
+        {
+          "id": "x1",
+          "category": "context",
+          "text": "Při velkém hluku v šatně.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "při velkém hluku v šatně"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "m1",
+          "category": "manifestations",
+          "text": "Začala se výrazně rozrušovat.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "začala výrazně rozrušovat"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "m2",
+          "category": "manifestations",
+          "text": "Snažila se rychle odejít.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "snažila se rychle odejít"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "m3",
+          "category": "manifestations",
+          "text": "Nereagovala na běžné pokyny.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "nereagovala na běžné pokyny"
+          },
+          "uncertain": false,
+          "negated": true,
+          "requiredMarkers": [
+            "nereagovala"
+          ],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "h1",
+          "category": "helps",
+          "text": "Pomohlo klidnější místo.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "Pomohlo až klidnější místo"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "h2",
+          "category": "helps",
+          "text": "Pomohla přítomnost známé učitelky.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "přítomnost známé učitelky"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "g1",
+          "category": "goals",
+          "text": "Určit, co bezpečně sledovat před reakcí, během ní a při uklidňování.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "Potřebuji určit, co bezpečně sledovat před reakcí, během ní a při uklidňování"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "g2",
+          "category": "goals",
+          "text": "Rozlišit vliv hluku, možnosti odejít do klidu a přítomnosti známé osoby.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "lépe rozlišili vliv hluku, možnosti odejít do klidu a přítomnosti známé osoby"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        }
+      ],
+      "forbiddenInferences": [],
+      "tags": [
+        "human-gate",
+        "regression:anicka"
+      ],
+      "dimensions": {
+        "factCount": 8,
+        "categoryCount": 4,
+        "linguistic": [
+          "compound",
+          "conditional"
+        ]
+      }
+    },
+    {
+      "id": "human-gate-ondra",
+      "suite": "dense",
+      "description": "Permanent Human Gate regression: Ondra.",
+      "inputs": [
+        "Ondra někdy zvládne celou řízenou činnost bez problému a jindy po pár minutách odbíhá. Nevidím jasný vzorec. Častější je to po víkendu a před obědem, ale ne vždy. Potřebuji vytvořit cílený plán pozorování, který pomůže rozlišit, které podmínky s odbíháním skutečně souvisejí a které jsou jen náhodné."
+      ],
+      "startingNotebook": [],
+      "expectedFacts": [
+        {
+          "id": "m1",
+          "category": "manifestations",
+          "text": "Někdy zvládne celou řízenou činnost bez problému.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "někdy zvládne celou řízenou činnost bez problému"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "m2",
+          "category": "manifestations",
+          "text": "Jindy po pár minutách odbíhá.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "jindy po pár minutách odbíhá"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "c1",
+          "category": "course",
+          "text": "Odbíhá po pár minutách.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "po pár minutách"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "x1",
+          "category": "context",
+          "text": "Častější je to po víkendu.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "Častější je to po víkendu"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "x2",
+          "category": "context",
+          "text": "Častější je to před obědem.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "před obědem"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "c2",
+          "category": "course",
+          "text": "Častější je to po víkendu a před obědem, ale ne vždy.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "Častější je to po víkendu a před obědem, ale ne vždy"
+          },
+          "uncertain": true,
+          "negated": true,
+          "requiredMarkers": [
+            "ne vždy"
+          ],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "g1",
+          "category": "goals",
+          "text": "Vytvořit cílený plán pozorování.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "Potřebuji vytvořit cílený plán pozorování"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "g2",
+          "category": "goals",
+          "text": "Rozlišit související podmínky od náhodných.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "rozlišit, které podmínky s odbíháním skutečně souvisejí a které jsou jen náhodné"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        }
+      ],
+      "forbiddenInferences": [],
+      "tags": [
+        "human-gate",
+        "regression:ondra"
+      ],
+      "dimensions": {
+        "factCount": 8,
+        "categoryCount": 4,
+        "linguistic": [
+          "compound",
+          "contrast",
+          "uncertainty",
+          "negation"
+        ]
+      }
+    },
+    {
+      "id": "human-gate-eliska",
+      "suite": "dense",
+      "description": "Permanent Human Gate regression: Eliška.",
+      "inputs": [
+        "Eliška se při společném tvoření rychle přestane soustředit. Začne si hrát s pomůckami nebo pozoruje ostatní. Když sedí u kraje stolu a dostane úkol po malých částech, pracuje lépe. Potřebuji navrhnout praktický způsob organizace tvoření, který jí usnadní zapojení a který půjde ve třídě realisticky používat."
+      ],
+      "startingNotebook": [],
+      "expectedFacts": [
+        {
+          "id": "x1",
+          "category": "context",
+          "text": "Při společném tvoření.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "při společném tvoření"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "m1",
+          "category": "manifestations",
+          "text": "Rychle se přestane soustředit.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "rychle přestane soustředit"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "m2",
+          "category": "manifestations",
+          "text": "Začne si hrát s pomůckami.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "Začne si hrát s pomůckami"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "m3",
+          "category": "manifestations",
+          "text": "Pozoruje ostatní.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "pozoruje ostatní"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "h1",
+          "category": "helps",
+          "text": "U kraje stolu a s úkolem po malých částech pracuje lépe.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "Když sedí u kraje stolu a dostane úkol po malých částech, pracuje lépe"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "g1",
+          "category": "goals",
+          "text": "Navrhnout praktický způsob organizace tvoření, který usnadní zapojení.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "Potřebuji navrhnout praktický způsob organizace tvoření, který jí usnadní zapojení"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "g2",
+          "category": "goals",
+          "text": "Způsob musí být ve třídě realisticky použitelný.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "který půjde ve třídě realisticky používat"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        }
+      ],
+      "forbiddenInferences": [],
+      "tags": [
+        "human-gate",
+        "regression:eliska"
+      ],
+      "dimensions": {
+        "factCount": 7,
+        "categoryCount": 4,
+        "linguistic": [
+          "compound",
+          "conditional"
+        ]
+      }
+    },
+    {
+      "id": "human-gate-klarka",
+      "suite": "dense",
+      "description": "Permanent Human Gate regression: Klárka.",
+      "inputs": [
+        "Klárka reaguje velmi rozdílně na opravu. Někdy ji přijme, jindy začne křičet, že to neumí a nechce pokračovat. Častěji se to stává před ostatními dětmi, ale několikrát se to objevilo i při práci o samotě. Potřebuji navrhnout praktický způsob, jak jí poskytovat opravu a zpětnou vazbu, ale nechci, aby systém předstíral, že už přesně víme, proč reaguje tak rozdílně."
+      ],
+      "startingNotebook": [],
+      "expectedFacts": [
+        {
+          "id": "m1",
+          "category": "manifestations",
+          "text": "Reaguje velmi rozdílně na opravu.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "reaguje velmi rozdílně na opravu"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "m2",
+          "category": "manifestations",
+          "text": "Někdy opravu přijme.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "Někdy ji přijme"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "m3",
+          "category": "manifestations",
+          "text": "Jindy začne křičet.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "jindy začne křičet"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "m4",
+          "category": "manifestations",
+          "text": "Říká, že to neumí.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "že to neumí"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "m5",
+          "category": "manifestations",
+          "text": "Nechce pokračovat.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "nechce pokračovat"
+          },
+          "uncertain": false,
+          "negated": true,
+          "requiredMarkers": [
+            "nechce"
+          ],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "x1",
+          "category": "context",
+          "text": "Před ostatními dětmi.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "před ostatními dětmi"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "c1",
+          "category": "course",
+          "text": "Častěji se to stává před ostatními dětmi.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "Častěji se to stává před ostatními dětmi"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "x2",
+          "category": "context",
+          "text": "Při práci o samotě.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "při práci o samotě"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "c2",
+          "category": "course",
+          "text": "Několikrát se to objevilo i při práci o samotě.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "několikrát se to objevilo i při práci o samotě"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "g1",
+          "category": "goals",
+          "text": "Navrhnout praktický způsob poskytování opravy a zpětné vazby.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "Potřebuji navrhnout praktický způsob, jak jí poskytovat opravu a zpětnou vazbu"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "g2",
+          "category": "goals",
+          "text": "Nepředstírat jistotu o důvodu rozdílných reakcí.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "nechci, aby systém předstíral, že už přesně víme, proč reaguje tak rozdílně"
+          },
+          "uncertain": true,
+          "negated": true,
+          "requiredMarkers": [
+            "nechci",
+            "přesně víme"
+          ],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        }
+      ],
+      "forbiddenInferences": [
+        {
+          "text": "diagnóza",
+          "category": null
+        },
+        {
+          "text": "jistá příčina",
+          "category": null
+        }
+      ],
+      "tags": [
+        "human-gate",
+        "regression:klarka"
+      ],
+      "dimensions": {
+        "factCount": 11,
+        "categoryCount": 4,
+        "linguistic": [
+          "compound",
+          "contrast",
+          "uncertainty",
+          "negation"
+        ]
+      }
+    }
+  ]
+}
+

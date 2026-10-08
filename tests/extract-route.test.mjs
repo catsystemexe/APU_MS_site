@@ -10,10 +10,15 @@ test("source quotes are accepted only as exact message substrings", () => {
 });
 
 test("extract route requests strict structured output and revalidates quotes", async () => {
-  const source = await readFile(new URL("../app/api/extract/route.ts", import.meta.url), "utf8");
+  const [route, contract] = await Promise.all([
+    readFile(new URL("../app/api/extract/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/f1-extraction-contract.ts", import.meta.url), "utf8"),
+  ]);
+  const source = `${route}\n${contract}`;
   assert.match(source, /type:\s*"json_schema"/);
   assert.match(source, /strict:\s*true/);
-  assert.match(source, /locateSourceQuote\(body\.message as string, candidate\.sourceQuote\)/);
+  assert.match(route, /normalizeExtractionCandidates\(body\.message as string, notebook, extraction\.candidates\)/);
+  assert.match(contract, /locateSourceQuote\(message, candidate\.sourceQuote\)/);
   assert.match(source, /verifyGrounding\(apiKey, requestId, body\.message as string, notebook/);
   assert.match(source, /z „žák je líný“ nelze přijmout/);
   assert.match(source, /povinně projdi všech pět kategorií/);
@@ -39,9 +44,10 @@ test("extract route requests strict structured output and revalidates quotes", a
   assert.match(source, /„unavený“, „apatický“, „málo komunikuje“, „odmítá úkoly“ a „špatně se soustředí“ jsou odlišné projevy/);
   assert.match(source, /skutečnou parafrázi téhož projevu vrať jen jednou/);
   assert.match(source, /z explicitního „žák je apatický“ smíš přijmout pouze manifestations/);
-  assert.match(source, /model: EXTRACTION_MODEL,\s+reasoning: \{ effort: "low" \},\s+instructions: EXTRACTION_INSTRUCTIONS/);
-  assert.match(source, /name: "extract"[\s\S]{0,250}?reasoning: "low"/);
-  assert.match(source, /name: "grounding"[\s\S]{0,250}?reasoning: "low"/);
+  assert.match(route, /model: EXTRACTION_MODEL,\s+reasoning: \{ effort: PRODUCTION_EXTRACTION_REASONING \},\s+instructions: EXTRACTION_INSTRUCTIONS/);
+  assert.match(route, /name: "extract"[\s\S]{0,250}?reasoning: PRODUCTION_EXTRACTION_REASONING/);
+  assert.match(route, /name: "grounding"[\s\S]{0,250}?reasoning: PRODUCTION_EXTRACTION_REASONING/);
+  assert.doesNotMatch(route, /terra-extract|terra-both|terra-medium|coverage check/i);
   assert.match(source, /body\.explicitNeed !== undefined/);
   assert.match(source, /needMapping: \{ f2Path: body\.explicitNeed as F2Path, f3Target: null \}/);
 });
