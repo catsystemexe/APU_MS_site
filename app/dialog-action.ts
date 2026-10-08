@@ -99,15 +99,15 @@ export function resolveTextDialogEvent(
   return explicitContinuation || (action && destination) || directRecommendation ? "continue_to_solution" : null;
 }
 
-export type F2OutputNavigationResolution = "stay_for_preview" | "enter_f3";
+export type F2OutputNavigationResolution = "stay_for_rozbor" | "enter_f3";
 
 export function resolveF2OutputNavigation(
   textEvent: ReturnType<typeof resolveTextDialogEvent>,
   dialogEvent: string | undefined,
-  hasAcceptedPreview: boolean,
+  hasCurrentRozborSnapshot: boolean,
 ): F2OutputNavigationResolution | null {
   if (textEvent !== "continue_to_output" && dialogEvent !== "continue_to_output") return null;
-  return hasAcceptedPreview ? "enter_f3" : "stay_for_preview";
+  return hasCurrentRozborSnapshot ? "enter_f3" : "stay_for_rozbor";
 }
 
 const CONTINUE_OPTION: DialogActionOption = {
@@ -277,7 +277,7 @@ export function resolveDialogEvent(id: string, notebook: IntakeNotebookItem[], c
       }, navAction()],
     };
   }
-  // F2 output intent is resolved locally against the accepted PREVIEW. The
+  // F2 output intent is resolved locally against a valid current-Rozbor snapshot. The
   // controller must never advance directly to output without that snapshot.
   const phase: ConversationPhase = id === "continue_to_output" ? currentPhase : "development";
   return { phase, transition_ready: false, intake_question_policy_applies: false, dialog_actions: [] };

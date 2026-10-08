@@ -215,7 +215,7 @@ export async function POST(request: Request) {
   if (!intakeNotebook) return jsonError("Neplatný obsah intake mapy.", 400);
   const phase = body.phase ?? "intake";
   if (!CONVERSATION_PHASES.includes(phase as ConversationPhase)) return jsonError("Neplatná fáze konverzace.", 400);
-  if (phase === "output") return jsonError("F3 používá výhradně přijatý PREVIEW snapshot a explicitní finalizační rozhraní.", 409);
+  if (phase === "output") return jsonError("F3 používá výhradně přijatý snapshot aktuálního Rozboru a explicitní finalizační rozhraní.", 409);
   if (body.dialogEvent !== undefined && typeof body.dialogEvent !== "string") return jsonError("Neplatná dialogová akce.", 400);
   const askedRefinementTargets = validateRefinementTargets(body.askedRefinementTargets);
   if (!askedRefinementTargets) return jsonError("Neplatná historie doplňujících otázek.", 400);
@@ -255,7 +255,7 @@ export async function POST(request: Request) {
     ? resolveTextDialogEvent(body.message, intakeNotebook, phase as ConversationPhase)
     : null;
   if (phase === "development" && (body.dialogEvent === "continue_to_output" || textDialogEvent === "continue_to_output")) {
-    return jsonError("Přechod do F3 musí klient vyřešit proti přijatému PREVIEW snapshotu.", 409);
+    return jsonError("Přechod do F3 musí klient vyřešit proti validnímu snapshotu aktuálního Rozboru.", 409);
   }
   const effectiveDialogEvent = typeof body.dialogEvent === "string" ? body.dialogEvent : textDialogEvent;
   const controlledResult = effectiveDialogEvent

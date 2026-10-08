@@ -137,6 +137,21 @@ export type CurrentRozborState = {
   POZOROVAT: PozorovatBuildState;
   VYTVOŘIT: VytvoritBuildState;
 };
+export type F2ToF3Snapshot = {
+  kind: "f2-to-f3";
+  snapshotId: string;
+  sourceFingerprint: string;
+  sourceRevision: number;
+  canonicalNeed: F1ToF2NeedContract;
+  activePath: F2Path;
+  baselineHypotheses: WorkingHypothesis[];
+  currentRozbor: {
+    config: CurrentRozborBuildConfig;
+    components: RozborComponent[];
+  };
+  limitations: string[];
+  f3Target: string | null;
+};
 export type RozborComponentGenerationRequest = {
   activePath: F2Path;
   canonicalNeed: F1ToF2NeedContract;
@@ -363,6 +378,144 @@ export function reconcileRozborComponents(
   };
 }
 
+function orderedRozborSource(
+  need: F1ToF2NeedContract,
+  hypotheses: WorkingHypothesis[],
+  path: F2Path,
+  state: { config: CurrentRozborBuildConfig; components: RozborComponent[] },
+) {
+  return [
+    "current-rozbor-v1",
+    [need.needId, need.needText, need.initialF2Path, need.f3Target],
+    path,
+    hypotheses.map((hypothesis) => [
+      hypothesis.id,
+      hypothesis.rank,
+      ...relevantHypothesisContent(hypothesis),
+    ]),
+    state.config,
+    state.components.map(({ id, kind, hypothesisId, fingerprint, content }) => [
+      id,
+      kind,
+      hypothesisId ?? null,
+      fingerprint,
+      content,
+    ]),
+  ];
+}
+
+export function currentRozborSourceFingerprint(
+  need: F1ToF2NeedContract,
+  hypotheses: WorkingHypothesis[],
+  path: F2Path,
+  state: { config: CurrentRozborBuildConfig; components: RozborComponent[] },
+) {
+  return JSON.stringify(orderedRozborSource(need, hypotheses, path, state));
+}
+
+function compactFingerprint(value: string) {
+  let first = 0xdeadbeef ^ value.length;
+  let second = 0x41c6ce57 ^ value.length;
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    first = Math.imul(first ^ code, 2654435761);
+    second = Math.imul(second ^ code, 1597334677);
+  }
+  first = Math.imul(first ^ (first >>> 16), 2246822507) ^ Math.imul(second ^ (second >>> 13), 3266489909);
+  second = Math.imul(second ^ (second >>> 16), 2246822507) ^ Math.imul(first ^ (first >>> 13), 3266489909);
+  return `${(second >>> 0).toString(36)}${(first >>> 0).toString(36)}`;
+}
+
+function collectRozborLimitations(hypotheses: WorkingHypothesis[], components: RozborComponent[]) {
+  const collected = hypotheses.flatMap((hypothesis) => [...hypothesis.limitations, ...hypothesis.unknowns]);
+  const visit = (value: unknown): void => {
+    if (!value || typeof value !== "object") return;
+    if (Array.isArray(value)) {
+      value.forEach(visit);
+      return;
+    }
+    for (const [key, nested] of Object.entries(value)) {
+      if (key === "limitations" && Array.isArray(nested)) {
+        for (const item of nested) if (typeof item === "string") collected.push(item);
+      } else visit(nested);
+    }
+  };
+  components.forEach(({ content }) => visit(content));
+  return collected.map((item) => item.trim()).filter((item, index, items) => item && items.indexOf(item) === index);
+}
+
+export function assertCurrentRozborReadyForF3(
+  need: F1ToF2NeedContract,
+  hypotheses: WorkingHypothesis[],
+  path: F2Path,
+  state: { config: CurrentRozborBuildConfig; components: RozborComponent[] },
+) {
+  const required = deriveRequiredCurrentRozborComponents(path, need, hypotheses, state.config);
+  const reconciliation = reconcileRozborComponents(required, state.components);
+  if (!reconciliation.isRozborCurrent) throw new Error("Rozbor není aktuální vůči svému zdroji a nastavení.");
+  if (required.length === 0 || state.components.length === 0) throw new Error("Nejprve vytvořte aktuální Rozbor.");
+  parseGeneratedRozborComponents({ components: state.components }, required);
+  if (path === "POZOROVAT" && !state.components.some(({ kind }) => kind.startsWith("observation-"))) {
+    throw new Error("Rozbor zatím neobsahuje použitelnou pozorovací specifikaci.");
+  }
+  if (path === "VYTVOŘIT") {
+    const approaches = state.components.find(({ kind }) => kind === "creation-approaches")?.content;
+    const creation = approaches && typeof approaches !== "string" ? approaches as CreationApproachesContent : null;
+    if (!creation || !isComponentRecord(creation.workingApproach) || !hasText(creation.workingApproach.title) || !hasText(creation.workingApproach.rationale)) {
+      throw new Error("Rozbor VYTVOŘIT musí před Výstupem obsahovat explicitní pracovní přístup.");
+    }
+  }
+}
+
+function deepFreeze<T>(value: T): T {
+  if (value && typeof value === "object" && !Object.isFrozen(value)) {
+    Object.values(value).forEach((nested) => deepFreeze(nested));
+    Object.freeze(value);
+  }
+  return value;
+}
+
+export function createF2ToF3Snapshot(
+  need: F1ToF2NeedContract,
+  hypotheses: WorkingHypothesis[],
+  path: F2Path,
+  state: { config: CurrentRozborBuildConfig; components: RozborComponent[] },
+  sourceRevision: number,
+): F2ToF3Snapshot {
+  assertCurrentRozborReadyForF3(need, hypotheses, path, state);
+  const sourceFingerprint = currentRozborSourceFingerprint(need, hypotheses, path, state);
+  return deepFreeze(structuredClone({
+    kind: "f2-to-f3" as const,
+    snapshotId: `current-rozbor-${compactFingerprint(sourceFingerprint)}`,
+    sourceFingerprint,
+    sourceRevision,
+    canonicalNeed: need,
+    activePath: path,
+    baselineHypotheses: hypotheses,
+    currentRozbor: state,
+    limitations: collectRozborLimitations(hypotheses, state.components),
+    f3Target: need.f3Target,
+  }));
+}
+
+export function isF2ToF3Snapshot(value: unknown): value is F2ToF3Snapshot {
+  const isPath = (path: unknown): path is F2Path => path === "POCHOPIT" || path === "POZOROVAT" || path === "VYTVOŘIT";
+  const isQuestion = (question: unknown) => isComponentRecord(question) && hasText(question.id) && hasText(question.text) && ["manifestations", "goals", "context", "course", "helps"].includes(String(question.target)) && ["active", "skipped", "answered"].includes(String(question.status));
+  const isSnapshotHypothesis = (hypothesis: unknown) => isComponentRecord(hypothesis) && hasText(hypothesis.id) && Number.isInteger(hypothesis.rank) && hasText(hypothesis.title) && hasText(hypothesis.summary) && isStringArray(hypothesis.relevantNeeds) && isStringArray(hypothesis.supportingInformation) && isStringArray(hypothesis.limitations) && isStringArray(hypothesis.unknowns) && (hypothesis.question === null || isQuestion(hypothesis.question)) && Array.isArray(hypothesis.questions) && hypothesis.questions.every(isQuestion);
+  if (!isComponentRecord(value) || value.kind !== "f2-to-f3" || !hasText(value.snapshotId) || !hasText(value.sourceFingerprint) || !Number.isInteger(value.sourceRevision) || (value.sourceRevision as number) < 0) return false;
+  if (!isComponentRecord(value.canonicalNeed) || !hasText(value.canonicalNeed.needId) || !hasText(value.canonicalNeed.needText) || !isPath(value.canonicalNeed.initialF2Path) || !(value.canonicalNeed.f3Target === null || typeof value.canonicalNeed.f3Target === "string")) return false;
+  if (!isPath(value.activePath) || !Array.isArray(value.baselineHypotheses) || !value.baselineHypotheses.every(isSnapshotHypothesis) || !isComponentRecord(value.currentRozbor) || !isComponentRecord(value.currentRozbor.config) || !Array.isArray(value.currentRozbor.components) || !isStringArray(value.limitations) || !(value.f3Target === null || typeof value.f3Target === "string")) return false;
+  try {
+    const snapshot = value as F2ToF3Snapshot;
+    assertCurrentRozborReadyForF3(snapshot.canonicalNeed, snapshot.baselineHypotheses, snapshot.activePath, snapshot.currentRozbor);
+    const fingerprint = currentRozborSourceFingerprint(snapshot.canonicalNeed, snapshot.baselineHypotheses, snapshot.activePath, snapshot.currentRozbor);
+    const limitations = collectRozborLimitations(snapshot.baselineHypotheses, snapshot.currentRozbor.components);
+    return snapshot.sourceFingerprint === fingerprint && snapshot.snapshotId === `current-rozbor-${compactFingerprint(fingerprint)}` && snapshot.f3Target === snapshot.canonicalNeed.f3Target && JSON.stringify(snapshot.limitations) === JSON.stringify(limitations);
+  } catch {
+    return false;
+  }
+}
+
 export function createRozborGenerationRequest(
   need: F1ToF2NeedContract,
   hypotheses: WorkingHypothesis[],
@@ -432,22 +585,22 @@ function parseComponentContent(kind: RozborComponentKind, value: unknown): Rozbo
       return item as CreationApproachesContent["candidateApproaches"][number];
     });
     const working = value.workingApproach;
-    if (!hasText(working.title) || !hasText(working.rationale) || !isNonEmptyComponentStringArray(working.hypothesisIds) || !isNonEmptyComponentStringArray(working.limitations)) throw new Error("Model nevrátil zvolený pracovní přístup.");
+    if (!hasText(working.title) || !hasText(working.rationale) || !isNonEmptyComponentStringArray(working.hypothesisIds) || !isComponentStringArray(working.limitations)) throw new Error("Model nevrátil zvolený pracovní přístup.");
     return { candidateApproaches, workingApproach: working as CreationApproachesContent["workingApproach"] };
   }
   if (kind === "creation-objective") {
-    if (!hasText(value.objective) || !isNonEmptyComponentStringArray(value.hypothesisIds) || !isNonEmptyComponentStringArray(value.limitations)) throw new Error("Model nevrátil úplný praktický cíl.");
+    if (!hasText(value.objective) || !isNonEmptyComponentStringArray(value.hypothesisIds) || !isComponentStringArray(value.limitations)) throw new Error("Model nevrátil úplný praktický cíl.");
     return value as CreationObjectiveContent;
   }
   if (kind === "success-conditions") {
-    if (!Array.isArray(value.conditions) || value.conditions.length === 0 || !isNonEmptyComponentStringArray(value.limitations)) throw new Error("Model nevrátil podmínky úspěchu.");
+    if (!Array.isArray(value.conditions) || value.conditions.length === 0 || !isComponentStringArray(value.limitations)) throw new Error("Model nevrátil podmínky úspěchu.");
     const conditions = value.conditions.map((item) => {
       if (!isComponentRecord(item) || !hasText(item.condition) || !hasText(item.whyRequired)) throw new Error("Model vrátil neúplnou podmínku úspěchu.");
       return item as SuccessConditionsContent["conditions"][number];
     });
     return { conditions, limitations: value.limitations };
   }
-  if (!Array.isArray(value.checks) || value.checks.length === 0 || !isNonEmptyComponentStringArray(value.limitations)) throw new Error("Model nevrátil následné ověřování.");
+  if (!Array.isArray(value.checks) || value.checks.length === 0 || !isComponentStringArray(value.limitations)) throw new Error("Model nevrátil následné ověřování.");
   const checks = value.checks.map((item) => {
     if (!isComponentRecord(item) || !hasText(item.indicator) || !hasText(item.when) || !hasText(item.successSignal) || !hasText(item.adjustmentSignal) || !isComponentStringArray(item.hypothesisIds) || item.hypothesisIds.length === 0) throw new Error("Model vrátil neúplný následný indikátor.");
     return item as FollowUpVerificationContent["checks"][number];

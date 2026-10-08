@@ -4,6 +4,20 @@ Status: CURRENT
 
 Records significant verified product/runtime/project changes. It is not a complete Git log. Historical Sites-era entries are retained where they remain useful; current deployment state must not be inferred from a changelog entry alone.
 
+## 2026-10-08 — Milestone 2 direct current-Rozbor → F3 Output
+
+### Added / Changed
+- Connected POCHOPIT, POZOROVAT and VYTVOŘIT directly from the current Rozbor to a minimal structured F3 Output through an immutable validated snapshot; legacy PREVIEW is no longer required by the primary pipeline.
+- F3 now materializes the accepted F2 substance without re-deciding it, including the requirement that VYTVOŘIT provide an explicit working approach before materialization.
+- Source changes mark Output stale while preserving the previous valid Output; adopting the current Rozbor and regenerating remain explicit, and stale in-flight responses cannot replace current state.
+
+### Verification
+- Human Gate #2 passed on the Cloudflare branch preview for all three F2 paths, stale-source detection, previous-Output preservation, explicit adoption and explicit regeneration.
+
+### Preserved scope
+- APU Session JSON still exports `output: null`; B-01 remains open only for that export integration.
+- No production deployment was performed.
+
 ## 2026-10-08 — Shared current-Rozbor F2 core for all three paths
 
 ### Added / Changed
