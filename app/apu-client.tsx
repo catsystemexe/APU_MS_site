@@ -91,7 +91,7 @@ import { analysisChangeKeys, EMPTY_ANALYSIS, formatAnalysisChat, preserveAnalysi
 import { CompletedLifecycleStatus, ProcessingStatus, type F1ProcessingStage } from "./processing-status";
 import { addCompletedLifecycleRecord, withCompletedLifecycleRecord, type CompletedLifecycleRecord } from "./lifecycle-record";
 import { DevLogPanel } from "./dev-log-panel";
-import { DEV_TEST_SCENARIOS, type DevTestScenario } from "./dev-test-scenarios";
+import { DEV_TEST_SCENARIOS, DEV_TEST_SCENARIO_PATHS, type DevTestScenario } from "./dev-test-scenarios";
 import type { SharedFeedbackResult } from "./shared-feedback";
 import { acceptRenderedPreview, addF2Context, applyCurrentRozborComponentUpdate, applyF2BuildResult, canonicalF1NeedFingerprint, createCurrentRozborGenerationRequest, createCurrentRozborState, createF2BuildRequest, createF2PreviewSnapshot, deriveRequiredCurrentRozborComponents, F2_PATH_META, parameterizeF2Skill, parseF2BuildResult, parseF2RenderedPreview, parseGeneratedRozborComponents, previewStatus, reconcileRozborComponents, removeF2Context, switchF2Path, synchronizeF2BuildWithCanonicalNeed, toggleF2Skill, updateCurrentRozborConfig, type CurrentRozborState, type F2BuildState, type F2NotebookContextItem, type F2PreviewState } from "./f2-build-model";
 import { acceptF3Render, adoptF2Snapshot, createF3RenderRequest, createF3State, parseF3RenderResult, updateF3Config, type F3Config, type F3State } from "./f3-finalization-model";
@@ -331,18 +331,24 @@ function DeveloperHeaderControls({
           <FlaskConical aria-hidden="true" />
         </button>
         {scenarioMenuOpen && <span id="dev-scenario-menu" className="dev-scenario-menu" role="menu" aria-label="Testovací scénáře">
-          {DEV_TEST_SCENARIOS.map((scenario) => <button
-            key={scenario.id}
-            type="button"
-            role="menuitem"
-            onClick={() => {
-              onSelectScenario(scenario);
-              setScenarioMenuOpen(false);
-            }}
-          >
-            <strong>{scenario.label}</strong>
-            <span>{scenario.subtitle}</span>
-          </button>)}
+          {DEV_TEST_SCENARIO_PATHS.map((path) => <span key={path} className="dev-scenario-column" role="group" aria-label={path}>
+            <strong className="dev-scenario-path">{path}</strong>
+            {DEV_TEST_SCENARIOS.filter((scenario) => scenario.path === path)
+              .sort((a, b) => a.difficulty - b.difficulty)
+              .map((scenario) => <button
+                key={scenario.id}
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  onSelectScenario(scenario);
+                  setScenarioMenuOpen(false);
+                }}
+              >
+                <strong>{scenario.difficulty} · {scenario.load}</strong>
+                <span>{scenario.subtitle}</span>
+                <span>{scenario.label}</span>
+              </button>)}
+          </span>)}
         </span>}
       </span>
       <button
