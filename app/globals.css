@@ -187,22 +187,30 @@ button:disabled { cursor: default; opacity: 0.52; }
 .developer-log-toggle:hover { background: color-mix(in srgb, #e6a817 12%, transparent); }
 .developer-log-toggle:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .developer-log-toggle svg { width: 15px; height: 15px; stroke-width: 2.4; }
-.dev-scenario-picker { position: relative; display: inline-flex; }
+.dev-scenario-picker { display: inline-flex; }
 .dev-scenario-menu {
   position: absolute;
   z-index: 20;
   top: calc(100% + 8px);
-  left: 0;
-  width: 210px;
+  left: 20px;
+  width: min(600px, calc(100% - 40px));
   display: grid;
-  overflow: hidden;
-  padding: 5px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  max-height: calc(100dvh - 180px);
+  overflow: auto;
+  padding: 8px;
   border: 1px solid var(--border);
   border-radius: 10px;
   background: var(--bg-surface);
   box-shadow: 0 12px 30px var(--shadow-color);
 }
+.dev-scenario-column { display: grid; align-content: start; gap: 4px; min-width: 0; }
+.dev-scenario-column + .dev-scenario-column { border-left: 1px solid var(--border); padding-left: 6px; }
+.dev-scenario-path { padding: 6px 10px; color: var(--text-primary); }
 .dev-scenario-menu button {
+  min-width: 0;
+  overflow-wrap: anywhere;
   display: grid;
   gap: 2px;
   padding: 8px 10px;
@@ -217,7 +225,7 @@ button:disabled { cursor: default; opacity: 0.52; }
 .dev-scenario-menu button:focus-visible { background: var(--surface-hover); }
 .dev-scenario-menu button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
 .dev-scenario-menu strong { font-size: 12px; }
-.dev-scenario-menu span { color: var(--text-secondary); font-size: 10px; }
+.dev-scenario-menu button span { color: var(--text-secondary); font-size: 10px; }
 
 .dev-log-overlay { position: fixed; z-index: 100; inset: 0; padding: clamp(8px, 2vw, 24px); background: color-mix(in srgb, #111827 72%, transparent); backdrop-filter: blur(4px); }
 .dev-log-panel { width: min(1180px, 100%); height: 100%; margin: auto; display: grid; grid-template-rows: auto 1fr; overflow: hidden; border: 1px solid color-mix(in srgb, var(--line) 76%, #e6a817); border-radius: 16px; background: var(--bg-surface); box-shadow: 0 24px 80px #0008; }
@@ -1708,7 +1716,7 @@ button:disabled { cursor: default; opacity: 0.52; }
   .developer-indicator { font-size: 9px; }
   .developer-log-toggle { width: 24px; height: 24px; }
   .developer-log-toggle svg { width: 13px; height: 13px; }
-  .dev-scenario-menu { left: auto; right: 0; }
+  .dev-scenario-menu { position: fixed; top: 70px; left: 12px; right: 12px; width: auto; }
   .project-actions { gap: 0; }
   .project-actions button { width: 42px; height: 44px; }
   .project-actions button:disabled { display: none; }

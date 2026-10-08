@@ -139,8 +139,14 @@ test("all paths retain five independently configured skills", () => { for (const
 // Batch 2: focused POCHOPIT component-state contract.
 import {
   DEFAULT_POCHOPIT_BUILD_CONFIG,
+  DEFAULT_POZOROVAT_BUILD_CONFIG,
+  DEFAULT_VYTVORIT_BUILD_CONFIG,
+  applyCurrentRozborComponentUpdate,
   createRozborBaselineFingerprint,
+  createCurrentRozborGenerationRequest,
+  createCurrentRozborState,
   deriveRequiredRozborComponents,
+  deriveRequiredCurrentRozborComponents,
   reconcileRozborComponents,
   createPochopitBuildState,
   updatePochopitBuildConfig,
@@ -148,6 +154,7 @@ import {
   applyRozborComponentUpdate,
   createRozborGenerationRequest,
   parseGeneratedRozborComponents,
+  updateCurrentRozborConfig,
 } from "../app/f2-build-model.ts";
 
 const pochopitNeed = need("POCHOPIT");
@@ -365,4 +372,103 @@ test("atomic update removes obsolete components and replaces stale semantic IDs 
   assert.deepEqual(existing.map(({ id }) => id), ["hypothesis:h1:expansion", "hypothesis:h2:expansion", "expert-frame:all"]);
   assert.throws(() => applyRozborComponentUpdate({ config: nextConfig, components: existing }, required, response.slice(1)), /úplnou/);
   assert.deepEqual(existing.map(({ id }) => id), ["hypothesis:h1:expansion", "hypothesis:h2:expansion", "expert-frame:all"], "a failed response leaves the complete previous set untouched");
+});
+
+// Batch 1A-1C: shared path-aware current-Rozbor contract.
+const pozorovatNeed = need("POZOROVAT");
+const vytvoritNeed = need("VYTVOŘIT");
+const pozorovatConfig = (change = {}) => ({ ...DEFAULT_POZOROVAT_BUILD_CONFIG, ...change });
+const vytvoritConfig = (change = {}) => ({ ...DEFAULT_VYTVORIT_BUILD_CONFIG, ...change });
+
+const observationContent = {
+  "observation-comparison": {
+    contrasts: [{ conditionA: "kratší kruh", conditionB: "delší kruh", whatToObserve: "čas do odchodu", supportSignal: "v kratším kruhu zůstává déle", weakeningSignal: "délka kruhu výsledek nemění", supportsHypothesisIds: ["h1"], weakensHypothesisIds: [], doesNotDiscriminateWhen: "délka kruhu je stejná", limitations: ["jedno pozorování nestačí"] }],
+    limitations: ["kontrast neprokazuje příčinu"],
+  },
+  "observation-indicators": {
+    purpose: "Rozlišit vliv délky činnosti a podpory.",
+    indicators: [{ indicator: "čas do prvního odchodu", observableAs: "počet minut od začátku", situation: "ranní kruh", supportSignal: "čas se s kratším kruhem prodlouží", weakeningSignal: "čas zůstává stejný napříč délkami", supportsHypothesisIds: ["h1"], weakensHypothesisIds: [], doesNotDiscriminateWhen: "podmínky se nezmění", limitations: ["čas nepopisuje vnitřní stav"] }],
+    limitations: ["indikátor není diagnóza"],
+  },
+  "observation-priorities": {
+    priorities: [{ priority: 1, focus: "kratší versus delší kruh", reason: "zdroj již naznačuje rozdíl", hypothesisIds: ["h1"] }],
+    limitations: ["pořadí je pracovní"],
+  },
+};
+
+const creationContent = {
+  "creation-approaches": {
+    candidateApproaches: [{ title: "Předvídatelná aktivní role", description: "Dítě předem dostane krátkou roli v kruhu.", hypothesisIds: ["h1"], limitations: ["neznáme preferovanou roli"] }],
+    workingApproach: { title: "Krátký kruh s aktivní rolí", rationale: "Odpovídá rozdílům popsaným ve zdroji.", hypothesisIds: ["h1"], limitations: ["volba je pracovní a vyžaduje ověření"] },
+  },
+  "creation-objective": { objective: "Prodloužit smysluplné zapojení bez nátlaku.", hypothesisIds: ["h1"], limitations: ["výchozí délka kolísá"] },
+  "success-conditions": { conditions: [{ condition: "předem sdělená krátká struktura", whyRequired: "snižuje nepředvídatelnost" }], limitations: ["podmínky je třeba individualizovat"] },
+  "follow-up-verification": { checks: [{ indicator: "doba zapojení", when: "během tří ranních kruhů", successSignal: "delší účast bez zvýšení protestu", adjustmentSignal: "protest nebo kratší účast", hypothesisIds: ["h1"] }], limitations: ["změnu nelze připsat jediné podpoře"] },
+};
+
+test("one shared current-Rozbor state keeps independent path configuration without model work", () => {
+  let calls = 0;
+  let state = createCurrentRozborState();
+  state = updateCurrentRozborConfig(state, "POZOROVAT", { keyIndicators: true });
+  state = updateCurrentRozborConfig(state, "VYTVOŘIT", { candidateApproaches: true });
+  assert.equal(calls, 0);
+  assert.equal(state.POZOROVAT.config.keyIndicators, true);
+  assert.equal(state.VYTVOŘIT.config.candidateApproaches, true);
+  assert.deepEqual(state.POCHOPIT.config, DEFAULT_POCHOPIT_BUILD_CONFIG);
+});
+
+test("POZOROVAT derives stable operation components and selective dependency fingerprints", () => {
+  const hypotheses = [hypothesis("h1", "První"), hypothesis("h2", "Druhá")];
+  const config = pozorovatConfig({ expansionDepth: 2, compareHypotheses: true, keyIndicators: true, observationPriorities: true });
+  const required = deriveRequiredCurrentRozborComponents("POZOROVAT", pozorovatNeed, hypotheses, config);
+  assert.deepEqual(required.map(({ id }) => id), ["hypothesis:h1:expansion", "hypothesis:h2:expansion", "observation-comparison:all", "observation-indicators:all", "observation-priorities:all"]);
+  const existing = required.map(generated);
+  const changed = createCurrentRozborGenerationRequest("POZOROVAT", pozorovatNeed, [hypothesis("h1", "Změněná"), hypotheses[1]], config, existing);
+  assert.deepEqual(changed.components.map(({ id }) => id), ["hypothesis:h1:expansion", "observation-comparison:all", "observation-indicators:all", "observation-priorities:all"]);
+  assert.equal(changed.activePath, "POZOROVAT");
+});
+
+test("POZOROVAT structured results reject incomplete, unlinked, or unsolicited shapes", () => {
+  const config = pozorovatConfig({ compareHypotheses: true, keyIndicators: true, observationPriorities: true });
+  const requested = deriveRequiredCurrentRozborComponents("POZOROVAT", pozorovatNeed, [hypothesis("h1")], config);
+  const valid = requested.map((spec) => ({ ...spec, content: observationContent[spec.kind] }));
+  assert.equal(parseGeneratedRozborComponents({ components: valid }, requested).length, 3);
+  const missingCondition = structuredClone(valid); delete missingCondition[0].content.contrasts[0].conditionB;
+  assert.throws(() => parseGeneratedRozborComponents({ components: missingCondition }, requested), /kontrast/);
+  const unlinked = structuredClone(valid); unlinked[1].content.indicators[0].supportsHypothesisIds = [];
+  assert.throws(() => parseGeneratedRozborComponents({ components: unlinked }, requested), /indikátor/);
+  assert.throws(() => parseGeneratedRozborComponents({ components: [...valid, { ...valid[0], id: "unsolicited" }] }, requested), /nevyžádanou|úplnou/);
+});
+
+test("POZOROVAT pure removal is local and mixed invalid responses preserve the previous complete state", () => {
+  const config = pozorovatConfig({ compareHypotheses: true, keyIndicators: true, observationPriorities: true });
+  const hypotheses = [hypothesis("h1")];
+  const required = deriveRequiredCurrentRozborComponents("POZOROVAT", pozorovatNeed, hypotheses, config);
+  const valid = required.map((spec) => ({ ...spec, content: observationContent[spec.kind] }));
+  let state = createCurrentRozborState();
+  state = updateCurrentRozborConfig(state, "POZOROVAT", config);
+  state = applyCurrentRozborComponentUpdate(state, "POZOROVAT", required, valid);
+  const before = structuredClone(state);
+  const withoutPriority = pozorovatConfig({ compareHypotheses: true, keyIndicators: true });
+  const nextRequired = deriveRequiredCurrentRozborComponents("POZOROVAT", pozorovatNeed, hypotheses, withoutPriority);
+  assert.equal(createCurrentRozborGenerationRequest("POZOROVAT", pozorovatNeed, hypotheses, withoutPriority, state.POZOROVAT.components), null);
+  const removed = applyCurrentRozborComponentUpdate(state, "POZOROVAT", nextRequired, []);
+  assert.equal(removed.POZOROVAT.components.some(({ kind }) => kind === "observation-priorities"), false);
+  const changedRequired = deriveRequiredCurrentRozborComponents("POZOROVAT", pozorovatNeed, [hypothesis("h1", "Změněná")], config);
+  const changedValid = changedRequired.map((spec) => ({ ...spec, content: observationContent[spec.kind] }));
+  assert.throws(() => applyCurrentRozborComponentUpdate(state, "POZOROVAT", changedRequired, changedValid.slice(1)), /úplnou/);
+  assert.deepEqual(state, before);
+});
+
+test("VYTVOŘIT requires a selected working approach and represents objective, conditions, and follow-up checks", () => {
+  const config = vytvoritConfig({ expansionDepth: 1, candidateApproaches: true, refineObjective: true, successConditions: true, followUpVerification: true });
+  const requested = deriveRequiredCurrentRozborComponents("VYTVOŘIT", vytvoritNeed, [hypothesis("h1")], config);
+  assert.deepEqual(requested.map(({ id }) => id), ["hypothesis:h1:expansion", "creation-approaches:all", "creation-objective:all", "success-conditions:all", "follow-up-verification:all"]);
+  const valid = requested.map((spec) => ({ ...spec, content: spec.kind === "hypothesis-expansion" ? "Rozvinutí" : creationContent[spec.kind] }));
+  const parsed = parseGeneratedRozborComponents({ components: valid }, requested);
+  assert.equal(parsed.find(({ kind }) => kind === "creation-approaches").content.workingApproach.title, "Krátký kruh s aktivní rolí");
+  const noSelection = structuredClone(valid); delete noSelection.find(({ kind }) => kind === "creation-approaches").content.workingApproach;
+  assert.throws(() => parseGeneratedRozborComponents({ components: noSelection }, requested), /zvolený pracovní přístup/);
+  const noLimit = structuredClone(valid); noLimit.find(({ kind }) => kind === "creation-objective").content.limitations = [];
+  assert.throws(() => parseGeneratedRozborComponents({ components: noLimit }, requested), /praktický cíl/);
 });
