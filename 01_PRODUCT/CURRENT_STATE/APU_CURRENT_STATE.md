@@ -12,15 +12,27 @@ Zápisník
 
 Rozbor
 • Derived analytical layer built from the current Zápisník.
-• The verified current POCHOPIT prototype starts from the situation/pedagogical need plus concise open baseline hypotheses.
+• The verified current F2 prototype starts from the situation/pedagogical need plus concise open baseline hypotheses and supports three paths: POCHOPIT, POZOROVAT and VYTVOŘIT.
 • Baseline hypotheses stay distinct from generated analysis and are not rewritten by Build operations.
 • Desktop F2 uses Build on the left and Rozbor on the right; the composer remains available, Build can hide to reveal chat, and the divider is resizable.
-• POCHOPIT Build currently offers exactly three operations:
+• All three paths use one shared current-Rozbor component/reconciliation core with path-specific generated components.
+• POCHOPIT offers:
   – Rozvinout hypotézy: Základně / Podrobně / Do hloubky;
   – Porovnat a propojit hypotézy;
   – Doplnit odborný rámec.
+• POZOROVAT offers:
+  – Rozvinout hypotézy;
+  – Porovnat a propojit hypotézy as discriminative condition contrasts;
+  – Určit klíčové indikátory;
+  – Stanovit priority pozorování.
+• VYTVOŘIT offers:
+  – Rozvinout hypotézy;
+  – Navrhnout možné přístupy with one explicit working/recommended approach;
+  – Zpřesnit cíl;
+  – Určit podmínky úspěchu;
+  – Určit, co následně ověřovat.
 • VYTVOŘIT ROZBOR creates only the required generated components for active operations.
-• Each expansion is rendered directly below its matching baseline hypothesis. Porovnání a souvislosti and Odborný rámec are separate cross-cutting blocks below the hypothesis list.
+• Each hypothesis expansion is rendered directly below its matching baseline hypothesis. Path-specific cross-cutting components are rendered separately below the hypothesis list.
 • Generated content remains a working component collage, not one polished final report.
 • Build changes do not silently regenerate model content. AKTUALIZOVAT ROZBOR is explicit and incremental.
 • Unchanged components are preserved. Only missing or dependency-stale components are regenerated; pure removals make no model call.
@@ -33,8 +45,8 @@ Rozbor
 Výstup
 • F3 remains the downstream realization layer for concrete recommendations, plans and documents.
 • Product direction is that F3 should consume the current Rozbor substance and decide composition, audience, form and style without changing substantive F2 logic.
-• The new verified POCHOPIT slice has not yet migrated the existing immediate F2→F3 source contract. Legacy Preview-bound F3 implementation may still exist in the repository.
-• Therefore the new POCHOPIT flow must not currently be described as already entering F3 through the new current-Rozbor contract.
+• The verified current-Rozbor F2 flow has not yet migrated the existing immediate F2→F3 source contract. Legacy Preview-bound F3 implementation still exists in the repository.
+• Therefore none of the three current F2 paths should yet be described as entering F3 through the new current-Rozbor contract.
 
 PHASE BEHAVIOR
 F1 — Intake
@@ -50,9 +62,11 @@ F2 — Rozbor
 • Entry presents the concise baseline need + hypotheses rather than an exhaustive checklist.
 • Build controls are separate from baseline analytical content.
 • Ordinary Build selection changes are local and cause no model call.
-• VYTVOŘIT ROZBOR and AKTUALIZOVAT ROZBOR are the explicit model-backed actions for the verified POCHOPIT slice.
-• POZOROVAT and VYTVOŘIT redesign are not part of this verified slice.
-• The old path selector, five-skill track, processed path build and explicit PREVIEW generation are not current POCHOPIT interaction behavior.
+• VYTVOŘIT ROZBOR and AKTUALIZOVAT ROZBOR are the explicit model-backed actions for all three verified F2 paths.
+• Ordinary path/configuration changes are local and do not themselves call the model.
+• POZOROVAT is explicitly evidence-oriented: it separates observable indicators from interpretation and prioritizes contrasts that can discriminate between working hypotheses.
+• VYTVOŘIT must produce an explicit working/recommended approach before downstream materialization; a list of alternatives alone is not sufficient.
+• The old five-skill track, processed path build and explicit PREVIEW generation remain legacy contracts and are not the primary current-Rozbor interaction model.
 
 F2 → F3
 • The intended product boundary is current Rozbor substance → F3 materialization.
@@ -67,8 +81,8 @@ CURRENT INTERACTION PRINCIPLES
 
 CURRENT LIMITATIONS
 • Long-term project persistence, multi-project history, rich document editing, arbitrary templates and multiple saved F3 versions remain separate capabilities.
-• The new F2 POCHOPIT current-Rozbor source contract has not yet been wired into the existing F3 implementation.
-• POZOROVAT and VYTVOŘIT still require their own design/implementation cycle under the new F2 mental model.
+• The shared F2 current-Rozbor source contract has not yet been wired into the existing F3 implementation.
+• POCHOPIT, POZOROVAT and VYTVOŘIT are verified as F2 core prototypes, but F3 still consumes the legacy Preview-bound contract until the planned handoff migration is completed.
 • Integrations or deployment-specific access mechanisms are not product invariants and belong in technical current documentation.
 
 DOCUMENT OWNERSHIP
