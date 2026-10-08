@@ -5,6 +5,7 @@ import type { PipelineTurnTrace } from "./pipeline.ts";
 import { scoreCase, type CaseScore, type EvaluatedCandidate, type SemanticJudgeDecision } from "./scoring.ts";
 import { calculateStageMetrics, summarizeStageCalls, type JudgeCallAccounting, type StageRun } from "./stage-analysis.ts";
 import { formatRunFailure } from "./diagnostics.ts";
+import { deriveStagedSemanticEvaluation, type StagedSemanticJudgeOutput } from "./semantic-evidence.ts";
 
 export type SavedRawRun = {
   caseId: string;
@@ -22,6 +23,7 @@ export type SavedRawRun = {
   stageTurns?: PipelineTurnTrace[];
   stageCalls?: StageRun["stageCalls"];
   rescoreJudgeCalls?: JudgeCallAccounting[];
+  semanticEvidence?: StageRun["semanticEvidence"];
 };
 
 function validateRawRun(value: unknown, line: number): SavedRawRun {
@@ -55,20 +57,51 @@ export async function loadSavedRawRuns(inputPath: string) {
 }
 
 export type RescoreJudgeResult = { decisions: SemanticJudgeDecision[]; call: JudgeCallAccounting | null };
-export type RescoreJudge = (item: EvalCase, score: CaseScore, candidates: EvaluatedCandidate[], stage: JudgeCallAccounting["stage"]) => Promise<RescoreJudgeResult>;
+export type RescoreJudges = {
+  staged?: (item: EvalCase, turns: PipelineTurnTrace[]) => Promise<{ output: StagedSemanticJudgeOutput | null; call: JudgeCallAccounting | null }>;
+  legacy?: (item: EvalCase, score: CaseScore, candidates: EvaluatedCandidate[]) => Promise<RescoreJudgeResult>;
+};
 
-export async function rescoreSavedRun(corpus: EvalCorpus, saved: SavedRawRun, judge?: RescoreJudge): Promise<StageRun> {
+export async function rescoreSavedRun(corpus: EvalCorpus, saved: SavedRawRun, judges: RescoreJudges = {}): Promise<StageRun> {
   try {
     const item = corpus.cases.find((candidate) => candidate.id === saved.caseId);
     if (!item) throw new Error(`Saved run references unknown corpus case: ${saved.caseId}`);
     const judgeCalls: JudgeCallAccounting[] = [];
-    const preInitial = saved.preGroundingCandidates ? scoreCase(item, saved.preGroundingCandidates, saved.preGroundingSemanticJudgeDecisions ?? []) : null;
-    const preJudged = preInitial && judge ? await judge(item, preInitial, saved.preGroundingCandidates!, "judge_pre") : null;
-    if (preJudged?.call) judgeCalls.push(preJudged.call);
-    const preDecisions = preJudged?.decisions ?? saved.preGroundingSemanticJudgeDecisions ?? [];
-    const preScore = saved.preGroundingCandidates ? scoreCase(item, saved.preGroundingCandidates, preDecisions) : undefined;
+    if (saved.stageTurns) {
+      const judged = judges.staged ? await judges.staged(item, saved.stageTurns) : null;
+      if (judged?.call) judgeCalls.push(judged.call);
+      const evaluated = deriveStagedSemanticEvaluation(item, saved.stageTurns, judged?.output ?? null);
+      return {
+        ...evaluated.postScore,
+        profile: saved.profile,
+        pipeline: saved.pipeline,
+        repetition: saved.repetition,
+        candidates: structuredClone(saved.candidates),
+        latencyMs: saved.latencyMs,
+        inputTokens: saved.inputTokens,
+        outputTokens: saved.outputTokens,
+        estimatedCostUsd: saved.estimatedCostUsd,
+        suite: item.suite,
+        factCount: item.dimensions.factCount,
+        categoryCount: item.dimensions.categoryCount,
+        linguistic: item.dimensions.linguistic,
+        semanticJudgeDecisions: evaluated.postDecisions,
+        preGroundingCandidates: saved.preGroundingCandidates ? structuredClone(saved.preGroundingCandidates) : evaluated.context.preCandidates.map((candidate) => {
+          const { candidateId, origin, ...value } = candidate; void candidateId; void origin; return value;
+        }),
+        preGroundingSemanticJudgeDecisions: evaluated.preDecisions,
+        preGroundingScore: evaluated.preScore,
+        stageTurns: structuredClone(saved.stageTurns),
+        stageCalls: saved.stageCalls ? structuredClone(saved.stageCalls) : undefined,
+        stageAccounting: saved.stageCalls ? summarizeStageCalls(saved.stageCalls) : undefined,
+        stageMetrics: calculateStageMetrics(evaluated.preScore, evaluated.postScore, saved.stageTurns),
+        semanticEvidence: evaluated.evidence,
+        rescoreJudgeCalls: judgeCalls.length ? judgeCalls : saved.rescoreJudgeCalls,
+        rescoreJudgeAccounting: judgeCalls.length ? summarizeStageCalls(judgeCalls) : saved.rescoreJudgeCalls ? summarizeStageCalls(saved.rescoreJudgeCalls) : undefined,
+      };
+    }
     const initial = scoreCase(item, saved.candidates, saved.semanticJudgeDecisions ?? []);
-    const postJudged = judge ? await judge(item, initial, saved.candidates, "judge_post") : null;
+    const postJudged = judges.legacy ? await judges.legacy(item, initial, saved.candidates) : null;
     if (postJudged?.call) judgeCalls.push(postJudged.call);
     const decisions = postJudged?.decisions ?? saved.semanticJudgeDecisions ?? [];
     const score = scoreCase(item, saved.candidates, decisions);
@@ -87,13 +120,14 @@ export async function rescoreSavedRun(corpus: EvalCorpus, saved: SavedRawRun, ju
       categoryCount: item.dimensions.categoryCount,
       linguistic: item.dimensions.linguistic,
       semanticJudgeDecisions: decisions,
-      preGroundingCandidates: saved.preGroundingCandidates ? structuredClone(saved.preGroundingCandidates) : undefined,
-      preGroundingSemanticJudgeDecisions: saved.preGroundingCandidates ? preDecisions : undefined,
-      preGroundingScore: preScore,
-      stageTurns: saved.stageTurns ? structuredClone(saved.stageTurns) : undefined,
+      preGroundingCandidates: undefined,
+      preGroundingSemanticJudgeDecisions: undefined,
+      preGroundingScore: undefined,
+      stageTurns: undefined,
       stageCalls: saved.stageCalls ? structuredClone(saved.stageCalls) : undefined,
       stageAccounting: saved.stageCalls ? summarizeStageCalls(saved.stageCalls) : undefined,
-      stageMetrics: preScore && saved.stageTurns ? calculateStageMetrics(preScore, score, saved.stageTurns) : undefined,
+      stageMetrics: undefined,
+      semanticEvidence: undefined,
       rescoreJudgeCalls: judgeCalls.length ? judgeCalls : saved.rescoreJudgeCalls,
       rescoreJudgeAccounting: judgeCalls.length ? summarizeStageCalls(judgeCalls) : saved.rescoreJudgeCalls ? summarizeStageCalls(saved.rescoreJudgeCalls) : undefined,
     };
@@ -102,10 +136,10 @@ export async function rescoreSavedRun(corpus: EvalCorpus, saved: SavedRawRun, ju
   }
 }
 
-export async function rescoreSavedRuns(corpus: EvalCorpus, savedRuns: SavedRawRun[], judge?: RescoreJudge): Promise<StageRun[]> {
+export async function rescoreSavedRuns(corpus: EvalCorpus, savedRuns: SavedRawRun[], judges: RescoreJudges = {}): Promise<StageRun[]> {
   const rescored: StageRun[] = [];
   for (const saved of savedRuns) {
-    rescored.push(await rescoreSavedRun(corpus, saved, judge));
+    rescored.push(await rescoreSavedRun(corpus, saved, judges));
   }
   return rescored;
 }

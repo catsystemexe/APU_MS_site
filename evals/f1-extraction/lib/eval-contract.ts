@@ -248,6 +248,6 @@ export function estimateCallCount(cases: EvalCase[], options: Pick<EvalCliOption
   const turns = cases.reduce((sum, item) => sum + item.inputs.length, 0);
   const pipelineCalls = options.pipelines.reduce((sum, pipeline) => sum + (pipeline === "coverage" ? 3 : 2), 0);
   const pipelineProviderCalls = turns * options.profiles.length * options.repetitions * pipelineCalls;
-  const semanticJudgeCalls = options.judgeModel ? 2 * cases.length * options.profiles.length * options.pipelines.length * options.repetitions : 0;
+  const semanticJudgeCalls = options.judgeModel ? cases.length * options.profiles.length * options.pipelines.length * options.repetitions : 0;
   return { cases: cases.length, turns, repetitions: options.repetitions, configurations: options.profiles.length * options.pipelines.length, providerCalls: pipelineProviderCalls + semanticJudgeCalls, semanticJudgeCalls };
 }

@@ -5,15 +5,15 @@ import { readFile } from "node:fs/promises";
 import { resolve, win32 } from "node:path";
 import { pathToFileURL } from "node:url";
 import { MODEL_PROFILES, estimateCallCount, loadCorpus, parseCliArgs, resolveProfile, selectCases } from "./lib/eval-contract.ts";
-import { createOpenAIProvider, recordUsage, runExtractionPipeline, runSemanticJudge, type EvalProvider } from "./lib/pipeline.ts";
+import { createOpenAIProvider, recordUsage, runExtractionPipeline, runSemanticJudge, runStagedSemanticJudge, type EvalProvider } from "./lib/pipeline.ts";
 import { loadSavedRawRuns, rescoreSavedRun, rescoreSavedRuns, type SavedRawRun } from "./lib/rescore.ts";
-import { scoreCase } from "./lib/scoring.ts";
 import { writeResultArtifacts, writeResultArtifactsToDirectory } from "./lib/reporting.ts";
 import { assertResumeArguments, initializeRunDirectory, loadRunDirectory, runKey, saveCompletedRun, saveRunState, type RunPlan } from "./lib/checkpoint.ts";
 import { calculateStageMetrics, summarizeStageCalls, type JudgeCallAccounting, type StageRun } from "./lib/stage-analysis.ts";
 import { formatRunFailure } from "./lib/diagnostics.ts";
 import { assertResumeRescoreArguments, initializeRescoreDirectory, loadRescoreDirectory, saveRescoredRun, SCORING_CONTRACT_VERSION, type RescorePlan } from "./lib/rescore-checkpoint.ts";
 import type { SupportedModelId } from "../../app/model-config.ts";
+import { deriveStagedSemanticEvaluation } from "./lib/semantic-evidence.ts";
 
 export const HELP = `F1 extraction evaluation
 
@@ -67,7 +67,7 @@ function savedRunKey(run: SavedRawRun) {
 }
 
 function maximumJudgeCalls(runs: SavedRawRun[]) {
-  return runs.reduce((total, run) => total + 1 + Number(Boolean(run.preGroundingCandidates)), 0);
+  return runs.length;
 }
 
 async function executeJudgedRescore(input: {
@@ -93,12 +93,21 @@ async function executeJudgedRescore(input: {
   await writeResultArtifactsToDirectory(input.directory, runs, metadata);
   for (const saved of missing) {
     try {
-      const run = await rescoreSavedRun(input.corpus, saved, async (item, score, candidates, stage) => {
-        const judged = await runSemanticJudge(item, score, candidates, input.plan.judgeModel, input.provider);
-        return {
-          decisions: judged.decisions,
-          call: judged.called ? { stage, model: input.plan.judgeModel, reasoning: "low", latencyMs: judged.latencyMs, usage: judged.usage } : null,
-        };
+      const run = await rescoreSavedRun(input.corpus, saved, {
+        staged: async (item, turns) => {
+          const judged = await runStagedSemanticJudge(item, turns, input.plan.judgeModel, input.provider);
+          return {
+            output: judged.output,
+            call: judged.called ? { stage: "judge", model: input.plan.judgeModel, reasoning: "low", latencyMs: judged.latencyMs, usage: judged.usage } : null,
+          };
+        },
+        legacy: async (item, score, candidates) => {
+          const judged = await runSemanticJudge(item, score, candidates, input.plan.judgeModel, input.provider);
+          return {
+            decisions: judged.decisions,
+            call: judged.called ? { stage: "judge", model: input.plan.judgeModel, reasoning: "low", latencyMs: judged.latencyMs, usage: judged.usage } : null,
+          };
+        },
       });
       runs.push(run);
       completedKeys.add(runKey(run));
@@ -243,25 +252,23 @@ export async function execute(argv = process.argv.slice(2), cwd = process.cwd(),
     if (completed.has(runKey(identity))) continue;
     try {
       const pipelineRun = await runExtractionPipeline(item, resolvedProfiles[profileIndex], pipeline, provider);
-      const preInitial = scoreCase(item, pipelineRun.preGroundingCandidates);
-      const preJudge = judgeModel ? await runSemanticJudge(item, preInitial, pipelineRun.preGroundingCandidates, judgeModel, provider) : null;
-      const preScore = preJudge ? scoreCase(item, pipelineRun.preGroundingCandidates, preJudge.decisions) : preInitial;
-      const postInitial = scoreCase(item, pipelineRun.candidates);
-      const postJudge = judgeModel ? await runSemanticJudge(item, postInitial, pipelineRun.candidates, judgeModel, provider) : null;
-      const score = postJudge ? scoreCase(item, pipelineRun.candidates, postJudge.decisions) : postInitial;
+      const stagedJudge = judgeModel ? await runStagedSemanticJudge(item, pipelineRun.turns, judgeModel, provider) : null;
+      const evaluated = deriveStagedSemanticEvaluation(item, pipelineRun.turns, stagedJudge?.output ?? null);
+      const preScore = evaluated.preScore;
+      const score = evaluated.postScore;
       const judgeCalls: JudgeCallAccounting[] = [
-        ...(preJudge ? [{ stage: "judge_pre" as const, model: judgeModel!, reasoning: "low" as const, latencyMs: preJudge.latencyMs, usage: preJudge.usage }] : []),
-        ...(postJudge ? [{ stage: "judge_post" as const, model: judgeModel!, reasoning: "low" as const, latencyMs: postJudge.latencyMs, usage: postJudge.usage }] : []),
+        ...(stagedJudge?.called ? [{ stage: "judge" as const, model: judgeModel!, reasoning: "low" as const, latencyMs: stagedJudge.latencyMs, usage: stagedJudge.usage }] : []),
       ];
       const accounting = recordUsage([...pipelineRun.calls, ...judgeCalls]);
       const stageCalls = [...pipelineRun.calls, ...judgeCalls];
       const run: StageRun = {
         ...score, ...identity, candidates: pipelineRun.candidates,
         suite: item.suite, factCount: item.dimensions.factCount, categoryCount: item.dimensions.categoryCount, linguistic: item.dimensions.linguistic,
-        ...accounting, semanticJudgeDecisions: postJudge?.decisions,
+        ...accounting, semanticJudgeDecisions: evaluated.postDecisions,
         preGroundingCandidates: pipelineRun.preGroundingCandidates, preGroundingScore: preScore,
-        preGroundingSemanticJudgeDecisions: preJudge?.decisions, stageTurns: pipelineRun.turns,
+        preGroundingSemanticJudgeDecisions: evaluated.preDecisions, stageTurns: pipelineRun.turns,
         stageMetrics: calculateStageMetrics(preScore, score, pipelineRun.turns), stageCalls, stageAccounting: summarizeStageCalls(stageCalls),
+        semanticEvidence: evaluated.evidence,
       };
       runs.push(run);
       completed.add(runKey(run));

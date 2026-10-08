@@ -130,7 +130,7 @@ test("profile, pipeline, filters and call guards parse deterministically", async
   const selected = selectCases(corpus, options);
   assert.deepEqual(selected.map((item) => item.id), ["atomic-manifestation"]);
   assert.deepEqual(estimateCallCount(selected, options), { cases: 1, turns: 1, repetitions: 3, configurations: 4, providerCalls: 30, semanticJudgeCalls: 0 });
-  assert.deepEqual(estimateCallCount(selected, { ...options, judgeModel: "gpt-5.6-luna" }), { cases: 1, turns: 1, repetitions: 3, configurations: 4, providerCalls: 54, semanticJudgeCalls: 24 });
+  assert.deepEqual(estimateCallCount(selected, { ...options, judgeModel: "gpt-5.6-luna" }), { cases: 1, turns: 1, repetitions: 3, configurations: 4, providerCalls: 42, semanticJudgeCalls: 12 });
   assert.throws(() => parseCliArgs(["--profiles", "unknown"], "/repo"), /unsupported profile/);
 });
 

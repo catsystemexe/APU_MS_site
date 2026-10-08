@@ -1,9 +1,10 @@
 import type { PipelineCall, PipelineTurnTrace, StageCandidate } from "./pipeline.ts";
 import type { CaseScore, EvaluatedCandidate, RunScore, SemanticJudgeDecision } from "./scoring.ts";
 import type { ModelUsageRecord } from "../../../app/usage-ledger.ts";
+import type { StagedSemanticEvidence } from "./semantic-evidence.ts";
 
 export type JudgeCallAccounting = {
-  stage: "judge_pre" | "judge_post";
+  stage: "judge" | "judge_pre" | "judge_post";
   model: string;
   reasoning: "low";
   latencyMs: number;
@@ -35,6 +36,7 @@ export type StageRun = RunScore & {
   stageAccounting?: Record<string, { calls: number; latencyMs: number; inputTokens: number; outputTokens: number; estimatedCostUsd: number | null }>;
   rescoreJudgeCalls?: JudgeCallAccounting[];
   rescoreJudgeAccounting?: Record<string, { calls: number; latencyMs: number; inputTokens: number; outputTokens: number; estimatedCostUsd: number | null }>;
+  semanticEvidence?: StagedSemanticEvidence;
 };
 
 export function summarizeStageCalls(calls: NonNullable<StageRun["stageCalls"]>) {

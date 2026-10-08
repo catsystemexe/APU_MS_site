@@ -17,6 +17,7 @@ import type { ModelUsageRecord, UsageOperation } from "../../../app/usage-ledger
 import type { SupportedModelId } from "../../../app/model-config.ts";
 import type { EvalCase, ModelProfile, PipelineId, ReasoningEffort } from "./eval-contract.ts";
 import type { CaseScore, EvaluatedCandidate, SemanticJudgeDecision } from "./scoring.ts";
+import { buildStagedJudgeContext, validateStagedJudgeOutput, type StagedSemanticJudgeOutput } from "./semantic-evidence.ts";
 
 const intakeCorePromise = readFile(new URL("../../../apu-core/v1.6/02_OBSERVATION_AND_INTAKE.md", import.meta.url), "utf8");
 
@@ -41,6 +42,11 @@ U každého alignment posuď, zda uvedená skupina candidates společně význam
 U každého unmatched candidate posuď, zda jde o explicitní, zdrojově doložený fakt navíc (grounded_extra), nebo o nepodložený význam (unsupported).
 Při pochybnosti vrať uncertain. Kategorie, action, nejistota a negace musí zůstat zachovány. Nikdy nepřekrývej neplatný sourceQuote ani explicitní forbidden inference.`;
 
+const STAGED_SEMANTIC_JUDGE_INSTRUCTIONS = `${SEMANTIC_JUDGE_INSTRUCTIONS}
+Pracuješ jednou nad kanonickým PRE-grounding univerzem kandidátů. candidateId je stabilní identita kandidáta; survivedGrounding je pouze auditní informace a nesmí změnit sémantické posouzení.
+Pro každý reviewAlignment vrať právě jedno factDecision. Při equivalent vrať jednu nebo více minimálních dostačujících supportGroups tvořených candidateId. Každá skupina musí sama úplně pokrýt goldFact; více skupin znamená alternativní dostačující podporu. Společně nutné fragmenty patří do jedné skupiny.
+Pro každý unmatchedCandidate vrať právě jedno candidateDecision. Stejný kandidát neposuzuj znovu podle toho, zda přežil grounding.`;
+
 const SEMANTIC_JUDGE_SCHEMA = {
   type: "object",
   additionalProperties: false,
@@ -57,6 +63,49 @@ const SEMANTIC_JUDGE_SCHEMA = {
           goldFactId: { type: ["string", "null"] },
           candidateIndexes: { type: "array", items: { type: "integer", minimum: 0 } },
           decision: { type: "string", enum: ["equivalent", "not_equivalent", "grounded_extra", "unsupported", "uncertain"] },
+          reason: { type: "string" },
+        },
+      },
+    },
+  },
+} as const;
+
+const STAGED_SEMANTIC_JUDGE_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["factDecisions", "candidateDecisions"],
+  properties: {
+    factDecisions: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["goldFactId", "decision", "supportGroups", "reason"],
+        properties: {
+          goldFactId: { type: "string" },
+          decision: { type: "string", enum: ["equivalent", "not_equivalent", "uncertain"] },
+          supportGroups: {
+            type: "array",
+            items: {
+              type: "object",
+              additionalProperties: false,
+              required: ["candidateIds"],
+              properties: { candidateIds: { type: "array", items: { type: "string" } } },
+            },
+          },
+          reason: { type: "string" },
+        },
+      },
+    },
+    candidateDecisions: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["candidateId", "decision", "reason"],
+        properties: {
+          candidateId: { type: "string" },
+          decision: { type: "string", enum: ["grounded_extra", "unsupported", "uncertain"] },
           reason: { type: "string" },
         },
       },
@@ -321,4 +370,30 @@ export async function runSemanticJudge(item: EvalCase, score: CaseScore, candida
     },
   });
   return { decisions: judged.value.decisions, usage: judged.usage, latencyMs: judged.latencyMs, called: true };
+}
+
+export async function runStagedSemanticJudge(item: EvalCase, turns: PipelineTurnTrace[], model: SupportedModelId, provider: EvalProvider) {
+  const context = buildStagedJudgeContext(item, turns);
+  if (!context.reviewAlignments.length && !context.unmatchedCandidates.length) return {
+    output: null as StagedSemanticJudgeOutput | null, usage: null as ModelUsageRecord | null, latencyMs: 0, called: false,
+  };
+  const expectedDecisionCount = context.reviewAlignments.length + context.unmatchedCandidates.length;
+  const judged = await provider.call({
+    stage: "judge", model, reasoning: "low", instructions: STAGED_SEMANTIC_JUDGE_INSTRUCTIONS,
+    input: {
+      messageInputs: item.inputs,
+      canonicalPreCandidates: context.preCandidates.map((candidate) => ({
+        candidateId: candidate.candidateId,
+        candidate,
+        survivedGrounding: context.survivedCandidateIds.has(candidate.candidateId),
+      })),
+      reviewAlignments: context.reviewAlignments,
+      unmatchedCandidates: context.unmatchedCandidates,
+    },
+    schema: STAGED_SEMANTIC_JUDGE_SCHEMA,
+    formatName: "apu_f1_eval_staged_semantic_judge",
+    maxOutputTokens: semanticJudgeOutputBudget(expectedDecisionCount),
+    parse: (value) => validateStagedJudgeOutput(value, context),
+  });
+  return { output: judged.value, usage: judged.usage, latencyMs: judged.latencyMs, called: true };
 }

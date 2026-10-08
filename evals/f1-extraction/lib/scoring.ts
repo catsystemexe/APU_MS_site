@@ -165,17 +165,17 @@ export function scoreCase(item: EvalCase, candidates: EvaluatedCandidate[], sema
 
     if (state === "REVIEW") {
       const decisions = semanticDecisions.filter((decision) => decision.kind === "alignment" && decision.goldFactId === fact.id);
-      const equivalent = decisions.find((decision) => decision.decision === "equivalent");
-      if (equivalent) {
-        const decidedIndexes = decisionIndexes(equivalent, candidateIndexes);
+      const equivalentGroups = decisions.filter((decision) => decision.decision === "equivalent").map((decision) => {
+        const decidedIndexes = decisionIndexes(decision, candidateIndexes);
         const safe = decidedIndexes.length > 0
           && decidedIndexes.every((index) => sourceValidity[index] && !forbiddenIndexes.has(index) && candidates[index].inputIndex === fact.source.inputIndex && candidates[index].category === fact.category && candidates[index].action === fact.expectedAction && candidates[index].relatedEntryId === fact.relatedEntryId)
           && markersPreserved(fact, decidedIndexes, candidates);
-        if (safe) {
-          candidateIndexes = decidedIndexes;
-          state = "SEMANTIC_EQUIVALENT";
-          reason = equivalent.reason;
-        }
+        return safe ? { indexes: decidedIndexes, reason: decision.reason } : null;
+      }).filter((group): group is { indexes: number[]; reason: string } => group !== null);
+      if (equivalentGroups.length) {
+        candidateIndexes = [...new Set(equivalentGroups.flatMap((group) => group.indexes))];
+        state = "SEMANTIC_EQUIVALENT";
+        reason = equivalentGroups.map((group) => group.reason).join(" | ");
       }
       if (state === "REVIEW" && decisions.some((decision) => decision.decision === "not_equivalent")) {
         state = "MISS";

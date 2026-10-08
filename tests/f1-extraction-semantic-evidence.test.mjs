@@ -1,0 +1,176 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { runStagedSemanticJudge } from "../evals/f1-extraction/lib/pipeline.ts";
+import { deriveStagedSemanticEvaluation, validateStagedSemanticEvidence } from "../evals/f1-extraction/lib/semantic-evidence.ts";
+import { buildResultArtifacts } from "../evals/f1-extraction/lib/reporting.ts";
+import { calculateStageMetrics } from "../evals/f1-extraction/lib/stage-analysis.ts";
+
+const input = "Potřebuji zajistit klid a zajistit kratší úkoly. Při práci je ve třídě hlučno.";
+
+function gold(id, text = "Zajistit klid a kratší úkoly.") {
+  return { id, category: "goals", text, source: { inputIndex: 0, quote: input }, uncertain: false, negated: false, requiredMarkers: [], expectedAction: "add", relatedEntryId: null };
+}
+
+function evalCase(expectedFacts = [gold("goal")]) {
+  return {
+    id: "semantic-stage", suite: "mixed", description: "semantic stage", inputs: [input], startingNotebook: [], expectedFacts,
+    forbiddenInferences: [], tags: [], dimensions: { factCount: expectedFacts.length, categoryCount: expectedFacts.length ? 1 : 0, linguistic: ["compound"] },
+  };
+}
+
+function candidate(candidateId, notebookText, category = "goals") {
+  return { candidateId, origin: "extraction", inputIndex: 0, category, sourceQuote: input, notebookText, action: "add", relatedEntryId: null, reason: null, start: 0, end: input.length };
+}
+
+function turn(pre, survivingIds) {
+  const surviving = new Set(survivingIds);
+  return [{
+    inputIndex: 0,
+    rawExtraction: { situationRelation: "same", situationReason: null, categoryReview: { manifestations: "none", goals: "found", context: "none", course: "none", helps: "none" }, candidates: [] },
+    normalizedExtractionCandidates: pre,
+    rawCoverageCandidates: null,
+    normalizedCoverageCandidates: [],
+    preGroundingCandidates: pre,
+    groundingSubmittedCandidates: pre,
+    groundingVerdicts: pre.map((entry, submittedIndex) => ({
+      candidateId: entry.candidateId, submittedIndex, accepted: surviving.has(entry.candidateId), reason: surviving.has(entry.candidateId) ? null : "grounding rejected", providerVerdict: { index: submittedIndex, accepted: surviving.has(entry.candidateId), reason: surviving.has(entry.candidateId) ? null : "grounding rejected" },
+    })),
+    finalCandidates: pre.filter((entry) => surviving.has(entry.candidateId)),
+  }];
+}
+
+function output(factDecisions, candidateIds) {
+  return { factDecisions, candidateDecisions: candidateIds.map((candidateId) => ({ candidateId, decision: "uncertain", reason: "classified through fact support" })) };
+}
+
+function equivalent(goldFactId, groups) {
+  return { goldFactId, decision: "equivalent", supportGroups: groups.map((candidateIds) => ({ candidateIds })), reason: "semantically sufficient" };
+}
+
+test("one semantic support candidate survives for PRE and POST coverage", () => {
+  const a = candidate("candidate-a", "Zajistit klid a krátké úkoly.");
+  const result = deriveStagedSemanticEvaluation(evalCase(), turn([a], [a.candidateId]), output([equivalent("goal", [[a.candidateId]])], [a.candidateId]));
+  assert.equal(result.preScore.counts.semanticCovered, 1);
+  assert.equal(result.postScore.counts.semanticCovered, 1);
+  assert.equal(result.evidence.goldFacts[0].preCovered, true);
+  assert.equal(result.evidence.goldFacts[0].postCovered, true);
+});
+
+test("rejected semantic support becomes a traceable grounding loss", () => {
+  const a = candidate("candidate-a", "Zajistit klid a krátké úkoly.");
+  const turns = turn([a], []);
+  const result = deriveStagedSemanticEvaluation(evalCase(), turns, output([equivalent("goal", [[a.candidateId]])], [a.candidateId]));
+  const metrics = calculateStageMetrics(result.preScore, result.postScore, turns);
+  assert.equal(result.preScore.counts.semanticCovered, 1);
+  assert.equal(result.postScore.counts.semanticCovered, 0);
+  assert.deepEqual(metrics.groundingLossGoldFactIds, ["goal"]);
+  assert.deepEqual(result.evidence.goldFacts[0].removedCandidateIds, [a.candidateId]);
+  assert.equal(result.evidence.goldFacts[0].groundingVerdicts[0].reason, "grounding rejected");
+});
+
+test("fact absent before grounding is an extraction miss, not a grounding loss", () => {
+  const turns = turn([], []);
+  const result = deriveStagedSemanticEvaluation(evalCase(), turns, null);
+  const metrics = calculateStageMetrics(result.preScore, result.postScore, turns);
+  assert.deepEqual(metrics.extractionMissGoldFactIds, ["goal"]);
+  assert.deepEqual(metrics.groundingLossGoldFactIds, []);
+});
+
+test("joint semantic support remains only while every required candidate survives", () => {
+  const a = candidate("candidate-a", "Zajistit klid.");
+  const b = candidate("candidate-b", "Zajistit kratší úkoly.");
+  const judged = output([equivalent("goal", [[a.candidateId, b.candidateId]])], [a.candidateId, b.candidateId]);
+  const both = deriveStagedSemanticEvaluation(evalCase(), turn([a, b], [a.candidateId, b.candidateId]), judged);
+  const one = deriveStagedSemanticEvaluation(evalCase(), turn([a, b], [a.candidateId]), judged);
+  assert.equal(both.postScore.counts.semanticCovered, 1);
+  assert.equal(one.postScore.counts.semanticCovered, 0);
+  assert.equal(one.evidence.goldFacts[0].groundingLoss, true);
+});
+
+test("an alternative sufficient support group preserves POST coverage", () => {
+  const a = candidate("candidate-a", "Zajistit klid a krátké úkoly.");
+  const b = candidate("candidate-b", "Zajistit klid.");
+  const c = candidate("candidate-c", "Zajistit kratší úkoly.");
+  const judged = output([equivalent("goal", [[a.candidateId], [b.candidateId, c.candidateId]])], [a.candidateId, b.candidateId, c.candidateId]);
+  const result = deriveStagedSemanticEvaluation(evalCase(), turn([a, b, c], [b.candidateId, c.candidateId]), judged);
+  assert.equal(result.preScore.counts.semanticCovered, 1);
+  assert.equal(result.postScore.counts.semanticCovered, 1);
+  assert.deepEqual(result.evidence.goldFacts[0].postSupportGroups, [{ candidateIds: [b.candidateId, c.candidateId] }]);
+});
+
+test("one candidate may support two gold facts on the same semantic basis", () => {
+  const a = candidate("candidate-a", "Zajistit klid a krátké úkoly.");
+  const item = evalCase([gold("calm", "Zajistit klid."), gold("short", "Zajistit kratší úkoly.")]);
+  const judged = output([equivalent("calm", [[a.candidateId]]), equivalent("short", [[a.candidateId]])], [a.candidateId]);
+  const result = deriveStagedSemanticEvaluation(item, turn([a], [a.candidateId]), judged);
+  assert.equal(result.preScore.counts.semanticCovered, 2);
+  assert.equal(result.postScore.counts.semanticCovered, 2);
+});
+
+test("candidate extra and unsupported classifications are filtered, not re-judged", () => {
+  const extra = candidate("extra", "Ve třídě bývá hlučno.", "context");
+  const unsupported = candidate("unsupported", "Ve třídě je bezpečno.", "context");
+  const item = evalCase([]);
+  const baseOutput = { factDecisions: [], candidateDecisions: [
+    { candidateId: extra.candidateId, decision: "grounded_extra", reason: "explicit extra" },
+    { candidateId: unsupported.candidateId, decision: "unsupported", reason: "not supported" },
+  ] };
+  const survive = deriveStagedSemanticEvaluation(item, turn([extra], [extra.candidateId]), { factDecisions: [], candidateDecisions: [baseOutput.candidateDecisions[0]] });
+  const removedExtra = deriveStagedSemanticEvaluation(item, turn([extra], []), { factDecisions: [], candidateDecisions: [baseOutput.candidateDecisions[0]] });
+  const removedUnsupported = deriveStagedSemanticEvaluation(item, turn([unsupported], []), { factDecisions: [], candidateDecisions: [baseOutput.candidateDecisions[1]] });
+  assert.equal(survive.postScore.counts.groundedExtra, 1);
+  assert.equal(calculateStageMetrics(removedExtra.preScore, removedExtra.postScore, turn([extra], [])).groundedExtrasRemoved, 1);
+  assert.equal(calculateStageMetrics(removedUnsupported.preScore, removedUnsupported.postScore, turn([unsupported], [])).unsupportedRemoved, 1);
+});
+
+test("hard invariant validation rejects impossible or unknown support", () => {
+  const base = {
+    preCandidateIds: ["a"], postCandidateIds: ["a"], candidates: [],
+    goldFacts: [{ goldFactId: "g", decision: "equivalent", reason: "x", supportGroups: [{ candidateIds: ["a"] }], postSupportGroups: [{ candidateIds: ["a"] }], preCovered: false, postCovered: true, groundingLoss: false, removedCandidateIds: [], groundingVerdicts: [] }],
+  };
+  assert.throws(() => validateStagedSemanticEvidence(base), /not PRE-covered/);
+  assert.throws(() => validateStagedSemanticEvidence({ ...base, preCandidateIds: [], postCandidateIds: ["a"], goldFacts: [], candidates: [] }), /absent from PRE evidence/);
+  assert.throws(() => validateStagedSemanticEvidence({ ...base, preCandidateIds: ["a", "a"], goldFacts: [] }), /duplicate/);
+  assert.throws(() => validateStagedSemanticEvidence({ ...base, goldFacts: [{ ...base.goldFacts[0], preCovered: true, supportGroups: [{ candidateIds: ["unknown"] }] }] }), /unknown candidate/);
+  assert.throws(() => validateStagedSemanticEvidence({ ...base, postCandidateIds: [], goldFacts: [{ ...base.goldFacts[0], preCovered: true }] }), /did not survive/);
+  assert.throws(() => validateStagedSemanticEvidence({ ...base, postCandidateIds: [], goldFacts: [{ ...base.goldFacts[0], preCovered: false, postCovered: false, postSupportGroups: [], groundingLoss: true }] }), /Grounding-loss state/);
+});
+
+test("aggregate artifacts expose paired stage dimensions and reject POST coverage above PRE", () => {
+  const a = candidate("candidate-a", "Zajistit klid a krátké úkoly.");
+  const turns = turn([a], [a.candidateId]);
+  const evaluated = deriveStagedSemanticEvaluation(evalCase(), turns, output([equivalent("goal", [[a.candidateId]])], [a.candidateId]));
+  const run = {
+    ...evaluated.postScore,
+    profile: "baseline", pipeline: "coverage", repetition: 1,
+    candidates: [a], latencyMs: 1, inputTokens: 0, outputTokens: 0, estimatedCostUsd: null,
+    suite: "mixed", factCount: 1, categoryCount: 1, linguistic: ["compound"],
+    preGroundingScore: evaluated.preScore, stageTurns: turns,
+    stageMetrics: calculateStageMetrics(evaluated.preScore, evaluated.postScore, turns), semanticEvidence: evaluated.evidence,
+  };
+  const aggregate = JSON.parse(buildResultArtifacts([run], {}).aggregateJson);
+  assert.equal(aggregate.stageDimensions[0].preSemanticCovered, 1);
+  assert.equal(aggregate.stageDimensions[0].postSemanticCovered, 1);
+  assert.throws(() => buildResultArtifacts([{ ...run, counts: { ...run.counts, semanticCovered: 2 } }], {}), /POST semantic coverage exceeds PRE/);
+});
+
+test("staged semantic judge uses one stable-ID call and zero calls when no review exists", async () => {
+  const a = candidate("candidate-a", "Zajistit klid a krátké úkoly.");
+  const turns = turn([a], [a.candidateId]);
+  let calls = 0;
+  const provider = { async call(request) {
+    calls += 1;
+    assert.equal(request.input.canonicalPreCandidates[0].candidateId, a.candidateId);
+    assert.equal(request.input.canonicalPreCandidates[0].survivedGrounding, true);
+    assert.ok(request.maxOutputTokens >= 2_500 && request.maxOutputTokens <= 8_000);
+    return { value: output([equivalent("goal", [[a.candidateId]])], [a.candidateId]), latencyMs: 1, usage: null };
+  } };
+  const judged = await runStagedSemanticJudge(evalCase(), turns, "gpt-5.6-sol", provider);
+  assert.equal(judged.called, true);
+  assert.equal(calls, 1);
+
+  const exact = candidate("exact", "Zajistit klid a kratší úkoly.");
+  const noReview = await runStagedSemanticJudge(evalCase(), turn([exact], [exact.candidateId]), "gpt-5.6-sol", provider);
+  assert.equal(noReview.called, false);
+  assert.equal(calls, 1);
+});

@@ -179,16 +179,19 @@ test("rescoring a new staged run preserves and recomputes stage metrics", async 
     const judgeProvider = { async call(input) {
       assert.equal(input.stage, "judge");
       judgeCalls += 1;
-      return { value: { decisions: [{
-        kind: "alignment", goldFactId: "m1", candidateIndexes: [0], decision: "equivalent", reason: "same explicit fact",
-      }] }, latencyMs: 1, usage: null };
+      return { value: {
+        factDecisions: [{
+          goldFactId: "m1", decision: "equivalent", supportGroups: [{ candidateIds: ["turn-0-extract-0"] }], reason: "same explicit fact",
+        }],
+        candidateDecisions: [{ candidateId: "turn-0-extract-0", decision: "uncertain", reason: "covered by alignment" }],
+      }, latencyMs: 1, usage: null };
     } };
     const rescored = await execute([
       "--rescore", original.directory, "--corpus", corpusPath, "--run-id", "rescored", "--output-dir", root,
-      "--judge-model", "gpt-5.6-luna", "--max-calls", "2",
+      "--judge-model", "gpt-5.6-luna", "--max-calls", "1",
     ], process.cwd(), {}, { provider: judgeProvider });
     const aggregate = JSON.parse(await readFile(join(rescored.directory, "aggregate.json"), "utf8"));
-    assert.equal(judgeCalls, 2, "staged rescore judges pre- and post-grounding candidates");
+    assert.equal(judgeCalls, 1, "staged rescore judges the shared PRE evidence once");
     assert.equal(aggregate.stageAggregate[0].stageRunsAvailable, 1);
     assert.equal(aggregate.stageAggregate[0].preSemanticRecall, 1);
     assert.equal(aggregate.aggregate[0].semanticRecall, 1);

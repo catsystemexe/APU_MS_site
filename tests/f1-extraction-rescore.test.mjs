@@ -101,7 +101,7 @@ test("judged rescore checkpoints, fails safely, and resumes only missing source 
     assert.equal(partial.length, 1);
     assert.equal(partial[0].repetition, 1);
     assert.equal(partial[0].latencyMs, 101, "original extraction accounting is preserved");
-    assert.equal(partial[0].rescoreJudgeAccounting.judge_post.estimatedCostUsd, 0.01);
+    assert.equal(partial[0].rescoreJudgeAccounting.judge.estimatedCostUsd, 0.01);
 
     let guardedCalls = 0;
     const guardedProvider = { async call() { guardedCalls += 1; throw new Error("must not run"); } };
@@ -119,7 +119,7 @@ test("judged rescore checkpoints, fails safely, and resumes only missing source 
     assert.equal(resumedCalls, 2);
     const completed = (await readFile(join(target, "raw-runs.jsonl"), "utf8")).trim().split("\n").map(JSON.parse);
     assert.deepEqual(completed.map((run) => run.repetition), [1, 2, 3]);
-    assert.deepEqual(completed.map((run) => run.rescoreJudgeAccounting.judge_post.estimatedCostUsd), [0.01, 0.02, 0.02]);
+    assert.deepEqual(completed.map((run) => run.rescoreJudgeAccounting.judge.estimatedCostUsd), [0.01, 0.02, 0.02]);
     assert.equal(new Set(completed.map((run) => `${run.caseId}:${run.profile}:${run.pipeline}:${run.repetition}`)).size, 3);
     assert.equal(JSON.parse(await readFile(join(target, "run-state.json"), "utf8")).status, "completed");
     assert.equal(await readFile(rawPath, "utf8"), original);
