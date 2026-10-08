@@ -4,6 +4,27 @@ Status: CURRENT
 
 Records significant verified product/runtime/project changes. It is not a complete Git log. Historical Sites-era entries are retained where they remain useful; current deployment state must not be inferred from a changelog entry alone.
 
+## 2026-10-08 — Shared current-Rozbor F2 core for all three paths
+
+### Added / Changed
+- Generalized the component-based current-Rozbor mechanism from POCHOPIT into one path-aware F2 core for POCHOPIT, POZOROVAT and VYTVOŘIT.
+- Preserved explicit generation/update, stable component identities and fingerprints, selective regeneration, atomic updates, stale-response rejection, retryability and separation from canonical Zápisník facts.
+- Added POZOROVAT components for discriminative condition contrasts, observable indicators, hypothesis-linked support/weakening signals and observation priorities.
+- Added VYTVOŘIT components for candidate approaches, one explicit working/recommended approach, practical objective, success conditions and follow-up verification.
+- Updated the F2 workspace so all three paths are selectable in the current Build/Rozbor interaction model while legacy Preview/F3 contracts remain isolated for the next milestone.
+- Expanded the developer test picker to nine Human Gate scenarios arranged as POCHOPIT / POZOROVAT / VYTVOŘIT × difficulty 1–3 with VLNA / BOUŘE / TSUNAMI coverage.
+
+### Verification
+- Focused F2 tests: 57/57 passed before Human Gate.
+- Typecheck passed.
+- Production build and standalone Worker artifact validation passed.
+- Human Gate #1 passed for the three-path F2 core and developer test harness.
+- One unrelated pre-existing full-suite mismatch remains in `tests/shared-feedback.test.mjs`; it is outside this milestone and was not introduced by these changes.
+
+### Preserved scope
+- The F2→F3 contract migration remains pending; F3 still uses the legacy Preview-bound handoff.
+- No durable persistence, new context data model, attachment/integration work or production deployment was added.
+
 ## 2026-08-26 — Canonical model cost accounting
 
 ### Changed
