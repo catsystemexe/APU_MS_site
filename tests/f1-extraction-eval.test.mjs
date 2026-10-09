@@ -104,8 +104,18 @@ test("canonical extraction and primary grounding contracts reject the five evide
   assert.match(grounding, /zamítni course „Bez přípravy\.“ i course „Po krátkém upozornění\.“/);
   assert.match(grounding, /zamítni course „Deset minut\.“ jako neúplný fakt/);
   assert.match(grounding, /přijmi course „Vydrží deset minut\.“ se sourceQuote „vydrží deset minut“/);
-  assert.match(grounding, /Z předmětu „řízenou činnost“ zamítni context „Při řízené činnosti\.“/);
+  assert.match(grounding, /z předmětu „řízenou činnost“ nadále zamítni context „Při řízené činnosti\.“/);
   assert.match(grounding, /přijmi samostatné kategoriální údaje jako „Občas\.“, „Velmi silné\.“, „Každé ráno\.“ nebo „Po pár minutách\.“/);
+});
+
+test("semantic-role guard permits equivalent adverbial context but still rejects object reframing", () => {
+  const extraction = buildExtractionInstructions("CORE");
+  const grounding = buildGroundingInstructions("CORE");
+
+  assert.match(extraction, /sourceQuote „jednotlivě“ → context „Při práci jednotlivě\.“/);
+  assert.match(extraction, /Z předmětu „řízenou činnost“[^\n]+nevytvářej „Při řízené činnosti\.“/);
+  assert.match(grounding, /sourceQuote „jednotlivě“ podporuje context „Při práci jednotlivě\.“/);
+  assert.match(grounding, /z předmětu „řízenou činnost“ nadále zamítni context „Při řízené činnosti\.“/);
 });
 
 test("shared candidate normalization rejects invalid quotes and repairs cross-category links", () => {
