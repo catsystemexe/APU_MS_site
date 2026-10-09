@@ -134,6 +134,23 @@ test("helps contract preserves coordinated outcomes and accepts adverse observed
   assert.match(grounding, /Samotné „Bez přípravy\.“, „Při samostatné práci\.“ ani „Před obědem\.“ bez pozorovaného účinku jako helps nepřijímej/);
 });
 
+test("extraction and primary grounding interoperate on habitual tense, latency, and speech evidence", () => {
+  const extraction = buildExtractionInstructions("CORE");
+  const grounding = buildGroundingInstructions("CORE");
+
+  assert.match(extraction, /„Napomenutí před třídou situaci obvykle zhorší“ → helps: „Napomenutí před třídou situaci obvykle zhorší\.“/);
+  assert.match(extraction, /„obvykle zhorší“ ponech jako „obvykle zhorší“/);
+  assert.match(grounding, /„obvykle zhorší“ a „obvykle zhoršuje“ mohou v této konstrukci vyjadřovat tentýž pozorovaný účinek/);
+  assert.match(grounding, /nepovoluje měnit skutečně časový, modální, dokončený, plánovaný ani hypotetický význam/);
+
+  assert.match(grounding, /VYSOKÁ PRIORITA PRO COURSE LATENCI/);
+  assert.match(grounding, /přijmi samostatný course „Po pár minutách\.“ se sourceQuote „po pár minutách“/);
+  assert.match(grounding, /Nadále zamítni holé „Deset minut\.“/);
+
+  assert.match(extraction, /sourceQuote „začne křičet, že to neumí“, notebookText „Křičí, že to neumí\.“/);
+  assert.match(extraction, /NESMÍ vzniknout notebookText „Říká, že to neumí\.“ se sourceQuote pouze „že to neumí“/);
+});
+
 test("shared candidate normalization rejects invalid quotes and repairs cross-category links", () => {
   const message = "Při čtení odchází od stolu.";
   const notebook = [{ id: "course-1", category: "course", text: "Každý den.", trust: "confirmed" }];
