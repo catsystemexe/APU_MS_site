@@ -118,6 +118,22 @@ test("semantic-role guard permits equivalent adverbial context but still rejects
   assert.match(grounding, /z předmětu „řízenou činnost“ nadále zamítni context „Při řízené činnosti\.“/);
 });
 
+test("helps contract preserves coordinated outcomes and accepts adverse observed effects", () => {
+  const extraction = buildExtractionInstructions("CORE");
+  const grounding = buildGroundingInstructions("CORE");
+
+  assert.match(extraction, /helps se sourceQuote „jednotlivě ho dokončí a požádá o další“/);
+  assert.match(extraction, /notebookText „Při práci jednotlivě úkol dokončí a požádá o další\.“/);
+  assert.match(extraction, /samostatné manifestations atomy „Úkol dokončí\.“ a „Požádá o další\.“/);
+  assert.match(extraction, /NESMÍ vzniknout „Po dokončení úkolu požádá o další\.“/);
+  assert.match(extraction, /nepříznivého „Bez přípravy začne při změně protestovat\.“/);
+
+  assert.match(grounding, /účinek může být příznivý, nepříznivý či zhoršující, neutrální nebo rozdílný/);
+  assert.match(grounding, /přijmi helps „Bez přípravy začne při změně protestovat\.“/);
+  assert.match(grounding, /Nepřidávej kauzální „Absence přípravy způsobuje protest\.“/);
+  assert.match(grounding, /Samotné „Bez přípravy\.“, „Při samostatné práci\.“ ani „Před obědem\.“ bez pozorovaného účinku jako helps nepřijímej/);
+});
+
 test("shared candidate normalization rejects invalid quotes and repairs cross-category links", () => {
   const message = "Při čtení odchází od stolu.";
   const notebook = [{ id: "course-1", category: "course", text: "Každý den.", trust: "confirmed" }];
