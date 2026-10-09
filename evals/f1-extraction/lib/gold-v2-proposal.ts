@@ -1,8 +1,9 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { CategoryId } from "../../../app/notepad-model.ts";
-import type { EvalCorpus, ExpectedRelation, GoldFact } from "./eval-contract.ts";
+import { validateCorpus, type EvalCorpus, type ExpectedRelation, type GoldFact } from "./eval-contract.ts";
 import { auditGoldCorpus } from "./gold-contract-audit.ts";
+import { canonicalizeRelations, relationSignature } from "./gold-relations.ts";
 
 export type ProposalConfidence = "mechanical" | "high" | "human-review-required";
 export type ProposedFact = Pick<GoldFact, "id" | "category" | "text" | "source" | "uncertain" | "negated" | "requiredMarkers" | "expectedAction" | "relatedEntryId"> & {
@@ -15,22 +16,52 @@ export type GoldV2ProposalChange = {
   currentText: string;
   proposedCanonicalText: string;
   textStaysUnchanged: boolean;
+  newFactIds: string[];
+  relationIds: string[];
+  helpsProjectionIds: string[];
+  reason: string;
+  confidence: ProposalConfidence;
+  decisionStatus: "ready_to_apply" | "pending_human_review";
+};
+export type GoldV2CaseProposal = {
+  caseId: string;
+  changeGoldFactIds: string[];
   newFacts: ProposedFact[];
   relations: ExpectedRelation[];
   helpsProjections: string[];
-  reason: string;
-  confidence: ProposalConfidence;
+  readyToApply: boolean;
+};
+export type GoldV2ProposalSummary = {
+  sourceCorpusVersion: 1 | 2;
+  targetCorpusVersion: 2;
+  proposedCaseCount: number;
+  proposedFactChanges: number;
+  proposedNewFacts: number;
+  proposedRelations: number;
+  deduplicatedRelationCount: number;
+  mechanical: number;
+  high: number;
+  humanReviewRequired: number;
+  readyToApply: boolean;
+  validationPassed: boolean;
+  auditDeterministicViolations: number;
+  auditUnexpectedHeuristics: number;
 };
 export type GoldV2Proposal = {
   kind: "f1-gold-v2-proposal";
   sourceCorpusVersion: 1 | 2;
   targetCorpusVersion: 2;
-  summary: { total: number; byConfidence: Record<ProposalConfidence, number> };
+  summary: GoldV2ProposalSummary;
   policy: string[];
   changes: GoldV2ProposalChange[];
+  caseProposals: GoldV2CaseProposal[];
 };
 
-type Spec = Omit<GoldV2ProposalChange, "currentCategory" | "currentText">;
+type Spec = Omit<GoldV2ProposalChange, "currentCategory" | "currentText" | "newFactIds" | "relationIds" | "helpsProjectionIds" | "decisionStatus"> & {
+  newFacts: ProposedFact[];
+  relations: ExpectedRelation[];
+  helpsProjections: string[];
+};
 
 const source = (quote: string) => ({ inputIndex: 0, quote });
 const addFact = (id: string, category: CategoryId, canonicalText: string, quote: string, options: Partial<ProposedFact> = {}): ProposedFact => ({
@@ -58,7 +89,7 @@ const SPECS: Spec[] = [
     caseId: "human-gate-david", goldFactId,
     proposedCanonicalText: ["Předchází tomu konflikt s dítětem.", "Předchází tomu požadavek učitelky.", "Předchází tomu velký hluk."][index],
     textStaysUnchanged: true, newFacts: [],
-    relations: [relation(`r-context-${goldFactId}-outbursts`, "context_of", [goldFactId], ["m1", "m2", "m3", "m4", "m5"], ["Někdy tomu předchází konflikt s dítětem", "jindy požadavek učitelky", "velký hluk"][index])], helpsProjections: [],
+    relations: [relation(`r-context-${goldFactId}-outbursts`, "context_of", [goldFactId], ["m1", "m2", "m3", "m4", "m5"], "Někdy tomu předchází konflikt s dítětem, jindy požadavek učitelky nebo velký hluk")], helpsProjections: [],
     reason: "Někdy/jindy distinguishes supported alternatives but does not by itself establish a course fact.", confidence: "human-review-required",
   })),
   {
@@ -80,13 +111,13 @@ const SPECS: Spec[] = [
   {
     caseId: "human-gate-klarka", goldFactId: "c1", proposedCanonicalText: "Vyskytuje se častěji.", textStaysUnchanged: true,
     newFacts: [addFact("h1", "helps", "Před ostatními dětmi se reakce objevuje častěji.", "Častěji se to stává před ostatními dětmi")],
-    relations: [relation("r-course-c1-reactions", "course_of", ["c1"], ["m1", "m3", "m4", "m5"], "Častěji se to stává před ostatními dětmi"), relation("r-effect-x1-reactions", "condition_effect", ["x1"], ["m3", "m4", "m5"], "Častěji se to stává před ostatními dětmi", ["h1"])], helpsProjections: ["h1"],
+    relations: [relation("r-course-c1-reactions", "course_of", ["c1"], ["m1", "m3", "m4", "m5"], "Častěji se to stává před ostatními dětmi"), relation("r-effect-x1-c1", "condition_effect", ["x1"], ["c1"], "Častěji se to stává před ostatními dětmi", ["h1"])], helpsProjections: ["h1"],
     reason: "The course value is atomic; the relational surface statement remains legitimate through context, effect, and helps projection.", confidence: "high",
   },
   {
     caseId: "human-gate-klarka", goldFactId: "c2", proposedCanonicalText: "Objevilo se to několikrát.", textStaysUnchanged: true,
     newFacts: [addFact("h2", "helps", "Při práci o samotě se reakce objevila několikrát.", "několikrát se to objevilo i při práci o samotě")],
-    relations: [relation("r-course-c2-reactions", "course_of", ["c2"], ["m1", "m3", "m4", "m5"], "několikrát se to objevilo i při práci o samotě"), relation("r-effect-x2-reactions", "condition_effect", ["x2"], ["m3", "m4", "m5"], "několikrát se to objevilo i při práci o samotě", ["h2"])], helpsProjections: ["h2"],
+    relations: [relation("r-course-c2-reactions", "course_of", ["c2"], ["m1", "m3", "m4", "m5"], "několikrát se to objevilo i při práci o samotě"), relation("r-effect-x2-c2", "condition_effect", ["x2"], ["c2"], "několikrát se to objevilo i při práci o samotě", ["h2"])], helpsProjections: ["h2"],
     reason: "Několikrát is course; the situation-dependent occurrence is preserved as an explicit effect projection.", confidence: "high",
   },
   {
@@ -100,15 +131,19 @@ const SPECS: Spec[] = [
     reason: "The explicit duration belongs to course c1; jindy only identifies the contrast branch.", confidence: "human-review-required",
   },
   {
+    caseId: "human-gate-ondra", goldFactId: "c1", proposedCanonicalText: "Po pár minutách.", textStaysUnchanged: true, newFacts: [], relations: [], helpsProjections: [],
+    reason: "The course canonical meaning isolates the explicit duration while its readable text retains the related manifestation.", confidence: "high",
+  },
+  {
     caseId: "human-gate-ondra", goldFactId: "c2", proposedCanonicalText: "Častější je to, ale ne vždy.", textStaysUnchanged: true,
     newFacts: [addFact("h1", "helps", "Po víkendu je odbíhání častější, ale ne vždy.", "Častější je to po víkendu a před obědem, ale ne vždy", { uncertain: true, negated: true, requiredMarkers: ["ne vždy"] }), addFact("h2", "helps", "Před obědem je odbíhání častější, ale ne vždy.", "Častější je to po víkendu a před obědem, ale ne vždy", { uncertain: true, negated: true, requiredMarkers: ["ne vždy"] })],
-    relations: [relation("r-course-c2-m2", "course_of", ["c2"], ["m2"], "Častější je to po víkendu a před obědem, ale ne vždy"), relation("r-effect-x1-m2", "condition_effect", ["x1"], ["m2"], "Častější je to po víkendu a před obědem, ale ne vždy", ["h1"]), relation("r-effect-x2-m2", "condition_effect", ["x2"], ["m2"], "Častější je to po víkendu a před obědem, ale ne vždy", ["h2"])], helpsProjections: ["h1", "h2"],
+    relations: [relation("r-course-c2-m2", "course_of", ["c2"], ["m2"], "Častější je to po víkendu a před obědem, ale ne vždy"), relation("r-effect-x1-c2", "condition_effect", ["x1"], ["c2"], "Častější je to po víkendu a před obědem, ale ne vždy", ["h1"]), relation("r-effect-x2-c2", "condition_effect", ["x2"], ["c2"], "Častější je to po víkendu a před obědem, ale ne vždy", ["h2"])], helpsProjections: ["h1", "h2"],
     reason: "Separate the course value from two contexts while preserving the explicit not-always uncertainty in each relational projection.", confidence: "high",
   },
   {
     caseId: "mixed-condition-result", goldFactId: "m1", proposedCanonicalText: "Začne protestovat.", textStaysUnchanged: true,
-    newFacts: [addFact("x2", "context", "Bez přípravy.", "Bez přípravy"), addFact("x3", "context", "Po krátkém upozornění.", "po krátkém upozornění"), addFact("m2", "manifestations", "Přejde bez křiku.", "přejde bez křiku", { negated: true, requiredMarkers: ["bez křiku"] })],
-    relations: [relation("r-context-x1-m1", "context_of", ["x1"], ["m1"], "Bez přípravy začne při změně protestovat"), relation("r-effect-x2-m1", "condition_effect", ["x2"], ["m1"], "Bez přípravy začne při změně protestovat"), relation("r-effect-x3-m2", "condition_effect", ["x3"], ["m2"], "po krátkém upozornění přejde bez křiku", ["h1"])], helpsProjections: ["h1"],
+    newFacts: [addFact("x2", "context", "Bez přípravy.", "Bez přípravy"), addFact("x3", "context", "Po krátkém upozornění.", "po krátkém upozornění"), addFact("m2", "manifestations", "Přejde bez křiku.", "přejde bez křiku", { negated: true, requiredMarkers: ["bez křiku"] }), addFact("h2", "helps", "Bez přípravy začne při změně protestovat.", "Bez přípravy začne při změně protestovat")],
+    relations: [relation("r-context-x1-m1", "context_of", ["x1"], ["m1"], "Bez přípravy začne při změně protestovat"), relation("r-effect-x2-m1", "condition_effect", ["x2"], ["m1"], "Bez přípravy začne při změně protestovat", ["h2"]), relation("r-effect-x3-m2", "condition_effect", ["x3"], ["m2"], "po krátkém upozornění přejde bez křiku", ["h1"])], helpsProjections: ["h1", "h2"],
     reason: "Atomize the protest and preserve both conditional branches, including the existing helps projection.", confidence: "high",
   },
   {
@@ -136,57 +171,181 @@ const SPECS: Spec[] = [
   },
 ];
 
-function validateProposalChange(corpus: EvalCorpus, spec: Spec): GoldV2ProposalChange {
-  const item = corpus.cases.find((candidate) => candidate.id === spec.caseId);
-  if (!item) throw new Error(`Gold v2 proposal references unknown case ${spec.caseId}.`);
-  const fact = item.expectedFacts.find((candidate) => candidate.id === spec.goldFactId);
-  if (!fact) throw new Error(`Gold v2 proposal references unknown fact ${spec.caseId}/${spec.goldFactId}.`);
-  for (const proposed of spec.newFacts) if (!item.inputs[proposed.source.inputIndex]?.includes(proposed.source.quote)) throw new Error(`Gold v2 proposed fact ${spec.caseId}/${proposed.id} has an invalid source quote.`);
-  for (const proposedRelation of spec.relations) if (!item.inputs[proposedRelation.source.inputIndex]?.includes(proposedRelation.source.quote)) throw new Error(`Gold v2 proposed relation ${spec.caseId}/${proposedRelation.id} has an invalid source quote.`);
-  return { ...spec, currentCategory: fact.category, currentText: fact.text };
+function assembleCaseProposal(corpus: EvalCorpus, caseId: string, specs: Spec[]) {
+  const item = corpus.cases.find((candidate) => candidate.id === caseId);
+  if (!item) throw new Error(`Gold v2 proposal references unknown case ${caseId}.`);
+  const existingFacts = new Map(item.expectedFacts.map((fact) => [fact.id, fact]));
+  const newFacts = new Map<string, ProposedFact>();
+  const rawRelations: ExpectedRelation[] = [];
+  const helpsProjections = new Set<string>();
+  for (const spec of specs) {
+    if (!existingFacts.has(spec.goldFactId)) throw new Error(`Gold v2 proposal references unknown fact ${caseId}/${spec.goldFactId}.`);
+    for (const proposed of spec.newFacts) {
+      if (existingFacts.has(proposed.id) || newFacts.has(proposed.id)) throw new Error(`Duplicate proposed fact id in ${caseId}: ${proposed.id}`);
+      if (!item.inputs[proposed.source.inputIndex]?.includes(proposed.source.quote)) throw new Error(`Gold v2 proposed fact ${caseId}/${proposed.id} has an invalid source quote.`);
+      newFacts.set(proposed.id, structuredClone(proposed));
+    }
+    for (const proposedRelation of spec.relations) {
+      if (!item.inputs[proposedRelation.source.inputIndex]?.includes(proposedRelation.source.quote)) throw new Error(`Gold v2 proposed relation ${caseId}/${proposedRelation.id} has an invalid source quote.`);
+      rawRelations.push(structuredClone(proposedRelation));
+    }
+    for (const id of spec.helpsProjections) helpsProjections.add(id);
+  }
+  const allFacts = new Map([...existingFacts, ...newFacts]);
+  for (const relation of rawRelations) for (const factId of [...relation.sourceFactIds, ...relation.targetFactIds, ...relation.projectionFactIds]) {
+    if (!allFacts.has(factId)) throw new Error(`Gold v2 proposed relation ${caseId}/${relation.id} references unknown fact ${factId}.`);
+  }
+  for (const id of helpsProjections) if (allFacts.get(id)?.category !== "helps") throw new Error(`Gold v2 helps projection ${caseId}/${id} is not a helps fact.`);
+  const canonical = canonicalizeRelations(rawRelations);
+  const changes: GoldV2ProposalChange[] = specs.map((spec) => {
+    const fact = existingFacts.get(spec.goldFactId)!;
+    return {
+      caseId,
+      goldFactId: spec.goldFactId,
+      currentCategory: fact.category,
+      currentText: fact.text,
+      proposedCanonicalText: spec.proposedCanonicalText,
+      textStaysUnchanged: spec.textStaysUnchanged,
+      newFactIds: spec.newFacts.map((item) => item.id).sort(),
+      relationIds: [...new Set(spec.relations.map((item) => canonical.signatureToId.get(relationSignature(item))!))].sort(),
+      helpsProjectionIds: [...new Set(spec.helpsProjections)].sort(),
+      reason: spec.reason,
+      confidence: spec.confidence,
+      decisionStatus: spec.confidence === "human-review-required" ? "pending_human_review" : "ready_to_apply",
+    };
+  });
+  return {
+    caseProposal: {
+      caseId,
+      changeGoldFactIds: changes.map((change) => change.goldFactId),
+      newFacts: [...newFacts.values()],
+      relations: canonical.relations,
+      helpsProjections: [...helpsProjections].sort(),
+      readyToApply: changes.every((change) => change.decisionStatus === "ready_to_apply"),
+    } satisfies GoldV2CaseProposal,
+    changes,
+    deduplicatedRelationCount: canonical.deduplicatedCount,
+  };
+}
+
+export function applyGoldV2Proposal(sourceCorpus: EvalCorpus, proposal: GoldV2Proposal): EvalCorpus {
+  const migrated = structuredClone(sourceCorpus);
+  migrated.version = 2;
+  const changesByCase = new Map<string, Map<string, GoldV2ProposalChange>>();
+  for (const change of proposal.changes) {
+    const caseChanges = changesByCase.get(change.caseId) ?? new Map<string, GoldV2ProposalChange>();
+    if (caseChanges.has(change.goldFactId)) throw new Error(`Duplicate fact change ${change.caseId}/${change.goldFactId}.`);
+    caseChanges.set(change.goldFactId, change);
+    changesByCase.set(change.caseId, caseChanges);
+  }
+  const proposalsByCase = new Map(proposal.caseProposals.map((item) => [item.caseId, item]));
+  for (const item of migrated.cases) {
+    const caseChanges = changesByCase.get(item.id) ?? new Map<string, GoldV2ProposalChange>();
+    item.expectedFacts = item.expectedFacts.map((fact) => {
+      const change = caseChanges.get(fact.id);
+      if (change && !change.textStaysUnchanged) throw new Error(`Proposal ${item.id}/${fact.id} requires an unsupported text rewrite.`);
+      return { ...fact, canonicalText: change?.proposedCanonicalText ?? fact.canonicalText ?? fact.text };
+    });
+    const caseProposal = proposalsByCase.get(item.id);
+    if (caseProposal) item.expectedFacts.push(...structuredClone(caseProposal.newFacts));
+    item.expectedRelations = caseProposal ? structuredClone(caseProposal.relations) : structuredClone(item.expectedRelations ?? []);
+    item.dimensions.factCount = item.expectedFacts.length;
+    item.dimensions.categoryCount = new Set(item.expectedFacts.map((fact) => fact.category)).size;
+  }
+  return migrated;
 }
 
 export function buildGoldV2Proposal(corpus: EvalCorpus): GoldV2Proposal {
-  const changes = SPECS.map((spec) => validateProposalChange(corpus, spec));
+  const caseIds = [...new Set(SPECS.map((spec) => spec.caseId))];
+  const assemblies = caseIds.map((caseId) => assembleCaseProposal(corpus, caseId, SPECS.filter((spec) => spec.caseId === caseId)));
+  const changes = assemblies.flatMap((item) => item.changes);
+  const caseProposals = assemblies.map((item) => item.caseProposal);
   const proposedKeys = new Set(changes.map((change) => `${change.caseId}\u0000${change.goldFactId}`));
   const uncoveredFindings = auditGoldCorpus(corpus).findings.filter((finding) => !proposedKeys.has(`${finding.caseId}\u0000${finding.goldFactId}`));
   if (uncoveredFindings.length) throw new Error(`Gold v2 proposal does not cover current audit findings: ${uncoveredFindings.map((finding) => `${finding.caseId}/${finding.goldFactId}`).join(", ")}`);
-  return {
-    kind: "f1-gold-v2-proposal", sourceCorpusVersion: corpus.version, targetCorpusVersion: 2,
-    summary: {
-      total: changes.length,
-      byConfidence: {
-        mechanical: changes.filter((change) => change.confidence === "mechanical").length,
-        high: changes.filter((change) => change.confidence === "high").length,
-        "human-review-required": changes.filter((change) => change.confidence === "human-review-required").length,
-      },
-    },
+  const confidenceCount = (confidence: ProposalConfidence) => changes.filter((change) => change.confidence === confidence).length;
+  const pendingKeys = new Set(changes.filter((change) => change.decisionStatus === "pending_human_review").map((change) => `${change.caseId}\u0000${change.goldFactId}`));
+  const pendingRelationIds = new Set(changes.filter((change) => change.decisionStatus === "pending_human_review").flatMap((change) => change.relationIds.map((id) => `${change.caseId}\u0000${id}`)));
+  const baseSummary: GoldV2ProposalSummary = {
+    sourceCorpusVersion: corpus.version,
+    targetCorpusVersion: 2,
+    proposedCaseCount: caseProposals.length,
+    proposedFactChanges: changes.length,
+    proposedNewFacts: caseProposals.reduce((total, item) => total + item.newFacts.length, 0),
+    proposedRelations: caseProposals.reduce((total, item) => total + item.relations.length, 0),
+    deduplicatedRelationCount: assemblies.reduce((total, item) => total + item.deduplicatedRelationCount, 0),
+    mechanical: confidenceCount("mechanical"),
+    high: confidenceCount("high"),
+    humanReviewRequired: confidenceCount("human-review-required"),
+    readyToApply: false,
+    validationPassed: false,
+    auditDeterministicViolations: 0,
+    auditUnexpectedHeuristics: 0,
+  };
+  const proposal: GoldV2Proposal = {
+    kind: "f1-gold-v2-proposal",
+    sourceCorpusVersion: corpus.version,
+    targetCorpusVersion: 2,
+    summary: baseSummary,
     policy: [
       "canonicalText is the primary atomic scoring target; supported relational text may remain as surface text.",
+      "Relations are canonicalized per case; directional lists are sorted and contrast sides use stable fact-ID order.",
+      "Condition-dependent course is represented as context → course and course → manifestation.",
       "Helps facts are intrinsically relational and should be backed by explicit condition_effect projections.",
       "Někdy/jindy and sometimes/other-times branches do not automatically create course facts.",
       "Explicit občas, častěji, několikrát, denně, strong intensity, and duration normally produce course facts.",
     ],
     changes,
+    caseProposals,
   };
+  const migrated = applyGoldV2Proposal(corpus, proposal);
+  const validation = validateCorpus(migrated);
+  const audit = auditGoldCorpus(migrated);
+  const unexpectedFactFindings = audit.heuristicFindings.filter((finding) => !pendingKeys.has(`${finding.caseId}\u0000${finding.goldFactId}`));
+  const unexpectedRelationFindings = audit.relationFindings.filter((finding) => !pendingRelationIds.has(`${finding.caseId}\u0000${finding.relationId}`));
+  const unexpectedHeuristics = unexpectedFactFindings.length + unexpectedRelationFindings.length;
+  proposal.summary = {
+    ...baseSummary,
+    readyToApply: baseSummary.humanReviewRequired === 0,
+    validationPassed: validation.errors.length === 0 && audit.deterministicViolations.length === 0 && unexpectedHeuristics === 0,
+    auditDeterministicViolations: audit.deterministicViolations.length,
+    auditUnexpectedHeuristics: unexpectedHeuristics,
+  };
+  if (validation.errors.length) throw new Error(`Generated Gold v2 corpus is invalid:\n${validation.errors.join("\n")}`);
+  if (audit.deterministicViolations.length) throw new Error(`Generated Gold v2 corpus has deterministic audit violations:\n${audit.deterministicViolations.map((item) => item.reason).join("\n")}`);
+  if (unexpectedHeuristics) throw new Error(`Generated Gold v2 corpus introduced unexpected audit heuristics: ${[...unexpectedFactFindings.map((item) => `${item.caseId}/${item.goldFactId}`), ...unexpectedRelationFindings.map((item) => `${item.caseId}/${item.relationId}`)].join(", ")}`);
+  return proposal;
 }
 
 export function renderGoldV2ProposalMarkdown(proposal: GoldV2Proposal) {
-  const lines = ["# F1 Gold Contract v2 proposal", "", `Source corpus: v${proposal.sourceCorpusVersion}; target: v${proposal.targetCorpusVersion}.`, `Changes: ${proposal.summary.total} (mechanical ${proposal.summary.byConfidence.mechanical}, high ${proposal.summary.byConfidence.high}, human review ${proposal.summary.byConfidence["human-review-required"]}).`, "", "## Policy", "", ...proposal.policy.map((entry) => `- ${entry}`), "", "## Changes", ""];
-  for (const change of proposal.changes) lines.push(
-    `### ${change.caseId} / ${change.goldFactId}`,
-    "",
-    `- Current category: ${change.currentCategory}`,
-    `- Current text: ${change.currentText}`,
-    `- Proposed canonicalText: ${change.proposedCanonicalText}`,
-    `- Text stays unchanged: ${change.textStaysUnchanged}`,
-    `- New facts: ${change.newFacts.length ? change.newFacts.map((fact) => `${fact.id} (${fact.category}): ${fact.canonicalText}`).join("; ") : "none"}`,
-    `- Relations: ${change.relations.length ? change.relations.map((item) => `${item.id} (${item.type})`).join("; ") : "none"}`,
-    `- Helps projections: ${change.helpsProjections.length ? change.helpsProjections.join(", ") : "none"}`,
-    `- Reason: ${change.reason}`,
-    `- Confidence: ${change.confidence}`,
-    "",
-  );
+  const summary = proposal.summary;
+  const lines = [
+    "# F1 Gold Contract v2 proposal", "",
+    `Source corpus: v${summary.sourceCorpusVersion}; target: v${summary.targetCorpusVersion}.`,
+    `Cases: ${summary.proposedCaseCount}; fact changes: ${summary.proposedFactChanges}; new facts: ${summary.proposedNewFacts}; canonical relations: ${summary.proposedRelations}; deduplicated relations: ${summary.deduplicatedRelationCount}.`,
+    `Confidence: mechanical ${summary.mechanical}, high ${summary.high}, human review ${summary.humanReviewRequired}.`,
+    `Ready to apply: ${summary.readyToApply}; validation passed: ${summary.validationPassed}; deterministic audit violations: ${summary.auditDeterministicViolations}; unexpected heuristics: ${summary.auditUnexpectedHeuristics}.`,
+    "", "## Policy", "", ...proposal.policy.map((entry) => `- ${entry}`), "", "## Case proposals", "",
+  ];
+  for (const caseProposal of proposal.caseProposals) {
+    const changes = proposal.changes.filter((change) => change.caseId === caseProposal.caseId);
+    lines.push(`### ${caseProposal.caseId}`, "", `- Ready to apply: ${caseProposal.readyToApply}`, `- Helps projections: ${caseProposal.helpsProjections.length ? caseProposal.helpsProjections.join(", ") : "none"}`, "", "New facts:", "");
+    lines.push(...(caseProposal.newFacts.length ? caseProposal.newFacts.map((fact) => `- ${fact.id} (${fact.category}): ${fact.canonicalText}`) : ["- none"]), "", "Canonical relations:", "");
+    lines.push(...(caseProposal.relations.length ? caseProposal.relations.map((item) => {
+      const sharedBy = changes.filter((change) => change.relationIds.includes(item.id)).map((change) => change.goldFactId).join(", ");
+      return `- ${item.id}: ${item.type} [${item.sourceFactIds.join(", ")}] → [${item.targetFactIds.join(", ")}] projections [${item.projectionFactIds.join(", ") || "none"}] (referenced by: ${sharedBy})`;
+    }) : ["- none"]), "", "Fact changes:", "");
+    for (const change of changes) lines.push(
+      `- ${change.goldFactId} (${change.currentCategory}) → canonicalText: ${change.proposedCanonicalText}`,
+      `  - Current text remains: ${change.textStaysUnchanged}`,
+      `  - New fact refs: ${change.newFactIds.join(", ") || "none"}`,
+      `  - Relation refs: ${change.relationIds.join(", ") || "none"}`,
+      `  - Helps projection refs: ${change.helpsProjectionIds.join(", ") || "none"}`,
+      `  - Confidence: ${change.confidence}; decision: ${change.decisionStatus}`,
+      `  - Reason: ${change.reason}`,
+    );
+    lines.push("");
+  }
   return `${lines.join("\n")}\n`;
 }
 

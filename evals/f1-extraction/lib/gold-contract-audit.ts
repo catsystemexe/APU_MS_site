@@ -1,5 +1,6 @@
 import type { CategoryId } from "../../../app/notepad-model.ts";
 import { goldCanonicalText, validateCorpus, type EvalCase, type EvalCorpus, type GoldFact } from "./eval-contract.ts";
+import { relationSignature } from "./gold-relations.ts";
 
 export type GoldContractAuditSeverity = "definite contract mismatch" | "probable mismatch" | "review required";
 
@@ -74,11 +75,16 @@ function lexicalSignals(fact: GoldFact) {
 }
 
 function relationCoversDimension(item: EvalCase, factId: string, otherFactId: string | null, dimension: CategoryId) {
-  const expectedType = dimension === "context" ? "context_of" : dimension === "course" ? "course_of" : null;
-  if (!expectedType) return false;
-  return (item.expectedRelations ?? []).some((relation) => relation.type === expectedType
+  if (dimension === "course") return (item.expectedRelations ?? []).some((relation) => relation.type === "course_of"
     && relation.targetFactIds.includes(factId)
     && (otherFactId === null || relation.sourceFactIds.includes(otherFactId)));
+  if (dimension !== "context") return false;
+  const factsById = new Map(item.expectedFacts.map((fact) => [fact.id, fact]));
+  return (item.expectedRelations ?? []).some((relation) => {
+    if (!relation.targetFactIds.includes(factId) || (otherFactId !== null && !relation.sourceFactIds.includes(otherFactId))) return false;
+    if (relation.type === "context_of") return true;
+    return relation.type === "condition_effect" && relation.sourceFactIds.some((id) => factsById.get(id)?.category === "context");
+  });
 }
 
 function auditFact(item: EvalCase, fact: GoldFact): GoldContractAuditFinding | null {
@@ -142,10 +148,7 @@ export function auditGoldCorpus(corpus: EvalCorpus): GoldContractAuditReport {
     const signatures = new Map<string, string>();
     for (const relation of item.expectedRelations ?? []) {
       if (!relation || typeof relation !== "object" || !Array.isArray(relation.sourceFactIds) || !Array.isArray(relation.targetFactIds) || !Array.isArray(relation.projectionFactIds)) continue;
-      const sourceIds = [...relation.sourceFactIds].sort().join(",");
-      const targetIds = [...relation.targetFactIds].sort().join(",");
-      const sides = relation.type === "contrast_with" ? [sourceIds, targetIds].sort() : [sourceIds, targetIds];
-      const signature = [relation.type, ...sides, [...relation.projectionFactIds].sort().join(",")].join("|");
+      const signature = relationSignature(relation);
       const previous = signatures.get(signature);
       if (previous) deterministicViolations.push({ caseId: item.id, relationId: relation.id, code: "duplicate_relation", reason: `Relation ${relation.id} duplicates ${previous}.` });
       else signatures.set(signature, relation.id);

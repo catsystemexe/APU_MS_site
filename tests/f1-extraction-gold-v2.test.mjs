@@ -5,7 +5,8 @@ import { join } from "node:path";
 import test from "node:test";
 import { validateCorpus, loadCorpus } from "../evals/f1-extraction/lib/eval-contract.ts";
 import { auditGoldCorpus } from "../evals/f1-extraction/lib/gold-contract-audit.ts";
-import { buildGoldV2Proposal } from "../evals/f1-extraction/lib/gold-v2-proposal.ts";
+import { applyGoldV2Proposal, buildGoldV2Proposal } from "../evals/f1-extraction/lib/gold-v2-proposal.ts";
+import { canonicalizeRelations, relationSignature } from "../evals/f1-extraction/lib/gold-relations.ts";
 import { executeGoldV2Proposal } from "../evals/f1-extraction/propose-gold-v2.ts";
 import { scoreCase } from "../evals/f1-extraction/lib/scoring.ts";
 
@@ -139,12 +140,52 @@ test("helps projection may share evidence with a manifestation and audit separat
   assert.ok(auditGoldCorpus(corpus).deterministicViolations.some((entry) => entry.reason.includes("canonicalText")));
 });
 
+test("relation signatures deduplicate inverse contrasts and duplicate directional relations", () => {
+  const relation = (id, type, sourceFactIds, targetFactIds, projectionFactIds = []) => ({ id, type, sourceFactIds, targetFactIds, projectionFactIds, source: { inputIndex: 0, quote: "A proti B" } });
+  const forward = relation("forward", "contrast_with", ["m1"], ["m2"]);
+  const inverse = relation("inverse", "contrast_with", ["m2"], ["m1"]);
+  assert.equal(relationSignature(forward), relationSignature(inverse));
+  assert.deepEqual(canonicalizeRelations([forward]).relations, canonicalizeRelations([inverse]).relations);
+  const contrast = canonicalizeRelations([forward, inverse]);
+  assert.equal(contrast.relations.length, 1);
+  assert.equal(contrast.deduplicatedCount, 1);
+  assert.deepEqual(contrast.relations[0].sourceFactIds, ["m1"]);
+  assert.deepEqual(contrast.relations[0].targetFactIds, ["m2"]);
+  const duplicateAuditCorpus = validV2Case();
+  duplicateAuditCorpus.cases[0].expectedRelations.push({ id: "r5", type: "contrast_with", sourceFactIds: ["m2"], targetFactIds: ["m1"], projectionFactIds: [], source: { inputIndex: 0, quote: "odejde, v klidu zůstane" } });
+  assert.ok(auditGoldCorpus(duplicateAuditCorpus).deterministicViolations.some((entry) => entry.code === "duplicate_relation"));
+
+  const effectA = relation("effect-a", "condition_effect", ["x1"], ["c1"], ["h1"]);
+  const effectB = relation("effect-b", "condition_effect", ["x1"], ["c1"], ["h1"]);
+  assert.equal(canonicalizeRelations([effectA, effectB]).relations.length, 1);
+  assert.throws(() => canonicalizeRelations([effectA, { ...effectB, id: "effect-a" }]), /Duplicate proposed relation id/);
+});
+
+test("relation-aware audit accepts context → course → manifestation wording", () => {
+  const corpus = validV2Case();
+  const item = corpus.cases[0];
+  item.expectedFacts[1].text = "Při hluku odchází občas.";
+  item.expectedFacts[1].canonicalText = "Odchází občas.";
+  item.expectedRelations = [
+    { id: "effect", type: "condition_effect", sourceFactIds: ["x1"], targetFactIds: ["c1"], projectionFactIds: ["h1"], source: { inputIndex: 0, quote: "Při hluku občas odejde" } },
+    { id: "course", type: "course_of", sourceFactIds: ["c1"], targetFactIds: ["m1"], projectionFactIds: [], source: { inputIndex: 0, quote: "Při hluku občas odejde" } },
+  ];
+  assert.deepEqual(validateCorpus(corpus).errors, []);
+  assert.equal(auditGoldCorpus(corpus).findings.some((finding) => finding.goldFactId === "c1"), false);
+});
+
 test("Gold v2 proposal is deterministic, complete for required cases, and writes JSON plus Markdown", async () => {
   const corpus = await loadCorpus(corpusPath);
+  const original = JSON.stringify(corpus);
   const first = buildGoldV2Proposal(corpus);
   const second = buildGoldV2Proposal(corpus);
   assert.deepEqual(first, second);
-  assert.deepEqual(first.summary, { total: 18, byConfidence: { mechanical: 2, high: 8, "human-review-required": 8 } });
+  assert.deepEqual(first.summary, {
+    sourceCorpusVersion: 1, targetCorpusVersion: 2, proposedCaseCount: 8, proposedFactChanges: 19,
+    proposedNewFacts: 17, proposedRelations: 25, deduplicatedRelationCount: 3,
+    mechanical: 2, high: 9, humanReviewRequired: 8, readyToApply: false, validationPassed: true,
+    auditDeterministicViolations: 0, auditUnexpectedHeuristics: 0,
+  });
   const auditKeys = auditGoldCorpus(corpus).findings.map((finding) => `${finding.caseId}/${finding.goldFactId}`);
   const keys = new Set(first.changes.map((change) => `${change.caseId}/${change.goldFactId}`));
   for (const key of auditKeys) assert.ok(keys.has(key), `current audit finding has proposal: ${key}`);
@@ -154,28 +195,63 @@ test("Gold v2 proposal is deterministic, complete for required cases, and writes
     "mixed-negation-and-help/m1", "mixed-negation-and-help/h1",
   ]) assert.ok(keys.has(key), key);
   const branches = first.changes.filter((change) => ["human-gate-klarka/m2", "human-gate-klarka/m3", "human-gate-ondra/m1"].includes(`${change.caseId}/${change.goldFactId}`));
-  assert.ok(branches.every((change) => change.newFacts.every((fact) => fact.category !== "course")));
-  const david = first.changes.find((change) => change.caseId === "human-gate-david" && change.goldFactId === "m1");
+  const caseProposal = (id) => first.caseProposals.find((item) => item.caseId === id);
+  assert.ok(branches.every((change) => change.newFactIds.every((id) => caseProposal(change.caseId).newFacts.find((fact) => fact.id === id)?.category !== "course")));
+  const david = caseProposal("human-gate-david");
   assert.deepEqual(david.newFacts.map((fact) => [fact.category, fact.canonicalText]), [["course", "Výbuchy se objevují občas."], ["course", "Výbuchy jsou velmi silné."]]);
   const klarka = first.changes.find((change) => change.caseId === "human-gate-klarka" && change.goldFactId === "c1");
   assert.equal(klarka.textStaysUnchanged, true);
-  assert.ok(klarka.relations.some((relation) => relation.type === "condition_effect"));
-  assert.ok(klarka.helpsProjections.length > 0);
+  assert.ok(klarka.helpsProjectionIds.length > 0);
+  const klarkaRelations = caseProposal("human-gate-klarka").relations;
+  assert.ok(klarkaRelations.some((relation) => relation.type === "condition_effect" && relation.sourceFactIds.join() === "x1" && relation.targetFactIds.join() === "c1" && relation.projectionFactIds.join() === "h1"));
+  assert.ok(klarkaRelations.some((relation) => relation.type === "course_of" && relation.sourceFactIds.join() === "c1" && relation.targetFactIds.includes("m3")));
+  assert.ok(klarkaRelations.some((relation) => relation.type === "condition_effect" && relation.sourceFactIds.join() === "x2" && relation.targetFactIds.join() === "c2" && relation.projectionFactIds.join() === "h2"));
+  assert.ok(klarkaRelations.some((relation) => relation.type === "course_of" && relation.sourceFactIds.join() === "c2" && relation.targetFactIds.includes("m3")));
+  assert.equal(klarkaRelations.filter((relation) => relation.type === "contrast_with" && relation.sourceFactIds.includes("m2") && relation.targetFactIds.includes("m3")).length, 1);
+  const klarkaContrastChanges = first.changes.filter((change) => change.caseId === "human-gate-klarka" && ["m2", "m3"].includes(change.goldFactId));
+  assert.equal(klarkaContrastChanges[0].relationIds.find((id) => klarkaContrastChanges[1].relationIds.includes(id)) !== undefined, true);
   const ondra = first.changes.find((change) => change.caseId === "human-gate-ondra" && change.goldFactId === "c2");
   assert.match(ondra.proposedCanonicalText, /ne vždy/);
-  assert.ok(ondra.relations.filter((relation) => relation.type === "condition_effect").length === 2);
-  const duplicate = first.changes.find((change) => change.caseId === "mixed-duplicate" && change.goldFactId === "m1");
+  const ondraRelations = caseProposal("human-gate-ondra").relations;
+  assert.ok(ondraRelations.some((relation) => relation.type === "condition_effect" && relation.sourceFactIds.join() === "x1" && relation.targetFactIds.join() === "c2"));
+  assert.ok(ondraRelations.some((relation) => relation.type === "condition_effect" && relation.sourceFactIds.join() === "x2" && relation.targetFactIds.join() === "c2"));
+  assert.ok(ondraRelations.some((relation) => relation.type === "course_of" && relation.sourceFactIds.join() === "c2" && relation.targetFactIds.join() === "m2"));
+  assert.equal(ondraRelations.filter((relation) => relation.type === "contrast_with").length, 1);
+  const duplicate = caseProposal("mixed-duplicate");
   assert.ok(duplicate.newFacts.some((fact) => fact.category === "context" && fact.canonicalText === "Při ranním kruhu."));
-  const negation = first.changes.find((change) => change.caseId === "mixed-negation-and-help" && change.goldFactId === "h1");
-  assert.ok(negation.relations.some((relation) => relation.type === "condition_effect"));
+  const negation = caseProposal("mixed-negation-and-help");
+  const negationEffects = negation.relations.filter((relation) => relation.type === "condition_effect" && relation.sourceFactIds.join() === "x2" && relation.targetFactIds.join() === "m1" && relation.projectionFactIds.join() === "h1");
+  assert.equal(negationEffects.length, 1);
+  const negationChanges = first.changes.filter((change) => change.caseId === "mixed-negation-and-help");
+  assert.equal(negationChanges[0].relationIds[0], negationChanges[1].relationIds[0]);
   assert.ok(first.changes.every((change) => ["mechanical", "high", "human-review-required"].includes(change.confidence)));
+  const pending = first.changes.filter((change) => change.decisionStatus === "pending_human_review");
+  assert.equal(pending.length, 8);
+  assert.deepEqual([...new Set(pending.map((change) => change.caseId))], ["human-gate-david", "human-gate-klarka", "human-gate-ondra"]);
+
+  const migrated = applyGoldV2Proposal(corpus, first);
+  assert.equal(migrated.version, 2);
+  assert.ok(migrated.cases.every((item) => item.expectedFacts.every((fact) => typeof fact.canonicalText === "string" && fact.canonicalText.length > 0)));
+  assert.ok(migrated.cases.every((item) => Array.isArray(item.expectedRelations)));
+  for (const item of migrated.cases) {
+    assert.equal(item.dimensions.factCount, item.expectedFacts.length);
+    assert.equal(item.dimensions.categoryCount, new Set(item.expectedFacts.map((fact) => fact.category)).size);
+  }
+  assert.deepEqual(validateCorpus(migrated).errors, []);
+  const migratedAudit = auditGoldCorpus(migrated);
+  assert.deepEqual(migratedAudit.deterministicViolations, []);
+  assert.deepEqual(migratedAudit.heuristicFindings, []);
+  assert.equal(JSON.stringify(corpus), original, "in-memory migration must not mutate its source corpus");
 
   const root = await mkdtemp(join(tmpdir(), "apu-f1-gold-v2-"));
   try {
     const result = await executeGoldV2Proposal(corpusPath, root);
     assert.deepEqual(result, first);
     assert.deepEqual(JSON.parse(await readFile(join(root, "gold-v2-proposal.json"), "utf8")), first);
-    assert.match(await readFile(join(root, "gold-v2-proposal.md"), "utf8"), /atomic-uncertainty \/ m1/);
+    const markdown = await readFile(join(root, "gold-v2-proposal.md"), "utf8");
+    assert.match(markdown, /### atomic-uncertainty/);
+    assert.match(markdown, /Canonical relations:/);
+    assert.match(markdown, /pending_human_review/);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

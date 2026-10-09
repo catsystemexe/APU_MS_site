@@ -23,7 +23,7 @@ Audit the current or a proposed corpus with:
 npm run audit:f1-gold
 ```
 
-The audit uses `canonicalText` when present and recognizes explicit relations, so a relation-preserving surface `text` is not treated as category contamination when its atomic canonical fact and companion relation are present. `Někdy`/`jindy` branches alone are contrasts, not automatic course facts; explicit frequency, duration, and intensity remain course signals.
+The audit uses `canonicalText` when present and recognizes explicit relations, so a relation-preserving surface `text` is not treated as category contamination when its atomic canonical fact and companion relation are present. For condition-dependent course, the explanatory graph is `context → course → manifestation`: `condition_effect` links context to course (and its helps projection), then `course_of` links course to the observed manifestation. A context link only to a downstream manifestation does not explain context retained in course wording. `Někdy`/`jindy` branches alone are contrasts, not automatic course facts; explicit frequency, duration, and intensity remain course signals.
 
 Generate the deterministic version 2 migration proposal without changing the canonical corpus:
 
@@ -31,7 +31,11 @@ Generate the deterministic version 2 migration proposal without changing the can
 npm run propose:f1-gold-v2
 ```
 
-The command writes JSON and Markdown under `evals/f1-extraction/results/gold-v2-proposal/`. Optional positional arguments select a source corpus and output directory. Each proposed change records the current surface text, atomic `canonicalText`, whether the surface text may remain, companion facts, relations, helps projections, rationale, and confidence. It makes no provider calls.
+The command writes JSON and Markdown under `evals/f1-extraction/results/gold-v2-proposal/`. Optional positional arguments select a source corpus and output directory. Fact-level changes reference canonical case-level facts and relations instead of embedding duplicate relation objects. Each case merges new facts, helps projections, and relations before output.
+
+Directional relation signatures use relation type plus sorted source, target, and projection IDs. `contrast_with` is symmetric: both sides are individually sorted, then the two sides are oriented by stable fact-ID order, so inverse declarations collapse to one relation. Canonical relations are sorted by signature and receive deterministic case-local IDs.
+
+Before writing output, the generator applies the proposal to a clone in memory, sets version 2 fields, recalculates dimensions, and runs both corpus validation and the v2 audit. It fails on deterministic violations, duplicate/broken relations, or unexpected heuristics. Human-review changes remain `pending_human_review`; while any remain, `readyToApply` is false even when `validationPassed` is true. The command makes no provider calls and never writes the canonical corpus.
 
 ## Safe dry run
 
