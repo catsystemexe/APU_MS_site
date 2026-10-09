@@ -39,6 +39,30 @@ Before the canonical migration, the generator applied the proposal to a clone in
 
 Historical comparisons must identify the corpus version used. Version 2 changes gold fact targets and adds relation gold, so v1 and v2 aggregate fact metrics are not directly interchangeable even though production extraction and scoring logic are unchanged. `SCORING_CONTRACT_VERSION` therefore remains `4`; relation scoring remains unavailable until production F1 emits a relation representation.
 
+## Eval-only grounding replay
+
+The `evidence-scope-v2` experiment replays only the grounding stage over the exact PRE-grounding candidates stored in a judged `stage-runs.jsonl`. It does not rerun extraction, coverage, or the semantic judge, and it does not change the production grounding prompt, schema, parser, routing, or model selection. The replay supports the `baseline` profile and calls only `gpt-5.6-luna` with low reasoning.
+
+Its evidence contract treats `sourceQuote` as a local anchor and `newUserMessage` as the complete authoritative evidence context. Grounding may restore a shared grammatical subject, a clearly scoped preposed context/adjunct, a shared governing predicate, an explicit pronoun/coreference or ellipsis, relation-preserving context from the same sentence/clause, or an omitted subject/referent with exactly one grammatically plausible resolution. It must still reject unsupported facts, causes, diagnoses, intentions, needs, interpretations and recommendations; category changes; qualifier, uncertainty, or negation loss; inferred temporal/causal relations; ambiguous coreference; and `helps` without an explicit observed condition/change plus effect. Material qualifiers including `někdy`, `jindy`, `asi`, and `ne vždy` must remain intact.
+
+Run the baseline replay from native Windows PowerShell:
+
+```powershell
+npm.cmd run eval:f1-grounding-replay -- `
+  --source ".\evals\f1-extraction\results\f1-full48-luna-vs-terra-gold-v2-sol-judged" `
+  --profile baseline `
+  --variant evidence-scope-v2 `
+  --run-id "f1-grounding-evidence-scope-v2-baseline" `
+  --output-dir ".\evals\f1-extraction\results" `
+  --max-calls 48
+```
+
+The source must be a judged result directory (or its `stage-runs.jsonl`) containing the original stable PRE candidate IDs, complete original grounding traces, PRE and current POST scores, and staged semantic evidence. The canonical corpus must still contain every referenced case and supplies the original `newUserMessage`. For multi-turn cases, `currentNotebook` is reconstructed from the starting notebook and the original surviving add candidates, keeping all upstream inputs fixed while only grounding verdicts change. The replay records SHA-256 hashes for the source stage artifact and corpus, refuses an existing output directory, refuses to write inside the source result directory, and verifies both hashes again before completion.
+
+Provider verdicts require exactly one unique index for every submitted candidate, covering `0..N-1`; missing, duplicate, or out-of-range indexes invalidate the entire response instead of becoming implicit rejections. Every verdict also uses a deterministic reason category: `accept_direct`, `accept_shared_subject`, `accept_shared_scope`, `accept_coreference`, `accept_relation_context`, `reject_unsupported_meaning`, `reject_category_mismatch`, `reject_semantic_strengthening`, `reject_ambiguous_coreference`, `reject_inferred_relation`, or `reject_other`.
+
+The fresh result directory contains `replay-plan.json`, `run-state.json`, `grounding-replay-verdicts.jsonl`, `case-scores.jsonl`, `aggregate.json`, `dimension-breakdown.csv`, and `summary.md`. Reports compare current and replay PRE/POST recall, grounding losses, semantic precision, grounded extras, unsupported candidates, rejected/restored Gold-supporting candidates, and newly accepted grounded-extra versus unsupported candidates overall, by suite, and for Human Gate cases. Saved Sol semantic evidence is filtered by replay survival IDs; no new semantic-judge call is made.
+
 ## Safe dry run
 
 ```bash

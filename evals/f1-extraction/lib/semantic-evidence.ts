@@ -301,3 +301,79 @@ export function deriveStagedSemanticEvaluation(item: EvalCase, turns: PipelineTu
   validateStagedSemanticEvidence(evidence);
   return { context, preScore, postScore, preDecisions, postDecisions, evidence };
 }
+
+export function replayStagedSemanticEvaluationFromEvidence(
+  item: EvalCase,
+  turns: PipelineTurnTrace[],
+  savedPreScore: CaseScore,
+  savedEvidence: StagedSemanticEvidence,
+) {
+  validateStagedSemanticEvidence(savedEvidence);
+  const context = buildStagedJudgeContext(item, turns);
+  const preIds = context.preCandidates.map((candidate) => candidate.candidateId);
+  if (JSON.stringify(preIds) !== JSON.stringify(savedEvidence.preCandidateIds)) {
+    throw new Error("Grounding replay PRE candidate identities/order differ from saved semantic evidence.");
+  }
+  if (savedPreScore.candidateClassifications.length !== preIds.length || savedEvidence.candidates.length !== preIds.length) {
+    throw new Error("Grounding replay saved PRE scoring does not cover the complete candidate universe.");
+  }
+  for (const [index, candidateId] of preIds.entries()) {
+    const evidenceCandidate = savedEvidence.candidates[index];
+    if (evidenceCandidate.candidateId !== candidateId || JSON.stringify(evidenceCandidate.classification) !== JSON.stringify(savedPreScore.candidateClassifications[index])) {
+      throw new Error(`Grounding replay saved semantic classification mismatch for ${candidateId}.`);
+    }
+  }
+  const postIds = context.postCandidates.map((candidate) => candidate.candidateId);
+  const postSet = new Set(postIds);
+  const postIndex = new Map(postIds.map((id, index) => [id, index]));
+  const postDecisions: SemanticJudgeDecision[] = savedEvidence.goldFacts.flatMap((fact): SemanticJudgeDecision[] => {
+    if (fact.decision !== "equivalent") return [];
+    const surviving = fact.supportGroups.filter((group) => group.candidateIds.every((id) => postSet.has(id)));
+    if (surviving.length) return surviving.map((group) => ({
+      kind: "alignment",
+      goldFactId: fact.goldFactId,
+      candidateIndexes: group.candidateIds.map((id) => postIndex.get(id)!),
+      decision: "equivalent",
+      reason: fact.reason,
+    }));
+    return [{
+      kind: "alignment",
+      goldFactId: fact.goldFactId,
+      candidateIndexes: [],
+      decision: "not_equivalent",
+      reason: "No sufficient saved PRE support group survived replay grounding.",
+    }];
+  });
+  const postBase = scoreCase(item, context.postCandidates.map(evaluated), postDecisions);
+  const postScore = filterPostClassifications(postBase, savedPreScore, preIds, postIds);
+  const verdictById = new Map(turns.flatMap((turn) => turn.groundingVerdicts).map((verdict) => [verdict.candidateId, verdict]));
+  const scoreByFact = new Map(postScore.matches.map((match) => [match.goldFactId, match]));
+  const goldFacts: SemanticGoldEvidence[] = savedEvidence.goldFacts.map((fact) => {
+    const postSupportGroups = fact.supportGroups.filter((group) => group.candidateIds.every((id) => postSet.has(id)));
+    const postMatch = scoreByFact.get(fact.goldFactId);
+    const postCovered = postMatch?.state === "EXACT" || postMatch?.state === "SEMANTIC_EQUIVALENT";
+    const groundingLoss = fact.preCovered && !postCovered;
+    const removedCandidateIds = groundingLoss
+      ? [...new Set(fact.supportGroups.flatMap((group) => group.candidateIds.filter((id) => !postSet.has(id))))]
+      : [];
+    return {
+      ...structuredClone(fact),
+      postSupportGroups,
+      postCovered,
+      groundingLoss,
+      removedCandidateIds,
+      groundingVerdicts: removedCandidateIds.flatMap((id) => verdictById.has(id) ? [verdictById.get(id)!] : []),
+    };
+  });
+  const evidence: StagedSemanticEvidence = {
+    preCandidateIds: [...preIds],
+    postCandidateIds: [...postIds],
+    goldFacts,
+    candidates: savedEvidence.candidates.map((candidate) => ({
+      ...structuredClone(candidate),
+      survivedGrounding: postSet.has(candidate.candidateId),
+    })),
+  };
+  validateStagedSemanticEvidence(evidence);
+  return { context, preScore: structuredClone(savedPreScore), postScore, postDecisions, evidence };
+}
