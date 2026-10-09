@@ -76,6 +76,20 @@ test("production and eval prompt builders share the exact core-aware contract", 
   assert.match(grounding, /Buď konzervativní/);
 });
 
+test("canonical extraction contract preserves branch scope, coordination, and category-aware course atoms", () => {
+  const extraction = buildExtractionInstructions("CORE");
+  assert.match(extraction, /„Někdy tomu předchází konflikt s dítětem, jindy požadavek učitelky nebo velký hluk“/);
+  assert.match(extraction, /„Jindy tomu předchází požadavek učitelky\.“/);
+  assert.match(extraction, /„Jindy tomu předchází velký hluk\.“/);
+  assert.match(extraction, /U posledních dvou větví NESMÍ vzniknout „Někdy“/);
+  assert.match(extraction, /„Ve skupině úkol odmítne, jednotlivě ho dokončí a požádá o další“/);
+  assert.match(extraction, /„Požádá o další\.“/);
+  assert.match(extraction, /NESMÍ vzniknout „Po dokončení úkolu požádá o další\.“/);
+  assert.match(extraction, /manifestations „Jindy odbíhá\.“ a course „Po pár minutách\.“/);
+  assert.match(extraction, /Course NESMÍ být „Odbíhá po pár minutách\.“/);
+  assert.match(extraction, /Atomizace nesmí vztah zesílit, oslabit, zaměnit ani nově vytvořit/);
+});
+
 test("shared candidate normalization rejects invalid quotes and repairs cross-category links", () => {
   const message = "Při čtení odchází od stolu.";
   const notebook = [{ id: "course-1", category: "course", text: "Každý den.", trust: "confirmed" }];

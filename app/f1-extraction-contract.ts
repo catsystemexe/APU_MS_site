@@ -25,6 +25,10 @@ Pravidla:
 4a. Před dokončením výstupu povinně projdi všech pět kategorií. Nevynechávej explicitní kontext, četnost, trvání, intenzitu, vývoj, pedagogickou potřebu ani dosavadní zkušenost jen proto, že zpráva současně obsahuje projev.
 4b. Jedna věta nebo jedna sourceQuote může vytvořit více kandidátů v různých kategoriích, pokud skutečně obsahuje více samostatných údajů.
 4c. Výčet v jedné větě nebo souvětí významově odlišných explicitních projevů rozděl na samostatné candidates ve stejné kategorii. Neztrácej ani neslučuj je jen proto, že spolu souvisejí: „unavený“, „apatický“, „málo komunikuje“, „odmítá úkoly“ a „špatně se soustředí“ jsou odlišné projevy. Naopak skutečnou parafrázi téhož projevu vrať jen jednou.
+4d. V koordinaci a kontrastu zachovej kvalifikátor u každé větve, kterou řídí, například „někdy“, „jindy“, „ne vždy“, „obvykle“ nebo „jen někdy“. „Někdy“ nesmíš přenést na větev uvedenou slovem „jindy“, kvalifikátor vypustit ani jej nahradit významově širším. Smíš doplnit jednoznačně sdílený predikát z téže koordinace, ale nesmíš tím rozšířit nebo změnit platnost větve.
+4e. Pouhé pořadí nebo spojení dějů spojkou nevytváří časový, příčinný, podmínkový ani následkový vztah. Nepřidávej „po“, „potom“, „následně“, „předtím“, „proto“ ani „kvůli tomu“, pokud tento vztah není ve zprávě explicitní. Samostatné koordinované děje zapisuj jako samostatné atomy.
+4f. course zachycuje samotnou četnost, trvání, intenzitu, počátek nebo vývoj. Pokud jde o samostatný srozumitelný údaj, vytvoř kategoriálně specifický atom bez opakování projevu, například course „Po pár minutách.“ vedle manifestations „Jindy odbíhá.“. Predikát v course neopakuj jen kvůli srozumitelnosti, pokud jej určuje tentýž explicitní úsek a oddělený atom svůj význam zachovává.
+4g. Při atomizaci do kategorií vždy zachovej vztahy, rozsah a kvalifikátory explicitně vyjádřené ve zdroji. Atomizace nesmí vztah zesílit, oslabit, zaměnit ani nově vytvořit. Pokud by oddělení odstranilo materiálně důležitý význam nebo vytvořilo nesrozumitelný atom, údaj násilně neodděluj.
 5. Pokud stejný význam už v Zápisníku je, action=duplicate a uveď jeho relatedEntryId.
 5a. Duplicitu posuzuj pouze uvnitř stejné kategorie. Existující projev nikdy není důvodem odmítnout nový kontext, intenzitu a trend, pedagogickou potřebu nebo dosavadní zkušenost.
 6. Pokud nový údaj mění nebo odporuje existující položce, action=conflict a uveď její relatedEntryId. Nic tiše nepřepisuj.
@@ -46,6 +50,10 @@ Příklady úplné extrakce:
 - Při existujícím zápisu „Žák usíná“ a nové zprávě „Děje se to ve vyučování, každý den, zejména v odpoledních hodinách“ použij related a vrať context pro „ve vyučování“ a „zejména v odpoledních hodinách“ a course pro „každý den“. Nic dalšího neodvozuj.
 - Při existujícím manifestations „Žák usíná“ a nové zprávě „Děje se to každý den“ NEVRACEJ duplicate manifestations. Vrať add course: sourceQuote „každý den“, notebookText „Každý den.“. Předmět situace už určuje Zápisník; novým faktem je četnost.
 - „Ve skupině úkol odmítne, jednotlivě ho dokončí“ → manifestations, context a dosavadní zkušenost v helps, jsou-li všechny přímo doložené přesnými sourceQuote.
+- „Někdy tomu předchází konflikt s dítětem, jindy požadavek učitelky nebo velký hluk“ → zachovej context „Někdy tomu předchází konflikt s dítětem.“, „Jindy tomu předchází požadavek učitelky.“ a „Jindy tomu předchází velký hluk.“. U posledních dvou větví NESMÍ vzniknout „Někdy“.
+- „Ve skupině úkol odmítne, jednotlivě ho dokončí a požádá o další“ → samostatné atomy „Úkol dokončí.“ a „Požádá o další.“. NESMÍ vzniknout „Po dokončení úkolu požádá o další.“, protože zdroj takový časový vztah neuvádí.
+- „Žák každé ráno usíná“ → manifestations „Žák usíná.“ a course „Každé ráno.“. Samostatný course nemusí opakovat projev.
+- „Jindy po pár minutách odbíhá“ → manifestations „Jindy odbíhá.“ a course „Po pár minutách.“. Course NESMÍ být „Odbíhá po pár minutách.“.
 - „Potřebuji zjistit, co situaci spouští“ → goals: „Zjistit, co situaci spouští.“.
 - „Napomenutí před třídou situaci obvykle zhorší“ → helps: „Napomenutí před třídou situaci obvykle zhoršuje.“. Jde o dosavadní zkušenost, ne o doporučení.`;
 
