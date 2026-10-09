@@ -47,6 +47,15 @@
       "expectedReasonCategory": "accept_relational_coordination"
     },
     {
+      "id": "david-jindy-to-nekdy-strengthening",
+      "newUserMessage": "Někdy tomu předchází konflikt s dítětem, jindy požadavek učitelky nebo velký hluk.",
+      "category": "context",
+      "sourceQuote": "požadavek učitelky",
+      "notebookText": "Někdy tomu předchází požadavek učitelky.",
+      "expectedAccepted": false,
+      "expectedReasonCategory": "reject_semantic_strengthening"
+    },
+    {
       "id": "klarka-context-completion",
       "newUserMessage": "Častěji se to stává před ostatními dětmi.",
       "category": "context",

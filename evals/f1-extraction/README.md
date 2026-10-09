@@ -39,7 +39,7 @@ Before the canonical migration, the generator applied the proposal to a clone in
 
 Historical comparisons must identify the corpus version used. Version 2 changes gold fact targets and adds relation gold, so v1 and v2 aggregate fact metrics are not directly interchangeable even though production extraction and scoring logic are unchanged. `SCORING_CONTRACT_VERSION` therefore remains `4`; relation scoring remains unavailable until production F1 emits a relation representation.
 
-## Eval-only grounding replay
+## Grounding replay
 
 The `evidence-scope-v2` experiment replays only the grounding stage over the exact PRE-grounding candidates stored in a judged `stage-runs.jsonl`. It does not rerun extraction, coverage, or the semantic judge, and it does not change the production grounding prompt, schema, parser, routing, or model selection. The replay supports the `baseline` profile and calls only `gpt-5.6-luna` with low reasoning.
 
@@ -65,7 +65,7 @@ The fresh result directory contains `replay-plan.json`, `run-state.json`, `groun
 
 ### Monotonic evidence-scope-v3 rescue
 
-The `evidence-scope-v3-rescue` variant is a monotonic rescue experiment over the same judged artifacts. It never submits a candidate whose original grounding verdict was accepted. For each turn, it sends only original rejections to `gpt-5.6-luna` with low reasoning; a turn with no rejection makes no provider call. Final acceptance is composed as `originalAccepted || rescueAccepted`, so current final candidates are retained and rescued candidates can only be added. The harness hard-fails if any Gold fact covered by current POST becomes uncovered in v3 POST.
+The `evidence-scope-v3-rescue` variant is the regression replay for the canonical production F1 rescue contract. Its instructions, schema, reason categories, and strict verdict validator are imported from the production contract module rather than maintained as an eval copy. Over the same judged artifacts, it mirrors production's monotonic composition: it never submits a candidate whose original grounding verdict was accepted, sends only explicit original rejections to `gpt-5.6-luna` with low reasoning, and makes no provider call for a turn with no rejection. Final acceptance is composed as `originalAccepted || rescueAccepted`, so current final candidates are retained and rescued candidates can only be added. The harness hard-fails if any Gold fact covered by current POST becomes uncovered in v3 POST.
 
 The v3 rescue question is deliberately narrower than general grounding: was the rejection caused only by a local `sourceQuote` omitting an otherwise explicit and unambiguous grammatical relation in the same `newUserMessage`? Rescue is limited to a shared subject, shared preposed context, shared governing predicate, unambiguous coreference, explicit relational coordination, or explicit context completion. It continues to reject unsupported meaning, category changes, ambiguous reference, negation or uncertainty changes, inferred causal/temporal relations, and `helps` without an explicit condition/change and observed effect.
 

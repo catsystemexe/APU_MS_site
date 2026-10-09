@@ -4,13 +4,20 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { buildGroundingInstructions } from "../app/f1-extraction-contract.ts";
+import {
+  GROUNDING_RESCUE_INSTRUCTIONS,
+  GROUNDING_RESCUE_REASON_CATEGORIES as PRODUCTION_GROUNDING_RESCUE_REASON_CATEGORIES,
+  GROUNDING_RESCUE_SCHEMA as PRODUCTION_GROUNDING_RESCUE_SCHEMA,
+  buildGroundingInstructions,
+  validateGroundingRescueVerdicts as validateProductionGroundingRescueVerdicts,
+} from "../app/f1-extraction-contract.ts";
 import { loadCorpus } from "../evals/f1-extraction/lib/eval-contract.ts";
 import {
   EVIDENCE_SCOPE_V2_INSTRUCTIONS,
   EVIDENCE_SCOPE_V3_RESCUE_INSTRUCTIONS,
   GROUNDING_REPLAY_REASON_CATEGORIES,
   GROUNDING_RESCUE_REASON_CATEGORIES,
+  GROUNDING_RESCUE_SCHEMA,
   executeGroundingReplay,
   loadSavedStageRuns,
   parseGroundingReplayArgs,
@@ -251,6 +258,7 @@ test("v3 rescue contract covers allowed relations and hard modifier-only rejecti
     "shared-governing-predicate",
     "unambiguous-coreference",
     "david-relational-coordination",
+    "david-jindy-to-nekdy-strengthening",
     "klarka-context-completion",
     "modifier-only-nekdy",
     "modifier-only-jindy",
@@ -270,7 +278,7 @@ test("v3 rescue contract covers allowed relations and hard modifier-only rejecti
     }] }, 1);
     assert.equal(result.verdicts[0].accepted, entry.expectedAccepted);
   }
-  assert.match(EVIDENCE_SCOPE_V3_RESCUE_INSTRUCTIONS, /výhradně kandidáty, které původní grounding zamítl/);
+  assert.match(EVIDENCE_SCOPE_V3_RESCUE_INSTRUCTIONS, /výhradně kandidáty, které primární grounding explicitně zamítl/);
   assert.match(EVIDENCE_SCOPE_V3_RESCUE_INSTRUCTIONS, /SHARED SUBJECT/);
   assert.match(EVIDENCE_SCOPE_V3_RESCUE_INSTRUCTIONS, /SHARED PREPOSED CONTEXT/);
   assert.match(EVIDENCE_SCOPE_V3_RESCUE_INSTRUCTIONS, /SHARED GOVERNING PREDICATE/);
@@ -572,11 +580,14 @@ test("replay CLI guards scope, call budget, credentials, and Windows entrypoint 
   }
 });
 
-test("experimental grounding contract is isolated from production grounding", () => {
-  const production = buildGroundingInstructions("CORE");
-  assert.match(production, /sourceQuote je skutečným dostatečným podkladem pro celý notebookText/);
-  assert.doesNotMatch(production, /sourceQuote je lokální kotva faktu/);
-  assert.doesNotMatch(production, /TVRDÝ ZÁKAZ MODIFIER-ONLY/);
+test("eval v3 rescue is the canonical production rescue contract while primary grounding stays conservative", () => {
+  const primary = buildGroundingInstructions("CORE");
+  assert.match(primary, /sourceQuote je skutečným dostatečným podkladem pro celý notebookText/);
+  assert.doesNotMatch(primary, /sourceQuote je lokální kotva faktu/);
+  assert.doesNotMatch(primary, /TVRDÝ ZÁKAZ MODIFIER-ONLY/);
   assert.match(EVIDENCE_SCOPE_V2_INSTRUCTIONS, /sourceQuote je lokální kotva faktu/);
-  assert.match(EVIDENCE_SCOPE_V3_RESCUE_INSTRUCTIONS, /TVRDÝ ZÁKAZ MODIFIER-ONLY/);
+  assert.strictEqual(EVIDENCE_SCOPE_V3_RESCUE_INSTRUCTIONS, GROUNDING_RESCUE_INSTRUCTIONS);
+  assert.strictEqual(GROUNDING_RESCUE_SCHEMA, PRODUCTION_GROUNDING_RESCUE_SCHEMA);
+  assert.strictEqual(GROUNDING_RESCUE_REASON_CATEGORIES, PRODUCTION_GROUNDING_RESCUE_REASON_CATEGORIES);
+  assert.strictEqual(validateGroundingRescueVerdicts, validateProductionGroundingRescueVerdicts);
 });

@@ -20,6 +20,14 @@ test("extract route requests strict structured output and revalidates quotes", a
   assert.match(route, /normalizeExtractionCandidates\(body\.message as string, notebook, extraction\.candidates\)/);
   assert.match(contract, /locateSourceQuote\(message, candidate\.sourceQuote\)/);
   assert.match(source, /verifyGrounding\(apiKey, requestId, body\.message as string, notebook/);
+  assert.match(route, /applyMonotonicGroundingRescue\(candidates, primary\.verdicts/);
+  assert.match(route, /candidatesRequiringGrounding = locatedCandidates\.filter\([\s\S]*candidate\.action === "add" \|\| candidate\.action === "conflict"/);
+  assert.match(route, /candidate\.action === "duplicate" \|\| candidate\.action === "skip"/);
+  assert.match(route, /requested_model: PRODUCTION_GROUNDING_RESCUE_MODEL, reasoning_effort: PRODUCTION_GROUNDING_RESCUE_REASONING/);
+  assert.match(route, /validateGroundingRescueVerdicts\(JSON\.parse\(text\), rescueCandidates\.length\)/);
+  assert.match(route, /groundingRecords = collector\.records\(\)\.filter\(\(record\) => record\.operation === "grounding"\)/);
+  assert.match(route, /aggregateRecordedUsage\(groundingRecords\)/);
+  assert.match(route, /collector\.records\(\)[\s\S]*record\.operation === "extraction" \|\| record\.operation === "grounding"/);
   assert.match(source, /z „žák je líný“ nelze přijmout/);
   assert.match(source, /povinně projdi všech pět kategorií/);
   assert.match(source, /Pedagogická potřeba/);

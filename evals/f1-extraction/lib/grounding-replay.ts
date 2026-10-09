@@ -1,7 +1,16 @@
 import { createHash } from "node:crypto";
 import { access, mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
-import type { ExtractionNotebookInput, GroundingVerdict } from "../../../app/f1-extraction-contract.ts";
+import {
+  GROUNDING_RESCUE_INSTRUCTIONS,
+  GROUNDING_RESCUE_SCHEMA,
+  validateGroundingRescueVerdicts,
+  type ExtractionNotebookInput,
+  type GroundingRescueReasonCategory,
+  type GroundingRescueVerdict,
+  type GroundingVerdict,
+} from "../../../app/f1-extraction-contract.ts";
+export { GROUNDING_RESCUE_REASON_CATEGORIES, GROUNDING_RESCUE_SCHEMA, validateGroundingRescueVerdicts } from "../../../app/f1-extraction-contract.ts";
 import { MODEL_PROFILES, loadCorpus, type EvalCase } from "./eval-contract.ts";
 import { createOpenAIProvider, recordUsage, type EvalProvider, type PipelineCall, type PipelineTurnTrace, type StageCandidate } from "./pipeline.ts";
 import { aggregateScores, type CandidateClassification, type CaseScore, type EvaluatedCandidate } from "./scoring.ts";
@@ -12,6 +21,7 @@ export const GROUNDING_REPLAY_VARIANT = "evidence-scope-v2" as const;
 export const GROUNDING_RESCUE_VARIANT = "evidence-scope-v3-rescue" as const;
 export const GROUNDING_REPLAY_VARIANTS = [GROUNDING_REPLAY_VARIANT, GROUNDING_RESCUE_VARIANT] as const;
 export type GroundingReplayVariant = typeof GROUNDING_REPLAY_VARIANTS[number];
+export const EVIDENCE_SCOPE_V3_RESCUE_INSTRUCTIONS = GROUNDING_RESCUE_INSTRUCTIONS;
 export const GROUNDING_REPLAY_REASON_CATEGORIES = [
   "accept_direct",
   "accept_shared_subject",
@@ -29,33 +39,6 @@ export type GroundingReplayReasonCategory = typeof GROUNDING_REPLAY_REASON_CATEG
 
 const ACCEPT_REASONS = new Set<GroundingReplayReasonCategory>([
   "accept_direct", "accept_shared_subject", "accept_shared_scope", "accept_coreference", "accept_relation_context",
-]);
-
-export const GROUNDING_RESCUE_REASON_CATEGORIES = [
-  "accept_shared_subject",
-  "accept_shared_context",
-  "accept_shared_predicate",
-  "accept_coreference",
-  "accept_relational_coordination",
-  "accept_context_completion",
-  "reject_modifier_only",
-  "reject_unsupported_meaning",
-  "reject_category_mismatch",
-  "reject_semantic_strengthening",
-  "reject_ambiguous_coreference",
-  "reject_inferred_relation",
-  "reject_unsupported_helps",
-  "reject_other",
-] as const;
-export type GroundingRescueReasonCategory = typeof GROUNDING_RESCUE_REASON_CATEGORIES[number];
-
-const RESCUE_ACCEPT_REASONS = new Set<GroundingRescueReasonCategory>([
-  "accept_shared_subject",
-  "accept_shared_context",
-  "accept_shared_predicate",
-  "accept_coreference",
-  "accept_relational_coordination",
-  "accept_context_completion",
 ]);
 
 export const EVIDENCE_SCOPE_V2_INSTRUCTIONS = `Jsi izolovaná experimentální grounding brána eval harnessu APU. Neměníš produkční pravidla.
@@ -100,50 +83,6 @@ Příklady:
 
 Každému verdiktu přiřaď právě jednu reasonCategory z povoleného enumu. accepted=true smí používat jen accept_* kategorii; accepted=false jen reject_* kategorii. Vrať právě jeden verdikt pro každý vstupní index, bez duplicit a mezer.`;
 
-export const EVIDENCE_SCOPE_V3_RESCUE_INSTRUCTIONS = `Jsi izolovaná experimentální ZÁCHRANNÁ kontrola grounding vrstvy eval harnessu APU. Neměníš produkční pravidla ani původní grounding. Dostáváš výhradně kandidáty, které původní grounding zamítl.
-
-ÚZKÁ OTÁZKA:
-Přijmi kandidáta pouze tehdy, když byl zamítnut výhradně proto, že jeho lokální sourceQuote je užší než jinak explicitní a jednoznačný gramatický vztah ve stejné newUserMessage. Neprováděj obecné nové grounding posouzení. Při pochybnosti zamítni.
-
-POVOLENÉ ZÁCHRANNÉ TŘÍDY:
-1. SHARED SUBJECT — sourceQuote už obsahuje substantivní predikát nebo děj a pouze dědí explicitní podmět ze stejné koordinované věty.
-2. SHARED PREPOSED CONTEXT — sourceQuote už obsahuje substantivní predikát nebo děj a pouze dědí jednoznačně společný předřazený kontext z koordinace.
-3. SHARED GOVERNING PREDICATE — obsahový člen koordinace dědí jeden explicitní řídící predikát ze stejné klauze.
-4. UNAMBIGUOUS COREFERENCE — propozice už je v sourceQuote a pouze se rozvine explicitní zájmeno nebo reference s jediným možným referentem ve stejné zprávě.
-5. EXPLICIT RELATIONAL COORDINATION — obsahový člen koordinace dědí výslovně uvedený vztah. Zachovej podporované kvalifikátory jednotlivých větví, například někdy nebo jindy.
-6. EXPLICIT CONTEXT COMPLETION — sourceQuote obsahuje substantivní vztahový predikát a notebookText pouze doplní jeho jednoznačně explicitní kontext ze stejné klauze.
-
-TVRDÝ ZÁKAZ MODIFIER-ONLY:
-Vždy zamítni kandidáta, pokud sourceQuote obsahuje pouze frekvenci, trvání, intenzitu, míru, časové určení, příslovce způsobu nebo podobný modifikátor a notebookText do něj přidává substantivní predikát či děj, který v sourceQuote chybí.
-- „přibližně po dvou minutách“ NESMÍ zachránit „Vrací se přibližně po dvou minutách.“
-- „někdy“ NESMÍ zachránit „Někdy zvládne celou řízenou činnost.“
-- „jindy“ NESMÍ zachránit „Jindy po pár minutách odbíhá.“
-- „rychle“ NESMÍ zachránit „Rychle se přestane soustředit.“
-- „po pár minutách“ NESMÍ zachránit „Odbíhá po pár minutách.“
-
-ATOMIZACE A KVALIFIKÁTORY:
-Jedna source span může legitimně vytvořit více kategoriálně specifických atomických faktů. Z „Žák každé ráno usíná“ může vzniknout manifestations „Žák usíná.“ a course „Každé ráno.“. Nevyžaduj, aby atom manifestations opakoval samostatný course/context údaj. Současně nikdy neodstraň kvalifikátor, který materiálně mění právě reprezentovanou atomickou propozici.
-
-DALŠÍ TVRDÁ ZAMÍTNUTÍ:
-- nepodložená diagnóza, příčina, záměr, potřeba, interpretace nebo doporučení;
-- změna kategorie;
-- nejednoznačná koreference;
-- přidaná negace, odstraněná materiální negace nebo nepodložená změna nejistoty;
-- kauzální či časový vztah odvozený pouze z pořadí výpovědi;
-- helps bez explicitní podmínky nebo změny a jejího pozorovaného účinku.
-
-„jednotlivě ho dokončí a požádá o další“ NESMÍ zachránit „Po dokončení úkolu požádá o další.“
-
-PŘÍKLADY POVOLENÉ ZÁCHRANY:
-- „Robin při práci vstane, odloží tužku.“ + sourceQuote „odloží tužku“ → „Robin odloží tužku.“
-- „Sára při obědě křičí a bouchá do stolu.“ + sourceQuote „bouchá do stolu“ → „Sára při obědě bouchá do stolu.“
-- „Pomohlo až klidnější místo a přítomnost známé učitelky.“ + sourceQuote „přítomnost známé učitelky“ → „Pomohla přítomnost známé učitelky.“
-- „... uteče ze třídy; potřebuji ověřit, zda tomu předchází hluk.“ dovoluje jednoznačně rozvinout „tomu“ jako útěk ze třídy.
-- „někdy tomu předchází konflikt s dítětem, jindy požadavek učitelky nebo velký hluk“ dovoluje jednotlivé explicitní kontextové větve při zachování někdy/jindy.
-- „Častěji se to stává před ostatními dětmi“ dovoluje doplnit explicitní kontext, pokud sourceQuote obsahuje substantivní vztahový predikát, nikoli pouhé „častěji“.
-
-Každému verdiktu přiřaď právě jednu reasonCategory z povoleného enumu. accepted=true smí používat jen accept_* kategorii; accepted=false jen reject_* kategorii. Vrať právě jeden verdikt pro každý vstupní index, bez duplicit a mezer.`;
-
 export const GROUNDING_REPLAY_SCHEMA = {
   type: "object",
   additionalProperties: false,
@@ -166,28 +105,6 @@ export const GROUNDING_REPLAY_SCHEMA = {
   },
 } as const;
 
-export const GROUNDING_RESCUE_SCHEMA = {
-  type: "object",
-  additionalProperties: false,
-  required: ["verdicts"],
-  properties: {
-    verdicts: {
-      type: "array",
-      items: {
-        type: "object",
-        additionalProperties: false,
-        required: ["index", "accepted", "reasonCategory", "reason"],
-        properties: {
-          index: { type: "integer", minimum: 0 },
-          accepted: { type: "boolean" },
-          reasonCategory: { type: "string", enum: GROUNDING_RESCUE_REASON_CATEGORIES },
-          reason: { type: "string" },
-        },
-      },
-    },
-  },
-} as const;
-
 export type GroundingReplayProviderVerdict = {
   index: number;
   accepted: boolean;
@@ -195,14 +112,7 @@ export type GroundingReplayProviderVerdict = {
   reason: string;
 };
 
-export type GroundingRescueProviderVerdict = {
-  index: number;
-  accepted: boolean;
-  reasonCategory: GroundingRescueReasonCategory;
-  reason: string;
-};
-
-function validateProviderVerdicts<T extends GroundingReplayProviderVerdict | GroundingRescueProviderVerdict>(
+function validateProviderVerdicts<T extends GroundingReplayProviderVerdict>(
   value: unknown,
   submittedCount: number,
   categories: readonly string[],
@@ -228,10 +138,6 @@ function validateProviderVerdicts<T extends GroundingReplayProviderVerdict | Gro
 
 export function validateGroundingReplayVerdicts(value: unknown, submittedCount: number) {
   return validateProviderVerdicts<GroundingReplayProviderVerdict>(value, submittedCount, GROUNDING_REPLAY_REASON_CATEGORIES, ACCEPT_REASONS, "Grounding replay");
-}
-
-export function validateGroundingRescueVerdicts(value: unknown, submittedCount: number) {
-  return validateProviderVerdicts<GroundingRescueProviderVerdict>(value, submittedCount, GROUNDING_RESCUE_REASON_CATEGORIES, RESCUE_ACCEPT_REASONS, "Grounding rescue");
 }
 
 export type SavedStageArtifactRun = {
@@ -488,7 +394,7 @@ async function replayOneRun(item: EvalCase, saved: SavedStageArtifactRun, provid
     const submitted = structuredClone(sourceTurn.groundingSubmittedCandidates.filter((candidate) => (
       variant === GROUNDING_RESCUE_VARIANT ? !originalVerdicts.get(candidate.candidateId)!.accepted : true
     )));
-    let replayVerdicts: Array<GroundingReplayProviderVerdict | GroundingRescueProviderVerdict> = [];
+    let replayVerdicts: Array<GroundingReplayProviderVerdict | GroundingRescueVerdict> = [];
     if (submitted.length) {
       const common = {
         stage: "grounding" as const,

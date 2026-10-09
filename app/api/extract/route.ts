@@ -5,17 +5,23 @@ import { callOpenAIResponses, createRequestUsageCollector, modelUsagePayload, us
 import {
   EXTRACTION_SCHEMA,
   GROUNDING_SCHEMA,
+  GROUNDING_RESCUE_INSTRUCTIONS,
+  GROUNDING_RESCUE_SCHEMA,
   MAX_EXTRACTION_MESSAGE_LENGTH,
   PRODUCTION_EXTRACTION_MODEL,
   PRODUCTION_EXTRACTION_REASONING,
+  PRODUCTION_GROUNDING_RESCUE_MODEL,
+  PRODUCTION_GROUNDING_RESCUE_REASONING,
+  applyMonotonicGroundingRescue,
   buildExtractionInstructions,
   buildGroundingInstructions,
   extractResponseText,
   normalizeExtractionCandidates,
+  validateGroundingRescueVerdicts,
   validateExtractionNotebook,
   type ExtractionCandidate,
   type ExtractionNotebookInput,
-  type GroundingVerdict,
+  type GroundingRescueVerdict,
   type RawExtraction,
 } from "../../f1-extraction-contract";
 import intakeCore from "../../../apu-core/v1.6/02_OBSERVATION_AND_INTAKE.md?raw";
@@ -28,12 +34,57 @@ const EXTRACTION_MODEL = PRODUCTION_EXTRACTION_MODEL;
 
 type NotebookInput = ExtractionNotebookInput;
 type RawCandidate = ExtractionCandidate;
+type ProviderUsage = {
+  input_tokens?: number;
+  input_tokens_details?: { cached_tokens?: number; cache_write_tokens?: number };
+  output_tokens?: number;
+  output_tokens_details?: { reasoning_tokens?: number };
+  total_tokens?: number;
+};
+
+function aggregateUsage(...usages: Array<ProviderUsage | undefined>): ProviderUsage | undefined {
+  const available = usages.filter((usage): usage is ProviderUsage => Boolean(usage));
+  if (!available.length) return undefined;
+  const sum = (values: Array<number | undefined>) => {
+    const present = values.filter((value): value is number => typeof value === "number");
+    return present.length ? present.reduce((total, value) => total + value, 0) : undefined;
+  };
+  const cachedTokens = sum(available.map((usage) => usage.input_tokens_details?.cached_tokens));
+  const cacheWriteTokens = sum(available.map((usage) => usage.input_tokens_details?.cache_write_tokens));
+  const reasoningTokens = sum(available.map((usage) => usage.output_tokens_details?.reasoning_tokens));
+  return {
+    input_tokens: sum(available.map((usage) => usage.input_tokens)),
+    ...((cachedTokens !== undefined || cacheWriteTokens !== undefined) ? {
+      input_tokens_details: { cached_tokens: cachedTokens, cache_write_tokens: cacheWriteTokens },
+    } : {}),
+    output_tokens: sum(available.map((usage) => usage.output_tokens)),
+    ...(reasoningTokens !== undefined ? { output_tokens_details: { reasoning_tokens: reasoningTokens } } : {}),
+    total_tokens: sum(available.map((usage) => usage.total_tokens)),
+  };
+}
+
+function aggregateRecordedUsage(records: ReturnType<RequestUsageCollector["records"]>) {
+  return aggregateUsage(...records.map((record) => ({
+    input_tokens: record.usage.input_tokens ?? undefined,
+    ...((record.usage.cached_input_tokens !== null || record.usage.cache_write_tokens !== null) ? {
+      input_tokens_details: {
+        cached_tokens: record.usage.cached_input_tokens ?? undefined,
+        cache_write_tokens: record.usage.cache_write_tokens ?? undefined,
+      },
+    } : {}),
+    output_tokens: record.usage.output_tokens ?? undefined,
+    ...(record.usage.reasoning_tokens !== null ? {
+      output_tokens_details: { reasoning_tokens: record.usage.reasoning_tokens },
+    } : {}),
+    total_tokens: record.usage.provider_total_tokens ?? undefined,
+  })));
+}
 
 function jsonError(message: string, status = 500, collector?: RequestUsageCollector) {
   return Response.json(collector ? modelUsagePayload({ error: message }, collector) : { error: message }, { status });
 }
 
-async function verifyGrounding(
+async function verifyPrimaryGrounding(
   apiKey: string,
   requestId: string,
   message: string,
@@ -41,10 +92,10 @@ async function verifyGrounding(
   candidates: RawCandidate[],
   collector: RequestUsageCollector,
 ) {
-  if (!candidates.length) return { acceptedIndexes: new Set<number>(), response: null };
+  if (!candidates.length) return { verdicts: null };
 
   try {
-    const { response, usage_record, application_result } = await callOpenAIResponses({
+    const { usage_record, application_result } = await callOpenAIResponses({
       api_key: apiKey, request_id: requestId, phase: "F1", operation: "grounding", requested_model: EXTRACTION_MODEL, reasoning_effort: PRODUCTION_EXTRACTION_REASONING, requested_service_tier: "default", collector,
       payload: {
       model: EXTRACTION_MODEL,
@@ -70,20 +121,60 @@ async function verifyGrounding(
       },
       validate_application_response: (providerResponse) => {
         const text = extractResponseText(providerResponse); if (!text) throw new Error("missing structured output");
-        return JSON.parse(text) as { verdicts?: GroundingVerdict[] };
+        return JSON.parse(text) as { verdicts?: unknown };
       },
     });
-    if (usage_record.provider_status !== "completed" || !application_result) return { acceptedIndexes: new Set<number>(), response: response.body };
-    const parsed = application_result;
-    const acceptedIndexes = new Set(
-      (parsed.verdicts ?? [])
-        .filter((verdict) => verdict.accepted && Number.isInteger(verdict.index) && verdict.index >= 0 && verdict.index < candidates.length)
-        .map((verdict) => verdict.index),
-    );
-    return { acceptedIndexes, response: response.body };
+    if (usage_record.provider_status !== "completed" || !application_result || !Array.isArray(application_result.verdicts)) return { verdicts: null };
+    return { verdicts: application_result.verdicts };
   } catch {
-    return { acceptedIndexes: new Set<number>(), response: null };
+    return { verdicts: null };
   }
+}
+
+async function verifyGrounding(
+  apiKey: string,
+  requestId: string,
+  message: string,
+  notebook: NotebookInput[],
+  candidates: RawCandidate[],
+  collector: RequestUsageCollector,
+) {
+  if (!candidates.length) return { acceptedIndexes: new Set<number>() };
+  const primary = await verifyPrimaryGrounding(apiKey, requestId, message, notebook, candidates, collector);
+  const result = await applyMonotonicGroundingRescue(candidates, primary.verdicts, async (rescueCandidates) => {
+    const rescue = await callOpenAIResponses<{ verdicts: GroundingRescueVerdict[] }>({
+      api_key: apiKey, request_id: requestId, phase: "F1", operation: "grounding", requested_model: PRODUCTION_GROUNDING_RESCUE_MODEL, reasoning_effort: PRODUCTION_GROUNDING_RESCUE_REASONING, requested_service_tier: "default", collector,
+      payload: {
+        model: PRODUCTION_GROUNDING_RESCUE_MODEL,
+        reasoning: { effort: PRODUCTION_GROUNDING_RESCUE_REASONING },
+        instructions: GROUNDING_RESCUE_INSTRUCTIONS,
+        input: JSON.stringify({
+          currentNotebook: notebook,
+          newUserMessage: message,
+          candidates: rescueCandidates.map((candidate, index) => ({ index, ...candidate })),
+        }),
+        text: {
+          format: {
+            type: "json_schema",
+            name: "apu_notepad_grounding_rescue",
+            description: "Úzká monotónní záchrana explicitně zamítnutých grounding kandidátů.",
+            strict: true,
+            schema: GROUNDING_RESCUE_SCHEMA,
+          },
+        },
+        max_output_tokens: Math.min(4_000, Math.max(1_200, 500 + rescueCandidates.length * 180)),
+        service_tier: "default",
+        store: false,
+      },
+      validate_application_response: (providerResponse) => {
+        const text = extractResponseText(providerResponse); if (!text) throw new Error("missing structured output");
+        return validateGroundingRescueVerdicts(JSON.parse(text), rescueCandidates.length);
+      },
+    });
+    if (rescue.usage_record.provider_status !== "completed" || !rescue.application_result) throw new Error("grounding rescue failed");
+    return rescue.application_result;
+  });
+  return { acceptedIndexes: result.acceptedIndexes };
 }
 
 export async function POST(request: Request) {
@@ -197,14 +288,9 @@ export async function POST(request: Request) {
     return acceptedCandidateKeys.has(`${candidate.category}\u0000${candidate.sourceQuote}\u0000${candidate.notebookText}`);
   });
 
-  const usage = response.usage as {
-    input_tokens?: number;
-    input_tokens_details?: { cached_tokens?: number; cache_write_tokens?: number };
-    output_tokens?: number;
-    output_tokens_details?: { reasoning_tokens?: number };
-    total_tokens?: number;
-  } | undefined;
-  const groundingUsage = grounding.response?.usage as typeof usage;
+  const usage = response.usage as ProviderUsage | undefined;
+  const groundingRecords = collector.records().filter((record) => record.operation === "grounding");
+  const groundingUsage = aggregateRecordedUsage(groundingRecords);
   const inputTokens = (usage?.input_tokens ?? 0) + (groundingUsage?.input_tokens ?? 0);
   const cachedInputTokens = (usage?.input_tokens_details?.cached_tokens ?? 0) +
     (groundingUsage?.input_tokens_details?.cached_tokens ?? 0);
@@ -216,7 +302,8 @@ export async function POST(request: Request) {
     .filter((record) => record.operation === "extraction" || record.operation === "grounding")
     .map((record) => record.call_id);
   const callId = canonicalCallIds[0] ?? crypto.randomUUID();
-  const groundingModel = typeof grounding.response?.model === "string" ? grounding.response.model : EXTRACTION_MODEL;
+  const finalGroundingRecord = groundingRecords.at(-1);
+  const groundingModel = finalGroundingRecord?.reported_model ?? finalGroundingRecord?.requested_model ?? EXTRACTION_MODEL;
   const telemetry = {
     turn_id: typeof body.turnId === "string" ? body.turnId : null,
     completed_at: new Date().toISOString(),

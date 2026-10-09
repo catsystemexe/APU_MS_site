@@ -2,6 +2,8 @@ import { CATEGORY_IDS, F2_PATHS, locateSourceQuote, type CategoryId, type F2Path
 
 export const PRODUCTION_EXTRACTION_MODEL = "gpt-5.6-luna";
 export const PRODUCTION_EXTRACTION_REASONING = "low" as const;
+export const PRODUCTION_GROUNDING_RESCUE_MODEL = "gpt-5.6-luna";
+export const PRODUCTION_GROUNDING_RESCUE_REASONING = "low" as const;
 export const MAX_EXTRACTION_MESSAGE_LENGTH = 12_000;
 export const MAX_EXTRACTION_NOTEBOOK_ITEMS = 80;
 
@@ -66,6 +68,78 @@ Položka currentNotebook s trust=unconfirmed není nezávislým důkazem své sp
 
 Příklad: z „žák je líný“ nelze přijmout „žák je pasivní“, „nesoustředí se“, „odmítá pracovat“ ani „usíná při výuce“. Vše zamítni jako nepodloženou interpretaci. Samotné „žák je líný“ rovněž není pozorovatelný projev. Naopak z explicitního „žák je apatický“ smíš přijmout pouze manifestations „Je apatický.“ se stejnou sourceQuote.
 Buď konzervativní. Při pochybnosti kandidáta zamítni.`;
+
+export const GROUNDING_RESCUE_REASON_CATEGORIES = [
+  "accept_shared_subject",
+  "accept_shared_context",
+  "accept_shared_predicate",
+  "accept_coreference",
+  "accept_relational_coordination",
+  "accept_context_completion",
+  "reject_modifier_only",
+  "reject_unsupported_meaning",
+  "reject_category_mismatch",
+  "reject_semantic_strengthening",
+  "reject_ambiguous_coreference",
+  "reject_inferred_relation",
+  "reject_unsupported_helps",
+  "reject_other",
+] as const;
+export type GroundingRescueReasonCategory = typeof GROUNDING_RESCUE_REASON_CATEGORIES[number];
+
+const GROUNDING_RESCUE_ACCEPT_REASONS = new Set<GroundingRescueReasonCategory>([
+  "accept_shared_subject",
+  "accept_shared_context",
+  "accept_shared_predicate",
+  "accept_coreference",
+  "accept_relational_coordination",
+  "accept_context_completion",
+]);
+
+export const GROUNDING_RESCUE_INSTRUCTIONS = `Jsi úzká záchranná kontrola grounding vrstvy automatického zápisu do pedagogického Zápisníku APU. Neměníš primární grounding. Dostáváš výhradně kandidáty, které primární grounding explicitně zamítl.
+
+ÚZKÁ OTÁZKA:
+Přijmi kandidáta pouze tehdy, když byl zamítnut výhradně proto, že jeho lokální sourceQuote je užší než jinak explicitní a jednoznačný gramatický vztah ve stejné newUserMessage. Neprováděj obecné nové grounding posouzení. Při pochybnosti zamítni.
+
+POVOLENÉ ZÁCHRANNÉ TŘÍDY:
+1. SHARED SUBJECT — sourceQuote už obsahuje substantivní predikát nebo děj a pouze dědí explicitní podmět ze stejné koordinované věty.
+2. SHARED PREPOSED CONTEXT — sourceQuote už obsahuje substantivní predikát nebo děj a pouze dědí jednoznačně společný předřazený kontext z koordinace.
+3. SHARED GOVERNING PREDICATE — obsahový člen koordinace dědí jeden explicitní řídící predikát ze stejné klauze.
+4. UNAMBIGUOUS COREFERENCE — propozice už je v sourceQuote a pouze se rozvine explicitní zájmeno nebo reference s jediným možným referentem ve stejné zprávě.
+5. EXPLICIT RELATIONAL COORDINATION — obsahový člen koordinace dědí výslovně uvedený vztah. Zachovej podporované kvalifikátory jednotlivých větví, například někdy nebo jindy.
+6. EXPLICIT CONTEXT COMPLETION — sourceQuote obsahuje substantivní vztahový predikát a notebookText pouze doplní jeho jednoznačně explicitní kontext ze stejné klauze.
+
+TVRDÝ ZÁKAZ MODIFIER-ONLY:
+Vždy zamítni kandidáta, pokud sourceQuote obsahuje pouze frekvenci, trvání, intenzitu, míru, časové určení, příslovce způsobu nebo podobný modifikátor a notebookText do něj přidává substantivní predikát či děj, který v sourceQuote chybí.
+- „přibližně po dvou minutách“ NESMÍ zachránit „Vrací se přibližně po dvou minutách.“
+- „někdy“ NESMÍ zachránit „Někdy zvládne celou řízenou činnost.“
+- „jindy“ NESMÍ zachránit „Jindy po pár minutách odbíhá.“
+- Z „někdy tomu předchází konflikt s dítětem, jindy požadavek učitelky nebo velký hluk“ NESMÍ sourceQuote „požadavek učitelky“ zachránit „Někdy tomu předchází požadavek učitelky.“; kvalifikátor jindy se nesmí změnit na někdy.
+- „rychle“ NESMÍ zachránit „Rychle se přestane soustředit.“
+- „po pár minutách“ NESMÍ zachránit „Odbíhá po pár minutách.“
+
+ATOMIZACE A KVALIFIKÁTORY:
+Jedna source span může legitimně vytvořit více kategoriálně specifických atomických faktů. Z „Žák každé ráno usíná“ může vzniknout manifestations „Žák usíná.“ a course „Každé ráno.“. Nevyžaduj, aby atom manifestations opakoval samostatný course/context údaj. Současně nikdy neodstraň kvalifikátor, který materiálně mění právě reprezentovanou atomickou propozici.
+
+DALŠÍ TVRDÁ ZAMÍTNUTÍ:
+- nepodložená diagnóza, příčina, záměr, potřeba, interpretace nebo doporučení;
+- změna kategorie;
+- nejednoznačná koreference;
+- přidaná negace, odstraněná materiální negace nebo nepodložená změna nejistoty;
+- kauzální či časový vztah odvozený pouze z pořadí výpovědi;
+- helps bez explicitní podmínky nebo změny a jejího pozorovaného účinku.
+
+„jednotlivě ho dokončí a požádá o další“ NESMÍ zachránit „Po dokončení úkolu požádá o další.“
+
+PŘÍKLADY POVOLENÉ ZÁCHRANY:
+- „Robin při práci vstane, odloží tužku.“ + sourceQuote „odloží tužku“ → „Robin odloží tužku.“
+- „Sára při obědě křičí a bouchá do stolu.“ + sourceQuote „bouchá do stolu“ → „Sára při obědě bouchá do stolu.“
+- „Pomohlo až klidnější místo a přítomnost známé učitelky.“ + sourceQuote „přítomnost známé učitelky“ → „Pomohla přítomnost známé učitelky.“
+- „... uteče ze třídy; potřebuji ověřit, zda tomu předchází hluk.“ dovoluje jednoznačně rozvinout „tomu“ jako útěk ze třídy.
+- „někdy tomu předchází konflikt s dítětem, jindy požadavek učitelky nebo velký hluk“ dovoluje jednotlivé explicitní kontextové větve při zachování někdy/jindy.
+- „Častěji se to stává před ostatními dětmi“ dovoluje doplnit explicitní kontext, pokud sourceQuote obsahuje substantivní vztahový predikát, nikoli pouhé „častěji“.
+
+Každému verdiktu přiřaď právě jednu reasonCategory z povoleného enumu. accepted=true smí používat jen accept_* kategorii; accepted=false jen reject_* kategorii. Vrať právě jeden verdikt pro každý vstupní index, bez duplicit a mezer.`;
 
 export function buildExtractionInstructions(intakeCore: string) {
   return `${intakeCore}\n\n${EXTRACTION_RULES}`.trim();
@@ -134,6 +208,28 @@ export const GROUNDING_SCHEMA = {
   },
 } as const;
 
+export const GROUNDING_RESCUE_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["verdicts"],
+  properties: {
+    verdicts: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["index", "accepted", "reasonCategory", "reason"],
+        properties: {
+          index: { type: "integer", minimum: 0 },
+          accepted: { type: "boolean" },
+          reasonCategory: { type: "string", enum: GROUNDING_RESCUE_REASON_CATEGORIES },
+          reason: { type: "string" },
+        },
+      },
+    },
+  },
+} as const;
+
 export type ExtractionNotebookInput = {
   category: CategoryId;
   id: string;
@@ -159,6 +255,88 @@ export type RawExtraction = {
 };
 
 export type GroundingVerdict = { index: number; accepted: boolean; reason: string | null };
+
+export type GroundingRescueVerdict = {
+  index: number;
+  accepted: boolean;
+  reasonCategory: GroundingRescueReasonCategory;
+  reason: string;
+};
+
+export function validateGroundingRescueVerdicts(value: unknown, submittedCount: number) {
+  if (!value || typeof value !== "object" || !Array.isArray((value as { verdicts?: unknown }).verdicts)) throw new Error("Grounding rescue response must contain verdicts.");
+  const verdicts = (value as { verdicts: unknown[] }).verdicts;
+  if (verdicts.length !== submittedCount) throw new Error(`Grounding rescue verdict completeness failed: expected ${submittedCount}, received ${verdicts.length}.`);
+  const byIndex = new Map<number, GroundingRescueVerdict>();
+  for (const raw of verdicts) {
+    if (!raw || typeof raw !== "object") throw new Error("Grounding rescue verdict is not an object.");
+    const verdict = raw as Partial<GroundingRescueVerdict>;
+    if (!Number.isInteger(verdict.index) || verdict.index! < 0 || verdict.index! >= submittedCount) throw new Error(`Grounding rescue verdict index is out of range: ${String(verdict.index)}.`);
+    if (byIndex.has(verdict.index!)) throw new Error(`Grounding rescue verdict index is duplicated: ${verdict.index}.`);
+    if (typeof verdict.accepted !== "boolean" || typeof verdict.reason !== "string" || !GROUNDING_RESCUE_REASON_CATEGORIES.includes(verdict.reasonCategory as GroundingRescueReasonCategory)) throw new Error(`Grounding rescue verdict ${verdict.index} has an invalid contract.`);
+    if (GROUNDING_RESCUE_ACCEPT_REASONS.has(verdict.reasonCategory as GroundingRescueReasonCategory) !== verdict.accepted) throw new Error(`Grounding rescue verdict ${verdict.index} has an incompatible accepted/reasonCategory pair.`);
+    byIndex.set(verdict.index!, verdict as GroundingRescueVerdict);
+  }
+  for (let index = 0; index < submittedCount; index += 1) if (!byIndex.has(index)) throw new Error(`Grounding rescue verdict completeness failed: missing index ${index}.`);
+  return { verdicts: [...byIndex.values()].sort((left, right) => left.index - right.index) };
+}
+
+export type MonotonicGroundingResult = {
+  acceptedIndexes: Set<number>;
+  primaryAcceptedIndexes: Set<number>;
+  rescueCandidateOriginalIndexes: number[];
+  rescueAttempted: boolean;
+  rescueSucceeded: boolean;
+};
+
+function primaryGroundingIndexes(value: unknown, candidateCount: number) {
+  if (!Array.isArray(value)) return { validApplicationResult: false, acceptedIndexes: new Set<number>(), explicitRejectedIndexes: [] as number[] };
+  const acceptedIndexes = new Set<number>();
+  const rejectedCounts = new Map<number, number>();
+  for (const raw of value) {
+    if (!raw || typeof raw !== "object") continue;
+    const verdict = raw as Partial<GroundingVerdict>;
+    if (!Number.isInteger(verdict.index) || verdict.index! < 0 || verdict.index! >= candidateCount || typeof verdict.accepted !== "boolean") continue;
+    if (verdict.accepted) acceptedIndexes.add(verdict.index!);
+    else rejectedCounts.set(verdict.index!, (rejectedCounts.get(verdict.index!) ?? 0) + 1);
+  }
+  const explicitRejectedIndexes = [...rejectedCounts.entries()]
+    .filter(([index, count]) => count === 1 && !acceptedIndexes.has(index))
+    .map(([index]) => index)
+    .sort((left, right) => left - right);
+  return { validApplicationResult: true, acceptedIndexes, explicitRejectedIndexes };
+}
+
+export async function applyMonotonicGroundingRescue<T>(
+  candidates: T[],
+  primaryVerdicts: unknown,
+  callRescue: (rescueCandidates: T[]) => Promise<unknown>,
+): Promise<MonotonicGroundingResult> {
+  const primary = primaryGroundingIndexes(primaryVerdicts, candidates.length);
+  const fallback = (): MonotonicGroundingResult => ({
+    acceptedIndexes: new Set(primary.acceptedIndexes),
+    primaryAcceptedIndexes: new Set(primary.acceptedIndexes),
+    rescueCandidateOriginalIndexes: [...primary.explicitRejectedIndexes],
+    rescueAttempted: false,
+    rescueSucceeded: false,
+  });
+  if (!primary.validApplicationResult || primary.explicitRejectedIndexes.length === 0) return fallback();
+  const rescueCandidates = primary.explicitRejectedIndexes.map((index) => candidates[index]);
+  try {
+    const rescue = validateGroundingRescueVerdicts(await callRescue(rescueCandidates), rescueCandidates.length);
+    const acceptedIndexes = new Set(primary.acceptedIndexes);
+    for (const verdict of rescue.verdicts) if (verdict.accepted) acceptedIndexes.add(primary.explicitRejectedIndexes[verdict.index]);
+    return {
+      acceptedIndexes,
+      primaryAcceptedIndexes: new Set(primary.acceptedIndexes),
+      rescueCandidateOriginalIndexes: [...primary.explicitRejectedIndexes],
+      rescueAttempted: true,
+      rescueSucceeded: true,
+    };
+  } catch {
+    return { ...fallback(), rescueAttempted: true };
+  }
+}
 
 export type LocatedExtractionCandidate = ExtractionCandidate & { start: number; end: number };
 
