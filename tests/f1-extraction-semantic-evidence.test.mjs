@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { runStagedSemanticJudge } from "../evals/f1-extraction/lib/pipeline.ts";
-import { deriveStagedSemanticEvaluation, validateStagedSemanticEvidence } from "../evals/f1-extraction/lib/semantic-evidence.ts";
+import { deriveStagedSemanticEvaluation, replayStagedSemanticEvaluationFromEvidence, validateStagedSemanticEvidence } from "../evals/f1-extraction/lib/semantic-evidence.ts";
 import { buildResultArtifacts } from "../evals/f1-extraction/lib/reporting.ts";
+import { scoreCase } from "../evals/f1-extraction/lib/scoring.ts";
 import { calculateStageMetrics } from "../evals/f1-extraction/lib/stage-analysis.ts";
 
 const input = "Potřebuji zajistit klid a zajistit kratší úkoly. Při práci je ve třídě hlučno.";
@@ -45,6 +46,13 @@ function output(factDecisions, candidateIds) {
 
 function equivalent(goldFactId, groups) {
   return { goldFactId, decision: "equivalent", supportGroups: groups.map((candidateIds) => ({ candidateIds })), reason: "semantically sufficient" };
+}
+
+function evaluated(entry) {
+  const { candidateId, origin, ...value } = entry;
+  void candidateId;
+  void origin;
+  return value;
 }
 
 test("one semantic support candidate survives for PRE and POST coverage", () => {
@@ -120,6 +128,77 @@ test("an alternative sufficient support group preserves POST coverage", () => {
   assert.equal(result.preScore.counts.semanticCovered, 1);
   assert.equal(result.postScore.counts.semanticCovered, 1);
   assert.deepEqual(result.evidence.goldFacts[0].postSupportGroups, [{ candidateIds: [b.candidateId, c.candidateId] }]);
+});
+
+test("saved equivalent evidence replays surviving support and grounding loss", () => {
+  const a = candidate("candidate-a", "Zajistit klid a krátké úkoly.");
+  const originalTurns = turn([a], [a.candidateId]);
+  const original = deriveStagedSemanticEvaluation(evalCase(), originalTurns, output([equivalent("goal", [[a.candidateId]])], [a.candidateId]));
+  const surviving = replayStagedSemanticEvaluationFromEvidence(evalCase(), originalTurns, original.preScore, original.evidence);
+  const removed = replayStagedSemanticEvaluationFromEvidence(evalCase(), turn([a], []), original.preScore, original.evidence);
+  assert.equal(surviving.postScore.matches[0].state, "SEMANTIC_EQUIVALENT");
+  assert.equal(removed.postScore.matches[0].state, "MISS");
+  assert.equal(removed.postDecisions[0].decision, "not_equivalent");
+});
+
+test("saved not_equivalent evidence reproduces original POST MISS", () => {
+  const a = candidate("candidate-a", "Zajistit klid, nikoli kratší úkoly.");
+  const turns = turn([a], [a.candidateId]);
+  const item = evalCase();
+  assert.equal(scoreCase(item, [evaluated(a)]).matches[0].state, "REVIEW");
+  const rejection = { goldFactId: "goal", decision: "not_equivalent", supportGroups: [], reason: "The candidate negates part of the required goal." };
+  const original = deriveStagedSemanticEvaluation(item, turns, output([rejection], [a.candidateId]));
+  const replayed = replayStagedSemanticEvaluationFromEvidence(item, turns, original.preScore, original.evidence);
+  assert.equal(original.postScore.matches[0].state, "MISS");
+  assert.equal(replayed.postScore.matches[0].state, "MISS");
+  assert.deepEqual(replayed.postScore.counts, original.postScore.counts);
+  assert.deepEqual(replayed.postScore.metrics, original.postScore.metrics);
+  assert.deepEqual(replayed.postDecisions, [{
+    kind: "alignment", goldFactId: "goal", candidateIndexes: [], decision: "not_equivalent", reason: rejection.reason,
+  }]);
+});
+
+test("saved uncertain evidence remains unresolved during replay", () => {
+  const a = candidate("candidate-a", "Zajistit klid a možná kratší úkoly.");
+  const turns = turn([a], [a.candidateId]);
+  const uncertain = { goldFactId: "goal", decision: "uncertain", supportGroups: [], reason: "Insufficient semantic confidence." };
+  const original = deriveStagedSemanticEvaluation(evalCase(), turns, output([uncertain], [a.candidateId]));
+  const replayed = replayStagedSemanticEvaluationFromEvidence(evalCase(), turns, original.preScore, original.evidence);
+  assert.equal(original.postScore.matches[0].state, "REVIEW");
+  assert.equal(replayed.postScore.matches[0].state, "REVIEW");
+  assert.deepEqual(replayed.postDecisions, []);
+});
+
+test("saved deterministic exact and missing facts replay without semantic decisions", () => {
+  const exact = candidate("exact", "Zajistit klid a kratší úkoly.");
+  const exactTurns = turn([exact], [exact.candidateId]);
+  const exactOriginal = deriveStagedSemanticEvaluation(evalCase(), exactTurns, null);
+  const exactReplay = replayStagedSemanticEvaluationFromEvidence(evalCase(), exactTurns, exactOriginal.preScore, exactOriginal.evidence);
+  assert.equal(exactOriginal.evidence.goldFacts[0].decision, "exact");
+  assert.equal(exactReplay.postScore.matches[0].state, "EXACT");
+  assert.deepEqual(exactReplay.postDecisions, []);
+
+  const missingTurns = turn([], []);
+  const missingOriginal = deriveStagedSemanticEvaluation(evalCase(), missingTurns, null);
+  const missingReplay = replayStagedSemanticEvaluationFromEvidence(evalCase(), missingTurns, missingOriginal.preScore, missingOriginal.evidence);
+  assert.equal(missingOriginal.evidence.goldFacts[0].decision, "missing");
+  assert.equal(missingReplay.postScore.matches[0].state, "MISS");
+  assert.deepEqual(missingReplay.postDecisions, []);
+});
+
+test("replay preserves saved candidate classifications for surviving candidates", () => {
+  const extra = candidate("extra", "Ve třídě bývá hlučno.", "context");
+  const unsupported = candidate("unsupported", "Ve třídě je bezpečno.", "context");
+  const turns = turn([extra, unsupported], [extra.candidateId, unsupported.candidateId]);
+  const judged = { factDecisions: [], candidateDecisions: [
+    { candidateId: extra.candidateId, decision: "grounded_extra", reason: "explicit extra" },
+    { candidateId: unsupported.candidateId, decision: "unsupported", reason: "not supported" },
+  ] };
+  const original = deriveStagedSemanticEvaluation(evalCase([]), turns, judged);
+  const replayed = replayStagedSemanticEvaluationFromEvidence(evalCase([]), turns, original.preScore, original.evidence);
+  assert.deepEqual(replayed.postScore.candidateClassifications, original.postScore.candidateClassifications);
+  assert.deepEqual(replayed.postScore.counts, original.postScore.counts);
+  assert.deepEqual(replayed.postScore.metrics, original.postScore.metrics);
 });
 
 test("one candidate may support two gold facts on the same semantic basis", () => {

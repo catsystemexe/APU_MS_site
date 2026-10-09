@@ -89,6 +89,61 @@ async function writeSavedStageFixture(root) {
   return { sourceDirectory, stagePath, item };
 }
 
+async function writeNotEquivalentStageFixture(root) {
+  const corpus = await loadCorpus(corpusPath);
+  const item = corpus.cases.find((entry) => entry.id === "atomic-negation");
+  const sourceQuote = "odchází od stolu";
+  const entry = {
+    candidateId: "turn-0-extract-0",
+    origin: "extraction",
+    inputIndex: 0,
+    category: "manifestations",
+    sourceQuote,
+    notebookText: "Odchází od stolu.",
+    action: "add",
+    relatedEntryId: null,
+    reason: null,
+    start: item.inputs[0].indexOf(sourceQuote),
+    end: item.inputs[0].indexOf(sourceQuote) + sourceQuote.length,
+  };
+  const turns = rejectedTurn(entry);
+  turns[0].groundingVerdicts = [{
+    candidateId: entry.candidateId,
+    submittedIndex: 0,
+    accepted: true,
+    reason: null,
+    providerVerdict: { index: 0, accepted: true, reason: null },
+  }];
+  turns[0].finalCandidates = [entry];
+  const evaluated = deriveStagedSemanticEvaluation(item, turns, {
+    factDecisions: [{
+      goldFactId: "m1",
+      decision: "not_equivalent",
+      supportGroups: [],
+      reason: "The candidate reverses the saved fact's negation.",
+    }],
+    candidateDecisions: [{ candidateId: entry.candidateId, decision: "uncertain", reason: "classified through fact review" }],
+  });
+  assert.equal(evaluated.postScore.matches[0].state, "MISS");
+  const sourceDirectory = join(root, "not-equivalent-source");
+  await mkdir(sourceDirectory);
+  await writeFile(join(sourceDirectory, "stage-runs.jsonl"), `${JSON.stringify({
+    caseId: item.id,
+    profile: "baseline",
+    pipeline: "baseline",
+    repetition: 1,
+    preGroundingScore: evaluated.preScore,
+    postGroundingScore: evaluated.postScore,
+    totals: { latencyMs: 1, inputTokens: 0, outputTokens: 0, estimatedCostUsd: null },
+    stageMetrics: calculateStageMetrics(evaluated.preScore, evaluated.postScore, turns),
+    stageTurns: turns,
+    stageCalls: [],
+    stageAccounting: {},
+    semanticEvidence: evaluated.evidence,
+  })}\n`);
+  return sourceDirectory;
+}
+
 test("evidence-scope fixtures cover every required allowed and rejected pattern", async () => {
   const fixture = JSON.parse(await readFile(fixturePath, "utf8"));
   assert.equal(fixture.variant, "evidence-scope-v2");
@@ -143,6 +198,24 @@ test("saved-stage loader requires judged semantic evidence and stable unique run
     await mkdir(invalidDirectory);
     await writeFile(join(invalidDirectory, "stage-runs.jsonl"), `${JSON.stringify({ caseId: "x" })}\n`);
     await assert.rejects(loadSavedStageRuns(invalidDirectory), /judged staged-run contract/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("saved source validation reproduces a surviving not_equivalent POST miss before any provider call", async () => {
+  const root = await mkdtemp(join(tmpdir(), "apu-grounding-replay-not-equivalent-"));
+  try {
+    const sourceDirectory = await writeNotEquivalentStageFixture(root);
+    await assert.rejects(executeGroundingReplay([
+      "--source", sourceDirectory,
+      "--profile", "baseline",
+      "--variant", "evidence-scope-v2",
+      "--run-id", "not-equivalent",
+      "--output-dir", root,
+      "--max-calls", "1",
+      "--corpus", corpusPath,
+    ], process.cwd(), {}), /OPENAI_API_KEY is unavailable.*no provider call/i);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

@@ -327,7 +327,14 @@ export function replayStagedSemanticEvaluationFromEvidence(
   const postSet = new Set(postIds);
   const postIndex = new Map(postIds.map((id, index) => [id, index]));
   const postDecisions: SemanticJudgeDecision[] = savedEvidence.goldFacts.flatMap((fact): SemanticJudgeDecision[] => {
-    if (fact.decision !== "equivalent") return [];
+    if (fact.decision === "not_equivalent") return [{
+      kind: "alignment",
+      goldFactId: fact.goldFactId,
+      candidateIndexes: [],
+      decision: "not_equivalent",
+      reason: fact.reason,
+    }];
+    if (fact.decision !== "equivalent" || fact.supportGroups.length === 0) return [];
     const surviving = fact.supportGroups.filter((group) => group.candidateIds.every((id) => postSet.has(id)));
     if (surviving.length) return surviving.map((group) => ({
       kind: "alignment",
