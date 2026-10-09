@@ -1,8 +1,12 @@
 # F1 canonical extraction evaluation
 
-This harness compares the production extraction/grounding contract without changing production routing. The `coverage` pipeline is test-only:
+This harness compares F1 extraction and grounding configurations without changing production routing. Pipeline IDs have stable meanings:
 
-`EXTRACT → COVERAGE CHECK → GROUNDING`
+- `baseline` is the historical `EXTRACT → PRIMARY GROUNDING` pipeline and remains primary-grounding only for result comparability;
+- `coverage` is the test-only `EXTRACT → COVERAGE CHECK → PRIMARY GROUNDING` pipeline;
+- `production-rescue` mirrors current production F1 as `EXTRACT → PRIMARY GROUNDING → MONOTONIC GROUNDING RESCUE` and should be used for new production-equivalent extraction experiments.
+
+`production-rescue` imports the canonical production rescue instructions, schema, reason categories, validator, model, reasoning level, and monotonic composition helper. Only explicit primary rejections enter rescue; primary acceptances cannot be removed, and rescue failure preserves the primary result. Its pre-run call estimate conservatively reserves at most one rescue call per turn, while saved stage accounting records only calls actually made.
 
 ## Gold Contract versions
 
@@ -95,6 +99,6 @@ Dry runs never require `OPENAI_API_KEY` and make no provider calls. A live run r
 
 ## Filters and profiles
 
-Use `--suite atomic,mixed,dense`, `--case <comma-separated ids>`, `--profiles baseline,terra-extract,terra-both,terra-medium,sol-reference`, and `--pipelines baseline,coverage`. Explicit `--extraction-model`, `--extraction-reasoning`, `--grounding-model`, and `--grounding-reasoning` flags can override a selected profile for a controlled experiment. `--judge-model` enables an isolated optional semantic judge for deterministic `REVIEW` matches; judge decisions are recorded and never rewrite gold fixtures or silently count as deterministic passes.
+Use `--suite atomic,mixed,dense`, `--case <comma-separated ids>`, `--profiles baseline,terra-extract,terra-both,terra-medium,sol-reference`, and `--pipelines baseline,coverage,production-rescue`. Explicit `--extraction-model`, `--extraction-reasoning`, `--grounding-model`, and `--grounding-reasoning` flags can override a selected profile for a controlled experiment. `--judge-model` enables an isolated optional semantic judge for deterministic `REVIEW` matches; judge decisions are recorded and never rewrite gold fixtures or silently count as deterministic passes.
 
 Use `--max-calls` to bound a live sweep. Results are written below `evals/f1-extraction/results/` and ignored by Git. Each run emits raw JSONL, case-score JSONL, aggregate JSON/CSV, and a Markdown summary. Do not commit live outputs by default.

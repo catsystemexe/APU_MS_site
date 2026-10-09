@@ -5,7 +5,7 @@ import { PRODUCTION_EXTRACTION_MODEL, PRODUCTION_EXTRACTION_REASONING, validateE
 
 export const EVAL_SUITES = ["atomic", "mixed", "dense", "real"] as const;
 export type EvalSuite = typeof EVAL_SUITES[number];
-export const PIPELINE_IDS = ["baseline", "coverage"] as const;
+export const PIPELINE_IDS = ["baseline", "coverage", "production-rescue"] as const;
 export type PipelineId = typeof PIPELINE_IDS[number];
 export type ReasoningEffort = "low" | "medium";
 export type MatchState = "EXACT" | "SEMANTIC_EQUIVALENT" | "MISS" | "REVIEW";
@@ -313,7 +313,7 @@ export function selectCases(corpus: EvalCorpus, options: Pick<EvalCliOptions, "s
 
 export function estimateCallCount(cases: EvalCase[], options: Pick<EvalCliOptions, "profiles" | "pipelines" | "repetitions" | "judgeModel">) {
   const turns = cases.reduce((sum, item) => sum + item.inputs.length, 0);
-  const pipelineCalls = options.pipelines.reduce((sum, pipeline) => sum + (pipeline === "coverage" ? 3 : 2), 0);
+  const pipelineCalls = options.pipelines.reduce((sum, pipeline) => sum + (pipeline === "baseline" ? 2 : 3), 0);
   const pipelineProviderCalls = turns * options.profiles.length * options.repetitions * pipelineCalls;
   const semanticJudgeCalls = options.judgeModel ? cases.length * options.profiles.length * options.pipelines.length * options.repetitions : 0;
   return { cases: cases.length, turns, repetitions: options.repetitions, configurations: options.profiles.length * options.pipelines.length, providerCalls: pipelineProviderCalls + semanticJudgeCalls, semanticJudgeCalls };

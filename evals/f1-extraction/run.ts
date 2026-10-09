@@ -36,7 +36,7 @@ Options:
   --extraction-reasoning <x>   low or medium override
   --grounding-model <model>    Optional selected-profile override
   --grounding-reasoning <x>    low or medium override
-  --pipelines <csv>            baseline,coverage
+  --pipelines <csv>            baseline,coverage,production-rescue
   --repetitions <n>            1–20
   --run-id <id>                Result directory name
   --output-dir <path>          Local result root

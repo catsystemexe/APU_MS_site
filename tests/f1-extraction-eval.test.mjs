@@ -6,11 +6,11 @@ import test from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { buildExtractionInstructions, buildGroundingInstructions, normalizeExtractionCandidates } from "../app/f1-extraction-contract.ts";
 import { DEV_TEST_SCENARIOS } from "../app/dev-test-scenarios.ts";
-import { MODEL_PROFILES, estimateCallCount, loadCorpus, parseCliArgs, resolveProfile, selectCases, validateCorpus } from "../evals/f1-extraction/lib/eval-contract.ts";
+import { MODEL_PROFILES, PIPELINE_IDS, estimateCallCount, loadCorpus, parseCliArgs, resolveProfile, selectCases, validateCorpus } from "../evals/f1-extraction/lib/eval-contract.ts";
 import { COVERAGE_SCHEMA, runExtractionPipeline } from "../evals/f1-extraction/lib/pipeline.ts";
 import { aggregateScores, scoreCase } from "../evals/f1-extraction/lib/scoring.ts";
 import { buildResultArtifacts, writeResultArtifacts } from "../evals/f1-extraction/lib/reporting.ts";
-import { execute, isCliEntrypoint } from "../evals/f1-extraction/run.ts";
+import { HELP, execute, isCliEntrypoint } from "../evals/f1-extraction/run.ts";
 
 const corpusPath = new URL("../evals/f1-extraction/fixtures/corpus.json", import.meta.url).pathname;
 const suite4Path = new URL("../evals/f1-extraction/fixtures/suite4-real-case-studies.json", import.meta.url).pathname;
@@ -120,6 +120,8 @@ test("aggregate metrics include stability, latency, tokens and cost", async () =
 });
 
 test("profile, pipeline, filters and call guards parse deterministically", async () => {
+  assert.deepEqual(PIPELINE_IDS, ["baseline", "coverage", "production-rescue"]);
+  assert.match(HELP, /baseline,coverage,production-rescue/);
   assert.deepEqual(Object.keys(MODEL_PROFILES), ["baseline", "terra-extract", "terra-both", "terra-medium", "sol-reference"]);
   assert.deepEqual(MODEL_PROFILES.baseline, {
     id: "baseline", extractionModel: "gpt-5.6-luna", extractionReasoning: "low",
@@ -136,6 +138,9 @@ test("profile, pipeline, filters and call guards parse deterministically", async
   assert.deepEqual(selected.map((item) => item.id), ["atomic-manifestation"]);
   assert.deepEqual(estimateCallCount(selected, options), { cases: 1, turns: 1, repetitions: 3, configurations: 4, providerCalls: 30, semanticJudgeCalls: 0 });
   assert.deepEqual(estimateCallCount(selected, { ...options, judgeModel: "gpt-5.6-luna" }), { cases: 1, turns: 1, repetitions: 3, configurations: 4, providerCalls: 42, semanticJudgeCalls: 12 });
+  assert.deepEqual(estimateCallCount(selected, { ...options, profiles: ["baseline"], pipelines: ["production-rescue"], repetitions: 1, judgeModel: "gpt-5.6-sol" }), {
+    cases: 1, turns: 1, repetitions: 1, configurations: 1, providerCalls: 4, semanticJudgeCalls: 1,
+  });
   assert.throws(() => parseCliArgs(["--profiles", "unknown"], "/repo"), /unsupported profile/);
 });
 
@@ -145,6 +150,26 @@ test("CLI dry run reports scope without requiring provider credentials", async (
   assert.equal(result.plan.cases, 15);
   assert.equal(result.plan.configurations, 4);
   assert.equal(result.plan.estimatedProviderCalls, 300);
+});
+
+test("production-rescue dry run reserves one rescue call per turn and makes no provider call", async () => {
+  let providerCalls = 0;
+  const result = await execute([
+    "--dry-run", "--corpus", corpusPath,
+    "--case", "human-gate-david,human-gate-ondra,mixed-contrast-situations",
+    "--profiles", "baseline", "--pipelines", "production-rescue", "--repetitions", "1",
+    "--judge-model", "gpt-5.6-sol", "--max-calls", "12",
+  ], process.cwd(), {}, { provider: { async call() { providerCalls += 1; throw new Error("dry run must not call provider"); } } });
+  assert.equal(result.kind, "dry-run");
+  assert.equal(result.plan.estimatedProviderCalls, 12);
+  assert.deepEqual(result.plan.pipelines, ["production-rescue"]);
+  assert.equal(providerCalls, 0);
+  await assert.rejects(execute([
+    "--dry-run", "--corpus", corpusPath,
+    "--case", "human-gate-david,human-gate-ondra,mixed-contrast-situations",
+    "--profiles", "baseline", "--pipelines", "production-rescue", "--repetitions", "1",
+    "--judge-model", "gpt-5.6-sol", "--max-calls", "11",
+  ], process.cwd(), {}), /Estimated provider calls 12 exceed --max-calls 11/);
 });
 
 test("CLI entrypoint detection normalizes native Windows paths", () => {

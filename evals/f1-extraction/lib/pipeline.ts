@@ -4,12 +4,20 @@ import { InstrumentedModelCallError } from "../../../app/model-call-instrumentat
 import {
   EXTRACTION_SCHEMA,
   GROUNDING_SCHEMA,
+  GROUNDING_RESCUE_INSTRUCTIONS,
+  GROUNDING_RESCUE_SCHEMA,
+  PRODUCTION_GROUNDING_RESCUE_MODEL,
+  PRODUCTION_GROUNDING_RESCUE_REASONING,
+  applyMonotonicGroundingRescue,
   buildExtractionInstructions,
   buildGroundingInstructions,
   extractResponseText,
   normalizeExtractionCandidates,
+  validateGroundingRescueVerdicts,
   type ExtractionCandidate,
   type ExtractionNotebookInput,
+  type GroundingRescueReasonCategory,
+  type GroundingRescueVerdict,
   type GroundingVerdict,
   type RawExtraction,
 } from "../../../app/f1-extraction-contract.ts";
@@ -140,13 +148,22 @@ export class EvalProviderCallError extends Error {
   readonly stage: ProviderCall<unknown>["stage"];
   readonly model: string;
   readonly reasoning: ReasoningEffort;
+  readonly latencyMs: number;
+  readonly usage: ModelUsageRecord | null;
 
-  constructor(input: Pick<ProviderCall<unknown>, "stage" | "model" | "reasoning">, diagnostic: string) {
+  constructor(
+    input: Pick<ProviderCall<unknown>, "stage" | "model" | "reasoning">,
+    diagnostic: string,
+    latencyMs = 0,
+    usage: ModelUsageRecord | null = null,
+  ) {
     super(`stage=${input.stage}; model=${input.model}; reasoning=${input.reasoning}; ${diagnostic}`);
     this.name = "EvalProviderCallError";
     this.stage = input.stage;
     this.model = input.model;
     this.reasoning = input.reasoning;
+    this.latencyMs = latencyMs;
+    this.usage = usage;
   }
 }
 
@@ -208,19 +225,27 @@ export function createOpenAIProvider(apiKey: string, requestPrefix: string): Eva
           },
         });
         if (result.usage_record.provider_status !== "completed" || !result.application_result) {
-          throw new EvalProviderCallError(input, providerResponseDiagnostic(result.usage_record, result.response));
+          throw new EvalProviderCallError(input, providerResponseDiagnostic(result.usage_record, result.response), Math.round(performance.now() - started), result.usage_record);
         }
         return { value: result.application_result, latencyMs: Math.round(performance.now() - started), usage: result.usage_record };
       } catch (error) {
         if (error instanceof EvalProviderCallError) throw error;
         const record = error instanceof InstrumentedModelCallError ? error.usage_record : collector.records().at(-1);
-        throw new EvalProviderCallError(input, providerResponseDiagnostic(record));
+        throw new EvalProviderCallError(input, providerResponseDiagnostic(record), Math.round(performance.now() - started), record ?? null);
       }
     },
   };
 }
 
-export type PipelineCall = { stage: "extraction" | "coverage" | "grounding"; model: string; reasoning: string; latencyMs: number; usage: ModelUsageRecord | null };
+export type PipelineCall = {
+  stage: "extraction" | "coverage" | "grounding";
+  model: string;
+  reasoning: string;
+  latencyMs: number;
+  usage: ModelUsageRecord | null;
+  groundingPass?: "rescue";
+  error?: string;
+};
 export type StageCandidate = EvaluatedCandidate & { candidateId: string; origin: "extraction" | "coverage" };
 export type GroundingTraceVerdict = {
   candidateId: string;
@@ -228,6 +253,15 @@ export type GroundingTraceVerdict = {
   accepted: boolean;
   reason: string | null;
   providerVerdict: GroundingVerdict | null;
+};
+export type GroundingRescueTraceVerdict = {
+  candidateId: string;
+  rescueIndex: number;
+  originalGroundingIndex: number;
+  accepted: boolean | null;
+  reason: string | null;
+  reasonCategory: GroundingRescueReasonCategory | null;
+  providerVerdict: GroundingRescueVerdict | null;
 };
 export type PipelineTurnTrace = {
   inputIndex: number;
@@ -238,6 +272,9 @@ export type PipelineTurnTrace = {
   preGroundingCandidates: StageCandidate[];
   groundingSubmittedCandidates: StageCandidate[];
   groundingVerdicts: GroundingTraceVerdict[];
+  groundingRescueSubmittedCandidateIds?: string[];
+  groundingRescueVerdicts?: GroundingRescueTraceVerdict[];
+  groundingRescueFailure?: string | null;
   finalCandidates: StageCandidate[];
 };
 export type PipelineRun = {
@@ -321,12 +358,87 @@ export async function runExtractionPipeline(item: EvalCase, profile: ModelProfil
       calls.push({ stage: "grounding", model: profile.groundingModel, reasoning: profile.groundingReasoning, latencyMs: grounding.latencyMs, usage: grounding.usage });
       verdicts = grounding.value.verdicts;
     }
-    const verdictByIndex = new Map(verdicts.filter((verdict) => Number.isInteger(verdict.index) && verdict.index >= 0 && verdict.index < requiringGrounding.length).map((verdict) => [verdict.index, verdict]));
+    const validPrimaryVerdicts = verdicts.filter((verdict) => Number.isInteger(verdict.index) && verdict.index >= 0 && verdict.index < requiringGrounding.length);
+    const verdictByIndex = new Map(validPrimaryVerdicts.map((verdict) => [verdict.index, verdict]));
+    let finalAcceptedIndexes = new Set(
+      [...verdictByIndex.entries()].filter(([, verdict]) => verdict.accepted === true).map(([index]) => index),
+    );
+    let primaryAcceptedIndexes = new Set(finalAcceptedIndexes);
+    let groundingRescueSubmittedCandidateIds: string[] = [];
+    let groundingRescueVerdicts: GroundingRescueTraceVerdict[] = [];
+    let groundingRescueFailure: string | null = null;
+    if (pipeline === "production-rescue") {
+      const rescueResult = await applyMonotonicGroundingRescue(requiringGrounding, verdicts, async (rescueCandidates) => {
+        const originalIndexById = new Map(requiringGrounding.map((candidate, index) => [candidate.candidateId, index]));
+        const originalIndexes = rescueCandidates.map((candidate) => originalIndexById.get(candidate.candidateId)!);
+        groundingRescueSubmittedCandidateIds = rescueCandidates.map((candidate) => candidate.candidateId);
+        let callRecorded = false;
+        try {
+          const rescue = await provider.call({
+            stage: "grounding",
+            model: PRODUCTION_GROUNDING_RESCUE_MODEL,
+            reasoning: PRODUCTION_GROUNDING_RESCUE_REASONING,
+            instructions: GROUNDING_RESCUE_INSTRUCTIONS,
+            input: {
+              currentNotebook: notebook,
+              newUserMessage: message,
+              candidates: rescueCandidates.map((candidate, index) => ({ index, ...toEvaluated(candidate) })),
+            },
+            schema: GROUNDING_RESCUE_SCHEMA,
+            formatName: "apu_f1_eval_production_grounding_rescue",
+            maxOutputTokens: Math.min(4_000, Math.max(1_200, 500 + rescueCandidates.length * 180)),
+            parse: (value) => validateGroundingRescueVerdicts(value, rescueCandidates.length),
+          });
+          calls.push({
+            stage: "grounding", groundingPass: "rescue",
+            model: PRODUCTION_GROUNDING_RESCUE_MODEL, reasoning: PRODUCTION_GROUNDING_RESCUE_REASONING,
+            latencyMs: rescue.latencyMs, usage: rescue.usage,
+          });
+          callRecorded = true;
+          const validated = validateGroundingRescueVerdicts(rescue.value, rescueCandidates.length);
+          groundingRescueVerdicts = validated.verdicts.map((verdict) => ({
+            candidateId: rescueCandidates[verdict.index].candidateId,
+            rescueIndex: verdict.index,
+            originalGroundingIndex: originalIndexes[verdict.index],
+            accepted: verdict.accepted,
+            reason: verdict.reason,
+            reasonCategory: verdict.reasonCategory,
+            providerVerdict: structuredClone(verdict),
+          }));
+          return validated;
+        } catch (error) {
+          groundingRescueFailure = error instanceof EvalProviderCallError ? error.message : "Grounding rescue failed.";
+          if (!callRecorded) calls.push({
+            stage: "grounding", groundingPass: "rescue",
+            model: PRODUCTION_GROUNDING_RESCUE_MODEL, reasoning: PRODUCTION_GROUNDING_RESCUE_REASONING,
+            latencyMs: error instanceof EvalProviderCallError ? error.latencyMs : 0,
+            usage: error instanceof EvalProviderCallError ? error.usage : null,
+            error: groundingRescueFailure,
+          });
+          groundingRescueVerdicts = rescueCandidates.map((candidate, rescueIndex) => ({
+            candidateId: candidate.candidateId,
+            rescueIndex,
+            originalGroundingIndex: originalIndexes[rescueIndex],
+            accepted: null,
+            reason: null,
+            reasonCategory: null,
+            providerVerdict: null,
+          }));
+          throw error;
+        }
+      });
+      primaryAcceptedIndexes = rescueResult.primaryAcceptedIndexes;
+      finalAcceptedIndexes = rescueResult.acceptedIndexes;
+    }
     const groundingVerdicts: GroundingTraceVerdict[] = requiringGrounding.map((candidate, submittedIndex) => {
-      const verdict = verdictByIndex.get(submittedIndex) ?? null;
-      return { candidateId: candidate.candidateId, submittedIndex, accepted: verdict?.accepted === true, reason: verdict?.reason ?? null, providerVerdict: verdict };
+      const legacyVerdict = verdictByIndex.get(submittedIndex) ?? null;
+      const accepted = pipeline === "production-rescue" ? primaryAcceptedIndexes.has(submittedIndex) : legacyVerdict?.accepted === true;
+      const verdict = accepted
+        ? validPrimaryVerdicts.find((candidateVerdict) => candidateVerdict.index === submittedIndex && candidateVerdict.accepted === true) ?? legacyVerdict
+        : legacyVerdict;
+      return { candidateId: candidate.candidateId, submittedIndex, accepted, reason: verdict?.reason ?? null, providerVerdict: verdict };
     });
-    const acceptedIds = new Set(groundingVerdicts.filter((verdict) => verdict.accepted).map((verdict) => verdict.candidateId));
+    const acceptedIds = new Set([...finalAcceptedIndexes].map((index) => requiringGrounding[index]?.candidateId).filter((id): id is string => Boolean(id)));
     const finalCandidates = preGroundingCandidates.filter((candidate) => candidate.action === "duplicate" || candidate.action === "skip" || acceptedIds.has(candidate.candidateId));
     allPreGroundingCandidates.push(...preGroundingCandidates.map(toEvaluated));
     allCandidates.push(...finalCandidates.map(toEvaluated));
@@ -339,6 +451,11 @@ export async function runExtractionPipeline(item: EvalCase, profile: ModelProfil
       preGroundingCandidates,
       groundingSubmittedCandidates: requiringGrounding,
       groundingVerdicts,
+      ...(pipeline === "production-rescue" ? {
+        groundingRescueSubmittedCandidateIds,
+        groundingRescueVerdicts,
+        groundingRescueFailure,
+      } : {}),
       finalCandidates,
     });
     for (const candidate of finalCandidates) if (candidate.action === "add") notebook.push({
