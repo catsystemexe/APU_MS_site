@@ -71,103 +71,67 @@ test("production and eval prompt builders share the exact core-aware contract", 
   const extraction = buildExtractionInstructions(core);
   const grounding = buildGroundingInstructions(core);
   assert.ok(extraction.startsWith(core.trim()));
-  assert.match(extraction, /1\. ONTOLOGIE KATEGORIÍ/);
-  assert.match(extraction, /povinně projdi všech pět kategorií nezávisle/);
-  assert.match(extraction, /5\. ZÁPISNÍK, AKCE A SITUACE/);
-  assert.match(grounding, /1\. SPOLEČNÁ ONTOLOGIE/);
-  assert.match(grounding, /Ověřuj kandidáty podle stejné ontologie jako extrakce/);
+  assert.match(extraction, /povinně projdi všech pět kategorií/);
+  assert.match(grounding, /z „žák je líný“ nelze přijmout/);
   assert.match(grounding, /Buď konzervativní/);
 });
 
-test("consolidated hierarchy retains explicit-evidence ontology and five-category completeness", () => {
+test("canonical extraction contract preserves branch scope, coordination, and category-aware course atoms", () => {
   const extraction = buildExtractionInstructions("CORE");
-  const grounding = buildGroundingInstructions("CORE");
-  for (const prompt of [extraction, grounding]) {
-    for (const category of ["manifestations", "context", "course", "goals", "helps"]) assert.match(prompt, new RegExp(`- ${category}`));
-  }
-  assert.match(extraction, /Zapisuj jen význam výslovně podložený newUserMessage/);
-  assert.match(extraction, /Nálepky „líný“, „drzý“, „zlobivý“, „neschopný“ či „manipulativní“ nejsou samy manifestations/);
-  assert.match(extraction, /categoryReview\.<category>=found/);
-  assert.match(extraction, /Jedna věta či sourceQuote může podpořit více faktů i kategorií/);
-  assert.match(grounding, /Explicitní „je apatický“ přijmi bez odvozování dalších projevů/);
-  assert.match(grounding, /Goals bez výslovného pedagogického požadavku, otázky či cíle zamítni/);
+  assert.match(extraction, /„Někdy tomu předchází konflikt s dítětem, jindy požadavek učitelky nebo velký hluk“/);
+  assert.match(extraction, /„Jindy tomu předchází požadavek učitelky\.“/);
+  assert.match(extraction, /„Jindy tomu předchází velký hluk\.“/);
+  assert.match(extraction, /U posledních dvou větví NESMÍ vzniknout „Někdy“/);
+  assert.match(extraction, /„Ve skupině úkol odmítne, jednotlivě ho dokončí a požádá o další“/);
+  assert.match(extraction, /„Požádá o další\.“/);
+  assert.match(extraction, /NESMÍ vzniknout „Po dokončení úkolu požádá o další\.“/);
+  assert.match(extraction, /manifestations „Jindy odbíhá\.“ a course „Po pár minutách\.“/);
+  assert.match(extraction, /Course NESMÍ být „Odbíhá po pár minutách\.“/);
+  assert.match(extraction, /Atomizace nesmí vztah zesílit, oslabit, zaměnit ani nově vytvořit/);
 });
 
-test("consolidated contract preserves branch scope, conditional scope, and non-causal coordination", () => {
+test("canonical extraction and primary grounding contracts reject the five evidenced unsupported transformations", () => {
   const extraction = buildExtractionInstructions("CORE");
   const grounding = buildGroundingInstructions("CORE");
-  assert.match(extraction, /druhé dvě context větve zachovají „Jindy“, nikdy „Někdy“/);
-  assert.match(extraction, /Zachovej negaci, nejistotu a rozsah výrazů jako „někdy“, „jindy“, „obvykle“, „ne vždy“ či „jen někdy“/);
-  assert.match(extraction, /„Ve skupině úkol odmítne, jednotlivě ho dokončí a požádá o další\.“/);
-  assert.match(extraction, /Nikdy „Po dokončení úkolu požádá o další\.“/);
-  assert.match(extraction, /ne nepodmíněné manifestations „Přechod zvládne klidněji\.“/);
-  assert.match(grounding, /„Někdy“ nesmí nahradit branch-local „jindy“/);
-  assert.match(grounding, /„dokončí a požádá“ nepodporuje „Po dokončení požádá“/);
-  assert.match(grounding, /zamítni nepodmíněné manifestations „Přechod zvládne klidněji\.“/);
+
+  assert.match(extraction, /Samostatný context atom podmínku zachytí, ale neopravňuje samostatný manifestations atom k jejímu vypuštění/);
+  assert.match(extraction, /„Bez přípravy\.“ a „Po krátkém upozornění\.“ jsou context, nikoli course/);
+  assert.match(extraction, /Samotné „Deset minut\.“ není úplný fakt/);
+  assert.match(extraction, /sourceQuote „řízenou činnost“ vytvořit context „Při řízené činnosti\.“/);
+  assert.match(extraction, /„Jindy po pár minutách odbíhá“ → manifestations „Jindy odbíhá\.“ a course „Po pár minutách\.“/);
+
+  assert.match(grounding, /zamítni manifestations „Přechod zvládne klidněji\.“/);
+  assert.match(grounding, /zamítni course „Bez přípravy\.“ i course „Po krátkém upozornění\.“/);
+  assert.match(grounding, /zamítni course „Deset minut\.“ jako neúplný fakt/);
+  assert.match(grounding, /přijmi course „Vydrží deset minut\.“ se sourceQuote „vydrží deset minut“/);
+  assert.match(grounding, /z předmětu „řízenou činnost“ nadále zamítni context „Při řízené činnosti\.“/);
+  assert.match(grounding, /přijmi samostatné kategoriální údaje jako „Občas\.“, „Velmi silné\.“, „Každé ráno\.“ nebo „Po pár minutách\.“/);
 });
 
-test("consolidated course and semantic-role boundaries distinguish valid atoms from unsafe transformations", () => {
+test("semantic-role guard permits equivalent adverbial context but still rejects object reframing", () => {
   const extraction = buildExtractionInstructions("CORE");
   const grounding = buildGroundingInstructions("CORE");
-  for (const prompt of [extraction, grounding]) {
-    assert.match(prompt, /„Po pár minutách\.“/);
-    assert.match(prompt, /„Deset minut\.“/);
-    assert.match(prompt, /„Vydrží deset minut\.“/);
-    assert.match(prompt, /„Bez přípravy\.“/);
-    assert.match(prompt, /„Po krátkém upozornění\.“/);
-    assert.match(prompt, /„řízenou činnost“/);
-    assert.match(prompt, /„Při řízené činnosti\.“/);
-    assert.match(prompt, /„jednotlivě“/);
-    assert.match(prompt, /„Při práci jednotlivě\.“/);
-  }
-  assert.match(extraction, /Latence „Po pár minutách\.“ je úplná/);
-  assert.match(grounding, /„Po pár minutách\.“ je úplná latence/);
-  assert.match(grounding, /Holé „Deset minut\.“ zamítni/);
+
+  assert.match(extraction, /sourceQuote „jednotlivě“ → context „Při práci jednotlivě\.“/);
+  assert.match(extraction, /Z předmětu „řízenou činnost“[^\n]+nevytvářej „Při řízené činnosti\.“/);
+  assert.match(grounding, /sourceQuote „jednotlivě“ podporuje context „Při práci jednotlivě\.“/);
+  assert.match(grounding, /z předmětu „řízenou činnost“ nadále zamítni context „Při řízené činnosti\.“/);
 });
 
-test("consolidated evidence-span rule covers shared predicates and reported content", () => {
+test("helps contract preserves coordinated outcomes and accepts adverse observed effects", () => {
   const extraction = buildExtractionInstructions("CORE");
   const grounding = buildGroundingInstructions("CORE");
-  assert.match(extraction, /Každý podstatný predikát a vztah v notebookText musí mít v sourceQuote dostatečný důkaz/);
-  assert.match(extraction, /„odstrkuje věci i lidi kolem sebe“/);
-  assert.match(extraction, /samotné „že to neumí“ nepodporuje nově přidané „Říká“/);
-  assert.match(grounding, /sourceQuote je skutečným dostatečným podkladem pro celý notebookText/);
-  assert.match(grounding, /přesný souvislý podřetězec a dokládat každý podstatný predikát a vztah/);
-  assert.match(grounding, /„lidi kolem sebe“ samo nepodporuje „Odstrkuje lidi kolem sebe\.“/);
-  assert.match(grounding, /„že to neumí“ samo nepodporuje nově přidané „Říká“/);
-});
 
-test("consolidated helps ontology preserves effects but rejects contextual co-occurrence", () => {
-  const extraction = buildExtractionInstructions("CORE");
-  const grounding = buildGroundingInstructions("CORE");
-  assert.match(extraction, /Pouhá souběžná přítomnost context a manifestation\/course vztah helps sama nezakládá/);
-  assert.match(extraction, /manifestations „Úkol odmítne\.“, „Úkol dokončí\.“, „Požádá o další\.“/);
-  assert.match(extraction, /helps „Při práci jednotlivě úkol dokončí a požádá o další\.“/);
-  assert.match(extraction, /„Po přesazení už nekřičí\.“ je explicitní změna vhodná pro helps/);
-  assert.match(extraction, /bez explicitního účinku, změny či rozdílu samo nevytváří helps/);
-  assert.match(extraction, /nikdy „Absence přípravy způsobuje protest\.“/);
-  assert.match(grounding, /Účinek může být příznivý, nepříznivý, neutrální či diferenciální/);
-  assert.match(grounding, /samotná kontextová souběžnost nestačí/);
-  assert.match(grounding, /bez doložené změny, rozdílu či účinku zamítni helps/);
-  assert.match(grounding, /zamítni „Absence přípravy způsobuje protest\.“/);
-});
+  assert.match(extraction, /helps se sourceQuote „jednotlivě ho dokončí a požádá o další“/);
+  assert.match(extraction, /notebookText „Při práci jednotlivě úkol dokončí a požádá o další\.“/);
+  assert.match(extraction, /samostatné manifestations atomy „Úkol dokončí\.“ a „Požádá o další\.“/);
+  assert.match(extraction, /NESMÍ vzniknout „Po dokončení úkolu požádá o další\.“/);
+  assert.match(extraction, /nepříznivého „Bez přípravy začne při změně protestovat\.“/);
 
-test("consolidated contract preserves habitual morphology and notebook state semantics", () => {
-  const extraction = buildExtractionInstructions("CORE");
-  const grounding = buildGroundingInstructions("CORE");
-  assert.match(extraction, /„obvykle zhorší“ ponech jako „obvykle zhorší“/);
-  assert.match(extraction, /source-faithful helps se zachovaným „obvykle zhorší“/);
-  assert.match(grounding, /„obvykle zhorší“ a „obvykle zhoršuje“ vyjadřovat totéž/);
-  assert.match(grounding, /neplatí to pro skutečně časový, dokončený, plánovaný či hypotetický význam/);
-  assert.match(extraction, /action=duplicate/);
-  assert.match(extraction, /action=conflict/);
-  assert.match(extraction, /action=skip/);
-  assert.match(extraction, /unconfirmed položku nepovažuj za nezávislý důkaz pravdivosti/);
-  assert.match(extraction, /situationRelation: same/);
-  assert.match(extraction, /related = pokračování/);
-  assert.match(extraction, /different = zjevně jiný žák/);
-  assert.match(extraction, /uncertain = skutečná nejasnost/);
-  assert.match(grounding, /trust=unconfirmed není nezávislý důkaz/);
+  assert.match(grounding, /účinek může být příznivý, nepříznivý či zhoršující, neutrální nebo rozdílný/);
+  assert.match(grounding, /přijmi helps „Bez přípravy začne při změně protestovat\.“/);
+  assert.match(grounding, /Nepřidávej kauzální „Absence přípravy způsobuje protest\.“/);
+  assert.match(grounding, /Samotné „Bez přípravy\.“, „Při samostatné práci\.“ ani „Před obědem\.“ bez pozorovaného účinku jako helps nepřijímej/);
 });
 
 test("shared candidate normalization rejects invalid quotes and repairs cross-category links", () => {
