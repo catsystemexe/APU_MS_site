@@ -1,0 +1,130 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://apu.local/evals/f1-extraction/corpus.schema.json",
+  "title": "APU F1 extraction evaluation corpus",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "cases"],
+  "properties": {
+    "version": { "enum": [1, 2] },
+    "cases": { "type": "array", "items": { "$ref": "#/$defs/case" } }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "version": { "const": 2 } }, "required": ["version"] },
+      "then": {
+        "properties": {
+          "cases": {
+            "items": {
+              "allOf": [
+                { "$ref": "#/$defs/case" },
+                {
+                  "required": ["expectedRelations"],
+                  "properties": {
+                    "expectedFacts": {
+                      "items": { "allOf": [{ "$ref": "#/$defs/goldFact" }, { "required": ["canonicalText"] }] }
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "category": { "enum": ["manifestations", "goals", "context", "course", "helps"] },
+    "notebookItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "category", "text", "trust"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "category": { "$ref": "#/$defs/category" },
+        "text": { "type": "string", "minLength": 1 },
+        "trust": { "enum": ["confirmed", "unconfirmed"] }
+      }
+    },
+    "goldFact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "category", "text", "source", "uncertain", "negated", "requiredMarkers", "expectedAction", "relatedEntryId"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "category": { "$ref": "#/$defs/category" },
+        "text": { "type": "string", "minLength": 1 },
+        "canonicalText": { "type": "string", "minLength": 1 },
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["inputIndex", "quote"],
+          "properties": {
+            "inputIndex": { "type": "integer", "minimum": 0 },
+            "quote": { "type": "string", "minLength": 1 }
+          }
+        },
+        "uncertain": { "type": "boolean" },
+        "negated": { "type": "boolean" },
+        "requiredMarkers": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+        "expectedAction": { "enum": ["add", "duplicate", "conflict", "skip"] },
+        "relatedEntryId": { "type": ["string", "null"] }
+      }
+    },
+    "case": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "suite", "description", "inputs", "startingNotebook", "expectedFacts", "forbiddenInferences", "tags", "dimensions"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "suite": { "enum": ["atomic", "mixed", "dense", "real"] },
+        "description": { "type": "string", "minLength": 1 },
+        "inputs": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+        "startingNotebook": { "type": "array", "items": { "$ref": "#/$defs/notebookItem" } },
+        "expectedFacts": { "type": "array", "items": { "$ref": "#/$defs/goldFact" } },
+        "expectedRelations": { "type": "array", "items": { "$ref": "#/$defs/relation" } },
+        "forbiddenInferences": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["text", "category"],
+            "properties": { "text": { "type": "string", "minLength": 1 }, "category": { "anyOf": [{ "$ref": "#/$defs/category" }, { "type": "null" }] } }
+          }
+        },
+        "tags": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+        "dimensions": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["factCount", "categoryCount", "linguistic"],
+          "properties": {
+            "factCount": { "type": "integer", "minimum": 0 },
+            "categoryCount": { "type": "integer", "minimum": 0, "maximum": 5 },
+            "linguistic": { "type": "array", "items": { "enum": ["simple", "compound", "contrast", "conditional", "negation", "uncertainty", "coreference"] }, "uniqueItems": true }
+          }
+        }
+      }
+    },
+    "relation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "sourceFactIds", "targetFactIds", "projectionFactIds", "source"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "type": { "enum": ["context_of", "course_of", "condition_effect", "contrast_with"] },
+        "sourceFactIds": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+        "targetFactIds": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+        "projectionFactIds": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["inputIndex", "quote"],
+          "properties": {
+            "inputIndex": { "type": "integer", "minimum": 0 },
+            "quote": { "type": "string", "minLength": 1 }
+          }
+        }
+      }
+    }
+  }
+}

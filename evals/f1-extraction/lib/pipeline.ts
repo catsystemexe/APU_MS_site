@@ -1,0 +1,519 @@
+import { readFile } from "node:fs/promises";
+import { callOpenAIResponses, createRequestUsageCollector, providerResponseDiagnostic } from "../../../app/openai-responses-instrumentation.ts";
+import { InstrumentedModelCallError } from "../../../app/model-call-instrumentation.ts";
+import {
+  EXTRACTION_SCHEMA,
+  GROUNDING_SCHEMA,
+  GROUNDING_RESCUE_INSTRUCTIONS,
+  GROUNDING_RESCUE_SCHEMA,
+  PRODUCTION_GROUNDING_RESCUE_MODEL,
+  PRODUCTION_GROUNDING_RESCUE_REASONING,
+  applyMonotonicGroundingRescue,
+  buildExtractionInstructions,
+  buildGroundingInstructions,
+  extractResponseText,
+  normalizeExtractionCandidates,
+  validateGroundingRescueVerdicts,
+  type ExtractionCandidate,
+  type ExtractionNotebookInput,
+  type GroundingRescueReasonCategory,
+  type GroundingRescueVerdict,
+  type GroundingVerdict,
+  type RawExtraction,
+} from "../../../app/f1-extraction-contract.ts";
+import type { ModelUsageRecord, UsageOperation } from "../../../app/usage-ledger.ts";
+import type { SupportedModelId } from "../../../app/model-config.ts";
+import { goldCanonicalText, type EvalCase, type ModelProfile, type PipelineId, type ReasoningEffort } from "./eval-contract.ts";
+import type { CaseScore, EvaluatedCandidate, SemanticJudgeDecision } from "./scoring.ts";
+import { buildStagedJudgeContext, validateStagedJudgeOutput, type StagedSemanticJudgeOutput } from "./semantic-evidence.ts";
+
+const intakeCorePromise = readFile(new URL("../../../apu-core/v1.6/02_OBSERVATION_AND_INTAKE.md", import.meta.url), "utf8");
+
+export const COVERAGE_INSTRUCTIONS = `Jsi testovací kontrola pokrytí explicitních faktů pro F1 Zápisník APU.
+Porovnej pouze newUserMessage s alreadyExtractedCandidates a currentNotebook.
+Vrať výhradně explicitní atomické fakty z nové zprávy, které nejsou významově zastoupené v alreadyExtractedCandidates.
+Nevylepšuj formulace, nedoplňuj příčiny, diagnózy, potřeby dítěte ani doporučení.
+Každý sourceQuote musí být přesný souvislý podřetězec newUserMessage.
+Použij stejné kategorie, pravidla duplicate/conflict a zachování nejistoty jako produkční extrakce.
+Pokud nic nechybí, vrať prázdné candidates.`;
+
+export const COVERAGE_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["candidates"],
+  properties: { candidates: EXTRACTION_SCHEMA.properties.candidates },
+} as const;
+
+const SEMANTIC_JUDGE_INSTRUCTIONS = `Jsi izolovaný sekundární hodnotitel pro eval F1 extrakce.
+Nehodnotíš správnost gold dat a nesmíš je přepisovat ani vytvářet nové gold fakty.
+U každého alignment posuď, zda uvedená skupina candidates společně významově pokrývá goldFact bez přidání významu. Jedna skupina může obsahovat fragmenty jednoho faktu; jeden candidate může být posouzen vůči více gold faktům.
+U každého unmatched candidate posuď, zda jde o explicitní, zdrojově doložený fakt navíc (grounded_extra), nebo o nepodložený význam (unsupported).
+Při pochybnosti vrať uncertain. Kategorie, action, nejistota a negace musí zůstat zachovány. Nikdy nepřekrývej neplatný sourceQuote ani explicitní forbidden inference.`;
+
+const STAGED_SEMANTIC_JUDGE_INSTRUCTIONS = `${SEMANTIC_JUDGE_INSTRUCTIONS}
+Pracuješ jednou nad kanonickým PRE-grounding univerzem kandidátů. candidateId je stabilní identita kandidáta; survivedGrounding je pouze auditní informace a nesmí změnit sémantické posouzení.
+Pro každý reviewAlignment vrať právě jedno factDecision. Při equivalent vrať jednu nebo více minimálních dostačujících supportGroups tvořených candidateId. Každá skupina musí sama úplně pokrýt goldFact; více skupin znamená alternativní dostačující podporu. Společně nutné fragmenty patří do jedné skupiny.
+Pro každý unmatchedCandidate vrať právě jedno candidateDecision. Stejný kandidát neposuzuj znovu podle toho, zda přežil grounding.`;
+
+const SEMANTIC_JUDGE_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["decisions"],
+  properties: {
+    decisions: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["kind", "goldFactId", "candidateIndexes", "decision", "reason"],
+        properties: {
+          kind: { type: "string", enum: ["alignment", "candidate"] },
+          goldFactId: { type: ["string", "null"] },
+          candidateIndexes: { type: "array", items: { type: "integer", minimum: 0 } },
+          decision: { type: "string", enum: ["equivalent", "not_equivalent", "grounded_extra", "unsupported", "uncertain"] },
+          reason: { type: "string" },
+        },
+      },
+    },
+  },
+} as const;
+
+const STAGED_SEMANTIC_JUDGE_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["factDecisions", "candidateDecisions"],
+  properties: {
+    factDecisions: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["goldFactId", "decision", "supportGroups", "reason"],
+        properties: {
+          goldFactId: { type: "string" },
+          decision: { type: "string", enum: ["equivalent", "not_equivalent", "uncertain"] },
+          supportGroups: {
+            type: "array",
+            items: {
+              type: "object",
+              additionalProperties: false,
+              required: ["candidateIds"],
+              properties: { candidateIds: { type: "array", items: { type: "string" } } },
+            },
+          },
+          reason: { type: "string" },
+        },
+      },
+    },
+    candidateDecisions: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["candidateId", "decision", "reason"],
+        properties: {
+          candidateId: { type: "string" },
+          decision: { type: "string", enum: ["grounded_extra", "unsupported", "uncertain"] },
+          reason: { type: "string" },
+        },
+      },
+    },
+  },
+} as const;
+
+export const SEMANTIC_JUDGE_MIN_OUTPUT_TOKENS = 2_500;
+export const SEMANTIC_JUDGE_MAX_OUTPUT_TOKENS = 8_000;
+
+export function semanticJudgeOutputBudget(expectedDecisionCount: number) {
+  const decisionCount = Math.max(0, Math.floor(expectedDecisionCount));
+  return Math.min(SEMANTIC_JUDGE_MAX_OUTPUT_TOKENS, Math.max(SEMANTIC_JUDGE_MIN_OUTPUT_TOKENS, 1_800 + decisionCount * 240));
+}
+
+export type ProviderCall<T> = {
+  stage: "extraction" | "coverage" | "grounding" | "judge";
+  model: SupportedModelId;
+  reasoning: ReasoningEffort;
+  instructions: string;
+  input: Record<string, unknown>;
+  schema: Record<string, unknown>;
+  formatName: string;
+  maxOutputTokens: number;
+  parse: (value: unknown) => T;
+};
+
+export type ProviderCallResult<T> = { value: T; latencyMs: number; usage: ModelUsageRecord | null };
+export type EvalProvider = { call<T>(input: ProviderCall<T>): Promise<ProviderCallResult<T>> };
+
+export class EvalProviderCallError extends Error {
+  readonly stage: ProviderCall<unknown>["stage"];
+  readonly model: string;
+  readonly reasoning: ReasoningEffort;
+  readonly latencyMs: number;
+  readonly usage: ModelUsageRecord | null;
+
+  constructor(
+    input: Pick<ProviderCall<unknown>, "stage" | "model" | "reasoning">,
+    diagnostic: string,
+    latencyMs = 0,
+    usage: ModelUsageRecord | null = null,
+  ) {
+    super(`stage=${input.stage}; model=${input.model}; reasoning=${input.reasoning}; ${diagnostic}`);
+    this.name = "EvalProviderCallError";
+    this.stage = input.stage;
+    this.model = input.model;
+    this.reasoning = input.reasoning;
+    this.latencyMs = latencyMs;
+    this.usage = usage;
+  }
+}
+
+function parseObject(value: unknown, label: string) {
+  if (!value || typeof value !== "object") throw new Error(`${label} is not an object`);
+  return value as Record<string, unknown>;
+}
+
+function parseRawExtraction(value: unknown) {
+  const object = parseObject(value, "extraction");
+  if (!Array.isArray(object.candidates) || !object.categoryReview || typeof object.situationRelation !== "string") throw new Error("invalid extraction result");
+  return object as RawExtraction;
+}
+
+function parseCandidates(value: unknown) {
+  const object = parseObject(value, "candidate result");
+  if (!Array.isArray(object.candidates)) throw new Error("invalid candidates result");
+  return object as { candidates: ExtractionCandidate[] };
+}
+
+function parseVerdicts(value: unknown) {
+  const object = parseObject(value, "grounding result");
+  if (!Array.isArray(object.verdicts)) throw new Error("invalid grounding result");
+  return object as { verdicts: GroundingVerdict[] };
+}
+
+function usageOperation(stage: ProviderCall<unknown>["stage"]): UsageOperation {
+  return stage === "grounding" || stage === "judge" ? "grounding" : "extraction";
+}
+
+export function createOpenAIProvider(apiKey: string, requestPrefix: string): EvalProvider {
+  return {
+    async call<T>(input: ProviderCall<T>) {
+      const collector = createRequestUsageCollector();
+      const started = performance.now();
+      try {
+        const result = await callOpenAIResponses<T>({
+          api_key: apiKey,
+          request_id: `${requestPrefix}-${input.stage}-${crypto.randomUUID()}`,
+          phase: "F1",
+          operation: usageOperation(input.stage),
+          requested_model: input.model,
+          reasoning_effort: input.reasoning,
+          requested_service_tier: "default",
+          collector,
+          payload: {
+            model: input.model,
+            reasoning: { effort: input.reasoning },
+            instructions: input.instructions,
+            input: JSON.stringify(input.input),
+            text: { format: { type: "json_schema", name: input.formatName, strict: true, schema: input.schema } },
+            max_output_tokens: input.maxOutputTokens,
+            service_tier: "default",
+            store: false,
+          },
+          validate_application_response: (body) => {
+            const text = extractResponseText(body); if (!text) throw new Error("missing structured output");
+            return input.parse(JSON.parse(text));
+          },
+        });
+        if (result.usage_record.provider_status !== "completed" || !result.application_result) {
+          throw new EvalProviderCallError(input, providerResponseDiagnostic(result.usage_record, result.response), Math.round(performance.now() - started), result.usage_record);
+        }
+        return { value: result.application_result, latencyMs: Math.round(performance.now() - started), usage: result.usage_record };
+      } catch (error) {
+        if (error instanceof EvalProviderCallError) throw error;
+        const record = error instanceof InstrumentedModelCallError ? error.usage_record : collector.records().at(-1);
+        throw new EvalProviderCallError(input, providerResponseDiagnostic(record), Math.round(performance.now() - started), record ?? null);
+      }
+    },
+  };
+}
+
+export type PipelineCall = {
+  stage: "extraction" | "coverage" | "grounding";
+  model: string;
+  reasoning: string;
+  latencyMs: number;
+  usage: ModelUsageRecord | null;
+  groundingPass?: "rescue";
+  error?: string;
+};
+export type StageCandidate = EvaluatedCandidate & { candidateId: string; origin: "extraction" | "coverage" };
+export type GroundingTraceVerdict = {
+  candidateId: string;
+  submittedIndex: number;
+  accepted: boolean;
+  reason: string | null;
+  providerVerdict: GroundingVerdict | null;
+};
+export type GroundingRescueTraceVerdict = {
+  candidateId: string;
+  rescueIndex: number;
+  originalGroundingIndex: number;
+  accepted: boolean | null;
+  reason: string | null;
+  reasonCategory: GroundingRescueReasonCategory | null;
+  providerVerdict: GroundingRescueVerdict | null;
+};
+export type PipelineTurnTrace = {
+  inputIndex: number;
+  rawExtraction: RawExtraction;
+  normalizedExtractionCandidates: StageCandidate[];
+  rawCoverageCandidates: ExtractionCandidate[] | null;
+  normalizedCoverageCandidates: StageCandidate[];
+  preGroundingCandidates: StageCandidate[];
+  groundingSubmittedCandidates: StageCandidate[];
+  groundingVerdicts: GroundingTraceVerdict[];
+  groundingRescueSubmittedCandidateIds?: string[];
+  groundingRescueVerdicts?: GroundingRescueTraceVerdict[];
+  groundingRescueFailure?: string | null;
+  finalCandidates: StageCandidate[];
+};
+export type PipelineRun = {
+  preGroundingCandidates: EvaluatedCandidate[];
+  candidates: EvaluatedCandidate[];
+  turns: PipelineTurnTrace[];
+  latencyMs: number;
+  inputTokens: number;
+  outputTokens: number;
+  estimatedCostUsd: number | null;
+  calls: PipelineCall[];
+};
+
+function candidateKey(candidate: ExtractionCandidate) {
+  return `${candidate.category}\u0000${candidate.sourceQuote}\u0000${candidate.notebookText}\u0000${candidate.action}\u0000${candidate.relatedEntryId ?? ""}`;
+}
+
+function toEvaluated(candidate: StageCandidate): EvaluatedCandidate {
+  const { candidateId, origin, ...evaluated } = candidate;
+  void candidateId;
+  void origin;
+  return evaluated;
+}
+
+export function recordUsage(calls: Array<{ latencyMs: number; usage: ModelUsageRecord | null }>) {
+  const records = calls.map((call) => call.usage).filter((record): record is ModelUsageRecord => record !== null);
+  const costs = records.map((record) => record.pricing_snapshot.estimated_cost_usd);
+  return {
+    latencyMs: calls.reduce((sum, call) => sum + call.latencyMs, 0),
+    inputTokens: records.reduce((sum, record) => sum + (record.usage.input_tokens ?? 0), 0),
+    outputTokens: records.reduce((sum, record) => sum + (record.usage.output_tokens ?? 0), 0),
+    estimatedCostUsd: costs.every((cost): cost is number => cost !== null) ? costs.reduce((sum, cost) => sum + cost, 0) : null,
+  };
+}
+
+export async function runExtractionPipeline(item: EvalCase, profile: ModelProfile, pipeline: PipelineId, provider: EvalProvider): Promise<PipelineRun> {
+  const intakeCore = await intakeCorePromise;
+  const extractionInstructions = buildExtractionInstructions(intakeCore);
+  const groundingInstructions = buildGroundingInstructions(intakeCore);
+  const notebook: ExtractionNotebookInput[] = structuredClone(item.startingNotebook);
+  const allPreGroundingCandidates: EvaluatedCandidate[] = [];
+  const allCandidates: EvaluatedCandidate[] = [];
+  const calls: PipelineRun["calls"] = [];
+  const turns: PipelineTurnTrace[] = [];
+  for (const [inputIndex, message] of item.inputs.entries()) {
+    const extraction = await provider.call({
+      stage: "extraction", model: profile.extractionModel, reasoning: profile.extractionReasoning,
+      instructions: extractionInstructions, input: { currentNotebook: notebook, newUserMessage: message },
+      schema: EXTRACTION_SCHEMA, formatName: "apu_f1_eval_extraction", maxOutputTokens: 2_000, parse: parseRawExtraction,
+    });
+    calls.push({ stage: "extraction", model: profile.extractionModel, reasoning: profile.extractionReasoning, latencyMs: extraction.latencyMs, usage: extraction.usage });
+    const normalizedExtractionCandidates: StageCandidate[] = normalizeExtractionCandidates(message, notebook, extraction.value.candidates).map((candidate, index) => ({
+      ...candidate, inputIndex, candidateId: `turn-${inputIndex}-extract-${index}`, origin: "extraction",
+    }));
+    let rawCoverageCandidates: ExtractionCandidate[] | null = null;
+    let normalizedCoverageCandidates: StageCandidate[] = [];
+    if (pipeline === "coverage") {
+      const coverage = await provider.call({
+        stage: "coverage", model: profile.extractionModel, reasoning: profile.extractionReasoning,
+        instructions: COVERAGE_INSTRUCTIONS,
+        input: { currentNotebook: notebook, newUserMessage: message, alreadyExtractedCandidates: normalizedExtractionCandidates.map(toEvaluated) },
+        schema: COVERAGE_SCHEMA, formatName: "apu_f1_eval_coverage", maxOutputTokens: 1_500, parse: parseCandidates,
+      });
+      calls.push({ stage: "coverage", model: profile.extractionModel, reasoning: profile.extractionReasoning, latencyMs: coverage.latencyMs, usage: coverage.usage });
+      rawCoverageCandidates = structuredClone(coverage.value.candidates);
+      const seen = new Set(normalizedExtractionCandidates.map(candidateKey));
+      normalizedCoverageCandidates = normalizeExtractionCandidates(message, notebook, coverage.value.candidates)
+        .filter((candidate) => !seen.has(candidateKey(candidate)))
+        .map((candidate, index) => ({ ...candidate, inputIndex, candidateId: `turn-${inputIndex}-coverage-${index}`, origin: "coverage" }));
+    }
+    const preGroundingCandidates = [...normalizedExtractionCandidates, ...normalizedCoverageCandidates];
+    const requiringGrounding = preGroundingCandidates.filter((candidate) => candidate.action === "add" || candidate.action === "conflict");
+    let verdicts: GroundingVerdict[] = [];
+    if (requiringGrounding.length) {
+      const grounding = await provider.call({
+        stage: "grounding", model: profile.groundingModel, reasoning: profile.groundingReasoning,
+        instructions: groundingInstructions,
+        input: { currentNotebook: notebook, newUserMessage: message, candidates: requiringGrounding.map((candidate, index) => ({ index, ...toEvaluated(candidate) })) },
+        schema: GROUNDING_SCHEMA, formatName: "apu_f1_eval_grounding", maxOutputTokens: 1_200, parse: parseVerdicts,
+      });
+      calls.push({ stage: "grounding", model: profile.groundingModel, reasoning: profile.groundingReasoning, latencyMs: grounding.latencyMs, usage: grounding.usage });
+      verdicts = grounding.value.verdicts;
+    }
+    const validPrimaryVerdicts = verdicts.filter((verdict) => Number.isInteger(verdict.index) && verdict.index >= 0 && verdict.index < requiringGrounding.length);
+    const verdictByIndex = new Map(validPrimaryVerdicts.map((verdict) => [verdict.index, verdict]));
+    let finalAcceptedIndexes = new Set(
+      [...verdictByIndex.entries()].filter(([, verdict]) => verdict.accepted === true).map(([index]) => index),
+    );
+    let primaryAcceptedIndexes = new Set(finalAcceptedIndexes);
+    let groundingRescueSubmittedCandidateIds: string[] = [];
+    let groundingRescueVerdicts: GroundingRescueTraceVerdict[] = [];
+    let groundingRescueFailure: string | null = null;
+    if (pipeline === "production-rescue") {
+      const rescueResult = await applyMonotonicGroundingRescue(requiringGrounding, verdicts, async (rescueCandidates) => {
+        const originalIndexById = new Map(requiringGrounding.map((candidate, index) => [candidate.candidateId, index]));
+        const originalIndexes = rescueCandidates.map((candidate) => originalIndexById.get(candidate.candidateId)!);
+        groundingRescueSubmittedCandidateIds = rescueCandidates.map((candidate) => candidate.candidateId);
+        let callRecorded = false;
+        try {
+          const rescue = await provider.call({
+            stage: "grounding",
+            model: PRODUCTION_GROUNDING_RESCUE_MODEL,
+            reasoning: PRODUCTION_GROUNDING_RESCUE_REASONING,
+            instructions: GROUNDING_RESCUE_INSTRUCTIONS,
+            input: {
+              currentNotebook: notebook,
+              newUserMessage: message,
+              candidates: rescueCandidates.map((candidate, index) => ({ index, ...toEvaluated(candidate) })),
+            },
+            schema: GROUNDING_RESCUE_SCHEMA,
+            formatName: "apu_f1_eval_production_grounding_rescue",
+            maxOutputTokens: Math.min(4_000, Math.max(1_200, 500 + rescueCandidates.length * 180)),
+            parse: (value) => validateGroundingRescueVerdicts(value, rescueCandidates.length),
+          });
+          calls.push({
+            stage: "grounding", groundingPass: "rescue",
+            model: PRODUCTION_GROUNDING_RESCUE_MODEL, reasoning: PRODUCTION_GROUNDING_RESCUE_REASONING,
+            latencyMs: rescue.latencyMs, usage: rescue.usage,
+          });
+          callRecorded = true;
+          const validated = validateGroundingRescueVerdicts(rescue.value, rescueCandidates.length);
+          groundingRescueVerdicts = validated.verdicts.map((verdict) => ({
+            candidateId: rescueCandidates[verdict.index].candidateId,
+            rescueIndex: verdict.index,
+            originalGroundingIndex: originalIndexes[verdict.index],
+            accepted: verdict.accepted,
+            reason: verdict.reason,
+            reasonCategory: verdict.reasonCategory,
+            providerVerdict: structuredClone(verdict),
+          }));
+          return validated;
+        } catch (error) {
+          groundingRescueFailure = error instanceof EvalProviderCallError ? error.message : "Grounding rescue failed.";
+          if (!callRecorded) calls.push({
+            stage: "grounding", groundingPass: "rescue",
+            model: PRODUCTION_GROUNDING_RESCUE_MODEL, reasoning: PRODUCTION_GROUNDING_RESCUE_REASONING,
+            latencyMs: error instanceof EvalProviderCallError ? error.latencyMs : 0,
+            usage: error instanceof EvalProviderCallError ? error.usage : null,
+            error: groundingRescueFailure,
+          });
+          groundingRescueVerdicts = rescueCandidates.map((candidate, rescueIndex) => ({
+            candidateId: candidate.candidateId,
+            rescueIndex,
+            originalGroundingIndex: originalIndexes[rescueIndex],
+            accepted: null,
+            reason: null,
+            reasonCategory: null,
+            providerVerdict: null,
+          }));
+          throw error;
+        }
+      });
+      primaryAcceptedIndexes = rescueResult.primaryAcceptedIndexes;
+      finalAcceptedIndexes = rescueResult.acceptedIndexes;
+    }
+    const groundingVerdicts: GroundingTraceVerdict[] = requiringGrounding.map((candidate, submittedIndex) => {
+      const legacyVerdict = verdictByIndex.get(submittedIndex) ?? null;
+      const accepted = pipeline === "production-rescue" ? primaryAcceptedIndexes.has(submittedIndex) : legacyVerdict?.accepted === true;
+      const verdict = accepted
+        ? validPrimaryVerdicts.find((candidateVerdict) => candidateVerdict.index === submittedIndex && candidateVerdict.accepted === true) ?? legacyVerdict
+        : legacyVerdict;
+      return { candidateId: candidate.candidateId, submittedIndex, accepted, reason: verdict?.reason ?? null, providerVerdict: verdict };
+    });
+    const acceptedIds = new Set([...finalAcceptedIndexes].map((index) => requiringGrounding[index]?.candidateId).filter((id): id is string => Boolean(id)));
+    const finalCandidates = preGroundingCandidates.filter((candidate) => candidate.action === "duplicate" || candidate.action === "skip" || acceptedIds.has(candidate.candidateId));
+    allPreGroundingCandidates.push(...preGroundingCandidates.map(toEvaluated));
+    allCandidates.push(...finalCandidates.map(toEvaluated));
+    turns.push({
+      inputIndex,
+      rawExtraction: structuredClone(extraction.value),
+      normalizedExtractionCandidates,
+      rawCoverageCandidates,
+      normalizedCoverageCandidates,
+      preGroundingCandidates,
+      groundingSubmittedCandidates: requiringGrounding,
+      groundingVerdicts,
+      ...(pipeline === "production-rescue" ? {
+        groundingRescueSubmittedCandidateIds,
+        groundingRescueVerdicts,
+        groundingRescueFailure,
+      } : {}),
+      finalCandidates,
+    });
+    for (const candidate of finalCandidates) if (candidate.action === "add") notebook.push({
+      id: `eval-${item.id}-${inputIndex}-${notebook.length}`, category: candidate.category, text: candidate.notebookText, trust: "unconfirmed",
+    });
+  }
+  return { preGroundingCandidates: allPreGroundingCandidates, candidates: allCandidates, turns, calls, ...recordUsage(calls) };
+}
+
+export async function runSemanticJudge(item: EvalCase, score: CaseScore, candidates: EvaluatedCandidate[], model: SupportedModelId, provider: EvalProvider) {
+  const reviewAlignments = score.matches.filter((match) => match.state === "REVIEW" && match.candidateIndexes.length).map((match) => ({
+    goldFact: (() => {
+      const fact = item.expectedFacts.find((candidate) => candidate.id === match.goldFactId);
+      return fact ? { ...fact, text: goldCanonicalText(fact) } : undefined;
+    })(),
+    candidates: match.candidateIndexes.map((candidateIndex) => ({ candidateIndex, candidate: candidates[candidateIndex] })),
+  }));
+  const unmatchedCandidates = score.candidateClassifications.filter((entry) => entry.state === "REVIEW").map((entry) => ({
+    candidateIndex: entry.candidateIndex,
+    candidate: candidates[entry.candidateIndex],
+  }));
+  if (!reviewAlignments.length && !unmatchedCandidates.length) return { decisions: [] as SemanticJudgeDecision[], usage: null as ModelUsageRecord | null, latencyMs: 0, called: false };
+  const expectedDecisionCount = reviewAlignments.length + unmatchedCandidates.length;
+  const judged = await provider.call({
+    stage: "judge", model, reasoning: "low", instructions: SEMANTIC_JUDGE_INSTRUCTIONS,
+    input: { messageInputs: item.inputs, reviewAlignments, unmatchedCandidates }, schema: SEMANTIC_JUDGE_SCHEMA,
+    formatName: "apu_f1_eval_semantic_judge", maxOutputTokens: semanticJudgeOutputBudget(expectedDecisionCount),
+    parse(value) {
+      const object = parseObject(value, "semantic judge result");
+      if (!Array.isArray(object.decisions)) throw new Error("invalid semantic judge decisions");
+      return object as { decisions: SemanticJudgeDecision[] };
+    },
+  });
+  return { decisions: judged.value.decisions, usage: judged.usage, latencyMs: judged.latencyMs, called: true };
+}
+
+export async function runStagedSemanticJudge(item: EvalCase, turns: PipelineTurnTrace[], model: SupportedModelId, provider: EvalProvider) {
+  const context = buildStagedJudgeContext(item, turns);
+  if (!context.reviewAlignments.length && !context.unmatchedCandidates.length) return {
+    output: null as StagedSemanticJudgeOutput | null, usage: null as ModelUsageRecord | null, latencyMs: 0, called: false,
+  };
+  const expectedDecisionCount = context.reviewAlignments.length + context.unmatchedCandidates.length;
+  const judged = await provider.call({
+    stage: "judge", model, reasoning: "low", instructions: STAGED_SEMANTIC_JUDGE_INSTRUCTIONS,
+    input: {
+      messageInputs: item.inputs,
+      canonicalPreCandidates: context.preCandidates.map((candidate) => ({
+        candidateId: candidate.candidateId,
+        candidate,
+        survivedGrounding: context.survivedCandidateIds.has(candidate.candidateId),
+      })),
+      reviewAlignments: context.reviewAlignments,
+      unmatchedCandidates: context.unmatchedCandidates,
+    },
+    schema: STAGED_SEMANTIC_JUDGE_SCHEMA,
+    formatName: "apu_f1_eval_staged_semantic_judge",
+    maxOutputTokens: semanticJudgeOutputBudget(expectedDecisionCount),
+    parse: (value) => validateStagedJudgeOutput(value, context),
+  });
+  return { output: judged.value, usage: judged.usage, latencyMs: judged.latencyMs, called: true };
+}

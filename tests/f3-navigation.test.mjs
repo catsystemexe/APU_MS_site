@@ -28,6 +28,15 @@ test("Output workspace keeps explicit return, adoption and regeneration transiti
   assert.doesNotMatch(output, /PREVIEW|preview/);
 });
 
+test("returning from Output preserves current Rozbor and the last valid Output", () => {
+  const returnHandlerStart = client.indexOf("onF3Return=");
+  assert.notEqual(returnHandlerStart, -1);
+  const returnHandler = client.slice(returnHandlerStart, returnHandlerStart + 220);
+  assert.match(returnHandler, /setPhase\("development"\)/);
+  assert.match(returnHandler, /setActivePanel\("analysis"\)/);
+  assert.doesNotMatch(returnHandler, /setF3State|setCurrentRozbor|setF2Build/);
+});
+
 test("legacy Preview remains isolated instead of authoritative for F3 adoption", () => {
   assert.match(client, /async function renderF2Preview/);
   const outputProps = client.slice(client.indexOf("f2ToF3Snapshot="), client.indexOf("onF3Return="));
