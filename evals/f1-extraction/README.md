@@ -63,6 +63,28 @@ Provider verdicts require exactly one unique index for every submitted candidate
 
 The fresh result directory contains `replay-plan.json`, `run-state.json`, `grounding-replay-verdicts.jsonl`, `case-scores.jsonl`, `aggregate.json`, `dimension-breakdown.csv`, and `summary.md`. Reports compare current and replay PRE/POST recall, grounding losses, semantic precision, grounded extras, unsupported candidates, rejected/restored Gold-supporting candidates, and newly accepted grounded-extra versus unsupported candidates overall, by suite, and for Human Gate cases. Saved Sol semantic evidence is filtered by replay survival IDs; no new semantic-judge call is made.
 
+### Monotonic evidence-scope-v3 rescue
+
+The `evidence-scope-v3-rescue` variant is a monotonic rescue experiment over the same judged artifacts. It never submits a candidate whose original grounding verdict was accepted. For each turn, it sends only original rejections to `gpt-5.6-luna` with low reasoning; a turn with no rejection makes no provider call. Final acceptance is composed as `originalAccepted || rescueAccepted`, so current final candidates are retained and rescued candidates can only be added. The harness hard-fails if any Gold fact covered by current POST becomes uncovered in v3 POST.
+
+The v3 rescue question is deliberately narrower than general grounding: was the rejection caused only by a local `sourceQuote` omitting an otherwise explicit and unambiguous grammatical relation in the same `newUserMessage`? Rescue is limited to a shared subject, shared preposed context, shared governing predicate, unambiguous coreference, explicit relational coordination, or explicit context completion. It continues to reject unsupported meaning, category changes, ambiguous reference, negation or uncertainty changes, inferred causal/temporal relations, and `helps` without an explicit condition/change and observed effect.
+
+The hard modifier-only rule rejects a rescue whenever `sourceQuote` contains only frequency, duration, intensity, degree, time, manner, or a similar modifier while `notebookText` imports a substantive predicate absent from the quote. This includes `někdy`, `jindy`, `rychle`, and `po pár minutách` when used alone to anchor an added action. Atomization remains category-aware: one source span may support separate manifestation and course/context atoms, and a manifestation need not duplicate an independent qualifier atom unless the qualifier materially changes that manifestation proposition.
+
+Run the monotonic rescue from native Windows PowerShell:
+
+```powershell
+npm.cmd run eval:f1-grounding-replay -- `
+  --source ".\evals\f1-extraction\results\f1-full48-luna-vs-terra-gold-v2-sol-judged" `
+  --profile baseline `
+  --variant evidence-scope-v3-rescue `
+  --run-id "f1-grounding-evidence-scope-v3-rescue-baseline" `
+  --output-dir ".\evals\f1-extraction\results" `
+  --max-calls 14
+```
+
+The call estimate is computed from turns containing at least one original rejection; `14` is the expected bound for the current 48-case artifact, not a harness constant. The plan records both estimated calls and rescue candidates submitted. Reports expose original accepted/rejected counts, rescue submitted/accepted/rejected counts, restored Gold facts, remaining grounding losses, newly accepted `ALIGNED`, `GROUNDED_EXTRA`, and `UNSUPPORTED` candidates, and current-covered Gold facts lost, overall and by atomic/mixed/dense suite and Human Gate case. Saved Gold IDs and semantic classifications are never provider inputs; saved Sol evidence is applied only after rescue to evaluate outcomes. A successful result requires zero newly accepted `UNSUPPORTED` candidates and zero current-covered Gold facts lost.
+
 ## Safe dry run
 
 ```bash

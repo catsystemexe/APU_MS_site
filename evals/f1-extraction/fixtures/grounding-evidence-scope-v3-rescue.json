@@ -1,0 +1,113 @@
+{
+  "variant": "evidence-scope-v3-rescue",
+  "cases": [
+    {
+      "id": "shared-subject",
+      "newUserMessage": "Robin při práci vstane a odloží tužku.",
+      "category": "manifestations",
+      "sourceQuote": "odloží tužku",
+      "notebookText": "Robin odloží tužku.",
+      "expectedAccepted": true,
+      "expectedReasonCategory": "accept_shared_subject"
+    },
+    {
+      "id": "shared-subject-context",
+      "newUserMessage": "Sára při obědě křičí a bouchá do stolu.",
+      "category": "manifestations",
+      "sourceQuote": "bouchá do stolu",
+      "notebookText": "Sára při obědě bouchá do stolu.",
+      "expectedAccepted": true,
+      "expectedReasonCategory": "accept_shared_context"
+    },
+    {
+      "id": "shared-governing-predicate",
+      "newUserMessage": "Pomohlo až klidnější místo a přítomnost známé učitelky.",
+      "category": "helps",
+      "sourceQuote": "přítomnost známé učitelky",
+      "notebookText": "Pomohla přítomnost známé učitelky.",
+      "expectedAccepted": true,
+      "expectedReasonCategory": "accept_shared_predicate"
+    },
+    {
+      "id": "unambiguous-coreference",
+      "newUserMessage": "Asi dvakrát týdně uteče ze třídy; potřebuji ověřit, zda tomu předchází hluk.",
+      "category": "goals",
+      "sourceQuote": "potřebuji ověřit, zda tomu předchází hluk",
+      "notebookText": "Potřebuji ověřit, zda útěku ze třídy předchází hluk.",
+      "expectedAccepted": true,
+      "expectedReasonCategory": "accept_coreference"
+    },
+    {
+      "id": "david-relational-coordination",
+      "newUserMessage": "Někdy tomu předchází konflikt s dítětem, jindy požadavek učitelky nebo velký hluk.",
+      "category": "context",
+      "sourceQuote": "konflikt s dítětem",
+      "notebookText": "Někdy tomu předchází konflikt s dítětem.",
+      "expectedAccepted": true,
+      "expectedReasonCategory": "accept_relational_coordination"
+    },
+    {
+      "id": "klarka-context-completion",
+      "newUserMessage": "Častěji se to stává před ostatními dětmi.",
+      "category": "context",
+      "sourceQuote": "Častěji se to stává",
+      "notebookText": "Častěji se to stává před ostatními dětmi.",
+      "expectedAccepted": true,
+      "expectedReasonCategory": "accept_context_completion"
+    },
+    {
+      "id": "modifier-only-nekdy",
+      "newUserMessage": "Ondra někdy zvládne celou řízenou činnost bez problému.",
+      "category": "manifestations",
+      "sourceQuote": "někdy",
+      "notebookText": "Někdy zvládne celou řízenou činnost.",
+      "expectedAccepted": false,
+      "expectedReasonCategory": "reject_modifier_only"
+    },
+    {
+      "id": "modifier-only-jindy",
+      "newUserMessage": "Jindy po pár minutách odbíhá.",
+      "category": "manifestations",
+      "sourceQuote": "Jindy",
+      "notebookText": "Jindy po pár minutách odbíhá.",
+      "expectedAccepted": false,
+      "expectedReasonCategory": "reject_modifier_only"
+    },
+    {
+      "id": "modifier-only-rychle",
+      "newUserMessage": "Při hluku se rychle přestane soustředit.",
+      "category": "manifestations",
+      "sourceQuote": "rychle",
+      "notebookText": "Rychle se přestane soustředit.",
+      "expectedAccepted": false,
+      "expectedReasonCategory": "reject_modifier_only"
+    },
+    {
+      "id": "modifier-only-duration",
+      "newUserMessage": "Jindy po pár minutách odbíhá.",
+      "category": "manifestations",
+      "sourceQuote": "po pár minutách",
+      "notebookText": "Odbíhá po pár minutách.",
+      "expectedAccepted": false,
+      "expectedReasonCategory": "reject_modifier_only"
+    },
+    {
+      "id": "wrong-helps-category",
+      "newUserMessage": "Po přesazení už nekřičí a při samostatné práci vydrží deset minut.",
+      "category": "helps",
+      "sourceQuote": "při samostatné práci vydrží deset minut",
+      "notebookText": "Při samostatné práci vydrží deset minut.",
+      "expectedAccepted": false,
+      "expectedReasonCategory": "reject_unsupported_helps"
+    },
+    {
+      "id": "unsupported-temporal-relation",
+      "newUserMessage": "Ve skupině úkol odmítne, jednotlivě ho dokončí a požádá o další.",
+      "category": "manifestations",
+      "sourceQuote": "požádá o další",
+      "notebookText": "Po dokončení úkolu požádá o další.",
+      "expectedAccepted": false,
+      "expectedReasonCategory": "reject_inferred_relation"
+    }
+  ]
+}

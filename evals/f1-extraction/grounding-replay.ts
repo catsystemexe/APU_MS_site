@@ -6,9 +6,9 @@ import { executeGroundingReplay } from "./lib/grounding-replay.ts";
 export const HELP = `F1 grounding replay (eval only)
 
 Usage:
-  npm run eval:f1-grounding-replay -- --source <judged-result-directory> --profile baseline --variant evidence-scope-v2 --run-id <id> --output-dir <path> --max-calls <n> [--corpus <path>]
+  npm run eval:f1-grounding-replay -- --source <judged-result-directory> --profile baseline --variant <evidence-scope-v2|evidence-scope-v3-rescue> --run-id <id> --output-dir <path> --max-calls <n> [--corpus <path>]
 
-The command reads saved stage-runs.jsonl PRE candidates and saved semantic evidence. It makes grounding calls only (gpt-5.6-luna/low), never extraction, coverage, or semantic-judge calls, and refuses to overwrite its source or an existing output directory.`;
+The command reads saved stage-runs.jsonl PRE candidates and saved semantic evidence. It makes grounding calls only (gpt-5.6-luna/low), never extraction, coverage, or semantic-judge calls, and refuses to overwrite its source or an existing output directory. The evidence-scope-v3-rescue variant freezes original accepted verdicts and submits only original rejections.`;
 
 export function isCliEntrypoint(moduleUrl: string, entryPath: string | undefined, windows = process.platform === "win32") {
   if (typeof entryPath !== "string") return false;
