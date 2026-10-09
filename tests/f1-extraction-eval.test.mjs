@@ -90,6 +90,24 @@ test("canonical extraction contract preserves branch scope, coordination, and ca
   assert.match(extraction, /Atomizace nesmí vztah zesílit, oslabit, zaměnit ani nově vytvořit/);
 });
 
+test("canonical extraction and primary grounding contracts reject the five evidenced unsupported transformations", () => {
+  const extraction = buildExtractionInstructions("CORE");
+  const grounding = buildGroundingInstructions("CORE");
+
+  assert.match(extraction, /Samostatný context atom podmínku zachytí, ale neopravňuje samostatný manifestations atom k jejímu vypuštění/);
+  assert.match(extraction, /„Bez přípravy\.“ a „Po krátkém upozornění\.“ jsou context, nikoli course/);
+  assert.match(extraction, /Samotné „Deset minut\.“ není úplný fakt/);
+  assert.match(extraction, /sourceQuote „řízenou činnost“ vytvořit context „Při řízené činnosti\.“/);
+  assert.match(extraction, /„Jindy po pár minutách odbíhá“ → manifestations „Jindy odbíhá\.“ a course „Po pár minutách\.“/);
+
+  assert.match(grounding, /zamítni manifestations „Přechod zvládne klidněji\.“/);
+  assert.match(grounding, /zamítni course „Bez přípravy\.“ i course „Po krátkém upozornění\.“/);
+  assert.match(grounding, /zamítni course „Deset minut\.“ jako neúplný fakt/);
+  assert.match(grounding, /přijmi course „Vydrží deset minut\.“ se sourceQuote „vydrží deset minut“/);
+  assert.match(grounding, /Z předmětu „řízenou činnost“ zamítni context „Při řízené činnosti\.“/);
+  assert.match(grounding, /přijmi samostatné kategoriální údaje jako „Občas\.“, „Velmi silné\.“, „Každé ráno\.“ nebo „Po pár minutách\.“/);
+});
+
 test("shared candidate normalization rejects invalid quotes and repairs cross-category links", () => {
   const message = "Při čtení odchází od stolu.";
   const notebook = [{ id: "course-1", category: "course", text: "Každý den.", trust: "confirmed" }];

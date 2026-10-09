@@ -29,6 +29,10 @@ Pravidla:
 4e. Pouhé pořadí nebo spojení dějů spojkou nevytváří časový, příčinný, podmínkový ani následkový vztah. Nepřidávej „po“, „potom“, „následně“, „předtím“, „proto“ ani „kvůli tomu“, pokud tento vztah není ve zprávě explicitní. Samostatné koordinované děje zapisuj jako samostatné atomy.
 4f. course zachycuje samotnou četnost, trvání, intenzitu, počátek nebo vývoj. Pokud jde o samostatný srozumitelný údaj, vytvoř kategoriálně specifický atom bez opakování projevu, například course „Po pár minutách.“ vedle manifestations „Jindy odbíhá.“. Predikát v course neopakuj jen kvůli srozumitelnosti, pokud jej určuje tentýž explicitní úsek a oddělený atom svůj význam zachovává.
 4g. Při atomizaci do kategorií vždy zachovej vztahy, rozsah a kvalifikátory explicitně vyjádřené ve zdroji. Atomizace nesmí vztah zesílit, oslabit, zaměnit ani nově vytvořit. Pokud by oddělení odstranilo materiálně důležitý význam nebo vytvořilo nesrozumitelný atom, údaj násilně neodděluj.
+4h. Podmínkový rozsah je materiální součást významu. Důsledek platný pouze za podmínky „když“, „pokud“, „bez“ nebo jiné explicitní podmínky nesmíš vydávat za nepodmíněný fakt. Samostatný context atom podmínku zachytí, ale neopravňuje samostatný manifestations atom k jejímu vypuštění; podmíněný účinek může bezpečně zachovat celý vztah v helps.
+4i. course popisuje průběh samotného projevu, nikoli vnější podmínku, situaci nebo zásah. Výrazy jako „Bez přípravy“ nebo „Po krátkém upozornění“ jsou v konstrukci podmínka–reakce context, i když mají časovou či podmínkovou formu. Naopak „Po pár minutách“ je course, když přímo vyjadřuje, za jak dlouho projev nastane. Rozhoduj podle sémantické role, ne podle předložky.
+4j. Course atom musí být sám významově úplný. Kategorie dovoluje samostatné údaje jako „Občas.“, „Velmi silné.“, „Každé ráno.“ nebo „Po pár minutách.“, ale holá veličina jako „Deset minut.“ sama neříká, co tak dlouho trvá. Když je řídící predikát pro význam nutný, zachovej jej v sourceQuote i notebookText, například „Vydrží deset minut.“.
+4k. Zachovej gramatickou a sémantickou roli výrazu. Předmět nebo doplnění slovesa nesmíš změnit na samostatný context přidáním nepodložené předložky či vztahu. Z předmětu „řízenou činnost“ ve spojení „zvládne celou řízenou činnost“ nevytvářej „Při řízené činnosti.“.
 5. Pokud stejný význam už v Zápisníku je, action=duplicate a uveď jeho relatedEntryId.
 5a. Duplicitu posuzuj pouze uvnitř stejné kategorie. Existující projev nikdy není důvodem odmítnout nový kontext, intenzitu a trend, pedagogickou potřebu nebo dosavadní zkušenost.
 6. Pokud nový údaj mění nebo odporuje existující položce, action=conflict a uveď její relatedEntryId. Nic tiše nepřepisuj.
@@ -54,6 +58,10 @@ Příklady úplné extrakce:
 - „Ve skupině úkol odmítne, jednotlivě ho dokončí a požádá o další“ → samostatné atomy „Úkol dokončí.“ a „Požádá o další.“. NESMÍ vzniknout „Po dokončení úkolu požádá o další.“, protože zdroj takový časový vztah neuvádí.
 - „Žák každé ráno usíná“ → manifestations „Žák usíná.“ a course „Každé ráno.“. Samostatný course nemusí opakovat projev.
 - „Jindy po pár minutách odbíhá“ → manifestations „Jindy odbíhá.“ a course „Po pár minutách.“. Course NESMÍ být „Odbíhá po pár minutách.“.
+- „Když dostane obrázkový plán, přechod zvládne klidněji“ → context pro podmínku a helps zachovávající podmínku i účinek. NESMÍ vzniknout nepodmíněné manifestations „Přechod zvládne klidněji.“.
+- „Bez přípravy začne při změně protestovat, ale po krátkém upozornění přejde bez křiku“ → „Bez přípravy.“ a „Po krátkém upozornění.“ jsou context, nikoli course; podmíněné reakce nesmí ztratit svůj rozsah.
+- „Po přesazení už nekřičí a při samostatné práci vydrží deset minut“ → course sourceQuote „vydrží deset minut“, notebookText „Vydrží deset minut.“. Samotné „Deset minut.“ není úplný fakt.
+- Z „Ondra někdy zvládne celou řízenou činnost bez problému“ NESMÍ předmět sourceQuote „řízenou činnost“ vytvořit context „Při řízené činnosti.“.
 - „Potřebuji zjistit, co situaci spouští“ → goals: „Zjistit, co situaci spouští.“.
 - „Napomenutí před třídou situaci obvykle zhorší“ → helps: „Napomenutí před třídou situaci obvykle zhoršuje.“. Jde o dosavadní zkušenost, ne o doporučení.`;
 
@@ -69,12 +77,17 @@ Kandidáta přijmi jen tehdy, když současně platí:
 - u goals jde o pedagogem explicitně vyjádřenou potřebu, ne potřebu dítěte odvozenou modelem;
 - samotný popis problému ani používání pedagogického asistenta neznamená implicitní žádost o radu nebo pochopení; bez výslovného záměru goals zamítni;
 - u helps jde o již vyzkoušený nebo pozorovaný postup, podmínku či změnu a její doložený účinek, ne o nevyzkoušený návrh;
+- kandidát zachovává podmínkový rozsah: důsledek výslovně platný jen při „když“, „pokud“, „bez“ nebo jiné podmínce nesmí být přijat jako nepodmíněné tvrzení, ani když je podmínka navržena v samostatném context kandidátovi;
+- course skutečně popisuje četnost, trvání, intenzitu, počátek nebo vývoj projevu, nikoli vnější podmínku, okolnost či zásah; „Bez přípravy.“ a „Po krátkém upozornění.“ v konstrukci podmínka–reakce patří do context, ne course;
+- course atom je významově úplný: přijmi samostatné kategoriální údaje jako „Občas.“, „Velmi silné.“, „Každé ráno.“ nebo „Po pár minutách.“, ale zamítni holou veličinu „Deset minut.“, pokud bez řídícího predikátu neříká, co tak dlouho trvá; „Vydrží deset minut.“ je úplné;
+- notebookText zachovává gramatickou a sémantickou roli sourceQuote; předmět či doplnění slovesa nesmí změnit na context přidáním nepodložené předložky nebo vztahu, například „řízenou činnost“ nepodporuje „Při řízené činnosti.“;
 - přeformulování nepřidává žádný nový fakt.
 
 Aktuální Zápisník smíš použít pouze k bezpečnému rozlišení eliptického podmětu nebo zájmena („to“, „děje se to“, „pomáhá mu“). Nový projev, četnost, kontext, pedagogická potřeba nebo dosavadní zkušenost musí být vždy explicitně obsaženy v newUserMessage. Například při zápisu „Žák usíná“ je z nové zprávy „Děje se to každý den“ bezpečně doložen course „Každý den.“.
 Položka currentNotebook s trust=unconfirmed není nezávislým důkazem své správnosti. Používej ji pouze pro návaznost, eliptický odkaz, deduplikaci nebo možný konflikt; nikdy jí nedoplňuj význam, který není v newUserMessage.
 
 Příklad: z „žák je líný“ nelze přijmout „žák je pasivní“, „nesoustředí se“, „odmítá pracovat“ ani „usíná při výuce“. Vše zamítni jako nepodloženou interpretaci. Samotné „žák je líný“ rovněž není pozorovatelný projev. Naopak z explicitního „žák je apatický“ smíš přijmout pouze manifestations „Je apatický.“ se stejnou sourceQuote.
+Z „Když dostane obrázkový plán, přechod zvládne klidněji“ zamítni manifestations „Přechod zvládne klidněji.“, protože vypouští materiální podmínku. Z „Bez přípravy začne protestovat, ale po krátkém upozornění přejde bez křiku“ zamítni course „Bez přípravy.“ i course „Po krátkém upozornění.“ jako změnu kategorie. Z „při samostatné práci vydrží deset minut“ zamítni course „Deset minut.“ jako neúplný fakt, ale přijmi course „Vydrží deset minut.“ se sourceQuote „vydrží deset minut“. Z předmětu „řízenou činnost“ zamítni context „Při řízené činnosti.“ jako nepodloženou změnu vztahu.
 Buď konzervativní. Při pochybnosti kandidáta zamítni.`;
 
 export const GROUNDING_RESCUE_REASON_CATEGORIES = [
