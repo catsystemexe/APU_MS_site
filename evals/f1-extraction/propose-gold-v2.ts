@@ -15,7 +15,7 @@ export async function executeGoldV2Proposal(
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   executeGoldV2Proposal(process.argv[2] ? resolve(process.argv[2]) : undefined, process.argv[3] ? resolve(process.argv[3]) : undefined).then((proposal) => {
-    console.log(JSON.stringify({ kind: proposal.kind, summary: proposal.summary, outputDirectory: resolve(process.argv[3] ?? "evals/f1-extraction/results/gold-v2-proposal") }, null, 2));
+    console.log(JSON.stringify({ kind: proposal.kind, status: proposal.status, summary: proposal.summary, outputDirectory: resolve(process.argv[3] ?? "evals/f1-extraction/results/gold-v2-proposal") }, null, 2));
   }).catch((error) => {
     console.error(error instanceof Error ? error.message : "F1 Gold Contract v2 proposal failed.");
     process.exitCode = 1;

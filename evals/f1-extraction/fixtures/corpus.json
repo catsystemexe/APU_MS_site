@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "cases": [
     {
       "id": "atomic-manifestation",
@@ -22,7 +22,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Kopne do židle."
         }
       ],
       "forbiddenInferences": [],
@@ -35,7 +36,8 @@
         "linguistic": [
           "simple"
         ]
-      }
+      },
+      "expectedRelations": []
     },
     {
       "id": "atomic-context",
@@ -65,7 +67,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Během ranního kruhu."
         }
       ],
       "forbiddenInferences": [],
@@ -79,7 +82,8 @@
           "simple",
           "coreference"
         ]
-      }
+      },
+      "expectedRelations": []
     },
     {
       "id": "atomic-course-frequency",
@@ -109,7 +113,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Třikrát týdně."
         }
       ],
       "forbiddenInferences": [],
@@ -123,7 +128,8 @@
           "simple",
           "coreference"
         ]
-      }
+      },
+      "expectedRelations": []
     },
     {
       "id": "atomic-goal",
@@ -146,7 +152,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Zjistit, co reakci spouští."
         }
       ],
       "forbiddenInferences": [],
@@ -159,7 +166,8 @@
         "linguistic": [
           "simple"
         ]
-      }
+      },
+      "expectedRelations": []
     },
     {
       "id": "atomic-helps",
@@ -182,7 +190,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Předchozí upozornění pomáhá začít bez protestu."
         }
       ],
       "forbiddenInferences": [],
@@ -196,7 +205,8 @@
           "simple",
           "conditional"
         ]
-      }
+      },
+      "expectedRelations": []
     },
     {
       "id": "atomic-manifestation-context",
@@ -219,7 +229,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Zakrývá si uši."
         },
         {
           "id": "x1",
@@ -233,7 +244,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Ve třídě."
         }
       ],
       "forbiddenInferences": [],
@@ -246,7 +258,8 @@
         "linguistic": [
           "simple"
         ]
-      }
+      },
+      "expectedRelations": []
     },
     {
       "id": "atomic-course-intensity",
@@ -269,7 +282,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Přichází denně."
         },
         {
           "id": "c2",
@@ -283,7 +297,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Bývá velmi silný."
         }
       ],
       "forbiddenInferences": [],
@@ -296,7 +311,8 @@
         "linguistic": [
           "compound"
         ]
-      }
+      },
+      "expectedRelations": []
     },
     {
       "id": "atomic-uncertainty",
@@ -321,6 +337,22 @@
             "Možná"
           ],
           "expectedAction": "add",
+          "relatedEntryId": null,
+          "canonicalText": "Možná odejde."
+        },
+        {
+          "id": "x1",
+          "category": "context",
+          "canonicalText": "Hlavně při hluku.",
+          "text": "Hlavně při hluku.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "hlavně při hluku"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
           "relatedEntryId": null
         }
       ],
@@ -329,12 +361,29 @@
         "uncertainty"
       ],
       "dimensions": {
-        "factCount": 1,
-        "categoryCount": 1,
+        "factCount": 2,
+        "categoryCount": 2,
         "linguistic": [
           "uncertainty"
         ]
-      }
+      },
+      "expectedRelations": [
+        {
+          "id": "rel_01_context_of",
+          "type": "context_of",
+          "sourceFactIds": [
+            "x1"
+          ],
+          "targetFactIds": [
+            "m1"
+          ],
+          "projectionFactIds": [],
+          "source": {
+            "inputIndex": 0,
+            "quote": "Možná odejde hlavně při hluku"
+          }
+        }
+      ]
     },
     {
       "id": "atomic-negation",
@@ -359,7 +408,8 @@
             "neodchází"
           ],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Už neodchází od stolu."
         }
       ],
       "forbiddenInferences": [],
@@ -372,7 +422,8 @@
         "linguistic": [
           "negation"
         ]
-      }
+      },
+      "expectedRelations": []
     },
     {
       "id": "atomic-context-course",
@@ -395,7 +446,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Po obědě."
         },
         {
           "id": "c1",
@@ -409,7 +461,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Asi pět minut."
         }
       ],
       "forbiddenInferences": [],
@@ -422,7 +475,8 @@
         "linguistic": [
           "simple"
         ]
-      }
+      },
+      "expectedRelations": []
     },
     {
       "id": "atomic-unhelpful",
@@ -445,7 +499,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Napomenutí před třídou situaci obvykle zhoršuje."
         }
       ],
       "forbiddenInferences": [],
@@ -458,7 +513,8 @@
         "linguistic": [
           "simple"
         ]
-      }
+      },
+      "expectedRelations": []
     },
     {
       "id": "atomic-label-negative-control",
@@ -492,7 +548,8 @@
         "linguistic": [
           "simple"
         ]
-      }
+      },
+      "expectedRelations": []
     },
     {
       "id": "atomic-no-implied-goal",
@@ -515,7 +572,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Žák usíná."
         },
         {
           "id": "c1",
@@ -529,7 +587,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Každé ráno."
         }
       ],
       "forbiddenInferences": [
@@ -551,7 +610,8 @@
         "linguistic": [
           "simple"
         ]
-      }
+      },
+      "expectedRelations": []
     },
     {
       "id": "atomic-same-span-two-categories",
@@ -574,7 +634,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Odmítne začít."
         },
         {
           "id": "x1",
@@ -588,7 +649,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Při skupinové práci."
         }
       ],
       "forbiddenInferences": [],
@@ -601,7 +663,8 @@
         "linguistic": [
           "simple"
         ]
-      }
+      },
+      "expectedRelations": []
     },
     {
       "id": "atomic-conditional-help",
@@ -624,7 +687,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "S obrázkovým plánem zvládne přechod klidněji."
         }
       ],
       "forbiddenInferences": [],
@@ -637,7 +701,8 @@
         "linguistic": [
           "conditional"
         ]
-      }
+      },
+      "expectedRelations": []
     },
     {
       "id": "mixed-multiple-manifestations",
@@ -660,7 +725,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Vstane."
         },
         {
           "id": "m2",
@@ -674,7 +740,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Odstrčí sešit."
         },
         {
           "id": "m3",
@@ -688,7 +755,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Začne hlasitě protestovat."
         },
         {
           "id": "x1",
@@ -702,7 +770,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Při úkolu."
         }
       ],
       "forbiddenInferences": [],
@@ -715,7 +784,8 @@
         "linguistic": [
           "compound"
         ]
-      }
+      },
+      "expectedRelations": []
     },
     {
       "id": "mixed-manifestation-course",
@@ -738,7 +808,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Odchází od stolu."
         },
         {
           "id": "x1",
@@ -752,7 +823,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Při čtení."
         },
         {
           "id": "c1",
@@ -766,7 +838,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Skoro každý den."
         },
         {
           "id": "c2",
@@ -780,7 +853,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Vrací se přibližně po dvou minutách."
         }
       ],
       "forbiddenInferences": [],
@@ -793,7 +867,8 @@
         "linguistic": [
           "compound"
         ]
-      }
+      },
+      "expectedRelations": []
     },
     {
       "id": "mixed-goal-embedded",
@@ -816,7 +891,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Pobíhá po třídě."
         },
         {
           "id": "x1",
@@ -830,7 +906,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Před obědem."
         },
         {
           "id": "g1",
@@ -844,7 +921,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Zjistit, co mu pomůže čekání zvládnout."
         }
       ],
       "forbiddenInferences": [],
@@ -857,7 +935,8 @@
         "linguistic": [
           "compound"
         ]
-      }
+      },
+      "expectedRelations": []
     },
     {
       "id": "mixed-condition-result",
@@ -880,7 +959,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Začne protestovat."
         },
         {
           "id": "h1",
@@ -896,7 +976,8 @@
             "bez křiku"
           ],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Po krátkém upozornění přejde bez křiku."
         },
         {
           "id": "x1",
@@ -910,6 +991,69 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
+          "relatedEntryId": null,
+          "canonicalText": "Při změně."
+        },
+        {
+          "id": "x2",
+          "category": "context",
+          "canonicalText": "Bez přípravy.",
+          "text": "Bez přípravy.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "Bez přípravy"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "x3",
+          "category": "context",
+          "canonicalText": "Po krátkém upozornění.",
+          "text": "Po krátkém upozornění.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "po krátkém upozornění"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "m2",
+          "category": "manifestations",
+          "canonicalText": "Přejde bez křiku.",
+          "text": "Přejde bez křiku.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "přejde bez křiku"
+          },
+          "uncertain": false,
+          "negated": true,
+          "requiredMarkers": [
+            "bez křiku"
+          ],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "h2",
+          "category": "helps",
+          "canonicalText": "Bez přípravy začne při změně protestovat.",
+          "text": "Bez přípravy začne při změně protestovat.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "Bez přípravy začne při změně protestovat"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
           "relatedEntryId": null
         }
       ],
@@ -918,14 +1062,65 @@
         "condition-result"
       ],
       "dimensions": {
-        "factCount": 3,
+        "factCount": 7,
         "categoryCount": 3,
         "linguistic": [
           "contrast",
           "conditional",
           "negation"
         ]
-      }
+      },
+      "expectedRelations": [
+        {
+          "id": "rel_01_condition_effect",
+          "type": "condition_effect",
+          "sourceFactIds": [
+            "x2"
+          ],
+          "targetFactIds": [
+            "m1"
+          ],
+          "projectionFactIds": [
+            "h2"
+          ],
+          "source": {
+            "inputIndex": 0,
+            "quote": "Bez přípravy začne při změně protestovat"
+          }
+        },
+        {
+          "id": "rel_02_condition_effect",
+          "type": "condition_effect",
+          "sourceFactIds": [
+            "x3"
+          ],
+          "targetFactIds": [
+            "m2"
+          ],
+          "projectionFactIds": [
+            "h1"
+          ],
+          "source": {
+            "inputIndex": 0,
+            "quote": "po krátkém upozornění přejde bez křiku"
+          }
+        },
+        {
+          "id": "rel_03_context_of",
+          "type": "context_of",
+          "sourceFactIds": [
+            "x1"
+          ],
+          "targetFactIds": [
+            "m1"
+          ],
+          "projectionFactIds": [],
+          "source": {
+            "inputIndex": 0,
+            "quote": "Bez přípravy začne při změně protestovat"
+          }
+        }
+      ]
     },
     {
       "id": "mixed-contrast-situations",
@@ -948,7 +1143,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Úkol odmítne."
         },
         {
           "id": "x1",
@@ -962,7 +1158,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Ve skupině."
         },
         {
           "id": "h1",
@@ -976,6 +1173,52 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
+          "relatedEntryId": null,
+          "canonicalText": "Jednotlivě úkol dokončí a požádá o další."
+        },
+        {
+          "id": "x2",
+          "category": "context",
+          "canonicalText": "Při práci jednotlivě.",
+          "text": "Při práci jednotlivě.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "jednotlivě"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "m2",
+          "category": "manifestations",
+          "canonicalText": "Úkol dokončí.",
+          "text": "Úkol dokončí.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "ho dokončí"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "m3",
+          "category": "manifestations",
+          "canonicalText": "Požádá o další.",
+          "text": "Požádá o další.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "požádá o další"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
           "relatedEntryId": null
         }
       ],
@@ -984,12 +1227,63 @@
         "contrast"
       ],
       "dimensions": {
-        "factCount": 3,
+        "factCount": 6,
         "categoryCount": 3,
         "linguistic": [
           "contrast"
         ]
-      }
+      },
+      "expectedRelations": [
+        {
+          "id": "rel_01_condition_effect",
+          "type": "condition_effect",
+          "sourceFactIds": [
+            "x2"
+          ],
+          "targetFactIds": [
+            "m2",
+            "m3"
+          ],
+          "projectionFactIds": [
+            "h1"
+          ],
+          "source": {
+            "inputIndex": 0,
+            "quote": "jednotlivě ho dokončí a požádá o další"
+          }
+        },
+        {
+          "id": "rel_02_context_of",
+          "type": "context_of",
+          "sourceFactIds": [
+            "x1"
+          ],
+          "targetFactIds": [
+            "m1"
+          ],
+          "projectionFactIds": [],
+          "source": {
+            "inputIndex": 0,
+            "quote": "Ve skupině úkol odmítne"
+          }
+        },
+        {
+          "id": "rel_03_contrast_with",
+          "type": "contrast_with",
+          "sourceFactIds": [
+            "m1"
+          ],
+          "targetFactIds": [
+            "m2",
+            "m3"
+          ],
+          "projectionFactIds": [],
+          "source": {
+            "inputIndex": 0,
+            "quote": "Ve skupině úkol odmítne, jednotlivě ho dokončí a požádá o další"
+          }
+        }
+      ]
     },
     {
       "id": "mixed-uncertainty-confirmed",
@@ -1012,7 +1306,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Zakrývá si oči."
         },
         {
           "id": "m2",
@@ -1026,7 +1321,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Odvrací hlavu."
         },
         {
           "id": "g1",
@@ -1042,7 +1338,8 @@
             "nejsem si jistá"
           ],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Zjistit, zda jí vadí světlo."
         }
       ],
       "forbiddenInferences": [
@@ -1061,7 +1358,8 @@
           "compound",
           "uncertainty"
         ]
-      }
+      },
+      "expectedRelations": []
     },
     {
       "id": "mixed-duplicate",
@@ -1091,7 +1389,23 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "duplicate",
-          "relatedEntryId": "existing-m1"
+          "relatedEntryId": "existing-m1",
+          "canonicalText": "Vstává ze židle."
+        },
+        {
+          "id": "x1",
+          "category": "context",
+          "canonicalText": "Při ranním kruhu.",
+          "text": "Při ranním kruhu.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "Při ranním kruhu"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
         }
       ],
       "forbiddenInferences": [],
@@ -1099,12 +1413,29 @@
         "duplicate"
       ],
       "dimensions": {
-        "factCount": 1,
-        "categoryCount": 1,
+        "factCount": 2,
+        "categoryCount": 2,
         "linguistic": [
           "simple"
         ]
-      }
+      },
+      "expectedRelations": [
+        {
+          "id": "rel_01_context_of",
+          "type": "context_of",
+          "sourceFactIds": [
+            "x1"
+          ],
+          "targetFactIds": [
+            "m1"
+          ],
+          "projectionFactIds": [],
+          "source": {
+            "inputIndex": 0,
+            "quote": "Při ranním kruhu znovu vstává ze židle"
+          }
+        }
+      ]
     },
     {
       "id": "mixed-conflict",
@@ -1140,7 +1471,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "conflict",
-          "relatedEntryId": "existing-c1"
+          "relatedEntryId": "existing-c1",
+          "canonicalText": "Teď každý den."
         }
       ],
       "forbiddenInferences": [],
@@ -1154,7 +1486,8 @@
         "linguistic": [
           "coreference"
         ]
-      }
+      },
+      "expectedRelations": []
     },
     {
       "id": "mixed-multi-turn-addition",
@@ -1178,7 +1511,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Odloží tužku."
         },
         {
           "id": "x1",
@@ -1192,7 +1526,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Při psaní."
         },
         {
           "id": "x2",
@@ -1206,7 +1541,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Hlavně odpoledne."
         },
         {
           "id": "c1",
@@ -1222,7 +1558,8 @@
             "asi"
           ],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Asi čtyřikrát týdně."
         }
       ],
       "forbiddenInferences": [],
@@ -1238,7 +1575,8 @@
           "coreference",
           "uncertainty"
         ]
-      }
+      },
+      "expectedRelations": []
     },
     {
       "id": "mixed-negation-and-help",
@@ -1263,7 +1601,8 @@
             "nekřičí"
           ],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Už nekřičí."
         },
         {
           "id": "h1",
@@ -1279,7 +1618,8 @@
             "nekřičí"
           ],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Po přesazení už nekřičí."
         },
         {
           "id": "c1",
@@ -1293,7 +1633,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Vydrží deset minut."
         },
         {
           "id": "x1",
@@ -1302,6 +1643,22 @@
           "source": {
             "inputIndex": 0,
             "quote": "při samostatné práci"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null,
+          "canonicalText": "Při samostatné práci."
+        },
+        {
+          "id": "x2",
+          "category": "context",
+          "canonicalText": "Po přesazení.",
+          "text": "Po přesazení.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "Po přesazení"
           },
           "uncertain": false,
           "negated": false,
@@ -1316,13 +1673,32 @@
         "same-span-multiple-categories"
       ],
       "dimensions": {
-        "factCount": 4,
+        "factCount": 5,
         "categoryCount": 4,
         "linguistic": [
           "compound",
           "negation"
         ]
-      }
+      },
+      "expectedRelations": [
+        {
+          "id": "rel_01_condition_effect",
+          "type": "condition_effect",
+          "sourceFactIds": [
+            "x2"
+          ],
+          "targetFactIds": [
+            "m1"
+          ],
+          "projectionFactIds": [
+            "h1"
+          ],
+          "source": {
+            "inputIndex": 0,
+            "quote": "Po přesazení už nekřičí"
+          }
+        }
+      ]
     },
     {
       "id": "mixed-course-trend",
@@ -1345,7 +1721,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Potíže začaly v září."
         },
         {
           "id": "c2",
@@ -1359,7 +1736,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Postupně zesílily."
         },
         {
           "id": "c3",
@@ -1373,7 +1751,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Tento měsíc čtyřikrát týdně."
         }
       ],
       "forbiddenInferences": [],
@@ -1386,7 +1765,8 @@
         "linguistic": [
           "compound"
         ]
-      }
+      },
+      "expectedRelations": []
     },
     {
       "id": "mixed-context-help-goal",
@@ -1409,7 +1789,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Schová se pod stůl."
         },
         {
           "id": "x1",
@@ -1423,7 +1804,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "V jídelně."
         },
         {
           "id": "h1",
@@ -1437,7 +1819,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Klidné místo pomohlo."
         },
         {
           "id": "g1",
@@ -1451,7 +1834,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Zjistit, jak bezpečně zvládnout návrat."
         }
       ],
       "forbiddenInferences": [],
@@ -1464,7 +1848,8 @@
         "linguistic": [
           "compound"
         ]
-      }
+      },
+      "expectedRelations": []
     },
     {
       "id": "mixed-unhelpful-contrast",
@@ -1487,7 +1872,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Dlouhé vysvětlování protest prodlouží."
         },
         {
           "id": "h2",
@@ -1501,7 +1887,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Jedna krátká instrukce mu obvykle pomůže začít."
         }
       ],
       "forbiddenInferences": [],
@@ -1515,7 +1902,8 @@
         "linguistic": [
           "contrast"
         ]
-      }
+      },
+      "expectedRelations": []
     },
     {
       "id": "mixed-ellipsis-existing-notebook",
@@ -1545,7 +1933,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Ve vyučování."
         },
         {
           "id": "c1",
@@ -1559,7 +1948,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Každý den."
         },
         {
           "id": "x2",
@@ -1573,7 +1963,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Zejména odpoledne."
         }
       ],
       "forbiddenInferences": [],
@@ -1588,7 +1979,8 @@
           "compound",
           "coreference"
         ]
-      }
+      },
+      "expectedRelations": []
     },
     {
       "id": "mixed-separate-same-category",
@@ -1611,7 +2003,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Je unavený."
         },
         {
           "id": "m2",
@@ -1625,7 +2018,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Je apatický."
         },
         {
           "id": "m3",
@@ -1639,7 +2033,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Málo komunikuje."
         },
         {
           "id": "m4",
@@ -1653,7 +2048,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Odmítá úkoly."
         }
       ],
       "forbiddenInferences": [
@@ -1671,7 +2067,8 @@
         "linguistic": [
           "compound"
         ]
-      }
+      },
+      "expectedRelations": []
     },
     {
       "id": "mixed-uncertain-frequency-goal",
@@ -1696,7 +2093,8 @@
             "Asi"
           ],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Asi dvakrát týdně."
         },
         {
           "id": "m1",
@@ -1710,7 +2108,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Uteče ze třídy."
         },
         {
           "id": "g1",
@@ -1726,7 +2125,8 @@
             "zda"
           ],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Ověřit, zda tomu předchází hluk."
         }
       ],
       "forbiddenInferences": [],
@@ -1741,7 +2141,8 @@
           "compound",
           "uncertainty"
         ]
-      }
+      },
+      "expectedRelations": []
     },
     {
       "id": "dense-fact-count-1",
@@ -1764,7 +2165,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Vstane."
         }
       ],
       "forbiddenInferences": [],
@@ -1778,7 +2180,8 @@
         "linguistic": [
           "simple"
         ]
-      }
+      },
+      "expectedRelations": []
     },
     {
       "id": "dense-fact-count-2",
@@ -1801,7 +2204,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Vstane."
         },
         {
           "id": "m2",
@@ -1815,7 +2219,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Odloží tužku."
         }
       ],
       "forbiddenInferences": [],
@@ -1829,7 +2234,8 @@
         "linguistic": [
           "compound"
         ]
-      }
+      },
+      "expectedRelations": []
     },
     {
       "id": "dense-fact-count-3",
@@ -1852,7 +2258,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Vstane."
         },
         {
           "id": "m2",
@@ -1866,7 +2273,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Odloží tužku."
         },
         {
           "id": "m3",
@@ -1880,7 +2288,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Řekne, že pokračovat nechce."
         }
       ],
       "forbiddenInferences": [],
@@ -1894,7 +2303,8 @@
         "linguistic": [
           "compound"
         ]
-      }
+      },
+      "expectedRelations": []
     },
     {
       "id": "dense-fact-count-4",
@@ -1917,7 +2327,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Vstane."
         },
         {
           "id": "m2",
@@ -1931,7 +2342,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Odloží tužku."
         },
         {
           "id": "m3",
@@ -1945,7 +2357,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Řekne, že pokračovat nechce."
         },
         {
           "id": "m4",
@@ -1959,7 +2372,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Odejde ke dveřím."
         }
       ],
       "forbiddenInferences": [],
@@ -1973,7 +2387,8 @@
         "linguistic": [
           "compound"
         ]
-      }
+      },
+      "expectedRelations": []
     },
     {
       "id": "dense-fact-count-6",
@@ -1996,7 +2411,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Vstane."
         },
         {
           "id": "m2",
@@ -2010,7 +2426,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Odloží tužku."
         },
         {
           "id": "m3",
@@ -2024,7 +2441,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Řekne, že pokračovat nechce."
         },
         {
           "id": "m4",
@@ -2038,7 +2456,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Odejde ke dveřím."
         },
         {
           "id": "m5",
@@ -2052,7 +2471,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Začne hlasitě mluvit."
         },
         {
           "id": "m6",
@@ -2066,7 +2486,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Zavře sešit."
         }
       ],
       "forbiddenInferences": [],
@@ -2080,7 +2501,8 @@
         "linguistic": [
           "compound"
         ]
-      }
+      },
+      "expectedRelations": []
     },
     {
       "id": "dense-fact-count-8",
@@ -2103,7 +2525,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Vstane."
         },
         {
           "id": "m2",
@@ -2117,7 +2540,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Odloží tužku."
         },
         {
           "id": "m3",
@@ -2131,7 +2555,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Řekne, že pokračovat nechce."
         },
         {
           "id": "m4",
@@ -2145,7 +2570,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Odejde ke dveřím."
         },
         {
           "id": "m5",
@@ -2159,7 +2585,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Začne hlasitě mluvit."
         },
         {
           "id": "m6",
@@ -2173,7 +2600,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Zavře sešit."
         },
         {
           "id": "m7",
@@ -2187,7 +2615,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Odstrčí židli."
         },
         {
           "id": "m8",
@@ -2201,7 +2630,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Přestane odpovídat."
         }
       ],
       "forbiddenInferences": [],
@@ -2215,7 +2645,8 @@
         "linguistic": [
           "compound"
         ]
-      }
+      },
+      "expectedRelations": []
     },
     {
       "id": "dense-fact-count-10",
@@ -2238,7 +2669,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Vstane."
         },
         {
           "id": "m2",
@@ -2252,7 +2684,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Odloží tužku."
         },
         {
           "id": "m3",
@@ -2266,7 +2699,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Řekne, že pokračovat nechce."
         },
         {
           "id": "m4",
@@ -2280,7 +2714,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Odejde ke dveřím."
         },
         {
           "id": "m5",
@@ -2294,7 +2729,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Začne hlasitě mluvit."
         },
         {
           "id": "m6",
@@ -2308,7 +2744,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Zavře sešit."
         },
         {
           "id": "m7",
@@ -2322,7 +2759,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Odstrčí židli."
         },
         {
           "id": "m8",
@@ -2336,7 +2774,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Přestane odpovídat."
         },
         {
           "id": "m9",
@@ -2350,7 +2789,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Zakryje si oči."
         },
         {
           "id": "m10",
@@ -2364,7 +2804,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Začne plakat."
         }
       ],
       "forbiddenInferences": [],
@@ -2378,7 +2819,8 @@
         "linguistic": [
           "compound"
         ]
-      }
+      },
+      "expectedRelations": []
     },
     {
       "id": "dense-category-count-1",
@@ -2401,7 +2843,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Křičí."
         },
         {
           "id": "m2",
@@ -2415,7 +2858,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Bouchá do stolu."
         }
       ],
       "forbiddenInferences": [],
@@ -2429,7 +2873,8 @@
         "linguistic": [
           "compound"
         ]
-      }
+      },
+      "expectedRelations": []
     },
     {
       "id": "dense-category-count-2",
@@ -2452,7 +2897,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Křičí."
         },
         {
           "id": "m2",
@@ -2466,7 +2912,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Bouchá do stolu."
         },
         {
           "id": "x1",
@@ -2480,7 +2927,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Při obědě."
         }
       ],
       "forbiddenInferences": [],
@@ -2494,7 +2942,8 @@
         "linguistic": [
           "compound"
         ]
-      }
+      },
+      "expectedRelations": []
     },
     {
       "id": "dense-category-count-3",
@@ -2517,7 +2966,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Křičí."
         },
         {
           "id": "m2",
@@ -2531,7 +2981,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Bouchá do stolu."
         },
         {
           "id": "x1",
@@ -2545,7 +2996,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Při obědě."
         },
         {
           "id": "c1",
@@ -2559,7 +3011,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Skoro každý den."
         }
       ],
       "forbiddenInferences": [],
@@ -2573,7 +3026,8 @@
         "linguistic": [
           "compound"
         ]
-      }
+      },
+      "expectedRelations": []
     },
     {
       "id": "dense-category-count-4",
@@ -2596,7 +3050,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Křičí."
         },
         {
           "id": "m2",
@@ -2610,7 +3065,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Bouchá do stolu."
         },
         {
           "id": "x1",
@@ -2624,7 +3080,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Při obědě."
         },
         {
           "id": "c1",
@@ -2638,7 +3095,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Skoro každý den."
         },
         {
           "id": "h1",
@@ -2652,7 +3110,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Přesazení ke kraji stolu reakci zkrátí."
         }
       ],
       "forbiddenInferences": [],
@@ -2667,7 +3126,8 @@
           "compound",
           "contrast"
         ]
-      }
+      },
+      "expectedRelations": []
     },
     {
       "id": "dense-category-count-5",
@@ -2690,7 +3150,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Křičí."
         },
         {
           "id": "m2",
@@ -2704,7 +3165,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Bouchá do stolu."
         },
         {
           "id": "x1",
@@ -2718,7 +3180,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Při obědě."
         },
         {
           "id": "c1",
@@ -2732,7 +3195,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Skoro každý den."
         },
         {
           "id": "h1",
@@ -2746,7 +3210,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Přesazení ke kraji stolu reakci zkrátí."
         },
         {
           "id": "g1",
@@ -2760,7 +3225,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Zjistit, jak návrat k jídlu bezpečně podpořit."
         }
       ],
       "forbiddenInferences": [],
@@ -2775,7 +3241,8 @@
           "compound",
           "contrast"
         ]
-      }
+      },
+      "expectedRelations": []
     },
     {
       "id": "human-gate-david",
@@ -2798,7 +3265,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Má výbuchy."
         },
         {
           "id": "m2",
@@ -2812,7 +3280,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Začne křičet."
         },
         {
           "id": "m3",
@@ -2826,7 +3295,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Odstrkuje věci."
         },
         {
           "id": "m4",
@@ -2840,7 +3310,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Odstrkuje lidi kolem sebe."
         },
         {
           "id": "m5",
@@ -2854,7 +3325,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Snaží se opustit místnost."
         },
         {
           "id": "x1",
@@ -2868,7 +3340,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Někdy tomu předchází konflikt s dítětem."
         },
         {
           "id": "x2",
@@ -2882,7 +3355,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Jindy tomu předchází požadavek učitelky."
         },
         {
           "id": "x3",
@@ -2896,7 +3370,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Jindy tomu předchází velký hluk."
         },
         {
           "id": "g1",
@@ -2910,7 +3385,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Pochopit situaci bez rychlého závěru a rozlišit možná vysvětlení."
         },
         {
           "id": "g2",
@@ -2924,7 +3400,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Zachovat prioritu bezpečí a stabilizace."
         },
         {
           "id": "u1",
@@ -2940,6 +3417,37 @@
             "Nevíme"
           ],
           "expectedAction": "add",
+          "relatedEntryId": null,
+          "canonicalText": "Není jisté, zda jde pokaždé o stejný problém."
+        },
+        {
+          "id": "c1",
+          "category": "course",
+          "canonicalText": "Výbuchy se objevují občas.",
+          "text": "Výbuchy se objevují občas.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "občas"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "c2",
+          "category": "course",
+          "canonicalText": "Výbuchy jsou velmi silné.",
+          "text": "Výbuchy jsou velmi silné.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "velmi silné"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
           "relatedEntryId": null
         }
       ],
@@ -2954,14 +3462,103 @@
         "regression:david"
       ],
       "dimensions": {
-        "factCount": 11,
-        "categoryCount": 3,
+        "factCount": 13,
+        "categoryCount": 4,
         "linguistic": [
           "compound",
           "contrast",
           "uncertainty"
         ]
-      }
+      },
+      "expectedRelations": [
+        {
+          "id": "rel_01_context_of",
+          "type": "context_of",
+          "sourceFactIds": [
+            "x1"
+          ],
+          "targetFactIds": [
+            "m1",
+            "m2",
+            "m3",
+            "m4",
+            "m5"
+          ],
+          "projectionFactIds": [],
+          "source": {
+            "inputIndex": 0,
+            "quote": "Někdy tomu předchází konflikt s dítětem, jindy požadavek učitelky nebo velký hluk"
+          }
+        },
+        {
+          "id": "rel_02_context_of",
+          "type": "context_of",
+          "sourceFactIds": [
+            "x2"
+          ],
+          "targetFactIds": [
+            "m1",
+            "m2",
+            "m3",
+            "m4",
+            "m5"
+          ],
+          "projectionFactIds": [],
+          "source": {
+            "inputIndex": 0,
+            "quote": "Někdy tomu předchází konflikt s dítětem, jindy požadavek učitelky nebo velký hluk"
+          }
+        },
+        {
+          "id": "rel_03_context_of",
+          "type": "context_of",
+          "sourceFactIds": [
+            "x3"
+          ],
+          "targetFactIds": [
+            "m1",
+            "m2",
+            "m3",
+            "m4",
+            "m5"
+          ],
+          "projectionFactIds": [],
+          "source": {
+            "inputIndex": 0,
+            "quote": "Někdy tomu předchází konflikt s dítětem, jindy požadavek učitelky nebo velký hluk"
+          }
+        },
+        {
+          "id": "rel_04_course_of",
+          "type": "course_of",
+          "sourceFactIds": [
+            "c1"
+          ],
+          "targetFactIds": [
+            "m1"
+          ],
+          "projectionFactIds": [],
+          "source": {
+            "inputIndex": 0,
+            "quote": "má občas velmi silné výbuchy"
+          }
+        },
+        {
+          "id": "rel_05_course_of",
+          "type": "course_of",
+          "sourceFactIds": [
+            "c2"
+          ],
+          "targetFactIds": [
+            "m1"
+          ],
+          "projectionFactIds": [],
+          "source": {
+            "inputIndex": 0,
+            "quote": "má občas velmi silné výbuchy"
+          }
+        }
+      ]
     },
     {
       "id": "human-gate-anicka",
@@ -2984,7 +3581,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Při velkém hluku v šatně."
         },
         {
           "id": "m1",
@@ -2998,7 +3596,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Začala se výrazně rozrušovat."
         },
         {
           "id": "m2",
@@ -3012,7 +3611,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Snažila se rychle odejít."
         },
         {
           "id": "m3",
@@ -3028,7 +3628,8 @@
             "nereagovala"
           ],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Nereagovala na běžné pokyny."
         },
         {
           "id": "h1",
@@ -3042,7 +3643,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Pomohlo klidnější místo."
         },
         {
           "id": "h2",
@@ -3056,7 +3658,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Pomohla přítomnost známé učitelky."
         },
         {
           "id": "g1",
@@ -3070,7 +3673,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Určit, co bezpečně sledovat před reakcí, během ní a při uklidňování."
         },
         {
           "id": "g2",
@@ -3084,7 +3688,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Rozlišit vliv hluku, možnosti odejít do klidu a přítomnosti známé osoby."
         }
       ],
       "forbiddenInferences": [],
@@ -3099,7 +3704,8 @@
           "compound",
           "conditional"
         ]
-      }
+      },
+      "expectedRelations": []
     },
     {
       "id": "human-gate-ondra",
@@ -3122,7 +3728,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Někdy zvládne celou řízenou činnost bez problému."
         },
         {
           "id": "m2",
@@ -3136,7 +3743,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Jindy odbíhá."
         },
         {
           "id": "c1",
@@ -3150,7 +3758,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Po pár minutách."
         },
         {
           "id": "x1",
@@ -3164,7 +3773,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Častější je to po víkendu."
         },
         {
           "id": "x2",
@@ -3178,7 +3788,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Častější je to před obědem."
         },
         {
           "id": "c2",
@@ -3194,7 +3805,8 @@
             "ne vždy"
           ],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Častější je to, ale ne vždy."
         },
         {
           "id": "g1",
@@ -3208,7 +3820,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Vytvořit cílený plán pozorování."
         },
         {
           "id": "g2",
@@ -3222,6 +3835,41 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
+          "relatedEntryId": null,
+          "canonicalText": "Rozlišit související podmínky od náhodných."
+        },
+        {
+          "id": "h1",
+          "category": "helps",
+          "canonicalText": "Po víkendu je odbíhání častější, ale ne vždy.",
+          "text": "Po víkendu je odbíhání častější, ale ne vždy.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "Častější je to po víkendu a před obědem, ale ne vždy"
+          },
+          "uncertain": true,
+          "negated": true,
+          "requiredMarkers": [
+            "ne vždy"
+          ],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "h2",
+          "category": "helps",
+          "canonicalText": "Před obědem je odbíhání častější, ale ne vždy.",
+          "text": "Před obědem je odbíhání častější, ale ne vždy.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "Častější je to po víkendu a před obědem, ale ne vždy"
+          },
+          "uncertain": true,
+          "negated": true,
+          "requiredMarkers": [
+            "ne vždy"
+          ],
+          "expectedAction": "add",
           "relatedEntryId": null
         }
       ],
@@ -3231,15 +3879,96 @@
         "regression:ondra"
       ],
       "dimensions": {
-        "factCount": 8,
-        "categoryCount": 4,
+        "factCount": 10,
+        "categoryCount": 5,
         "linguistic": [
           "compound",
           "contrast",
           "uncertainty",
           "negation"
         ]
-      }
+      },
+      "expectedRelations": [
+        {
+          "id": "rel_01_condition_effect",
+          "type": "condition_effect",
+          "sourceFactIds": [
+            "x1"
+          ],
+          "targetFactIds": [
+            "c2"
+          ],
+          "projectionFactIds": [
+            "h1"
+          ],
+          "source": {
+            "inputIndex": 0,
+            "quote": "Častější je to po víkendu a před obědem, ale ne vždy"
+          }
+        },
+        {
+          "id": "rel_02_condition_effect",
+          "type": "condition_effect",
+          "sourceFactIds": [
+            "x2"
+          ],
+          "targetFactIds": [
+            "c2"
+          ],
+          "projectionFactIds": [
+            "h2"
+          ],
+          "source": {
+            "inputIndex": 0,
+            "quote": "Častější je to po víkendu a před obědem, ale ne vždy"
+          }
+        },
+        {
+          "id": "rel_03_contrast_with",
+          "type": "contrast_with",
+          "sourceFactIds": [
+            "m1"
+          ],
+          "targetFactIds": [
+            "m2"
+          ],
+          "projectionFactIds": [],
+          "source": {
+            "inputIndex": 0,
+            "quote": "někdy zvládne celou řízenou činnost bez problému a jindy po pár minutách odbíhá"
+          }
+        },
+        {
+          "id": "rel_04_course_of",
+          "type": "course_of",
+          "sourceFactIds": [
+            "c1"
+          ],
+          "targetFactIds": [
+            "m2"
+          ],
+          "projectionFactIds": [],
+          "source": {
+            "inputIndex": 0,
+            "quote": "jindy po pár minutách odbíhá"
+          }
+        },
+        {
+          "id": "rel_05_course_of",
+          "type": "course_of",
+          "sourceFactIds": [
+            "c2"
+          ],
+          "targetFactIds": [
+            "m2"
+          ],
+          "projectionFactIds": [],
+          "source": {
+            "inputIndex": 0,
+            "quote": "Častější je to po víkendu a před obědem, ale ne vždy"
+          }
+        }
+      ]
     },
     {
       "id": "human-gate-eliska",
@@ -3262,7 +3991,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Při společném tvoření."
         },
         {
           "id": "m1",
@@ -3276,7 +4006,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Rychle se přestane soustředit."
         },
         {
           "id": "m2",
@@ -3290,7 +4021,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Začne si hrát s pomůckami."
         },
         {
           "id": "m3",
@@ -3304,7 +4036,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Pozoruje ostatní."
         },
         {
           "id": "h1",
@@ -3318,7 +4051,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "U kraje stolu a s úkolem po malých částech pracuje lépe."
         },
         {
           "id": "g1",
@@ -3332,7 +4066,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Navrhnout praktický způsob organizace tvoření, který usnadní zapojení."
         },
         {
           "id": "g2",
@@ -3346,7 +4081,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Způsob musí být ve třídě realisticky použitelný."
         }
       ],
       "forbiddenInferences": [],
@@ -3361,7 +4097,8 @@
           "compound",
           "conditional"
         ]
-      }
+      },
+      "expectedRelations": []
     },
     {
       "id": "human-gate-klarka",
@@ -3384,7 +4121,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Reaguje velmi rozdílně."
         },
         {
           "id": "m2",
@@ -3398,7 +4136,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Někdy opravu přijme."
         },
         {
           "id": "m3",
@@ -3412,7 +4151,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Jindy začne křičet."
         },
         {
           "id": "m4",
@@ -3426,7 +4166,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Říká, že to neumí."
         },
         {
           "id": "m5",
@@ -3442,7 +4183,8 @@
             "nechce"
           ],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Nechce pokračovat."
         },
         {
           "id": "x1",
@@ -3456,7 +4198,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Před ostatními dětmi."
         },
         {
           "id": "c1",
@@ -3470,7 +4213,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Vyskytuje se častěji."
         },
         {
           "id": "x2",
@@ -3484,7 +4228,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Při práci o samotě."
         },
         {
           "id": "c2",
@@ -3498,7 +4243,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Objevilo se to několikrát."
         },
         {
           "id": "g1",
@@ -3512,7 +4258,8 @@
           "negated": false,
           "requiredMarkers": [],
           "expectedAction": "add",
-          "relatedEntryId": null
+          "relatedEntryId": null,
+          "canonicalText": "Navrhnout praktický způsob poskytování opravy a zpětné vazby."
         },
         {
           "id": "g2",
@@ -3528,6 +4275,52 @@
             "nechci",
             "přesně víme"
           ],
+          "expectedAction": "add",
+          "relatedEntryId": null,
+          "canonicalText": "Nepředstírat jistotu o důvodu rozdílných reakcí."
+        },
+        {
+          "id": "x3",
+          "category": "context",
+          "canonicalText": "Při opravě.",
+          "text": "Při opravě.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "na opravu"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "h1",
+          "category": "helps",
+          "canonicalText": "Před ostatními dětmi se reakce objevuje častěji.",
+          "text": "Před ostatními dětmi se reakce objevuje častěji.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "Častěji se to stává před ostatními dětmi"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
+          "expectedAction": "add",
+          "relatedEntryId": null
+        },
+        {
+          "id": "h2",
+          "category": "helps",
+          "canonicalText": "Při práci o samotě se reakce objevila několikrát.",
+          "text": "Při práci o samotě se reakce objevila několikrát.",
+          "source": {
+            "inputIndex": 0,
+            "quote": "několikrát se to objevilo i při práci o samotě"
+          },
+          "uncertain": false,
+          "negated": false,
+          "requiredMarkers": [],
           "expectedAction": "add",
           "relatedEntryId": null
         }
@@ -3547,16 +4340,117 @@
         "regression:klarka"
       ],
       "dimensions": {
-        "factCount": 11,
-        "categoryCount": 4,
+        "factCount": 14,
+        "categoryCount": 5,
         "linguistic": [
           "compound",
           "contrast",
           "uncertainty",
           "negation"
         ]
-      }
+      },
+      "expectedRelations": [
+        {
+          "id": "rel_01_condition_effect",
+          "type": "condition_effect",
+          "sourceFactIds": [
+            "x1"
+          ],
+          "targetFactIds": [
+            "c1"
+          ],
+          "projectionFactIds": [
+            "h1"
+          ],
+          "source": {
+            "inputIndex": 0,
+            "quote": "Častěji se to stává před ostatními dětmi"
+          }
+        },
+        {
+          "id": "rel_02_condition_effect",
+          "type": "condition_effect",
+          "sourceFactIds": [
+            "x2"
+          ],
+          "targetFactIds": [
+            "c2"
+          ],
+          "projectionFactIds": [
+            "h2"
+          ],
+          "source": {
+            "inputIndex": 0,
+            "quote": "několikrát se to objevilo i při práci o samotě"
+          }
+        },
+        {
+          "id": "rel_03_context_of",
+          "type": "context_of",
+          "sourceFactIds": [
+            "x3"
+          ],
+          "targetFactIds": [
+            "m1"
+          ],
+          "projectionFactIds": [],
+          "source": {
+            "inputIndex": 0,
+            "quote": "reaguje velmi rozdílně na opravu"
+          }
+        },
+        {
+          "id": "rel_04_contrast_with",
+          "type": "contrast_with",
+          "sourceFactIds": [
+            "m2"
+          ],
+          "targetFactIds": [
+            "m3"
+          ],
+          "projectionFactIds": [],
+          "source": {
+            "inputIndex": 0,
+            "quote": "Někdy ji přijme, jindy začne křičet"
+          }
+        },
+        {
+          "id": "rel_05_course_of",
+          "type": "course_of",
+          "sourceFactIds": [
+            "c1"
+          ],
+          "targetFactIds": [
+            "m1",
+            "m3",
+            "m4",
+            "m5"
+          ],
+          "projectionFactIds": [],
+          "source": {
+            "inputIndex": 0,
+            "quote": "Častěji se to stává před ostatními dětmi"
+          }
+        },
+        {
+          "id": "rel_06_course_of",
+          "type": "course_of",
+          "sourceFactIds": [
+            "c2"
+          ],
+          "targetFactIds": [
+            "m1",
+            "m3",
+            "m4",
+            "m5"
+          ],
+          "projectionFactIds": [],
+          "source": {
+            "inputIndex": 0,
+            "quote": "několikrát se to objevilo i při práci o samotě"
+          }
+        }
+      ]
     }
   ]
 }
-

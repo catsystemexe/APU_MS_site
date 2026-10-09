@@ -49,6 +49,7 @@ export type GoldV2ProposalSummary = {
 };
 export type GoldV2Proposal = {
   kind: "f1-gold-v2-proposal";
+  status: "migration_proposal" | "already_migrated";
   sourceCorpusVersion: 1 | 2;
   targetCorpusVersion: 2;
   summary: GoldV2ProposalSummary;
@@ -56,6 +57,15 @@ export type GoldV2Proposal = {
   changes: GoldV2ProposalChange[];
   caseProposals: GoldV2CaseProposal[];
 };
+
+const POLICY = [
+  "canonicalText is the primary atomic scoring target; supported relational text may remain as surface text.",
+  "Relations are canonicalized per case; directional lists are sorted and contrast sides use stable fact-ID order.",
+  "Condition-dependent course is represented as context → course and course → manifestation.",
+  "Helps facts are intrinsically relational and should be backed by explicit condition_effect projections.",
+  "Někdy/jindy and sometimes/other-times branches do not automatically create course facts.",
+  "Explicit občas, častěji, několikrát, denně, strong intensity, and duration normally produce course facts.",
+];
 
 type Spec = Omit<GoldV2ProposalChange, "currentCategory" | "currentText" | "newFactIds" | "relationIds" | "helpsProjectionIds" | "decisionStatus"> & {
   newFacts: ProposedFact[];
@@ -87,26 +97,26 @@ const SPECS: Spec[] = [
   },
   ...["x1", "x2", "x3"].map((goldFactId, index): Spec => ({
     caseId: "human-gate-david", goldFactId,
-    proposedCanonicalText: ["Předchází tomu konflikt s dítětem.", "Předchází tomu požadavek učitelky.", "Předchází tomu velký hluk."][index],
+    proposedCanonicalText: ["Někdy tomu předchází konflikt s dítětem.", "Jindy tomu předchází požadavek učitelky.", "Jindy tomu předchází velký hluk."][index],
     textStaysUnchanged: true, newFacts: [],
     relations: [relation(`r-context-${goldFactId}-outbursts`, "context_of", [goldFactId], ["m1", "m2", "m3", "m4", "m5"], "Někdy tomu předchází konflikt s dítětem, jindy požadavek učitelky nebo velký hluk")], helpsProjections: [],
-    reason: "Někdy/jindy distinguishes supported alternatives but does not by itself establish a course fact.", confidence: "human-review-required",
+    reason: "Human review approved preserving někdy/jindy as part of the supported contrast meaning without creating a course fact.", confidence: "high",
   })),
   {
     caseId: "human-gate-klarka", goldFactId: "m1", proposedCanonicalText: "Reaguje velmi rozdílně.", textStaysUnchanged: true,
     newFacts: [addFact("x3", "context", "Při opravě.", "na opravu")],
     relations: [relation("r-context-x3-m1", "context_of", ["x3"], ["m1"], "reaguje velmi rozdílně na opravu")], helpsProjections: [],
-    reason: "The correction situation is represented independently while the manifestation remains atomic.", confidence: "human-review-required",
+    reason: "Human review approved the atomic manifestation while the correction situation remains represented independently.", confidence: "high",
   },
   {
-    caseId: "human-gate-klarka", goldFactId: "m2", proposedCanonicalText: "Opravu přijme.", textStaysUnchanged: true, newFacts: [],
+    caseId: "human-gate-klarka", goldFactId: "m2", proposedCanonicalText: "Někdy opravu přijme.", textStaysUnchanged: true, newFacts: [],
     relations: [relation("r-contrast-m2-m3", "contrast_with", ["m2"], ["m3"], "Někdy ji přijme, jindy začne křičet")], helpsProjections: [],
-    reason: "Někdy marks one contrast branch; it does not automatically create a frequency/course fact.", confidence: "human-review-required",
+    reason: "Human review approved preserving někdy as part of the contrast branch without creating a frequency/course fact.", confidence: "high",
   },
   {
-    caseId: "human-gate-klarka", goldFactId: "m3", proposedCanonicalText: "Začne křičet.", textStaysUnchanged: true, newFacts: [],
+    caseId: "human-gate-klarka", goldFactId: "m3", proposedCanonicalText: "Jindy začne křičet.", textStaysUnchanged: true, newFacts: [],
     relations: [relation("r-contrast-m3-m2", "contrast_with", ["m3"], ["m2"], "Někdy ji přijme, jindy začne křičet")], helpsProjections: [],
-    reason: "Jindy marks the opposing contrast branch; it does not automatically create a frequency/course fact.", confidence: "human-review-required",
+    reason: "Human review approved preserving jindy as part of the opposing contrast branch without creating a frequency/course fact.", confidence: "high",
   },
   {
     caseId: "human-gate-klarka", goldFactId: "c1", proposedCanonicalText: "Vyskytuje se častěji.", textStaysUnchanged: true,
@@ -121,14 +131,14 @@ const SPECS: Spec[] = [
     reason: "Několikrát is course; the situation-dependent occurrence is preserved as an explicit effect projection.", confidence: "high",
   },
   {
-    caseId: "human-gate-ondra", goldFactId: "m1", proposedCanonicalText: "Zvládne celou řízenou činnost bez problému.", textStaysUnchanged: true, newFacts: [],
+    caseId: "human-gate-ondra", goldFactId: "m1", proposedCanonicalText: "Někdy zvládne celou řízenou činnost bez problému.", textStaysUnchanged: true, newFacts: [],
     relations: [relation("r-contrast-m1-m2", "contrast_with", ["m1"], ["m2"], "někdy zvládne celou řízenou činnost bez problému a jindy po pár minutách odbíhá")], helpsProjections: [],
-    reason: "Někdy introduces a contrast branch, not an independently established course value.", confidence: "human-review-required",
+    reason: "Human review approved preserving někdy as part of the contrast branch without establishing a separate course value.", confidence: "high",
   },
   {
-    caseId: "human-gate-ondra", goldFactId: "m2", proposedCanonicalText: "Odbíhá.", textStaysUnchanged: true, newFacts: [],
+    caseId: "human-gate-ondra", goldFactId: "m2", proposedCanonicalText: "Jindy odbíhá.", textStaysUnchanged: true, newFacts: [],
     relations: [relation("r-course-c1-m2", "course_of", ["c1"], ["m2"], "jindy po pár minutách odbíhá"), relation("r-contrast-m2-m1", "contrast_with", ["m2"], ["m1"], "někdy zvládne celou řízenou činnost bez problému a jindy po pár minutách odbíhá")], helpsProjections: [],
-    reason: "The explicit duration belongs to course c1; jindy only identifies the contrast branch.", confidence: "human-review-required",
+    reason: "Human review approved preserving jindy in the contrast branch; the explicit duration remains isolated in course c1.", confidence: "high",
   },
   {
     caseId: "human-gate-ondra", goldFactId: "c1", proposedCanonicalText: "Po pár minutách.", textStaysUnchanged: true, newFacts: [], relations: [], helpsProjections: [],
@@ -170,6 +180,80 @@ const SPECS: Spec[] = [
     reason: "Helps is intrinsically relational; its supported surface text remains legitimate when backed by an explicit condition-effect relation.", confidence: "high",
   },
 ];
+
+function matchesProposedFact(actual: GoldFact, proposed: ProposedFact) {
+  return actual.id === proposed.id
+    && actual.category === proposed.category
+    && actual.text === proposed.text
+    && actual.canonicalText === proposed.canonicalText
+    && actual.source.inputIndex === proposed.source.inputIndex
+    && actual.source.quote === proposed.source.quote
+    && actual.uncertain === proposed.uncertain
+    && actual.negated === proposed.negated
+    && JSON.stringify(actual.requiredMarkers) === JSON.stringify(proposed.requiredMarkers)
+    && actual.expectedAction === proposed.expectedAction
+    && actual.relatedEntryId === proposed.relatedEntryId;
+}
+
+function assertAlreadyMigrated(corpus: EvalCorpus) {
+  const validation = validateCorpus(corpus);
+  const audit = auditGoldCorpus(corpus);
+  const errors = [...validation.errors];
+  if (audit.deterministicViolations.length) errors.push(...audit.deterministicViolations.map((item) => item.reason));
+  if (audit.heuristicFindings.length) errors.push(`Gold v2 audit still has heuristic findings: ${audit.heuristicFindings.map((item) => `${item.caseId}/${item.goldFactId}`).join(", ")}`);
+  if (audit.relationFindings.length) errors.push(`Gold v2 audit still has relation findings: ${audit.relationFindings.map((item) => `${item.caseId}/${item.relationId}`).join(", ")}`);
+  for (const caseId of new Set(SPECS.map((spec) => spec.caseId))) {
+    const item = corpus.cases.find((candidate) => candidate.id === caseId);
+    if (!item) { errors.push(`Migrated Gold v2 corpus is missing case ${caseId}.`); continue; }
+    const facts = new Map(item.expectedFacts.map((fact) => [fact.id, fact]));
+    const specs = SPECS.filter((spec) => spec.caseId === caseId);
+    for (const spec of specs) {
+      const fact = facts.get(spec.goldFactId);
+      if (fact?.canonicalText !== spec.proposedCanonicalText) errors.push(`Migrated Gold v2 fact ${caseId}/${spec.goldFactId} does not match the approved canonical text.`);
+      for (const proposed of spec.newFacts) {
+        const actual = facts.get(proposed.id);
+        if (!actual || !matchesProposedFact(actual, proposed)) errors.push(`Migrated Gold v2 fact ${caseId}/${proposed.id} does not match the approved proposal.`);
+      }
+    }
+    const expectedRelations = canonicalizeRelations(specs.flatMap((spec) => spec.relations)).relations;
+    const actualRelations = new Map((item.expectedRelations ?? []).map((relation) => [relationSignature(relation), relation]));
+    for (const expected of expectedRelations) {
+      const actual = actualRelations.get(relationSignature(expected));
+      if (!actual || JSON.stringify(actual.source) !== JSON.stringify(expected.source)) errors.push(`Migrated Gold v2 relation ${caseId}/${expected.id} does not match the approved proposal.`);
+    }
+  }
+  if (errors.length) throw new Error(`Gold v2 migration no longer applies because the version 2 corpus is not the approved normalized result:\n${errors.join("\n")}`);
+  return audit;
+}
+
+function buildAlreadyMigratedProposal(corpus: EvalCorpus): GoldV2Proposal {
+  const audit = assertAlreadyMigrated(corpus);
+  return {
+    kind: "f1-gold-v2-proposal",
+    status: "already_migrated",
+    sourceCorpusVersion: 2,
+    targetCorpusVersion: 2,
+    summary: {
+      sourceCorpusVersion: 2,
+      targetCorpusVersion: 2,
+      proposedCaseCount: 0,
+      proposedFactChanges: 0,
+      proposedNewFacts: 0,
+      proposedRelations: 0,
+      deduplicatedRelationCount: 0,
+      mechanical: 0,
+      high: 0,
+      humanReviewRequired: 0,
+      readyToApply: true,
+      validationPassed: true,
+      auditDeterministicViolations: audit.deterministicViolations.length,
+      auditUnexpectedHeuristics: audit.heuristicFindings.length + audit.relationFindings.length,
+    },
+    policy: POLICY,
+    changes: [],
+    caseProposals: [],
+  };
+}
 
 function assembleCaseProposal(corpus: EvalCorpus, caseId: string, specs: Spec[]) {
   const item = corpus.cases.find((candidate) => candidate.id === caseId);
@@ -256,6 +340,7 @@ export function applyGoldV2Proposal(sourceCorpus: EvalCorpus, proposal: GoldV2Pr
 }
 
 export function buildGoldV2Proposal(corpus: EvalCorpus): GoldV2Proposal {
+  if (corpus.version === 2) return buildAlreadyMigratedProposal(corpus);
   const caseIds = [...new Set(SPECS.map((spec) => spec.caseId))];
   const assemblies = caseIds.map((caseId) => assembleCaseProposal(corpus, caseId, SPECS.filter((spec) => spec.caseId === caseId)));
   const changes = assemblies.flatMap((item) => item.changes);
@@ -284,17 +369,11 @@ export function buildGoldV2Proposal(corpus: EvalCorpus): GoldV2Proposal {
   };
   const proposal: GoldV2Proposal = {
     kind: "f1-gold-v2-proposal",
+    status: "migration_proposal",
     sourceCorpusVersion: corpus.version,
     targetCorpusVersion: 2,
     summary: baseSummary,
-    policy: [
-      "canonicalText is the primary atomic scoring target; supported relational text may remain as surface text.",
-      "Relations are canonicalized per case; directional lists are sorted and contrast sides use stable fact-ID order.",
-      "Condition-dependent course is represented as context → course and course → manifestation.",
-      "Helps facts are intrinsically relational and should be backed by explicit condition_effect projections.",
-      "Někdy/jindy and sometimes/other-times branches do not automatically create course facts.",
-      "Explicit občas, častěji, několikrát, denně, strong intensity, and duration normally produce course facts.",
-    ],
+    policy: POLICY,
     changes,
     caseProposals,
   };
@@ -321,6 +400,7 @@ export function renderGoldV2ProposalMarkdown(proposal: GoldV2Proposal) {
   const summary = proposal.summary;
   const lines = [
     "# F1 Gold Contract v2 proposal", "",
+    `Status: ${proposal.status}.`,
     `Source corpus: v${summary.sourceCorpusVersion}; target: v${summary.targetCorpusVersion}.`,
     `Cases: ${summary.proposedCaseCount}; fact changes: ${summary.proposedFactChanges}; new facts: ${summary.proposedNewFacts}; canonical relations: ${summary.proposedRelations}; deduplicated relations: ${summary.deduplicatedRelationCount}.`,
     `Confidence: mechanical ${summary.mechanical}, high ${summary.high}, human review ${summary.humanReviewRequired}.`,

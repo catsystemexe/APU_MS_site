@@ -5,15 +5,13 @@ import { auditGoldCorpus } from "../evals/f1-extraction/lib/gold-contract-audit.
 
 const corpusPath = new URL("../evals/f1-extraction/fixtures/corpus.json", import.meta.url).pathname;
 
-test("gold-contract audit examines all 48 fixtures and detects atomic-uncertainty", async () => {
+test("gold-contract audit examines the fully migrated corpus with zero findings", async () => {
   const report = auditGoldCorpus(await loadCorpus(corpusPath));
   assert.equal(report.casesAudited, 48);
-  assert.equal(report.factsAudited, 167);
-  const finding = report.findings.find((entry) => entry.caseId === "atomic-uncertainty" && entry.goldFactId === "m1");
-  assert.ok(finding);
-  assert.equal(finding.currentCategory, "manifestations");
-  assert.deepEqual(finding.suspectedAdditionalDimensions, ["context"]);
-  assert.ok(["definite contract mismatch", "probable mismatch"].includes(finding.severity));
+  assert.equal(report.factsAudited, 184);
+  assert.deepEqual(report.findings, []);
+  assert.deepEqual(report.relationFindings, []);
+  assert.deepEqual(report.deterministicViolations, []);
 });
 
 test("gold-contract audit does not flag an already atomized manifestation/context example", async () => {

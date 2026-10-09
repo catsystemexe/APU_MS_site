@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -38,6 +38,33 @@ function validV2Case() {
       forbiddenInferences: [], tags: [], dimensions: { factCount: 5, categoryCount: 4, linguistic: ["contrast"] },
     }],
   };
+}
+
+const MIGRATION_ADDED_FACT_IDS = {
+  "atomic-uncertainty": ["x1"],
+  "human-gate-david": ["c1", "c2"],
+  "human-gate-klarka": ["x3", "h1", "h2"],
+  "human-gate-ondra": ["h1", "h2"],
+  "mixed-condition-result": ["x2", "x3", "m2", "h2"],
+  "mixed-contrast-situations": ["x2", "m2", "m3"],
+  "mixed-duplicate": ["x1"],
+  "mixed-negation-and-help": ["x2"],
+};
+
+function reconstructPreMigrationCorpus(corpus) {
+  const legacy = structuredClone(corpus);
+  legacy.version = 1;
+  for (const item of legacy.cases) {
+    const added = new Set(MIGRATION_ADDED_FACT_IDS[item.id] ?? []);
+    item.expectedFacts = item.expectedFacts.filter((fact) => !added.has(fact.id)).map((fact) => {
+      const { canonicalText: _canonicalText, ...legacyFact } = fact;
+      return legacyFact;
+    });
+    delete item.expectedRelations;
+    item.dimensions.factCount = item.expectedFacts.length;
+    item.dimensions.categoryCount = new Set(item.expectedFacts.map((fact) => fact.category)).size;
+  }
+  return legacy;
 }
 
 test("Gold Contract v2 validates canonical facts and explicit relation integrity", () => {
@@ -106,7 +133,7 @@ test("richer same-category relational wording can match canonical meaning, while
 });
 
 test("v1 scoring falls back to text and remains compatible", async () => {
-  const corpus = await loadCorpus(corpusPath);
+  const corpus = reconstructPreMigrationCorpus(await loadCorpus(corpusPath));
   assert.equal(corpus.version, 1);
   const item = corpus.cases.find((entry) => entry.id === "atomic-manifestation");
   const fact = item.expectedFacts[0];
@@ -174,19 +201,22 @@ test("relation-aware audit accepts context → course → manifestation wording"
   assert.equal(auditGoldCorpus(corpus).findings.some((finding) => finding.goldFactId === "c1"), false);
 });
 
-test("Gold v2 proposal is deterministic, complete for required cases, and writes JSON plus Markdown", async () => {
+test("approved Gold v2 migration proposal is ready, qualifier-preserving, deterministic, and complete", async () => {
   const corpus = await loadCorpus(corpusPath);
-  const original = JSON.stringify(corpus);
-  const first = buildGoldV2Proposal(corpus);
-  const second = buildGoldV2Proposal(corpus);
+  const legacy = reconstructPreMigrationCorpus(corpus);
+  assert.deepEqual(validateCorpus(legacy).errors, []);
+  const original = JSON.stringify(legacy);
+  const first = buildGoldV2Proposal(legacy);
+  const second = buildGoldV2Proposal(legacy);
   assert.deepEqual(first, second);
+  assert.equal(first.status, "migration_proposal");
   assert.deepEqual(first.summary, {
     sourceCorpusVersion: 1, targetCorpusVersion: 2, proposedCaseCount: 8, proposedFactChanges: 19,
     proposedNewFacts: 17, proposedRelations: 25, deduplicatedRelationCount: 3,
-    mechanical: 2, high: 9, humanReviewRequired: 8, readyToApply: false, validationPassed: true,
+    mechanical: 2, high: 17, humanReviewRequired: 0, readyToApply: true, validationPassed: true,
     auditDeterministicViolations: 0, auditUnexpectedHeuristics: 0,
   });
-  const auditKeys = auditGoldCorpus(corpus).findings.map((finding) => `${finding.caseId}/${finding.goldFactId}`);
+  const auditKeys = auditGoldCorpus(legacy).findings.map((finding) => `${finding.caseId}/${finding.goldFactId}`);
   const keys = new Set(first.changes.map((change) => `${change.caseId}/${change.goldFactId}`));
   for (const key of auditKeys) assert.ok(keys.has(key), `current audit finding has proposal: ${key}`);
   for (const key of [
@@ -226,10 +256,27 @@ test("Gold v2 proposal is deterministic, complete for required cases, and writes
   assert.equal(negationChanges[0].relationIds[0], negationChanges[1].relationIds[0]);
   assert.ok(first.changes.every((change) => ["mechanical", "high", "human-review-required"].includes(change.confidence)));
   const pending = first.changes.filter((change) => change.decisionStatus === "pending_human_review");
-  assert.equal(pending.length, 8);
-  assert.deepEqual([...new Set(pending.map((change) => change.caseId))], ["human-gate-david", "human-gate-klarka", "human-gate-ondra"]);
+  assert.equal(pending.length, 0);
+  const approvedCanonical = new Map([
+    ["human-gate-david/x1", "Někdy tomu předchází konflikt s dítětem."],
+    ["human-gate-david/x2", "Jindy tomu předchází požadavek učitelky."],
+    ["human-gate-david/x3", "Jindy tomu předchází velký hluk."],
+    ["human-gate-klarka/m1", "Reaguje velmi rozdílně."],
+    ["human-gate-klarka/m2", "Někdy opravu přijme."],
+    ["human-gate-klarka/m3", "Jindy začne křičet."],
+    ["human-gate-ondra/m1", "Někdy zvládne celou řízenou činnost bez problému."],
+    ["human-gate-ondra/m2", "Jindy odbíhá."],
+    ["human-gate-ondra/c1", "Po pár minutách."],
+  ]);
+  for (const [key, canonicalText] of approvedCanonical) {
+    const [caseId, goldFactId] = key.split("/");
+    const change = first.changes.find((candidate) => candidate.caseId === caseId && candidate.goldFactId === goldFactId);
+    assert.equal(change?.proposedCanonicalText, canonicalText, key);
+    assert.equal(change?.decisionStatus, "ready_to_apply", key);
+  }
+  assert.equal(first.changes.some((change) => ["Opravu přijme.", "Začne křičet.", "Odbíhá."].includes(change.proposedCanonicalText)), false, "approved contrast qualifiers must not be weakened");
 
-  const migrated = applyGoldV2Proposal(corpus, first);
+  const migrated = applyGoldV2Proposal(legacy, first);
   assert.equal(migrated.version, 2);
   assert.ok(migrated.cases.every((item) => item.expectedFacts.every((fact) => typeof fact.canonicalText === "string" && fact.canonicalText.length > 0)));
   assert.ok(migrated.cases.every((item) => Array.isArray(item.expectedRelations)));
@@ -241,17 +288,64 @@ test("Gold v2 proposal is deterministic, complete for required cases, and writes
   const migratedAudit = auditGoldCorpus(migrated);
   assert.deepEqual(migratedAudit.deterministicViolations, []);
   assert.deepEqual(migratedAudit.heuristicFindings, []);
-  assert.equal(JSON.stringify(corpus), original, "in-memory migration must not mutate its source corpus");
+  assert.equal(JSON.stringify(legacy), original, "in-memory migration must not mutate its source corpus");
+  assert.deepEqual(migrated, corpus, "committed corpus must equal the fully approved migration result");
 
   const root = await mkdtemp(join(tmpdir(), "apu-f1-gold-v2-"));
   try {
-    const result = await executeGoldV2Proposal(corpusPath, root);
+    const legacyPath = join(root, "corpus-v1.json");
+    const proposalDirectory = join(root, "proposal");
+    await writeFile(legacyPath, JSON.stringify(legacy));
+    const result = await executeGoldV2Proposal(legacyPath, proposalDirectory);
     assert.deepEqual(result, first);
-    assert.deepEqual(JSON.parse(await readFile(join(root, "gold-v2-proposal.json"), "utf8")), first);
-    const markdown = await readFile(join(root, "gold-v2-proposal.md"), "utf8");
+    assert.deepEqual(JSON.parse(await readFile(join(proposalDirectory, "gold-v2-proposal.json"), "utf8")), first);
+    const markdown = await readFile(join(proposalDirectory, "gold-v2-proposal.md"), "utf8");
     assert.match(markdown, /### atomic-uncertainty/);
     assert.match(markdown, /Canonical relations:/);
-    assert.match(markdown, /pending_human_review/);
+    assert.match(markdown, /ready_to_apply/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("committed corpus is complete Gold v2 and proposal tooling returns an idempotent no-op", async () => {
+  const corpus = await loadCorpus(corpusPath);
+  assert.equal(corpus.version, 2);
+  assert.equal(corpus.cases.length, 48);
+  assert.equal(corpus.cases.reduce((total, item) => total + item.expectedFacts.length, 0), 184);
+  assert.equal(corpus.cases.reduce((total, item) => total + item.expectedRelations.length, 0), 25);
+  for (const item of corpus.cases) {
+    assert.ok(item.expectedFacts.every((fact) => typeof fact.canonicalText === "string" && fact.canonicalText.length > 0), item.id);
+    assert.ok(Array.isArray(item.expectedRelations), item.id);
+    assert.equal(new Set(item.expectedRelations.map(relationSignature)).size, item.expectedRelations.length, `${item.id} relation signatures`);
+    assert.equal(item.dimensions.factCount, item.expectedFacts.length, `${item.id} factCount`);
+    assert.equal(item.dimensions.categoryCount, new Set(item.expectedFacts.map((fact) => fact.category)).size, `${item.id} categoryCount`);
+  }
+  assert.deepEqual(validateCorpus(corpus).errors, []);
+  const audit = auditGoldCorpus(corpus);
+  assert.deepEqual(audit.deterministicViolations, []);
+  assert.deepEqual(audit.heuristicFindings, []);
+  assert.deepEqual(audit.relationFindings, []);
+
+  const ondra = corpus.cases.find((item) => item.id === "human-gate-ondra");
+  assert.ok(ondra.expectedRelations.some((relation) => relation.type === "course_of" && relation.sourceFactIds.join() === "c1" && relation.targetFactIds.join() === "m2"));
+  const noOp = buildGoldV2Proposal(corpus);
+  assert.equal(noOp.status, "already_migrated");
+  assert.deepEqual(noOp.changes, []);
+  assert.deepEqual(noOp.caseProposals, []);
+  assert.deepEqual(noOp.summary, {
+    sourceCorpusVersion: 2, targetCorpusVersion: 2, proposedCaseCount: 0, proposedFactChanges: 0,
+    proposedNewFacts: 0, proposedRelations: 0, deduplicatedRelationCount: 0,
+    mechanical: 0, high: 0, humanReviewRequired: 0, readyToApply: true, validationPassed: true,
+    auditDeterministicViolations: 0, auditUnexpectedHeuristics: 0,
+  });
+  assert.deepEqual(applyGoldV2Proposal(corpus, noOp), corpus);
+
+  const root = await mkdtemp(join(tmpdir(), "apu-f1-gold-v2-noop-"));
+  try {
+    const result = await executeGoldV2Proposal(corpusPath, root);
+    assert.deepEqual(result, noOp);
+    assert.match(await readFile(join(root, "gold-v2-proposal.md"), "utf8"), /Status: already_migrated/);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
