@@ -9,6 +9,7 @@ export type UsageOperation =
   | "controller"
   | "main_chat"
   | "analysis"
+  | "need_routing"
   | "f2_component_generation"
   | "f2_build"
   | "f2_preview"

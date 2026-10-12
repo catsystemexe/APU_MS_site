@@ -38,10 +38,9 @@ test("incremental CTA is reconciliation-derived and removals are deferred to exp
   assert.doesNotMatch(client, /removedIds = new Set/);
 });
 
-test("all three current paths are selectable without using legacy processed build execution", () => {
-  for (const path of ["POCHOPIT", "POZOROVAT", "VYTVOŘIT"]) assert.ok(client.includes(path), path);
-  assert.match(client, /F2_PATHS\.map/);
-  assert.match(client, /switchF2Path\(current, path\)/);
+test("one assigned path uses component generation without a route selector", () => {
+  assert.match(client, /<F2BuildOperations/);
+  assert.doesNotMatch(client, /F2_PATHS\.map|switchF2Path|Směr rozboru|onF2PathChange/);
   const generation = client.slice(client.indexOf("async function generateCurrentRozbor"), client.indexOf("async function renderF2Preview"));
   assert.equal(generation.includes('operation: "build"'), false);
 });

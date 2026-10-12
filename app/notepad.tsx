@@ -54,7 +54,6 @@ type WorkspacePanelProps = {
   f2BuildError: string | null;
   f2PreviewStatus: "idle" | "loading" | "error";
   f2PreviewError: string | null;
-  onF2PathChange: (path: F2BuildState["activePath"]) => void;
   onF2SkillToggle: (id: string) => void;
   onF2ParameterChange: (id: string, value: string) => void;
   onF2ContextAdd: (text: string) => void;

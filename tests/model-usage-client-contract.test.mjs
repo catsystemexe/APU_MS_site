@@ -6,7 +6,7 @@ const client = await readFile(new URL("../app/apu-client.tsx", import.meta.url),
 
 test("client collects canonical records from every non-streaming response path without a role gate", () => {
   assert.match(client, /setModelUsageSession/);
-  assert.equal((client.match(/collectModelUsageRecords\((?:payload|responseResult|result)\)/g) ?? []).length, 6);
+  assert.equal((client.match(/collectModelUsageRecords\((?:payload|responseResult|result)\)/g) ?? []).length, 7);
   const collector = client.slice(client.indexOf("function collectModelUsageRecords"), client.indexOf("useEffect", client.indexOf("function collectModelUsageRecords")));
   assert.match(collector, /readModelUsageRecords/);
   assert.match(collector, /appendModelUsageSessionRecords/);

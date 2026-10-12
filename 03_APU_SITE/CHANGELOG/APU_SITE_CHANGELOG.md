@@ -4,6 +4,24 @@ Status: CURRENT
 
 Records significant verified product/runtime/project changes. It is not a complete Git log. Historical Sites-era entries are retained where they remain useful; current deployment state must not be inferred from a changelog entry alone.
 
+## 2026-10-12 — Need-driven single-path F2 Build
+
+### Added / Changed
+- Added a separately bounded semantic F1→F2 routing request for the active canonical need: Terra low returns one validated existing F2 strategy by primary pedagogical outcome, or one brief clarification question before any active Build is created. Legacy keyword mapping and developer scenario path metadata do not assign the runtime strategy.
+- Reuse in-flight and accepted routing decisions for unchanged needs in client-session memory; routing uses the existing authenticated, `store: false` model boundary and canonical usage/cost ledger. No server-side storage was added.
+- Normal and developer modes share one Build operation set for the assigned strategy. Removed path selectors, obsolete switching callbacks/helper and the internal path heading; preserved operation descriptions, depth controls, selected states and explicit generation/update actions. Developer scenarios remain test input, grouped by difficulty.
+- Bound component generation, Build requests and F2→F3 snapshots to the assigned need strategy. Active-need changes hide incompatible Build state, reset current Rozbor and mark previous Output stale while preserving explicit adoption/regeneration.
+
+### Verification
+- Typecheck passed; 177 focused routing, API/contract, rendered Build/control, current-Rozbor, F1 boundary, F2→F3/F3 navigation/finalization, authentication and usage tests passed.
+- All nine development need texts and five mixed-goal counterexamples pass mocked provider/contract fixtures; these checks do not establish live-model semantic accuracy. No live model calls or F1 stability experiments were performed.
+- Rendered component and source-boundary tests confirm normal/developer parity and absence of route-switching controls.
+- Authenticated application visual smoke: NOT VERIFIED — access blocked in Codex Cloud; no authentication bypass was enabled.
+
+### Preserved scope
+- Frozen C3C5F extraction/grounding prompts, schemas, models, rescue and Gold are unchanged. Existing strategy prompts, component content contracts and F3 materialization semantics are preserved.
+- No new operations, hybrid Build, sequential runs, durable storage, merge or production deployment.
+
 ## 2026-10-08 — Milestone 2 direct current-Rozbor → F3 Output
 
 ### Added / Changed

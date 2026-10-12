@@ -51,7 +51,8 @@ test("Phase 2 chat and card are produced by the same structured analysis request
   assert.match(source, /selectedHypothesisId/);
   assert.match(source, /activeNeedId/);
   assert.match(source, /continue_to_output/);
-  assert.match(source, /canonicalNeed: getF1ToF2NeedContract\(notepadState, activeNeedId\)/);
+  assert.match(source, /canonicalNeed: resolvedNeed/);
+  assert.match(source, /await resolveActiveNeed\(sourceNeed\)/);
 });
 
 test("F2 receives canonical initial routing and validates it against the Zápisník need", async () => {

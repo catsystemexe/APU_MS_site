@@ -450,6 +450,7 @@ export function assertCurrentRozborReadyForF3(
   path: F2Path,
   state: { config: CurrentRozborBuildConfig; components: RozborComponent[] },
 ) {
+  if (path !== need.initialF2Path) throw new Error("Strategie Rozboru neodpovídá aktivní pedagogické potřebě.");
   const required = deriveRequiredCurrentRozborComponents(path, need, hypotheses, state.config);
   const reconciliation = reconcileRozborComponents(required, state.components);
   if (!reconciliation.isRozborCurrent) throw new Error("Rozbor není aktuální vůči svému zdroji a nastavení.");
@@ -536,6 +537,7 @@ export function createCurrentRozborGenerationRequest(
   config: CurrentRozborBuildConfig,
   existing: RozborComponent[],
 ): RozborComponentGenerationRequest | null {
+  if (path !== need.initialF2Path) throw new Error("Strategie Rozboru neodpovídá aktivní pedagogické potřebě.");
   const required = deriveRequiredCurrentRozborComponents(path, need, hypotheses, config);
   const { missing, stale } = reconcileRozborComponents(required, existing);
   const components = [...missing, ...stale.map(({ spec }) => spec)];
@@ -712,13 +714,13 @@ export function synchronizeF2BuildWithCanonicalNeed(build: F2BuildState | null, 
   return createF2BuildState(need);
 }
 function revise(state: F2BuildState, change: Partial<F2BuildState>) { return { ...state, ...change, buildRevision: state.buildRevision + 1 }; }
-export function switchF2Path(state: F2BuildState, activePath: F2Path) { return activePath === state.activePath ? state : revise(state, { activePath }); }
 export function toggleF2Skill(state: F2BuildState, id: string) { return revise(state, { skills: state.skills.map((skill) => skill.id === id && skill.path === state.activePath ? { ...skill, active: !skill.active } : skill) }); }
 export function parameterizeF2Skill(state: F2BuildState, id: string, parameterText: string) { const skill = state.skills.find((item) => item.id === id && item.path === state.activePath); return !skill || skill.parameterText === parameterText ? state : revise(state, { skills: state.skills.map((item) => item.id === id ? { ...item, parameterText } : item) }); }
 export function addF2Context(state: F2BuildState, item: F2ContextItem) { return revise(state, { addedContext: [...state.addedContext, item] }); }
 export function removeF2Context(state: F2BuildState, id: string) { return revise(state, { addedContext: state.addedContext.filter((item) => item.id !== id) }); }
 
 export function createF2BuildRequest(build: F2BuildState, canonicalNotebookContext: F2NotebookContextItem[], model?: string): F2BuildRequest {
+  if (build.activePath !== build.canonicalNeed.initialF2Path || build.initialPath !== build.activePath) throw new Error("Strategie Build neodpovídá aktivní pedagogické potřebě.");
   const activeSkills = build.skills.filter((skill) => skill.path === build.activePath && skill.active).map(({ id, label, parameterText }) => ({ id, label, parameterText: parameterText.trim() }));
   return structuredClone({ kind: "f2-build", initialPath: build.initialPath, activePath: build.activePath, canonicalNotebookContext, canonicalNeed: build.canonicalNeed, f3Target: build.f3Target, workingHypotheses: build.workingHypotheses, activeSkills, skillParameters: Object.fromEntries(activeSkills.map((skill) => [skill.id, skill.parameterText])), addedContext: build.addedContext, entryUncertainties: build.entryUncertainties, previousProcessedBuildState: build.processedBuilds[build.activePath] ?? null, buildRevision: build.buildRevision, ...(model ? { model } : {}) });
 }

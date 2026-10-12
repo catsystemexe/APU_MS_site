@@ -20,7 +20,7 @@ export type ModelUsageSession = {
 
 const phases = new Set(["F1", "F2", "F3"]);
 const operations = new Set([
-  "extraction", "grounding", "controller", "main_chat", "analysis",
+  "extraction", "grounding", "controller", "main_chat", "analysis", "need_routing",
   "f2_component_generation", "f2_build", "f2_preview", "f3_render",
 ]);
 const providerStatuses = new Set(["completed", "incomplete", "failed", "transport_error", "unknown"]);

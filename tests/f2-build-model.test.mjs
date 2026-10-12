@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { acceptRenderedPreview, addF2Context, applyF2BuildResult, createF2BuildRequest, createF2BuildState, createF2PreviewSnapshot, F2_SKILL_DEFINITIONS, parameterizeF2Skill, parseF2BuildResult, parseF2RenderedPreview, previewStatus, switchF2Path, synchronizeF2BuildWithCanonicalNeed, toggleF2Skill } from "../app/f2-build-model.ts";
+import { acceptRenderedPreview, addF2Context, applyF2BuildResult, createF2BuildRequest, createF2BuildState, createF2PreviewSnapshot, F2_SKILL_DEFINITIONS, parameterizeF2Skill, parseF2BuildResult, parseF2RenderedPreview, previewStatus, synchronizeF2BuildWithCanonicalNeed, toggleF2Skill } from "../app/f2-build-model.ts";
 
 const need = (path = "POCHOPIT", target = "přehled") => ({ needId: `need-${path}`, needText: `Potřeba ${path}`, initialF2Path: path, f3Target: target });
 const hypothesis = (id, title = id) => ({ id, rank: 1, title, summary: `Shrnutí ${title}`, relevantNeeds: ["need-POCHOPIT"], question: null, supportingInformation: [], limitations: [], unknowns: [], questions: [] });
@@ -100,10 +100,15 @@ test("VYTVOŘIT keeps pedagogical objective distinct from F3 artifact and locali
   const creation = build.processedBuilds.VYTVOŘIT.pathResult; assert.equal(creation.kind, "creation"); assert.notEqual(creation.pedagogicalObjective, build.f3Target); assert.match(creation.conditions[0], /pokud/i); assert.equal(build.processedBuilds.VYTVOŘIT.uncertainties[0].relatedDecisionOrArea, "přístup"); assert.equal(JSON.stringify(creation).includes("grafická sazba"), false);
 });
 
-test("cross-path switching preserves hypotheses and each path's local skill configuration without calls", () => {
-  let calls = 0; let build = configured("POCHOPIT"); build = applyF2BuildResult(build, result("POCHOPIT"), "POCHOPIT", build.buildRevision); build = switchF2Path(build, "POZOROVAT"); build = toggleF2Skill(build, "pozorovat-2"); build = switchF2Path(build, "VYTVOŘIT");
-  assert.equal(calls, 0); assert.equal(build.workingHypotheses[0].id, "h1"); assert.equal(build.skills.find((skill) => skill.id === "pozorovat-2").active, true); assert.equal(build.canonicalNeed.initialF2Path, "POCHOPIT");
-  calls++; assert.equal(calls, 1);
+test("strategy changes require a new authoritative need and discard previous path state", () => {
+  let build = configured("POCHOPIT");
+  build = applyF2BuildResult(build, result("POCHOPIT"), "POCHOPIT", build.buildRevision);
+  build = synchronizeF2BuildWithCanonicalNeed(build, need("POZOROVAT"));
+  assert.equal(build.activePath, "POZOROVAT");
+  assert.equal(build.canonicalNeed.initialF2Path, "POZOROVAT");
+  assert.deepEqual(build.processedBuilds, {});
+  assert.ok(build.skills.every((skill) => !skill.active));
+  assert.throws(() => createF2BuildRequest({ ...build, activePath: "VYTVOŘIT" }, []), /Strategie/);
 });
 
 test("local skill, parameter and context edits never execute a model and mark processed state stale", () => {

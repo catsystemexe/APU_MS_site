@@ -55,7 +55,6 @@ import {
   mapPedagogicalNeed,
   NotepadEntry,
   NotepadState,
-  F2_PATHS,
   type F2Path,
   replaceEntryFromConflict,
 } from "./notepad-model";
@@ -91,9 +90,11 @@ import { analysisChangeKeys, EMPTY_ANALYSIS, formatAnalysisChat, preserveAnalysi
 import { CompletedLifecycleStatus, ProcessingStatus, type F1ProcessingStage } from "./processing-status";
 import { addCompletedLifecycleRecord, withCompletedLifecycleRecord, type CompletedLifecycleRecord } from "./lifecycle-record";
 import { DevLogPanel } from "./dev-log-panel";
-import { DEV_TEST_SCENARIOS, DEV_TEST_SCENARIO_PATHS, type DevTestScenario } from "./dev-test-scenarios";
+import { F2BuildOperations } from "./f2-build-operations";
+import { activeNeedRoutingKey, bindNeedRoutingDecision, createNeedRouter, type NeedRoutingDecision } from "./f2-need-routing";
+import { DEV_TEST_SCENARIOS, type DevTestScenario } from "./dev-test-scenarios";
 import type { SharedFeedbackResult } from "./shared-feedback";
-import { acceptRenderedPreview, addF2Context, applyCurrentRozborComponentUpdate, applyF2BuildResult, canonicalF1NeedFingerprint, createCurrentRozborGenerationRequest, createCurrentRozborState, createF2BuildRequest, createF2PreviewSnapshot, createF2ToF3Snapshot, currentRozborSourceFingerprint, deriveRequiredCurrentRozborComponents, F2_PATH_META, parameterizeF2Skill, parseF2BuildResult, parseF2RenderedPreview, parseGeneratedRozborComponents, previewStatus, reconcileRozborComponents, removeF2Context, switchF2Path, synchronizeF2BuildWithCanonicalNeed, toggleF2Skill, updateCurrentRozborConfig, type CurrentRozborState, type F2BuildState, type F2NotebookContextItem, type F2PreviewState } from "./f2-build-model";
+import { acceptRenderedPreview, addF2Context, applyCurrentRozborComponentUpdate, applyF2BuildResult, canonicalF1NeedFingerprint, createCurrentRozborGenerationRequest, createCurrentRozborState, createF2BuildRequest, createF2PreviewSnapshot, createF2ToF3Snapshot, currentRozborSourceFingerprint, deriveRequiredCurrentRozborComponents, parameterizeF2Skill, parseF2BuildResult, parseF2RenderedPreview, parseGeneratedRozborComponents, previewStatus, reconcileRozborComponents, removeF2Context, synchronizeF2BuildWithCanonicalNeed, toggleF2Skill, type CurrentRozborState, type F2BuildState, type F2NotebookContextItem, type F2PreviewState } from "./f2-build-model";
 import { acceptF3Render, adoptF2Snapshot, createF3RenderRequest, createF3State, markF3SourceStale, parseF3RenderResult, updateF3Config, type F3Config, type F3State } from "./f3-finalization-model";
 
 type SpeechRecognitionEventLike = {
@@ -331,10 +332,9 @@ function DeveloperHeaderControls({
           <FlaskConical aria-hidden="true" />
         </button>
         {scenarioMenuOpen && <span id="dev-scenario-menu" className="dev-scenario-menu" role="menu" aria-label="Testovací scénáře">
-          {DEV_TEST_SCENARIO_PATHS.map((path) => <span key={path} className="dev-scenario-column" role="group" aria-label={path}>
-            <strong className="dev-scenario-path">{path}</strong>
-            {DEV_TEST_SCENARIOS.filter((scenario) => scenario.path === path)
-              .sort((a, b) => a.difficulty - b.difficulty)
+          {([1, 2, 3] as const).map((difficulty) => <span key={difficulty} className="dev-scenario-column" role="group" aria-label={`Obtížnost ${difficulty}`}>
+            <strong className="dev-scenario-path">Obtížnost {difficulty}</strong>
+            {DEV_TEST_SCENARIOS.filter((scenario) => scenario.difficulty === difficulty)
               .map((scenario) => <button
                 key={scenario.id}
                 type="button"
@@ -386,7 +386,7 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
   const [isResizingWorkspace, setIsResizingWorkspace] = useState(false);
   const [isF2BuildVisible, setIsF2BuildVisible] = useState(true);
   const [analysis, setAnalysis] = useState<AnalysisState>(EMPTY_ANALYSIS);
-  const [f2Build, setF2Build] = useState<F2BuildState | null>(null);
+  const [storedF2Build, setF2Build] = useState<F2BuildState | null>(null);
   const [currentRozbor, setCurrentRozbor] = useState<CurrentRozborState>(() => createCurrentRozborState());
   const [rozborGenerationStatus, setRozborGenerationStatus] = useState<"idle" | "loading" | "error">("idle");
   const [rozborGenerationError, setRozborGenerationError] = useState<string | null>(null);
@@ -430,8 +430,27 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
   const dictationSessionRef = useRef(0);
   const dictationShouldContinueRef = useRef(false);
   const dictationPrefixRef = useRef("");
-  const canonicalF2Need = useMemo(() => getF1ToF2NeedContract(notepad, activeNeedId), [notepad, activeNeedId]);
-  const activeF2Path = f2Build?.activePath ?? canonicalF2Need?.initialF2Path ?? "POCHOPIT";
+  const sourceF2Need = useMemo(() => getF1ToF2NeedContract(notepad, activeNeedId), [notepad, activeNeedId]);
+  const sourceNeedKey = sourceF2Need ? activeNeedRoutingKey(sourceF2Need) : null;
+  const latestSourceNeedKeyRef = useRef(sourceNeedKey);
+  latestSourceNeedKeyRef.current = sourceNeedKey;
+  const [needRoute, setNeedRoute] = useState<{ key: string; decision: NeedRoutingDecision } | null>(null);
+  const [needRouteError, setNeedRouteError] = useState<string | null>(null);
+  const [needClarification, setNeedClarification] = useState("");
+  const needRouterRef = useRef<ReturnType<typeof createNeedRouter> | null>(null);
+  if (!needRouterRef.current) needRouterRef.current = createNeedRouter(async (routingInput) => {
+    const response = await fetch("/api/need-route", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(routingInput) });
+    const payload = await response.json().catch(() => null) as ({ decision?: unknown; error?: string } & ModelUsageRecordsResponse) | null;
+    collectModelUsageRecords(payload);
+    if (!response.ok || !payload?.decision) throw new Error(payload?.error || "Cíl potřeby se nepodařilo určit.");
+    return payload.decision;
+  });
+  const canonicalF2Need = useMemo(() => sourceF2Need && needRoute?.key === sourceNeedKey
+    ? bindNeedRoutingDecision(sourceF2Need, needRoute.decision) : null, [sourceF2Need, sourceNeedKey, needRoute]);
+  // Hide a previous Build immediately, before synchronization effects run.
+  const f2Build = canonicalF2Need && storedF2Build && canonicalF1NeedFingerprint(storedF2Build.canonicalNeed) === canonicalF1NeedFingerprint(canonicalF2Need)
+    && storedF2Build.activePath === canonicalF2Need.initialF2Path ? storedF2Build : null;
+  const activeF2Path = canonicalF2Need?.initialF2Path ?? "POCHOPIT"; // Placeholder is never an active Build.
   const activeRozbor = currentRozbor[activeF2Path];
   const latestRozborSourceRef = useRef({ need: canonicalF2Need, hypotheses: analysis.hypotheses, activePath: activeF2Path });
   latestRozborSourceRef.current = { need: canonicalF2Need, hypotheses: analysis.hypotheses, activePath: activeF2Path };
@@ -462,8 +481,33 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
     setModelUsageSession((current) => appendModelUsageSessionRecords(current, records));
   }
 
+  async function resolveActiveNeed(need: NonNullable<typeof sourceF2Need>) {
+    const key = activeNeedRoutingKey(need);
+    const decision = await needRouterRef.current!(need);
+    if (latestSourceNeedKeyRef.current !== key) throw new Error("Pedagogická potřeba se mezitím změnila.");
+    setNeedRoute({ key, decision });
+    setNeedRouteError(null);
+    return bindNeedRoutingDecision(need, decision);
+  }
+
   useEffect(() => {
-    if (phase === "intake" || !canonicalF2Need) return;
+    if (phase === "intake" || !sourceF2Need) return;
+    let cancelled = false;
+    setNeedRouteError(null);
+    setNeedClarification("");
+    void needRouterRef.current!(sourceF2Need).then((decision) => {
+      if (!cancelled && latestSourceNeedKeyRef.current === sourceNeedKey) setNeedRoute({ key: sourceNeedKey!, decision });
+    }).catch((cause) => {
+      if (!cancelled) setNeedRouteError(cause instanceof Error ? cause.message : "Cíl potřeby se nepodařilo určit.");
+    });
+    return () => { cancelled = true; };
+    // Only authoritative active need changes request routing; never Build edits or developer mode.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sourceNeedKey, phase === "intake"]);
+
+  useEffect(() => {
+    if (phase === "intake") return;
+    if (!canonicalF2Need) { setF2Build(null); return; }
     setF2Build((current) => synchronizeF2BuildWithCanonicalNeed(
       current,
       canonicalF2Need,
@@ -472,19 +516,14 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
     ));
   }, [analysis.hypotheses, analysis.mainUncertainty, canonicalF2Need, phase]);
   useEffect(() => {
-    if (!canonicalF2Need) return;
-    const needFingerprint = canonicalF1NeedFingerprint(canonicalF2Need);
-    setCurrentRozbor((current) => {
-      if (currentRozborNeedFingerprintRef.current !== needFingerprint) {
-        currentRozborNeedFingerprintRef.current = needFingerprint;
-        return createCurrentRozborState();
-      }
-      return current;
-    });
+    const needFingerprint = canonicalF2Need ? canonicalF1NeedFingerprint(canonicalF2Need) : null;
+    if (currentRozborNeedFingerprintRef.current !== needFingerprint) {
+      currentRozborNeedFingerprintRef.current = needFingerprint;
+      setCurrentRozbor(createCurrentRozborState());
+    }
   }, [canonicalF2Need]);
   useEffect(() => {
-    if (!currentF2ToF3SourceFingerprint) return;
-    setF3State((current) => current ? markF3SourceStale(current, currentF2ToF3SourceFingerprint) : current);
+    setF3State((current) => current ? markF3SourceStale(current, currentF2ToF3SourceFingerprint ?? "unresolved-active-need") : current);
   }, [currentF2ToF3SourceFingerprint]);
   const dictationTranscriptRef = useRef("");
   const dictationFinalizedSessionRef = useRef(0);
@@ -909,23 +948,30 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
     setAnalysisStatus("loading");
     setAnalysisError(null);
     try {
+      const sourceNeed = getF1ToF2NeedContract(notepadState, activeNeedId);
+      const resolvedNeed = sourceNeed ? await resolveActiveNeed(sourceNeed) : null;
+      if (sourceNeed && !resolvedNeed) { setAnalysisStatus("idle"); return null; }
+      // Derived request mapping only; canonical F1 text and extraction remain unchanged.
+      const notebook = compactNotepad(notepadState).map((item) => item.id === resolvedNeed?.needId && item.category === "goals"
+        ? { ...item, needMapping: { f2Path: resolvedNeed.initialF2Path, f3Target: resolvedNeed.f3Target } } : item);
       const response = await fetch("/api/analysis", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          notebook: compactNotepad(notepadState),
+          notebook,
           previousAnalysis: analysis.hypotheses.length ? analysis : null,
           selectedHypothesisId,
           activeNeedId,
           focusInstruction,
           skippedQuestions: skippedAnalysisQuestions,
-          canonicalNeed: getF1ToF2NeedContract(notepadState, activeNeedId),
+          canonicalNeed: resolvedNeed,
           ...(turnId ? { turnId } : {}),
         }),
       });
       const responseResult = await response.json().catch(() => null) as ({ analysis?: AnalysisState; diagnostics?: Diagnostics; telemetry?: Partial<SessionTelemetry>; error?: string } & ModelUsageRecordsResponse) | null;
       collectModelUsageRecords(responseResult);
       if (!response.ok || !responseResult?.analysis) throw new Error(responseResult?.error || "Rozbor se nepodařilo aktualizovat.");
+      if (sourceNeed && latestSourceNeedKeyRef.current !== activeNeedRoutingKey(sourceNeed)) throw new Error("Pedagogická potřeba se mezitím změnila.");
       const result = responseResult as { analysis: AnalysisState; diagnostics?: Diagnostics; telemetry?: Partial<SessionTelemetry> } & ModelUsageRecordsResponse;
       if (turnId && requestId && result.telemetry) {
         setSessionTelemetry((current) => current.map((item) => item.request_id === requestId
@@ -952,6 +998,17 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
       setAnalysisStatus("error");
       throw cause;
     }
+  }
+
+  async function submitNeedClarification(event: FormEvent) {
+    event.preventDefault();
+    if (!sourceF2Need || !needClarification.trim() || isLoading || analysisStatus === "loading") return;
+    const text = `${sourceF2Need.needText}\nPožadovaný výsledek: ${needClarification.trim()}`;
+    if (text.length > 2000) return;
+    const next = { ...notepad, goals: notepad.goals.map((item) => item.id === sourceF2Need.needId
+      ? { ...item, text, origin: "manual" as const, source: undefined, needMapping: mapPedagogicalNeed(text) } : item) };
+    setNotepad(next);
+    try { await refreshStructuredAnalysis(next); } catch { /* Existing analysis error UI owns retry. */ }
   }
 
   function markAnalysisSeen(key: string) {
@@ -1033,6 +1090,7 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
     if (phase === "intake" && (dialogEvent === "continue_to_solution" || textTransition === "continue_to_solution")) {
       setPhase("development");
       const result = await refreshStructuredAnalysis(notepadForChat, "", turnId, requestId, "F1");
+      if (!result) { setMessages((current) => current.filter((message) => message.id !== assistantId)); return; }
       if (usesDesktopWorkspaceLayout()) {
         setActivePanel("analysis");
         setIsF2BuildVisible(false);
@@ -1045,6 +1103,7 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
     }
     if (phase === "development" && !dialogEvent) {
       const result = await refreshStructuredAnalysis(notepadForChat, rawText, turnId, requestId);
+      if (!result) { setMessages((current) => current.filter((message) => message.id !== assistantId)); return; }
       setMessages((current) => current.map((message) => message.id === assistantId ? {
         ...withCompletedLifecycleRecord(message, {
           operation: result.analysis.chatUpdate.kind === "entry" ? "analysis-entry" : "analysis-update",
@@ -1196,6 +1255,7 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
     if (!completeText || !receivedDone) throw new Error("Model nevrátil dokončenou odpověď s usage daty.");
     if (phase === "intake" && completedPhase === "development") {
       const result = await refreshStructuredAnalysis(notepadForChat, "", turnId, requestId, "F1");
+      if (!result) { setMessages((current) => current.filter((message) => message.id !== assistantId)); return; }
       if (usesDesktopWorkspaceLayout()) {
         setActivePanel("analysis");
         setIsF2BuildVisible(false);
@@ -1426,6 +1486,8 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
     setAnalysisFocus(null);
     setUnseenAnalysisKeys(new Set());
     setHighlightedAnalysisKeys(new Set());
+    needRouterRef.current = null;
+    setNeedRoute(null); setNeedRouteError(null); setNeedClarification("");
     setF2Build(null); setF2Preview(null); setF2BuildStatus("idle"); setF2BuildError(null); setF2PreviewStatus("idle"); setF2PreviewError(null);
     setCurrentRozbor(createCurrentRozborState());
     setRozborGenerationStatus("idle"); setRozborGenerationError(null);
@@ -1838,46 +1900,16 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
           <div ref={bottomRef} />
         </div>
 
+        {phase !== "intake" && sourceF2Need && !canonicalF2Need && <section className="f2-situation" aria-label="Upřesnění pedagogické potřeby">
+          {needRoute?.key === sourceNeedKey && needRoute.decision.clarification ? <form onSubmit={(event) => void submitNeedClarification(event)}>
+            <label className="f2-parameter"><span>{needRoute.decision.clarification}</span><input aria-label="Požadovaný pedagogický výsledek" value={needClarification} maxLength={Math.max(0, 2000 - sourceF2Need.needText.length - 24)} onChange={(event) => setNeedClarification(event.target.value)} /></label>
+            <button type="submit" disabled={!needClarification.trim() || analysisStatus === "loading"}>Upřesnit potřebu</button>
+          </form> : needRouteError ? <><p role="alert">{needRouteError}</p><button type="button" onClick={() => void resolveActiveNeed(sourceF2Need).catch((cause) => setNeedRouteError(cause.message))}>Zkusit znovu</button></> : <p role="status">Určuji zaměření podle pedagogické potřeby…</p>}
+        </section>}
         {isF2DesktopLayout && <section className="f2-build-shell" aria-label="Build">
-          <header className="f2-build-header"><div><span>F2 · {activeF2Path}</span><h2>Build</h2></div><button type="button" onClick={() => setIsF2BuildVisible(false)} aria-label="Skrýt Build a zobrazit chat" title="Zobrazit chat"><ChevronRight aria-hidden="true" /></button></header>
+          <header className="f2-build-header"><div><h2>Build</h2></div><button type="button" onClick={() => setIsF2BuildVisible(false)} aria-label="Skrýt Build a zobrazit chat" title="Zobrazit chat"><ChevronRight aria-hidden="true" /></button></header>
           <div className="f2-build-body">
-            <section><h3>Směr rozboru</h3><div className="f2-paths" role="radiogroup" aria-label="Směr rozboru">
-              {F2_PATHS.map((path) => <button key={path} type="button" role="radio" aria-checked={path === activeF2Path} className={path === activeF2Path ? "is-active" : ""} onClick={() => setF2Build((current) => current ? switchF2Path(current, path) : current)}><strong>{path}</strong><small>{F2_PATH_META[path].description}</small></button>)}
-            </div></section>
-            <section className={`f2-operation-card${activeRozbor.config.expansionDepth > 0 ? " is-active" : ""}`} aria-labelledby="f2-expansion-title">
-              <div className="f2-operation-copy"><h3 id="f2-expansion-title">Rozvinout hypotézy</h3></div>
-              <div className="f2-depth-options">
-                {([
-                  [1, "Základně", "Jak hypotéza může vysvětlovat situaci."],
-                  [2, "Podrobně", "Mechanismy, podmínky a co hypotézu podporuje či oslabuje."],
-                  [3, "Do hloubky", "Kritická interpretace, alternativy, limity a komplikující faktory."],
-                ] as const).map(([depth, label, description]) => {
-                  const selected = activeRozbor.config.expansionDepth === depth;
-                  return <button key={depth} type="button" aria-pressed={selected} onClick={() => setCurrentRozbor((current) => updateCurrentRozborConfig(current, activeF2Path, { expansionDepth: selected ? 0 : depth }))}>
-                    <strong>{label}</strong><span>{description}</span>
-                  </button>;
-                })}
-              </div>
-            </section>
-            {activeF2Path === "POCHOPIT" && <>
-              <button type="button" className={`f2-operation-card f2-operation-toggle${currentRozbor.POCHOPIT.config.compareHypotheses ? " is-active" : ""}`} aria-pressed={currentRozbor.POCHOPIT.config.compareHypotheses} onClick={() => setCurrentRozbor((current) => updateCurrentRozborConfig(current, "POCHOPIT", { compareHypotheses: !current.POCHOPIT.config.compareHypotheses }))}>
-                <span className="f2-operation-copy"><strong>Porovnat a propojit hypotézy</strong><span>Rozdíly, průniky, vztahy a možné souběžné působení hypotéz.</span></span>
-              </button>
-              <button type="button" className={`f2-operation-card f2-operation-toggle${currentRozbor.POCHOPIT.config.expertFrame ? " is-active" : ""}`} aria-pressed={currentRozbor.POCHOPIT.config.expertFrame} onClick={() => setCurrentRozbor((current) => updateCurrentRozborConfig(current, "POCHOPIT", { expertFrame: !current.POCHOPIT.config.expertFrame }))}>
-                <span className="f2-operation-copy"><strong>Doplnit odborný rámec</strong><span>Propojí rozbor s relevantními teoriemi, odbornými koncepty a evidencí.</span></span>
-              </button>
-            </>}
-            {activeF2Path === "POZOROVAT" && <>
-              <button type="button" className={`f2-operation-card f2-operation-toggle${currentRozbor.POZOROVAT.config.compareHypotheses ? " is-active" : ""}`} aria-pressed={currentRozbor.POZOROVAT.config.compareHypotheses} onClick={() => setCurrentRozbor((current) => updateCurrentRozborConfig(current, "POZOROVAT", { compareHypotheses: !current.POZOROVAT.config.compareHypotheses }))}><span className="f2-operation-copy"><strong>Porovnat a propojit hypotézy</strong><span>Odvodí konkrétní kontrasty podmínek, které mohou hypotézy rozlišit.</span></span></button>
-              <button type="button" className={`f2-operation-card f2-operation-toggle${currentRozbor.POZOROVAT.config.keyIndicators ? " is-active" : ""}`} aria-pressed={currentRozbor.POZOROVAT.config.keyIndicators} onClick={() => setCurrentRozbor((current) => updateCurrentRozborConfig(current, "POZOROVAT", { keyIndicators: !current.POZOROVAT.config.keyIndicators }))}><span className="f2-operation-copy"><strong>Určit klíčové indikátory</strong><span>Co je přímo pozorovatelné, kde to sledovat a jak to souvisí s hypotézami.</span></span></button>
-              <button type="button" className={`f2-operation-card f2-operation-toggle${currentRozbor.POZOROVAT.config.observationPriorities ? " is-active" : ""}`} aria-pressed={currentRozbor.POZOROVAT.config.observationPriorities} onClick={() => setCurrentRozbor((current) => updateCurrentRozborConfig(current, "POZOROVAT", { observationPriorities: !current.POZOROVAT.config.observationPriorities }))}><span className="f2-operation-copy"><strong>Stanovit priority pozorování</strong><span>Co sledovat nejdříve a proč je to nejvíce informativní.</span></span></button>
-            </>}
-            {activeF2Path === "VYTVOŘIT" && <>
-              <button type="button" className={`f2-operation-card f2-operation-toggle${currentRozbor.VYTVOŘIT.config.candidateApproaches ? " is-active" : ""}`} aria-pressed={currentRozbor.VYTVOŘIT.config.candidateApproaches} onClick={() => setCurrentRozbor((current) => updateCurrentRozborConfig(current, "VYTVOŘIT", { candidateApproaches: !current.VYTVOŘIT.config.candidateApproaches }))}><span className="f2-operation-copy"><strong>Navrhnout možné přístupy</strong><span>Porovná možnosti a zvolí jeden explicitní pracovní přístup.</span></span></button>
-              <button type="button" className={`f2-operation-card f2-operation-toggle${currentRozbor.VYTVOŘIT.config.refineObjective ? " is-active" : ""}`} aria-pressed={currentRozbor.VYTVOŘIT.config.refineObjective} onClick={() => setCurrentRozbor((current) => updateCurrentRozborConfig(current, "VYTVOŘIT", { refineObjective: !current.VYTVOŘIT.config.refineObjective }))}><span className="f2-operation-copy"><strong>Zpřesnit cíl</strong><span>Vymezí praktický pedagogický cíl odděleně od formátu Výstupu.</span></span></button>
-              <button type="button" className={`f2-operation-card f2-operation-toggle${currentRozbor.VYTVOŘIT.config.successConditions ? " is-active" : ""}`} aria-pressed={currentRozbor.VYTVOŘIT.config.successConditions} onClick={() => setCurrentRozbor((current) => updateCurrentRozborConfig(current, "VYTVOŘIT", { successConditions: !current.VYTVOŘIT.config.successConditions }))}><span className="f2-operation-copy"><strong>Určit podmínky úspěchu</strong><span>Podmínky použití, podpory a přizpůsobení.</span></span></button>
-              <button type="button" className={`f2-operation-card f2-operation-toggle${currentRozbor.VYTVOŘIT.config.followUpVerification ? " is-active" : ""}`} aria-pressed={currentRozbor.VYTVOŘIT.config.followUpVerification} onClick={() => setCurrentRozbor((current) => updateCurrentRozborConfig(current, "VYTVOŘIT", { followUpVerification: !current.VYTVOŘIT.config.followUpVerification }))}><span className="f2-operation-copy"><strong>Určit, co následně ověřovat</strong><span>Signály úspěchu i potřeby přístup upravit.</span></span></button>
-            </>}
+            <F2BuildOperations activeF2Path={activeF2Path} currentRozbor={currentRozbor} setCurrentRozbor={setCurrentRozbor} />
           </div>
           <button type="button" className="f2-build-divider-action" onClick={() => void generateCurrentRozbor()} disabled={rozborGenerationStatus === "loading" || !isCurrentRozborUpdatePending || (!hasActiveRozborOperation && activeRozbor.components.length === 0)} aria-label={activeRozbor.components.length ? "Aktualizovat Rozbor" : "Vytvořit Rozbor"}><span>{rozborGenerationStatus === "loading" ? "VYTVÁŘÍM ROZBOR" : activeRozbor.components.length ? "AKTUALIZOVAT ROZBOR" : "VYTVOŘIT ROZBOR"}</span><ChevronLeft aria-hidden="true" /></button>
           {rozborGenerationError && <p className="f2-generation-error" role="alert">{rozborGenerationError}</p>}
@@ -1995,7 +2027,6 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
           f2BuildError={f2BuildError}
           f2PreviewStatus={f2PreviewStatus}
           f2PreviewError={f2PreviewError}
-          onF2PathChange={(path) => setF2Build((current) => current ? switchF2Path(current, path) : current)}
           onF2SkillToggle={(id) => setF2Build((current) => current ? toggleF2Skill(current, id) : current)}
           onF2ParameterChange={(id, value) => setF2Build((current) => current ? parameterizeF2Skill(current, id, value) : current)}
           onF2ContextAdd={(text) => setF2Build((current) => current ? addF2Context(current, { id: createLocalId("f2-context"), text }) : current)}

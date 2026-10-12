@@ -102,3 +102,15 @@ test("keeps known session subtotal when an accepted record has unavailable prici
   assert.equal(session.summary.uncertain_charge_call_count, 1);
   assert.equal(session.summary.complete_estimated_cost_usd, null);
 });
+
+test("semantic need-routing calls contribute to the existing canonical usage and cost summary", () => {
+  const routed = finalizeModelUsageRecord({ ...record("need-route"), phase: "F2", operation: "need_routing" }, {
+    completed_at: "2026-10-12T00:00:01.000Z", provider_status: "completed", application_status: "accepted",
+    provider_usage: { input_tokens: 100, output_tokens: 20 },
+  });
+  assert.deepEqual(readModelUsageRecords({ model_usage_records: [routed] }), [routed]);
+  const session = appendModelUsageSessionRecords(createModelUsageSession(), [routed, routed]);
+  assert.equal(session.summary.call_count, 1);
+  assert.equal(session.summary.normalized_total_tokens, 120);
+  assert.equal(session.summary.complete_estimated_cost_usd, routed.pricing_snapshot.estimated_cost_usd);
+});
