@@ -70,9 +70,9 @@ test("analysis UI exposes the approved POCHOPIT baseline and component architect
     readFile(new URL("../app/f2-build-model.ts", import.meta.url), "utf8"),
   ]);
   assert.match(source, /<F3Finalization/);
-  assert.match(source, /f2-baseline/);
-  assert.match(source, /Pracovní hypotézy/);
-  assert.match(source, /component\.hypothesisId === hypothesis\.id/);
+  assert.match(source, /id="workspace-document"/);
+  assert.match(source, /documentMode=\{workingAnalysis \? "analysis" : "output"\}/);
+  assert.match(source, /snapshot=\{props.f2ToF3Snapshot\}/);
   assert.match(client, /f2-build-shell/);
   assert.match(client, /is-processing-workspace/);
   assert.match(model, /type PochopitBuildConfig/);

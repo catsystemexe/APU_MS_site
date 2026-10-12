@@ -4,6 +4,24 @@ Status: CURRENT
 
 Records significant verified product/runtime/project changes. It is not a complete Git log. Historical Sites-era entries are retained where they remain useful; current deployment state must not be inferred from a changelog entry alone.
 
+## 2026-10-12 — Unified F2/F3 document workspace
+
+### Added / Changed
+- Replaced separate Rozbor/Output presentation panels with one shared document area and header. The existing deterministic accepted-snapshot renderer supplies the same working-analysis sections and document markup in Build and default Výstup, including accepted components and uncertainty.
+- Build shows current accepted analysis and preserves F3 configuration/render state. Output restores its adopted default or generated representation; Chat preserves whichever document is shown. Navigation alone does not generate content or accept a new source.
+- Added direct baseline print/PDF/copy actions in Build and a pending-selection notice. Existing acceptance, failure/obsolete-response rejection, fingerprints, revision reuse, stale preservation and explicit F3 adoption/regeneration are unchanged.
+- Reused one readable document renderer and selected-document export reference for defaults and existing generated text/tables/cards. Older generated content retained after source adoption is labelled as an earlier source instead of the new revision.
+- Updated the current-design roadmap addendum and runtime documentation. Backlog, Known Issues, workflow and Core policy are unchanged.
+
+### Verification
+- Typecheck and 160 focused renderer/baseline/Build/snapshot/materialization/stale/adoption/navigation/intake/access/responsive tests passed, including all three strategies and accepted expansions.
+- Actual-client Chromium fixture passed A–L with synthetic API responses: exact default DOM/style identity, one persistent workspace, no navigation calls, generated-output/configuration preservation, pending/failure/obsolete guards, new source revision, explicit adoption and independent regeneration from the snapshot. Existing tabs, Chat, developer header, resize persistence and narrow/portrait/mobile behavior passed.
+- Real Clipboard copy and browser PDF checks passed for baseline and generated content; F2/F3 baseline PDF text is identical, uncertainty is retained, and controls/Chat/diagnostics are excluded. Screenshots were inspected; native print-dialog invocation was intercepted headlessly.
+- Authenticated live visual verification: NOT VERIFIED — access blocked. No authentication bypass, secrets or provider-backed F1/routing evaluations were used.
+
+### Preserved scope
+- F1 extraction/grounding, need routing, internal strategies/Build operations/prompts, snapshot schemas/semantic validation and F3 materialization/source contracts are unchanged. No history library, new export service/storage, contextual document chat, PR merge or production deployment.
+
 ## 2026-10-12 — Desktop Workspace B UX refinement
 
 ### Added / Changed

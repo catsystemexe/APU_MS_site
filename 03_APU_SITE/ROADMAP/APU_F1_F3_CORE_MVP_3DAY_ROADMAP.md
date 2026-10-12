@@ -29,6 +29,20 @@ Tento doplněk nahrazuje původní sprintové předpoklady o rozmístění praco
 
 Implementováno a technicky ověřeno na vývojové větvi/PR #60; nejde o tvrzení o produkčním nasazení.
 
+## Sjednocený dokument F2/F3 — aktuální design, doplnění 2026-10-12
+
+Tento doplněk nahrazuje rozdílnou výchozí prezentaci Rozboru a pracovní analýzy F3. Historické sprintové předpoklady níže i předchozí doplňky zůstávají zachovány; analytické odpovědnosti F2/F3 a validace snapshotu se neslučují.
+
+- F2/F3 sdílí jeden pravý dokumentový prostor. Levé nástroje jsou **Chat | Build | Výstup**; F1 nadále používá Chat / Zápisník. Splitter a jeho preference zůstávají zachovány.
+- Jediná kanonická výchozí pracovní pedagogická analýza vzniká deterministicky z přijatého neměnného F2 snapshotu. Build a výchozí Výstup používají stejný obsah, pořadí sekcí, styl a export; nevzniká další analýza ani modelové volání.
+- Build nezávisle řídí analytické operace; Výstup řídí podporovanou prezentaci. Návrat do Build ukáže přijatou pracovní analýzu a zachová konfiguraci i dosavadní generovaný F3 dokument. Samotná navigace nevytváří revizi zdroje.
+- Změna volby Build je pouze pending konfigurace. Přijatý dokument se změní až po validním úspěšném zpracování; selhání nebo zastaralá odpověď jej nepřepíše. Beze změny přijaté substance zůstává existující snapshot.
+- F3 má jako jediný věcný zdroj svůj explicitně přijatý F2 snapshot. Novější přijatý Rozbor označí starý generovaný dokument jako stale, ale zachová jej pro referenci spolu s nastavením. Přijetí nového zdroje a regenerace zůstávají explicitní; každá podoba vzniká přímo ze snapshotu, nikdy z jiné podoby F3.
+- Build umožňuje okamžitý tisk/PDF a kopírování pracovní analýzy; Výstup exportuje právě zvolenou podobu se zachováním stale upozornění. Export nevolá model ani nemění zdroj. Specializované podoby stále vyžadují příslušná přijatá rozhodnutí F2.
+- Chat mění pouze levý nástroj a zachovává pravý dokument. Podporovaný F2 rozhovor zůstává interaktivní; F3 zpřístupňuje historii pouze pro čtení. Contextual Document Chat zůstává mimo implementaci.
+
+Implementováno a ověřeno ve vývojové větvi/PR #60: typecheck, 160 cílených testů a syntetický browser smoke A–L. Ověření autentizovaného živého UI je **NOT VERIFIED — access blocked**. Nejde o produkční nasazení; B-01/B-06 a KI-01/KI-02 se nemění.
+
 ## 1. Definice MVP PASS
 MVP je považováno za hotové pouze tehdy, když reálný uživatelský průchod splní celý následující kontrakt bez porušení source-of-truth hranic:
 - F1 přijme reálnou situaci a vytvoří použitelný Zápisník a pedagogickou potřebu.

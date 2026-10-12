@@ -80,11 +80,15 @@ test("desktop panels connect to selected tabs, scroll internally and keep their 
 
 test("G: F3 portals only controls while the single readable document retains print ownership", async () => {
   const output = await readFile(new URL("../app/f3-finalization.tsx", import.meta.url), "utf8");
-  assert.equal((output.match(/<article ref=\{materialRef\}/g) ?? []).length, 1);
+  const document = await readFile(new URL("../app/document-content.tsx", import.meta.url), "utf8");
+  assert.equal((document.match(/<article ref=\{documentRef\}/g) ?? []).length, 1);
+  assert.equal((output.match(/<DocumentContent /g) ?? []).length, 1);
   assert.match(output, /createPortal\(controls, controlsTarget\)/);
+  assert.match(output, /createPortal\(exportControls, analysisExportTarget\)/);
+  assert.match(output, /printF3Output\(materialRef.current\)/);
+  assert.match(output, /copyF3Output\(content, undefined, stale\)/);
   const controls = output.slice(output.indexOf("const controls ="), output.indexOf("return <div className={`f3-finalization"));
   assert.match(controls, /onRepresentation/);
   assert.match(controls, /onConfig/);
-  assert.match(controls, /printF3Output\(materialRef.current\)/);
   assert.doesNotMatch(controls, /<article|content.sections.map/);
 });

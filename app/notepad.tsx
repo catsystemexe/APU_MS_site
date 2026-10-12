@@ -17,15 +17,15 @@ import {
 import { NOTEPAD_CATEGORIES } from "./notepad-categories";
 import type { AnalysisState, SuggestedNeed } from "./analysis-model";
 import type { ConversationPhase } from "./dialog-action";
-import type { CreationApproachesContent, CreationObjectiveContent, CurrentRozborState, F2BuildState, F2PreviewState, F2ToF3Snapshot, FollowUpVerificationContent, ObservationComparisonContent, ObservationIndicatorsContent, ObservationPrioritiesContent, SuccessConditionsContent } from "./f2-build-model";
+import type { CurrentRozborState, F2BuildState, F2PreviewState, F2ToF3Snapshot } from "./f2-build-model";
 import { F3Finalization } from "./f3-finalization";
 import type { F3Config, F3Representation, F3State } from "./f3-finalization-model";
-import { GeneratedMarkdown } from "./generated-markdown";
 
 export type WorkspacePanel = "notepad" | "analysis" | "output" | null;
 
 type WorkspacePanelProps = {
   f3ControlsTarget?: HTMLElement | null;
+  analysisExportTarget?: HTMLElement | null;
   activePanel: WorkspacePanel;
   entries: NotepadState;
   onEntriesChange: (entries: NotepadState) => void;
@@ -283,85 +283,22 @@ function NotepadPanel({
   );
 }
 
-function CurrentRozborComponents({ build, currentRozbor }: { build: F2BuildState; currentRozbor: CurrentRozborState }) {
-  const path = build.activePath;
-  const components = currentRozbor[path].components;
-  const hypothesisLabels = new Map(build.workingHypotheses.map(({ id, title }) => [id, title]));
-  const labels = (ids: string[]) => ids.map((id) => hypothesisLabels.get(id) ?? id).join(", ");
-  const limitations = (items: string[]) => items.length > 0 && <p><b>Limity / nejistota:</b> {items.join(" · ")}</p>;
-  if (path === "POCHOPIT") return <>
-    {components.find(({ id }) => id === "comparison:all") && <section className="f2-generated-component f2-generated-crosscut"><h2>Porovnání a souvislosti</h2><GeneratedMarkdown content={components.find(({ id }) => id === "comparison:all")!.content as string} /></section>}
-    {components.find(({ id }) => id === "expert-frame:all") && <section className="f2-generated-component f2-generated-crosscut is-expert"><h2>Odborný rámec</h2><GeneratedMarkdown content={components.find(({ id }) => id === "expert-frame:all")!.content as string} /></section>}
-  </>;
-  if (path === "POZOROVAT") {
-    const comparison = components.find(({ kind }) => kind === "observation-comparison")?.content as ObservationComparisonContent | undefined;
-    const indicators = components.find(({ kind }) => kind === "observation-indicators")?.content as ObservationIndicatorsContent | undefined;
-    const priorities = components.find(({ kind }) => kind === "observation-priorities")?.content as ObservationPrioritiesContent | undefined;
-    return <>
-      {comparison && <section className="f2-generated-component f2-generated-crosscut"><h2>Kontrasty podmínek</h2>{comparison.contrasts.map((item, index) => <article key={`${item.conditionA}-${item.conditionB}-${index}`}><h3>{item.conditionA} × {item.conditionB}</h3><p><b>Sledovat:</b> {item.whatToObserve}</p><p><b>Podpůrný signál:</b> {item.supportSignal}</p><p><b>Oslabující signál:</b> {item.weakeningSignal}</p>{item.supportsHypothesisIds.length > 0 && <p><b>Podporuje:</b> {labels(item.supportsHypothesisIds)}</p>}{item.weakensHypothesisIds.length > 0 && <p><b>Oslabuje:</b> {labels(item.weakensHypothesisIds)}</p>}<p><b>Nerozliší, pokud:</b> {item.doesNotDiscriminateWhen}</p>{limitations(item.limitations)}</article>)}{limitations(comparison.limitations)}</section>}
-      {indicators && <section className="f2-generated-component f2-generated-crosscut"><h2>Klíčové pozorovatelné indikátory</h2><p>{indicators.purpose}</p>{indicators.indicators.map((item, index) => <article key={`${item.indicator}-${index}`}><h3>{item.indicator}</h3><p><b>Přímo pozorovat:</b> {item.observableAs}</p><p><b>Situace:</b> {item.situation}</p><p><b>Podpůrný signál:</b> {item.supportSignal}</p><p><b>Oslabující signál:</b> {item.weakeningSignal}</p>{item.supportsHypothesisIds.length > 0 && <p><b>Podporuje:</b> {labels(item.supportsHypothesisIds)}</p>}{item.weakensHypothesisIds.length > 0 && <p><b>Oslabuje:</b> {labels(item.weakensHypothesisIds)}</p>}<p><b>Nerozliší, pokud:</b> {item.doesNotDiscriminateWhen}</p>{limitations(item.limitations)}</article>)}{limitations(indicators.limitations)}</section>}
-      {priorities && <section className="f2-generated-component f2-generated-crosscut"><h2>Priority pozorování</h2><ol>{priorities.priorities.map((item) => <li key={`${item.priority}-${item.focus}`}><h3>{item.priority}. {item.focus}</h3><p>{item.reason}</p><p><b>Vazba na hypotézy:</b> {labels(item.hypothesisIds)}</p></li>)}</ol>{limitations(priorities.limitations)}</section>}
-    </>;
+function DocumentPanel(props: Pick<WorkspacePanelProps,
+  "activePanel" | "phase" | "analysisStatus" | "analysisError" | "onRetryAnalysis" |
+  "f2ToF3Snapshot" | "f2ToF3SourceError" | "f3ControlsTarget" | "analysisExportTarget" | "onContinueToOutput" |
+  "f3State" | "f3Status" | "f3Error" | "onF3Representation" | "onF3Config" | "onF3Render" | "onF3Adopt" | "onF3Return"
+>) {
+  const workingAnalysis = props.activePanel === "analysis";
+  let unavailable = null;
+  if (workingAnalysis && !props.f2ToF3Snapshot) {
+    if (props.phase === "intake") unavailable = <div className="workspace-empty-state"><ScanSearch aria-hidden="true" /><h2>Rozbor začne ve Fázi 2</h2><p>Otevření panelu fázi nemění. Do Rozboru přejdete až svým potvrzením.</p></div>;
+    else if (props.analysisStatus === "loading") unavailable = <div className="analysis-state"><span className="analysis-spinner" />Vytvářím Rozbor z aktuálního Zápisníku…</div>;
+    else if (props.analysisStatus === "error") unavailable = <div className="analysis-state"><p>{props.analysisError}</p><button type="button" onClick={props.onRetryAnalysis}>Zkusit znovu</button></div>;
+    else unavailable = <div className="analysis-state"><p>{props.f2ToF3SourceError ?? "Rozbor čeká na kanonickou pedagogickou potřebu v Zápisníku."}</p></div>;
   }
-  const approaches = components.find(({ kind }) => kind === "creation-approaches")?.content as CreationApproachesContent | undefined;
-  const objective = components.find(({ kind }) => kind === "creation-objective")?.content as CreationObjectiveContent | undefined;
-  const conditions = components.find(({ kind }) => kind === "success-conditions")?.content as SuccessConditionsContent | undefined;
-  const verification = components.find(({ kind }) => kind === "follow-up-verification")?.content as FollowUpVerificationContent | undefined;
-  return <>
-    {approaches && <section className="f2-generated-component f2-generated-crosscut"><h2>Možné přístupy</h2><ul>{approaches.candidateApproaches.map((item) => <li key={item.title}><h3>{item.title}</h3><p>{item.description}</p>{item.hypothesisIds.length > 0 && <p><b>Vazba na hypotézy:</b> {labels(item.hypothesisIds)}</p>}{limitations(item.limitations)}</li>)}</ul><article className="f2-working-approach"><h2>Pracovní / doporučený přístup</h2><h3>{approaches.workingApproach.title}</h3><p>{approaches.workingApproach.rationale}</p><p><b>Vazba na hypotézy:</b> {labels(approaches.workingApproach.hypothesisIds)}</p>{limitations(approaches.workingApproach.limitations)}</article></section>}
-    {objective && <section className="f2-generated-component f2-generated-crosscut"><h2>Praktický / pedagogický cíl</h2><p>{objective.objective}</p><p><b>Vazba na hypotézy:</b> {labels(objective.hypothesisIds)}</p>{limitations(objective.limitations)}</section>}
-    {conditions && <section className="f2-generated-component f2-generated-crosscut"><h2>Podmínky úspěchu</h2><ul>{conditions.conditions.map((item) => <li key={item.condition}><b>{item.condition}</b><span> — {item.whyRequired}</span></li>)}</ul>{limitations(conditions.limitations)}</section>}
-    {verification && <section className="f2-generated-component f2-generated-crosscut"><h2>Co následně ověřovat</h2>{verification.checks.map((item, index) => <article key={`${item.indicator}-${index}`}><h3>{item.indicator}</h3><p><b>Kdy:</b> {item.when}</p><p><b>Signál úspěchu:</b> {item.successSignal}</p><p><b>Signál pro úpravu:</b> {item.adjustmentSignal}</p><p><b>Vazba na hypotézy:</b> {labels(item.hypothesisIds)}</p></article>)}{limitations(verification.limitations)}</section>}
-  </>;
-}
-
-function AnalysisPanel(props: Pick<WorkspacePanelProps, "phase" | "analysis" | "analysisStatus" | "analysisError" | "onRetryAnalysis" | "f2Build" | "currentRozbor" | "f2ToF3Snapshot" | "f2ToF3SourceError" | "onContinueToOutput">) {
-  if (props.phase === "intake") return <div id="workspace-analysis" className="notepad-scroll workspace-panel-body" role="tabpanel" aria-label="Rozbor"><div className="workspace-empty-state"><ScanSearch aria-hidden="true" /><h2>Rozbor začne ve Fázi 2</h2><p>Otevření panelu fázi nemění. Do Rozboru přejdete až svým potvrzením.</p></div></div>;
-  if (props.analysisStatus === "loading" && !props.analysis.hypotheses.length) return <div className="analysis-state"><span className="analysis-spinner" />Vytvářím Rozbor z aktuálního Zápisníku…</div>;
-  if (props.analysisStatus === "error" && !props.analysis.hypotheses.length) return <div className="analysis-state"><p>{props.analysisError}</p><button type="button" onClick={props.onRetryAnalysis}>Zkusit znovu</button></div>;
-  if (!props.f2Build) return <div className="analysis-state"><p>Rozbor čeká na kanonickou pedagogickou potřebu v Zápisníku.</p></div>;
-  return <div id="workspace-analysis" className="notepad-scroll f2-baseline" role="tabpanel" aria-label="Rozbor">
-    <section className="f2-baseline-situation" aria-labelledby="f2-situation-title">
-      <span>Situace / pedagogická potřeba</span>
-      <h2 id="f2-situation-title">{props.f2Build.canonicalNeed.needText || "Bez popisu"}</h2>
-    </section>
-    <section className="f2-baseline-hypotheses" aria-labelledby="f2-hypotheses-title">
-      <h2 id="f2-hypotheses-title">Pracovní hypotézy</h2>
-      <div className="f2-baseline-list">
-        {props.f2Build.workingHypotheses.map((hypothesis) => {
-          const activeRozbor = props.currentRozbor[props.f2Build!.activePath];
-          const expansion = activeRozbor.components.find((component) => component.kind === "hypothesis-expansion" && component.hypothesisId === hypothesis.id);
-          const clarifications = [
-            ...hypothesis.unknowns,
-            ...hypothesis.limitations,
-            ...hypothesis.questions.map((question) => question.text),
-            ...(hypothesis.question ? [hypothesis.question.text] : []),
-          ].filter((item, index, items) => item.trim() && items.indexOf(item) === index).slice(0, 2);
-          return <article className="f2-baseline-hypothesis" key={hypothesis.id}>
-            <div className="f2-baseline-hypothesis-heading">
-              <span className="analysis-rank">{hypothesis.rank}</span>
-              <div><h3>{hypothesis.title}</h3><p>{hypothesis.summary}</p></div>
-            </div>
-            {clarifications.length > 0 && <div className="f2-baseline-clarifications"><h4>Co chybí / čím zpřesnit</h4><ul>{clarifications.map((item) => <li key={item}>{item}</li>)}</ul></div>}
-            {expansion && typeof expansion.content === "string" && <section className="f2-generated-component f2-generated-expansion"><h4>Rozvinutí · {(["", "Základně", "Podrobně", "Do hloubky"] as const)[activeRozbor.config.expansionDepth]}</h4><GeneratedMarkdown content={expansion.content} /></section>}
-          </article>;
-        })}
-      </div>
-    </section>
-    <CurrentRozborComponents build={props.f2Build} currentRozbor={props.currentRozbor} />
-    <div className="f2-preview-action">
-      <span>{props.f2ToF3Snapshot ? `Pracovní analýza revize ${props.f2ToF3Snapshot.sourceRevision} je připravena k exportu ve Výstupu.` : props.f2ToF3SourceError}</span>
-      <button type="button" disabled={!props.f2ToF3Snapshot} onClick={props.onContinueToOutput}>PŘEJÍT K VÝSTUPU</button>
-    </div>
+  return <div id="workspace-document" className="notepad-scroll workspace-panel-body" role="region" aria-label="Dokument">
+    {unavailable ?? <F3Finalization documentMode={workingAnalysis ? "analysis" : "output"} analysisExportTarget={props.analysisExportTarget} onContinueToOutput={props.onContinueToOutput} controlsTarget={props.f3ControlsTarget} snapshot={props.f2ToF3Snapshot} sourceError={props.f2ToF3SourceError} state={props.f3State} status={props.f3Status} error={props.f3Error} onRepresentation={props.onF3Representation} onConfig={props.onF3Config} onRender={props.onF3Render} onAdopt={props.onF3Adopt} onReturn={props.onF3Return} />}
   </div>;
-}
-
-function OutputPanel(props: Pick<WorkspacePanelProps, "f3ControlsTarget" | "f2ToF3Snapshot" | "f2ToF3SourceError" | "f3State" | "f3Status" | "f3Error" | "onF3Representation" | "onF3Config" | "onF3Render" | "onF3Adopt" | "onF3Return">) {
-  return (
-    <div id="workspace-output" className="notepad-scroll workspace-panel-body" role="tabpanel" aria-label="Výstup">
-      <F3Finalization controlsTarget={props.f3ControlsTarget} snapshot={props.f2ToF3Snapshot} sourceError={props.f2ToF3SourceError} state={props.f3State} status={props.f3Status} error={props.f3Error} onRepresentation={props.onF3Representation} onConfig={props.onF3Config} onRender={props.onF3Render} onAdopt={props.onF3Adopt} onReturn={props.onF3Return} />
-    </div>
-  );
 }
 
 function PanelHeader({
@@ -369,13 +306,15 @@ function PanelHeader({
   isDescriptionVisible,
   onDescriptionToggle,
   descriptionRef,
+  documentWorkspace,
 }: {
+  documentWorkspace: boolean;
   panel: OpenWorkspacePanel;
   isDescriptionVisible: boolean;
   onDescriptionToggle: () => void;
   descriptionRef: React.RefObject<HTMLDivElement | null>;
 }) {
-  const { label, description, icon: Icon } = WORKSPACE_PANELS[panel];
+  const { label, description, icon: Icon } = documentWorkspace ? { label: "Dokument", description: "Pracovní analýza z přijatého Rozboru nebo zvolená podoba Výstupu. Změny zdroje se přijímají explicitně.", icon: FileText } : WORKSPACE_PANELS[panel];
 
   return (
     <header className="notepad-header">
@@ -439,6 +378,7 @@ export function WorkspacePanel({
         {activePanel && (
           <PanelHeader
             panel={activePanel}
+            documentWorkspace={activePanel !== "notepad" && analysisProps.phase !== "intake"}
             isDescriptionVisible={isDescriptionVisible}
             onDescriptionToggle={() => setDescribedPanel((current) => current === activePanel ? null : activePanel)}
             descriptionRef={descriptionRef}
@@ -453,8 +393,7 @@ export function WorkspacePanel({
             onEntrySeen={onEntrySeen}
           />
         )}
-        {activePanel === "analysis" && <AnalysisPanel {...analysisProps} />}
-        {activePanel === "output" && <OutputPanel {...analysisProps} />}
+        {(activePanel === "analysis" || activePanel === "output") && <DocumentPanel {...analysisProps} activePanel={activePanel} />}
       </div>
     </aside>
   );

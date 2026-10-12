@@ -5,15 +5,11 @@ import test from "node:test";
 const panel = await readFile(new URL("../app/notepad.tsx", import.meta.url), "utf8");
 const client = await readFile(new URL("../app/apu-client.tsx", import.meta.url), "utf8");
 
-test("local expansion is rendered inside its matching hypothesis before cross-cutting blocks", () => {
-  const hypothesisLoop = panel.indexOf("workingHypotheses.map");
-  const expansion = panel.indexOf("f2-generated-expansion", hypothesisLoop);
-  const crossCuttingRender = panel.indexOf("<CurrentRozborComponents", expansion);
-  const componentRenderer = panel.indexOf("function CurrentRozborComponents");
-  const comparison = panel.indexOf("Porovnání a souvislosti", componentRenderer);
-  const expert = panel.indexOf("Odborný rámec", comparison);
-  assert.ok(hypothesisLoop >= 0 && expansion > hypothesisLoop && crossCuttingRender > expansion && comparison > componentRenderer && expert > comparison);
-  assert.match(panel, /component\.hypothesisId === hypothesis\.id/);
+test("F2 uses the shared accepted-snapshot document instead of another live component mapping", () => {
+  assert.match(panel, /function DocumentPanel/);
+  assert.match(panel, /documentMode=\{workingAnalysis \? "analysis" : "output"\}/);
+  assert.match(panel, /snapshot=\{props.f2ToF3Snapshot\}/);
+  assert.doesNotMatch(panel, /function AnalysisPanel|function OutputPanel|CurrentRozborComponents|workingHypotheses.map|currentRozbor\[/);
 });
 
 test("first success changes CTA label and the new flow never invokes Preview", () => {
@@ -45,7 +41,8 @@ test("one assigned path uses component generation without a route selector", () 
   assert.equal(generation.includes('operation: "build"'), false);
 });
 
-test("POZOROVAT and VYTVOŘIT current components expose their required semantic sections", () => {
-  for (const heading of ["Kontrasty podmínek", "Klíčové pozorovatelné indikátory", "Priority pozorování", "Pracovní / doporučený přístup", "Praktický / pedagogický cíl", "Podmínky úspěchu", "Co následně ověřovat"]) assert.ok(panel.includes(heading), heading);
-  for (const relation of ["Podporuje:", "Oslabuje:", "Nerozliší, pokud:", "Limity / nejistota:"]) assert.ok(panel.includes(relation), relation);
+test("POZOROVAT and VYTVOŘIT substantive sections remain in the canonical deterministic renderer", async () => {
+  const renderer = await readFile(new URL("../app/f3-working-analysis.ts", import.meta.url), "utf8");
+  for (const heading of ["Kontrasty podmínek", "Pozorovatelné indikátory", "Priority pozorování", "Pracovní přístup", "Pedagogický cíl", "Podmínky úspěchu", "Následné ověřování"]) assert.ok(renderer.includes(heading), heading);
+  for (const relation of ["Podporuje:", "Oslabuje:", "Nerozliší, pokud:", "Omezení"]) assert.ok(renderer.includes(relation), relation);
 });

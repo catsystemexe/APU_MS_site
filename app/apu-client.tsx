@@ -362,6 +362,7 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
   const [isDesktop, setIsDesktop] = useState(false);
   const [desktopWorkspace, setDesktopWorkspace] = useState(INITIAL_PROCESSING_WORKSPACE);
   const [f3ControlsTarget, setF3ControlsTarget] = useState<HTMLDivElement | null>(null);
+  const [analysisExportTarget, setAnalysisExportTarget] = useState<HTMLDivElement | null>(null);
   const [analysis, setAnalysis] = useState<AnalysisState>(EMPTY_ANALYSIS);
   const [storedF2Build, setF2Build] = useState<F2BuildState | null>(null);
   const [currentRozbor, setCurrentRozbor] = useState<CurrentRozborState>(() => createCurrentRozborState());
@@ -2063,8 +2064,10 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
             <F2BuildOperations activeF2Path={activeF2Path} currentRozbor={currentRozbor} setCurrentRozbor={setCurrentRozbor} />
           </div>
           <footer className="f2-build-actions">
+            {isCurrentRozborUpdatePending && <p className="f2-pending-notice" role="status">Změny v Buildu zatím nejsou přijaty do dokumentu.</p>}
             {rozborGenerationError && <p className="f2-generation-error" role="alert">{rozborGenerationError}</p>}
             <button type="button" className="f2-build-action" onClick={() => void generateCurrentRozbor()} disabled={rozborGenerationStatus === "loading" || !isCurrentRozborUpdatePending || (!hasActiveRozborOperation && activeRozbor.components.length === 0)} aria-label={activeRozbor.components.length ? "Aktualizovat Rozbor" : "Vytvořit Rozbor"}>{rozborGenerationStatus === "loading" ? "VYTVÁŘÍM ROZBOR" : activeRozbor.components.length ? "AKTUALIZOVAT ROZBOR" : "VYTVOŘIT ROZBOR"}</button>
+            <div className="working-analysis-export" ref={setAnalysisExportTarget} />
           </footer>
         </section>}
 
@@ -2076,6 +2079,7 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
         <WorkspacePanel
           activePanel={documentPanel}
           f3ControlsTarget={isF2DesktopLayout ? f3ControlsTarget : null}
+          analysisExportTarget={isF2DesktopLayout ? analysisExportTarget : null}
           entries={notepad}
           onEntriesChange={setNotepad}
           onEntryNavigate={navigateToSource}

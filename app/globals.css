@@ -2095,5 +2095,10 @@ button:disabled { cursor: default; opacity: 0.52; }
 @media (max-width: 767px), (min-width: 768px) and (orientation: portrait) {
   .stats-popover { position: fixed; top: 70px; left: 12px; width: min(330px, calc(100vw - 24px)); }
   /* Keep the existing floating navigation clear of combined F3 form controls. */
-  .notepad-panel #workspace-output .f3-tools { padding-right: 36px; }
+  .notepad-panel #workspace-document .f3-tools, .notepad-panel #workspace-document .working-analysis-actions { padding-right: 36px; }
 }
+
+.working-analysis-actions { display: grid; gap: 10px; margin-bottom: 16px; }
+.f2-pending-notice { margin: 0 0 8px; color: var(--text-secondary); font-size: 11px; line-height: 1.4; }
+.working-analysis-export .f3-export { gap: 6px; margin-top: 10px; }
+.working-analysis-export .f3-secondary { padding: 7px 9px; font-size: 11px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-surface); color: var(--text-primary); }
