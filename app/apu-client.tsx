@@ -12,6 +12,7 @@ import {
 } from "react";
 import {
   ArrowUp,
+  ArrowDown,
   ChevronLeft,
   ChevronRight,
   Check,
@@ -27,7 +28,7 @@ import {
   Settings,
   Save,
   Square,
-  TriangleAlert,
+  DollarSign,
   UserRound,
   X,
   FileText,
@@ -89,12 +90,10 @@ import { createProjectResetState, shouldResetCurrentProject } from "./project-se
 import { analysisChangeKeys, EMPTY_ANALYSIS, formatAnalysisChat, preserveAnalysisSelection, type AnalysisNextPrompt, type AnalysisState, type SuggestedNeed } from "./analysis-model";
 import { CompletedLifecycleStatus, ProcessingStatus, type F1ProcessingStage } from "./processing-status";
 import { addCompletedLifecycleRecord, withCompletedLifecycleRecord, type CompletedLifecycleRecord } from "./lifecycle-record";
-import { DevLogPanel } from "./dev-log-panel";
 import { clampDesktopSplit, DEFAULT_DESKTOP_SPLIT, DESKTOP_SPLIT_STORAGE_KEY, DESKTOP_WORKSPACE_QUERY, INITIAL_PROCESSING_WORKSPACE, readDesktopSplitPreference, selectDesktopTool, type DesktopTool } from "./desktop-workspace";
 import { F2BuildOperations } from "./f2-build-operations";
 import { activeNeedRoutingKey, bindNeedRoutingDecision, createNeedRouter, type NeedRoutingDecision } from "./f2-need-routing";
 import { DEV_TEST_SCENARIOS, type DevTestScenario } from "./dev-test-scenarios";
-import type { SharedFeedbackResult } from "./shared-feedback";
 import { acceptRenderedPreview, addF2Context, advanceAcceptedF2Source, applyCurrentRozborComponentUpdate, applyF2BuildResult, canonicalF1NeedFingerprint, createCurrentRozborGenerationRequest, createCurrentRozborState, createF2BuildRequest, createF2PreviewSnapshot, createF2ToF3Snapshot, currentRozborSourceFingerprint, deriveRequiredCurrentRozborComponents, parameterizeF2Skill, parseF2BuildResult, parseF2RenderedPreview, parseGeneratedRozborComponents, previewStatus, reconcileRozborComponents, removeF2Context, synchronizeF2BuildWithCanonicalNeed, toggleF2Skill, type CurrentRozborState, type F2AnalysisContext, type F2ToF3Snapshot, type F2BuildState, type F2NotebookContextItem, type F2PreviewState } from "./f2-build-model";
 import { acceptF3Render, adoptF2Snapshot, createF3RenderRequest, createF3State, markF3SourceStale, parseF3RenderResult, updateF3Config, type F3Config, type F3State } from "./f3-finalization-model";
 
@@ -218,6 +217,10 @@ function formatInteger(value: number) {
   return new Intl.NumberFormat("cs-CZ").format(value);
 }
 
+function formatTelemetryDuration(value: number | null | undefined) {
+  return value == null ? "—" : `${formatInteger(value)} ms`;
+}
+
 function formatCostNumber(valueUsd: number) {
   const valueCzk = valueUsd * CZK_PER_USD;
   const digits = valueCzk >= 10 ? 1 : valueCzk >= 0.1 ? 2 : 3;
@@ -274,16 +277,11 @@ function HighlightedMessage({
 type ApuClientProps = {
   email: string;
   isDeveloper: boolean;
-  sharedFeedback: SharedFeedbackResult | null;
 };
 
 function DeveloperHeaderControls({
-  logOpen,
-  onLogToggle,
   onSelectScenario,
 }: {
-  logOpen: boolean;
-  onLogToggle: () => void;
   onSelectScenario: (scenario: DevTestScenario) => void;
 }) {
   const [scenarioMenuOpen, setScenarioMenuOpen] = useState(false);
@@ -340,22 +338,11 @@ function DeveloperHeaderControls({
           </span>)}
         </span>}
       </span>
-      <button
-        type="button"
-        className="developer-log-toggle"
-        aria-label={logOpen ? "Skrýt DEV LOG" : "Zobrazit DEV LOG"}
-        aria-expanded={logOpen}
-        aria-controls="dev-log-panel"
-        title={logOpen ? "Skrýt DEV LOG" : "Zobrazit DEV LOG"}
-        onClick={onLogToggle}
-      >
-        <TriangleAlert aria-hidden="true" />
-      </button>
     </span>
   );
 }
 
-export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuClientProps) {
+export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
   const [messages, setMessages] = useState<Message[]>([WELCOME]);
   const [input, setInput] = useState("");
   const [responseId, setResponseId] = useState<string | null>(null);
@@ -367,8 +354,7 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
   const [error, setError] = useState<string | null>(null);
   const [isStatsOpen, setIsStatsOpen] = useState(false);
   const [isDiagnosticsDrawerOpen, setIsDiagnosticsDrawerOpen] = useState(false);
-  const [isDevLogOpen, setIsDevLogOpen] = useState(false);
-  const [isDevLogRendered, setIsDevLogRendered] = useState(false);
+  const [isChatAtBottom, setIsChatAtBottom] = useState(true);
   const [activePanel, setActivePanel] = useState<WorkspacePanelId>("notepad");
   const [preferredDesktopSplit, setPreferredDesktopSplit] = useState(DEFAULT_DESKTOP_SPLIT);
   const [effectiveDesktopSplit, setEffectiveDesktopSplit] = useState(DEFAULT_DESKTOP_SPLIT);
@@ -413,6 +399,9 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
   const design = useDesignPreferences();
   const { entries: notepad, setEntries: setNotepad, hydrated: isNotepadHydrated } = usePersistentNotepad();
   const bottomRef = useRef<HTMLDivElement>(null);
+  const chatScrollRef = useRef<HTMLDivElement>(null);
+  const chatContentRef = useRef<HTMLDivElement>(null);
+  const chatAtBottomRef = useRef(true);
   const chatCardRef = useRef<HTMLElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const statsRef = useRef<HTMLDivElement>(null);
@@ -592,12 +581,6 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
   const f1MainPreparingRef = useRef<string | null>(null);
   const [isComposerExpanded, setIsComposerExpanded] = useState(false);
 
-  useEffect(() => {
-    if (isDevLogOpen) { setIsDevLogRendered(true); return; }
-    const timer = window.setTimeout(() => setIsDevLogRendered(false), 240);
-    return () => window.clearTimeout(timer);
-  }, [isDevLogOpen]);
-
   const legacyDiagnostics = useMemo(
     () => messages.flatMap((message) => [message.diagnostics, message.controllerDiagnostics, message.extractionDiagnostics]),
     [messages],
@@ -629,6 +612,7 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
     [notepad],
   );
   const hasUnreadAnalysisChange = unseenAnalysisKeys.size > 0;
+  const latestTelemetry = sessionTelemetry.at(-1);
   const costTooltip = canonicalUsageSummary.estimatedCostUsd === null
     ? canonicalUsageSummary.knownCostSubtotalUsd > 0 ? INCOMPLETE_COST_TOOLTIP : UNKNOWN_COST_TOOLTIP
     : COST_TOOLTIP;
@@ -639,9 +623,41 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
   const compactAnalysisNotebook = useMemo(() => compactNotepad(notepad), [notepad]);
   const compactAnalysisNotebookKey = useMemo(() => JSON.stringify(compactAnalysisNotebook), [compactAnalysisNotebook]);
 
+  function updateChatScrollPosition() {
+    const list = chatScrollRef.current;
+    // Hidden tools must not overwrite the last visible scroll position.
+    if (!list?.clientHeight) return;
+    const atBottom = list.scrollHeight - list.scrollTop - list.clientHeight <= 48;
+    chatAtBottomRef.current = atBottom;
+    setIsChatAtBottom(atBottom);
+  }
+
+  function scrollChatToBottom() {
+    const list = chatScrollRef.current;
+    if (!list) return;
+    list.scrollTo({ top: list.scrollHeight, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+  }
+
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    const list = chatScrollRef.current;
+    if (!list?.clientHeight) return;
+    if (chatAtBottomRef.current) list.scrollTo({ top: list.scrollHeight });
+    updateChatScrollPosition();
   }, [messages, isLoading]);
+
+  useEffect(() => {
+    const list = chatScrollRef.current;
+    const content = chatContentRef.current;
+    if (!list || !content) return;
+    const observer = new ResizeObserver(() => {
+      if (!list.clientHeight) return;
+      if (chatAtBottomRef.current) list.scrollTo({ top: list.scrollHeight });
+      updateChatScrollPosition();
+    });
+    observer.observe(list);
+    observer.observe(content);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     if (!isStatsOpen) return;
@@ -1334,6 +1350,7 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
     if (isChatReadOnly) { setError("Chat u Výstupu zatím slouží jen k prohlížení historie. Pro pokračování v rozhovoru se vraťte do Rozboru."); return; }
     const text = rawText.trim();
     if (!text || isLoading || !isNotepadHydrated) return;
+    chatAtBottomRef.current = true;
 
     if (isDictating) cancelDictation();
     if (handleF2OutputNavigation(rawText, options?.dialogEvent, options?.silent)) return;
@@ -1713,7 +1730,7 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
     <main className="app-shell">
       <section
         ref={chatCardRef}
-        className={`chat-card${isDevLogOpen ? " is-dev-log-open" : ""}${isResizingWorkspace ? " is-resizing-workspace" : ""}${isProcessingWorkspace ? " is-processing-workspace" : " is-intake-workspace"}`}
+        className={`chat-card${isResizingWorkspace ? " is-resizing-workspace" : ""}${isProcessingWorkspace ? " is-processing-workspace" : " is-intake-workspace"}`}
         style={{ "--desktop-chat-split": `${effectiveDesktopSplit}%` } as CSSProperties}
         aria-label="Pracovní prostor APU"
       >
@@ -1724,92 +1741,93 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
             </span>
             <span className="account-email" title={email}>{email}</span>
             {isDeveloper && <DeveloperHeaderControls
-              logOpen={isDevLogOpen}
-              onLogToggle={() => setIsDevLogOpen((value) => !value)}
               onSelectScenario={selectDevTestScenario}
             />}
+            {isDeveloper && <div className="conversation-diagnostics" ref={statsRef}>
+              <button
+                ref={statsButtonRef}
+                className="stats-trigger"
+                type="button"
+                aria-expanded={isStatsOpen}
+                aria-controls="conversation-stats-popover"
+                aria-haspopup="dialog"
+                onClick={() => setIsStatsOpen((open) => !open)}
+                aria-label="Telemetrie a náklady konverzace"
+                title="Telemetrie a náklady konverzace"
+              >
+                <DollarSign aria-hidden="true" />
+              </button>
+
+              {isStatsOpen && (
+                <div
+                  id="conversation-stats-popover"
+                  className="stats-popover"
+                  role="dialog"
+                  aria-label="Detail spotřeby této konverzace"
+                >
+                  <div className="model-row">
+                    <label htmlFor="model-select">Model</label>
+                    <div className="model-select-wrap">
+                      <select
+                        id="model-select"
+                        value={selectedModel}
+                        onChange={(event) => setSelectedModel(event.target.value as ModelSelection)}
+                        disabled={isLoading}
+                        aria-describedby="model-state"
+                      >
+                        <option value={AUTO_MODEL_OPTION.id}>{AUTO_MODEL_OPTION.label}</option>
+                        {MODEL_OPTIONS.map((model) => (
+                          <option key={model.id} value={model.id}>
+                            {model.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <span id="model-state" className={`model-state${isLoading ? " is-working" : ""}`} aria-live="polite">
+                      {isLoading ? "Pracuje…" : "pro další odpověď"}
+                    </span>
+                  </div>
+                  <strong>Tato konverzace</strong>
+                  <dl>
+                    <div><dt>Vstupní tokeny</dt><dd>{formatInteger(canonicalUsageSummary.inputTokens)}</dd></div>
+                    {canonicalUsageSummary.cachedInputTokens !== undefined && (
+                      <div><dt>z toho cachované</dt><dd>{formatInteger(canonicalUsageSummary.cachedInputTokens)}</dd></div>
+                    )}
+                    {canonicalUsageSummary.cacheWriteTokens !== undefined && (
+                      <div><dt>zapsané do cache</dt><dd>{formatInteger(canonicalUsageSummary.cacheWriteTokens)}</dd></div>
+                    )}
+                    <div><dt>Výstupní tokeny</dt><dd>{formatInteger(canonicalUsageSummary.outputTokens)}</dd></div>
+                    {canonicalUsageSummary.reasoningTokens !== undefined && (
+                      <div><dt>Reasoning tokeny</dt><dd>{formatInteger(canonicalUsageSummary.reasoningTokens)}</dd></div>
+                    )}
+                    <div className="stats-total"><dt>Celkem</dt><dd>{formatInteger(canonicalUsageSummary.totalTokens)}</dd></div>
+                    {canonicalUsageSummary.fileSearchCalls !== undefined && (
+                      <div><dt>Vyhledání v KB</dt><dd>{formatInteger(canonicalUsageSummary.fileSearchCalls)}</dd></div>
+                    )}
+                    <div title={costTooltip}><dt>Odhad ceny</dt><dd>{formatCost(canonicalUsageSummary.estimatedCostUsd)}</dd></div>
+                    {canonicalUsageSummary.estimatedCostUsd === null && canonicalUsageSummary.knownCostSubtotalUsd > 0 && (
+                      <div><dt>Známý subtotal</dt><dd>{formatCost(canonicalUsageSummary.knownCostSubtotalUsd)}</dd></div>
+                    )}
+                    {canonicalUsageSummary.unpricedCallCount > 0 && (
+                      <div><dt>Neoceněná volání</dt><dd>{formatInteger(canonicalUsageSummary.unpricedCallCount)}</dd></div>
+                    )}
+                    <div><dt>API volání</dt><dd>{formatInteger(canonicalUsageSummary.responseCount)}</dd></div>
+                  </dl>
+                  <p>{costTooltip}</p>
+                  {latestTelemetry && <details className="stats-telemetry">
+                    <summary>Telemetrie posledního tahu</summary>
+                    <dl>
+                      <div><dt>Fáze</dt><dd>{latestTelemetry.phase}</dd></div>
+                      <div><dt>První viditelná odpověď</dt><dd>{formatTelemetryDuration(latestTelemetry.latency_ms.user_to_first_token ?? latestTelemetry.latency_ms.analysis_user_visible_ms)}</dd></div>
+                      <div><dt>Celkový čas</dt><dd>{formatTelemetryDuration(latestTelemetry.latency_ms.total)}</dd></div>
+                      {latestTelemetry.stages.map((stage, index) => <div key={`${stage.name}-${index}`}><dt>{stage.name} · {stage.status}</dt><dd>{formatTelemetryDuration(stage.duration_ms)}</dd></div>)}
+                    </dl>
+                  </details>}
+                </div>
+              )}
+            </div>}
             <h1 className="sr-only">APU — Asistent pedagogické podpory</h1>
           </div>
-
-          {isDeveloper && <div className="conversation-diagnostics" ref={statsRef}>
-            <div className="model-row">
-              <label htmlFor="model-select">Model</label>
-              <div className="model-select-wrap">
-                <select
-                  id="model-select"
-                  value={selectedModel}
-                  onChange={(event) => setSelectedModel(event.target.value as ModelSelection)}
-                  disabled={isLoading}
-                  aria-describedby="model-state"
-                >
-                  <option value={AUTO_MODEL_OPTION.id}>{AUTO_MODEL_OPTION.label}</option>
-                  {MODEL_OPTIONS.map((model) => (
-                    <option key={model.id} value={model.id}>
-                      {model.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <span id="model-state" className={`model-state${isLoading ? " is-working" : ""}`} aria-live="polite">
-                {isLoading ? "Pracuje…" : "pro další odpověď"}
-              </span>
-            </div>
-
-            <button
-              ref={statsButtonRef}
-              className="stats-trigger"
-              type="button"
-              aria-expanded={isStatsOpen}
-              aria-controls="conversation-stats-popover"
-              onClick={() => setIsStatsOpen((open) => !open)}
-              title={costTooltip}
-            >
-              <span className="stats-desktop">
-                Konverzace · <b>IN</b> {formatInteger(canonicalUsageSummary.inputTokens)} · <b>OUT</b> {formatInteger(canonicalUsageSummary.outputTokens)} · <b>Σ</b> {formatInteger(canonicalUsageSummary.totalTokens)} tok. · <b>{formatCost(canonicalUsageSummary.estimatedCostUsd)}</b>
-              </span>
-              <span className="stats-mobile">
-                <b>{formatCost(canonicalUsageSummary.estimatedCostUsd)}</b>
-              </span>
-              <span className="info-icon" aria-hidden="true">i</span>
-            </button>
-
-            {isStatsOpen && (
-              <div
-                id="conversation-stats-popover"
-                className="stats-popover"
-                role="dialog"
-                aria-label="Detail spotřeby této konverzace"
-              >
-                <strong>Tato konverzace</strong>
-                <dl>
-                  <div><dt>Vstupní tokeny</dt><dd>{formatInteger(canonicalUsageSummary.inputTokens)}</dd></div>
-                  {canonicalUsageSummary.cachedInputTokens !== undefined && (
-                    <div><dt>z toho cachované</dt><dd>{formatInteger(canonicalUsageSummary.cachedInputTokens)}</dd></div>
-                  )}
-                  {canonicalUsageSummary.cacheWriteTokens !== undefined && (
-                    <div><dt>zapsané do cache</dt><dd>{formatInteger(canonicalUsageSummary.cacheWriteTokens)}</dd></div>
-                  )}
-                  <div><dt>Výstupní tokeny</dt><dd>{formatInteger(canonicalUsageSummary.outputTokens)}</dd></div>
-                  {canonicalUsageSummary.reasoningTokens !== undefined && (
-                    <div><dt>Reasoning tokeny</dt><dd>{formatInteger(canonicalUsageSummary.reasoningTokens)}</dd></div>
-                  )}
-                  <div className="stats-total"><dt>Celkem</dt><dd>{formatInteger(canonicalUsageSummary.totalTokens)}</dd></div>
-                  {canonicalUsageSummary.fileSearchCalls !== undefined && (
-                    <div><dt>Vyhledání v KB</dt><dd>{formatInteger(canonicalUsageSummary.fileSearchCalls)}</dd></div>
-                  )}
-                  <div title={costTooltip}><dt>Odhad ceny</dt><dd>{formatCost(canonicalUsageSummary.estimatedCostUsd)}</dd></div>
-                  {canonicalUsageSummary.estimatedCostUsd === null && canonicalUsageSummary.knownCostSubtotalUsd > 0 && (
-                    <div><dt>Známý subtotal</dt><dd>{formatCost(canonicalUsageSummary.knownCostSubtotalUsd)}</dd></div>
-                  )}
-                  {canonicalUsageSummary.unpricedCallCount > 0 && (
-                    <div><dt>Neoceněná volání</dt><dd>{formatInteger(canonicalUsageSummary.unpricedCallCount)}</dd></div>
-                  )}
-                  <div><dt>API volání</dt><dd>{formatInteger(canonicalUsageSummary.responseCount)}</dd></div>
-                </dl>
-                <p>{costTooltip}</p>
-              </div>
-            )}
-          </div>}
 
           <nav className="project-actions" aria-label="Projekt a účet">
             <button type="button" onClick={requestNewProject} disabled={isLoading} aria-label="Nový projekt" title="Nový projekt">
@@ -1829,11 +1847,13 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
 
         <div className="desktop-tools" data-tool={desktopWorkspace.tool}>
           {isProcessingWorkspace && <nav className="desktop-tool-tabs" aria-label="Nástroje pracovního prostoru">
-            {([['build', 'Build'], ['output', 'Výstup'], ['chat', 'Chat']] as const).map(([tool, label]) => <button key={tool} type="button" aria-pressed={desktopWorkspace.tool === tool} aria-controls={`desktop-tool-${tool}`} onClick={() => selectTool(tool)}>{label}</button>)}
+            {([['chat', 'Chat'], ['build', 'Build'], ['output', 'Výstup']] as const).map(([tool, label]) => <button key={tool} type="button" aria-pressed={desktopWorkspace.tool === tool} aria-controls={`desktop-tool-${tool}`} onClick={() => selectTool(tool)}>{label}</button>)}
           </nav>}
           <div id="desktop-tool-chat" className="workspace-chat">
+          <div className="chat-scroll-region">
           <fieldset className="chat-history" disabled={isChatReadOnly} aria-label={isChatReadOnly ? "Historie konverzace — pouze pro čtení" : "Konverzace"}>
-        <div className="message-list" aria-live="polite" aria-busy={isLoading}>
+        <div className="message-list" ref={chatScrollRef} onScroll={updateChatScrollPosition} tabIndex={0} role="region" aria-label="Zprávy konverzace" aria-live="polite" aria-busy={isLoading}>
+          <div ref={chatContentRef}>
           {messages.map((message) => (
             <div className="message-turn" key={message.id}>
               <article id={`message-${message.id}`} className={`message message--${message.role}`}>
@@ -1943,9 +1963,12 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
             </div>
           )}
           <div ref={bottomRef} />
+          </div>
         </div>
 
           </fieldset>
+          {isProcessingWorkspace && !isChatAtBottom && <button type="button" className="chat-scroll-bottom" aria-label="Přejít na nejnovější zprávy" title="Přejít na nejnovější zprávy" onClick={scrollChatToBottom}><ArrowDown aria-hidden="true" /></button>}
+          </div>
           {isChatReadOnly ? <div className="composer chat-read-only" role="status">Chat u Výstupu zatím slouží jen k prohlížení historie. Pro pokračování v rozhovoru se vraťte do Rozboru.</div> : (
         <form className="composer" onSubmit={submit}>
           <div className={`composer-field${isComposerExpanded && !isDictating ? " is-expanded" : ""}${isDictating ? " is-dictating" : ""}`}>
@@ -2039,8 +2062,10 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
           <div className="f2-build-body">
             <F2BuildOperations activeF2Path={activeF2Path} currentRozbor={currentRozbor} setCurrentRozbor={setCurrentRozbor} />
           </div>
-          <button type="button" className="f2-build-divider-action" onClick={() => void generateCurrentRozbor()} disabled={rozborGenerationStatus === "loading" || !isCurrentRozborUpdatePending || (!hasActiveRozborOperation && activeRozbor.components.length === 0)} aria-label={activeRozbor.components.length ? "Aktualizovat Rozbor" : "Vytvořit Rozbor"}><span>{rozborGenerationStatus === "loading" ? "VYTVÁŘÍM ROZBOR" : activeRozbor.components.length ? "AKTUALIZOVAT ROZBOR" : "VYTVOŘIT ROZBOR"}</span><ChevronLeft aria-hidden="true" /></button>
-          {rozborGenerationError && <p className="f2-generation-error" role="alert">{rozborGenerationError}</p>}
+          <footer className="f2-build-actions">
+            {rozborGenerationError && <p className="f2-generation-error" role="alert">{rozborGenerationError}</p>}
+            <button type="button" className="f2-build-action" onClick={() => void generateCurrentRozbor()} disabled={rozborGenerationStatus === "loading" || !isCurrentRozborUpdatePending || (!hasActiveRozborOperation && activeRozbor.components.length === 0)} aria-label={activeRozbor.components.length ? "Aktualizovat Rozbor" : "Vytvořit Rozbor"}>{rozborGenerationStatus === "loading" ? "VYTVÁŘÍM ROZBOR" : activeRozbor.components.length ? "AKTUALIZOVAT ROZBOR" : "VYTVOŘIT ROZBOR"}</button>
+          </footer>
         </section>}
 
 
@@ -2256,7 +2281,6 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
             </button>
           ))}
         </nav>
-        {isDeveloper && isDevLogRendered && sharedFeedback && <DevLogPanel result={sharedFeedback} open={isDevLogOpen} onClose={() => setIsDevLogOpen(false)} />}
       </section>
     </main>
   );

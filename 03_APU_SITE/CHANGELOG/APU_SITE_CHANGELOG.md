@@ -4,6 +4,23 @@ Status: CURRENT
 
 Records significant verified product/runtime/project changes. It is not a complete Git log. Historical Sites-era entries are retained where they remain useful; current deployment state must not be inferred from a changelog entry alone.
 
+## 2026-10-12 — Desktop Workspace B UX refinement
+
+### Added / Changed
+- Ordered the left tools Chat / Build / Výstup as connected tab cards with explicit selected/focus states; F2 still defaults to Build/Rozbor and F3 to Výstup/document.
+- Moved the unchanged explicit Build create/update action into an internal footer; the central divider is solely a resize handle. Compact Build controls and scrollable F3 settings retain reachable generation/export actions.
+- Added a floating Chat scroll-to-bottom arrow and hid the persistent desktop processing scrollbar. Native scrolling, bottom anchoring, older-message reading, shared history, interactive F2 Chat and read-only F3 Chat are preserved.
+- Consolidated developer header usage/cost/model/runtime information behind one dollar icon while preserving the beaker/scenario entry. Removed the warning/notes UI and its page payload; existing telemetry/pricing/backend storage is unchanged.
+- Updated the technical-current workspace section. No roadmap, backlog or Known Issues changes.
+
+### Verification
+- Typecheck and 132 focused UI/layout/Build/baseline/snapshot/F3-navigation/access/usage/notes-removal tests passed.
+- Actual-client Chromium smoke with synthetic responses passed cases A–J, including native tab traversal, Build loading/error/retry, scroll arrow/PageUp/wheel/reader anchoring, default and generated document preservation, accepted-source adoption/regeneration, developer popups and role parity, pointer/keyboard resize persistence, narrow desktop/portrait/mobile checks, real text copying and document-only PDF. Screenshots were inspected; native print-dialog invocation was intercepted headlessly.
+- Authenticated live visual verification: NOT VERIFIED — access blocked; no Access bypass, secrets or provider-backed F1 evaluations were used.
+
+### Preserved scope
+- F1 extraction/grounding, need routing, Build operations and analytical prompts, snapshot readiness/schema and F3 source/materialization/export logic are unchanged. No contextual document chat, new telemetry backend/pricing, persistent case storage, PR merge or production deployment.
+
 ## 2026-10-12 — Two desktop workspaces
 
 ### Added / Changed

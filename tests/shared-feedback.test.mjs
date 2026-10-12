@@ -26,13 +26,12 @@ test("status labels use the specified Czech mapping", () => {
   assert.deepEqual(SHARED_FEEDBACK_STATUS_LABELS, { new: "NOVÉ", in_progress: "ŘEŠÍME", discuss: "PROBRAT", done: "HOTOVO", rejected: "ZAMÍTNUTO" });
 });
 
-test("DEV LOG trigger and payload remain developer-only", async () => {
+test("removed notes menu has no client trigger, hidden surface or page payload", async () => {
   const [page, client] = await Promise.all([readFile(new URL("../app/page.tsx", import.meta.url), "utf8"), readFile(new URL("../app/apu-client.tsx", import.meta.url), "utf8")]);
-  assert.match(page, /sharedFeedback=\{isDeveloper \? loadDevLog\(\) : null\}/);
+  assert.doesNotMatch(page, /sharedFeedback|loadDevLog/);
   assert.match(client, /\{isDeveloper && <DeveloperHeaderControls/);
-  assert.match(client, /isDeveloper && isDevLogRendered && sharedFeedback/);
-  assert.match(client, /aria-expanded=\{open\}/);
-  assert.match(client, /aria-controls="dev-log-panel"/);
+  assert.doesNotMatch(client, /DevLogPanel|isDevLog|sharedFeedback|TriangleAlert|aria-controls="dev-log-panel"/);
+  assert.match(client, /aria-label="Telemetrie a náklady konverzace"/);
 });
 
 test("DEV LOG loads persistence and rolls an optimistic status back on failure", async () => {
