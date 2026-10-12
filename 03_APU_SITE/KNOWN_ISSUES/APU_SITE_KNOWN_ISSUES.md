@@ -6,7 +6,12 @@ This file contains confirmed current defects or concrete verification gaps only.
 
 ## OPEN
 
-No confirmed open technical defect is recorded by the documentation migration itself.
+### KI-02 — Manual notebook records without source references are omitted from compact requests
+**Status:** confirmed pre-existing defect; found during the isolated desktop fixture setup on 2026-10-12. No serialization or F1 extraction/grounding code was changed by the layout batch.
+
+`compactNotepad()` compares `entry.source?.messageId` with an optional `excludeSourceMessageId` even when both are undefined. Consequently manual records without a source reference disappear from a normal compact request. A local, non-provider reproduction with one nonempty manual manifestation returned `[]`; the same source filter also affects manual needs and can prevent their use at F1→F2/analysis boundaries. Browser workflow smoke therefore uses sourced records matching normal F1 extraction output.
+
+**Close when:** a separately approved serialization correction retains source-less manual records while preserving explicit source-message exclusion, with focused notebook/analysis contract verification. This is outside the authorized frozen-F1/layout change.
 
 ## VERIFICATION GAPS
 

@@ -90,6 +90,7 @@ import { analysisChangeKeys, EMPTY_ANALYSIS, formatAnalysisChat, preserveAnalysi
 import { CompletedLifecycleStatus, ProcessingStatus, type F1ProcessingStage } from "./processing-status";
 import { addCompletedLifecycleRecord, withCompletedLifecycleRecord, type CompletedLifecycleRecord } from "./lifecycle-record";
 import { DevLogPanel } from "./dev-log-panel";
+import { clampDesktopSplit, DEFAULT_DESKTOP_SPLIT, DESKTOP_SPLIT_STORAGE_KEY, DESKTOP_WORKSPACE_QUERY, INITIAL_PROCESSING_WORKSPACE, readDesktopSplitPreference, selectDesktopTool, type DesktopTool } from "./desktop-workspace";
 import { F2BuildOperations } from "./f2-build-operations";
 import { activeNeedRoutingKey, bindNeedRoutingDecision, createNeedRouter, type NeedRoutingDecision } from "./f2-need-routing";
 import { DEV_TEST_SCENARIOS, type DevTestScenario } from "./dev-test-scenarios";
@@ -104,19 +105,7 @@ type SpeechRecognitionEventLike = {
 
 type SpeechRecognitionErrorLike = { error: string };
 
-const DESKTOP_SPLIT_STORAGE_KEY = "apu.desktopSplit";
-const DEFAULT_DESKTOP_SPLIT = 60;
-const MIN_CHAT_WIDTH = 420;
-const MIN_WORKSPACE_WIDTH = 300;
 const SPLIT_KEYBOARD_STEP = 2;
-
-function clampDesktopSplit(preferred: number, width: number) {
-  if (width <= 0) return DEFAULT_DESKTOP_SPLIT;
-  const minimum = (MIN_CHAT_WIDTH / width) * 100;
-  const maximum = 100 - (MIN_WORKSPACE_WIDTH / width) * 100;
-  if (minimum > maximum) return (MIN_CHAT_WIDTH / (MIN_CHAT_WIDTH + MIN_WORKSPACE_WIDTH)) * 100;
-  return Math.min(maximum, Math.max(minimum, preferred));
-}
 
 type SpeechRecognitionLike = {
   continuous: boolean;
@@ -167,7 +156,7 @@ type Message = {
 function entryHypotheses(analysis: AnalysisState): AnalysisState["hypotheses"] { return analysis.hypotheses; }
 
 function usesDesktopWorkspaceLayout() {
-  return window.matchMedia("(min-width: 1024px), (min-width: 768px) and (orientation: landscape)").matches;
+  return window.matchMedia(DESKTOP_WORKSPACE_QUERY).matches;
 }
 
 const WELCOME: Message = {
@@ -384,7 +373,9 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
   const [preferredDesktopSplit, setPreferredDesktopSplit] = useState(DEFAULT_DESKTOP_SPLIT);
   const [effectiveDesktopSplit, setEffectiveDesktopSplit] = useState(DEFAULT_DESKTOP_SPLIT);
   const [isResizingWorkspace, setIsResizingWorkspace] = useState(false);
-  const [isF2BuildVisible, setIsF2BuildVisible] = useState(true);
+  const [isDesktop, setIsDesktop] = useState(false);
+  const [desktopWorkspace, setDesktopWorkspace] = useState(INITIAL_PROCESSING_WORKSPACE);
+  const [f3ControlsTarget, setF3ControlsTarget] = useState<HTMLDivElement | null>(null);
   const [analysis, setAnalysis] = useState<AnalysisState>(EMPTY_ANALYSIS);
   const [storedF2Build, setF2Build] = useState<F2BuildState | null>(null);
   const [currentRozbor, setCurrentRozbor] = useState<CurrentRozborState>(() => createCurrentRozborState());
@@ -457,7 +448,10 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
   const latestRozborSourceRef = useRef({ need: canonicalF2Need, hypotheses: analysis.hypotheses, activePath: activeF2Path, analysisContext: currentAnalysisContext });
   latestRozborSourceRef.current = { need: canonicalF2Need, hypotheses: analysis.hypotheses, activePath: activeF2Path, analysisContext: currentAnalysisContext };
   const currentRozborNeedFingerprintRef = useRef<string | null>(null);
-  const isF2DesktopLayout = phase === "development" && activePanel === "analysis" && f2Build !== null;
+  const isProcessingWorkspace = phase !== "intake";
+  const isF2DesktopLayout = isDesktop && isProcessingWorkspace;
+  const documentPanel = isDesktop ? (isProcessingWorkspace ? desktopWorkspace.document : "notepad") : activePanel;
+  const isChatReadOnly = phase === "output" || (isDesktop && isProcessingWorkspace && desktopWorkspace.document === "output");
   const currentRozborReconciliation = useMemo(() => canonicalF2Need
     ? reconcileRozborComponents(deriveRequiredCurrentRozborComponents(activeF2Path, canonicalF2Need, analysis.hypotheses, activeRozbor.config), activeRozbor.components)
     : null, [activeF2Path, activeRozbor, analysis.hypotheses, canonicalF2Need]);
@@ -548,15 +542,19 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
   const quickResponseSubmittingRef = useRef(false);
 
   useEffect(() => {
-    const stored = Number.parseFloat(window.localStorage.getItem(DESKTOP_SPLIT_STORAGE_KEY) ?? "");
-    if (Number.isFinite(stored) && stored > 0 && stored < 100) setPreferredDesktopSplit(stored);
+    setPreferredDesktopSplit(readDesktopSplitPreference(window.localStorage.getItem(DESKTOP_SPLIT_STORAGE_KEY)));
+    const media = window.matchMedia(DESKTOP_WORKSPACE_QUERY);
+    const update = () => setIsDesktop(media.matches);
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
   }, []);
 
   useEffect(() => {
     const card = chatCardRef.current;
     if (!card) return;
     const updateEffectiveSplit = () => {
-      setEffectiveDesktopSplit(clampDesktopSplit(preferredDesktopSplit, card.getBoundingClientRect().width));
+      setEffectiveDesktopSplit(clampDesktopSplit(preferredDesktopSplit, card.clientWidth));
     };
     updateEffectiveSplit();
     const observer = new ResizeObserver(updateEffectiveSplit);
@@ -570,10 +568,11 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
   }
 
   function updateDesktopSplitFromClientX(clientX: number) {
-    const rect = chatCardRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const preferred = ((clientX - rect.left) / rect.width) * 100;
-    const effective = clampDesktopSplit(preferred, rect.width);
+    const card = chatCardRef.current;
+    if (!card) return;
+    const rect = card.getBoundingClientRect();
+    const preferred = ((clientX - rect.left - card.clientLeft) / card.clientWidth) * 100;
+    const effective = clampDesktopSplit(preferred, card.clientWidth);
     setEffectiveDesktopSplit(effective);
     savePreferredDesktopSplit(effective);
   }
@@ -585,7 +584,7 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
     } else if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
       event.preventDefault();
       const direction = event.key === "ArrowLeft" ? -1 : 1;
-      const width = chatCardRef.current?.getBoundingClientRect().width ?? 0;
+      const width = chatCardRef.current?.clientWidth ?? 0;
       savePreferredDesktopSplit(clampDesktopSplit(effectiveDesktopSplit + direction * SPLIT_KEYBOARD_STEP, width));
     }
   }
@@ -861,6 +860,19 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
     requestAnimationFrame(() => textareaRef.current?.focus());
   }
 
+  function selectTool(tool: DesktopTool) {
+    setDesktopWorkspace((current) => selectDesktopTool(current, tool));
+    if (tool === "build") returnToF2();
+    if (tool === "output") {
+      if (isDictating) cancelDictation();
+      enterF3();
+    }
+  }
+
+  function returnToF2() {
+    setPhase("development"); setActivePanel("analysis"); setDesktopWorkspace(INITIAL_PROCESSING_WORKSPACE); setF3Error(null);
+  }
+
   function togglePanel(panel: WorkspacePanelId) {
     setActivePanel((current) => current === panel ? null : panel);
   }
@@ -937,9 +949,10 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
   }
 
   function enterF3() {
-    if (!currentF2ToF3Source.snapshot) return;
-    setF3State((current) => current ?? createF3State(currentF2ToF3Source.snapshot));
-    setF3Error(null); setPhase("output");
+    if (!currentF2ToF3Source.snapshot && !f3State) return;
+    if (currentF2ToF3Source.snapshot) setF3State((current) => current ?? createF3State(currentF2ToF3Source.snapshot));
+    setDesktopWorkspace({ tool: "output", document: "output" });
+    setF3Error(null); setPhase("output"); setActivePanel("output");
   }
 
   async function renderF3() {
@@ -1115,7 +1128,7 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
       if (!result) { setMessages((current) => current.filter((message) => message.id !== assistantId)); return; }
       if (usesDesktopWorkspaceLayout()) {
         setActivePanel("analysis");
-        setIsF2BuildVisible(false);
+        setDesktopWorkspace(INITIAL_PROCESSING_WORKSPACE);
       }
       setMessages((current) => current.map((message) => message.id === assistantId ? withCompletedLifecycleRecord({
         ...message, content: "", analysisEntryHypotheses: entryHypotheses(result.analysis), analysisNextPrompt: result.analysis.chatUpdate.nextPrompt, phaseLabel: "[FÁZE 2]",
@@ -1280,7 +1293,7 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
       if (!result) { setMessages((current) => current.filter((message) => message.id !== assistantId)); return; }
       if (usesDesktopWorkspaceLayout()) {
         setActivePanel("analysis");
-        setIsF2BuildVisible(false);
+        setDesktopWorkspace(INITIAL_PROCESSING_WORKSPACE);
       }
       setMessages((current) => current.map((message) => message.id === assistantId ? withCompletedLifecycleRecord({
         ...message, content: "", analysisEntryHypotheses: entryHypotheses(result.analysis), analysisNextPrompt: result.analysis.chatUpdate.nextPrompt,
@@ -1308,6 +1321,7 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
     setFailedInput(null);
     if (resolution === "enter_f3" && currentF2ToF3Source.snapshot) {
       setF3State((current) => current ?? createF3State(currentF2ToF3Source.snapshot));
+      setDesktopWorkspace({ tool: "output", document: "output" });
       setPhase("output");
       setActivePanel("output");
     } else {
@@ -1317,6 +1331,7 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
   }
 
   async function sendMessage(rawText: string, options?: { dialogEvent?: string; silent?: boolean; explicitNeed?: F2Path }) {
+    if (isChatReadOnly) { setError("Chat u Výstupu zatím slouží jen k prohlížení historie. Pro pokračování v rozhovoru se vraťte do Rozboru."); return; }
     const text = rawText.trim();
     if (!text || isLoading || !isNotepadHydrated) return;
 
@@ -1513,7 +1528,7 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
     setF2Build(null); setF2Preview(null); setF2BuildStatus("idle"); setF2BuildError(null); setF2PreviewStatus("idle"); setF2PreviewError(null);
     setCurrentRozbor(createCurrentRozborState());
     setRozborGenerationStatus("idle"); setRozborGenerationError(null);
-    setIsF2BuildVisible(true);
+    setDesktopWorkspace(INITIAL_PROCESSING_WORKSPACE);
     setAcceptedF2Source(null);
     setF3State(null); setF3Status("idle"); setF3Error(null);
     setSessionTelemetry([]);
@@ -1582,10 +1597,12 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
 
   function navigateToSource(entry: NotepadEntry) {
     if (!entry.source) return;
-    document.getElementById(`message-${entry.source.messageId}`)?.scrollIntoView({
+    if (isDesktop && isProcessingWorkspace) setDesktopWorkspace((current) => selectDesktopTool(current, "chat"));
+    const sourceMessageId = entry.source.messageId;
+    requestAnimationFrame(() => document.getElementById(`message-${sourceMessageId}`)?.scrollIntoView({
       behavior: "smooth",
       block: "center",
-    });
+    }));
   }
 
   function updateExtractionReview(messageId: string, update: (result: ExtractionResult) => ExtractionResult | undefined) {
@@ -1696,9 +1713,9 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
     <main className="app-shell">
       <section
         ref={chatCardRef}
-        className={`chat-card${isDevLogOpen ? " is-dev-log-open" : ""}${isResizingWorkspace ? " is-resizing-workspace" : ""}${isF2DesktopLayout ? " is-f2-layout" : ""}${isF2DesktopLayout && isF2BuildVisible ? " is-f2-build-visible" : ""}`}
+        className={`chat-card${isDevLogOpen ? " is-dev-log-open" : ""}${isResizingWorkspace ? " is-resizing-workspace" : ""}${isProcessingWorkspace ? " is-processing-workspace" : " is-intake-workspace"}`}
         style={{ "--desktop-chat-split": `${effectiveDesktopSplit}%` } as CSSProperties}
-        aria-label="Konverzace s APU"
+        aria-label="Pracovní prostor APU"
       >
         <header className="app-header">
           <div className="brand">
@@ -1810,8 +1827,13 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
           </nav>
         </header>
 
+        <div className="desktop-tools" data-tool={desktopWorkspace.tool}>
+          {isProcessingWorkspace && <nav className="desktop-tool-tabs" aria-label="Nástroje pracovního prostoru">
+            {([['build', 'Build'], ['output', 'Výstup'], ['chat', 'Chat']] as const).map(([tool, label]) => <button key={tool} type="button" aria-pressed={desktopWorkspace.tool === tool} aria-controls={`desktop-tool-${tool}`} onClick={() => selectTool(tool)}>{label}</button>)}
+          </nav>}
+          <div id="desktop-tool-chat" className="workspace-chat">
+          <fieldset className="chat-history" disabled={isChatReadOnly} aria-label={isChatReadOnly ? "Historie konverzace — pouze pro čtení" : "Konverzace"}>
         <div className="message-list" aria-live="polite" aria-busy={isLoading}>
-          {isF2DesktopLayout && !isF2BuildVisible && <button type="button" className="f2-build-reopen" onClick={() => setIsF2BuildVisible(true)}><ChevronRight aria-hidden="true" /><span>Zobrazit Build</span></button>}
           {messages.map((message) => (
             <div className="message-turn" key={message.id}>
               <article id={`message-${message.id}`} className={`message message--${message.role}`}>
@@ -1848,7 +1870,7 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
                     : message.analysisEntryHypotheses
                       ? <F2EntrySummary
                           onOpenAnalysis={() => setActivePanel("analysis")}
-                          onOpenBuild={() => { setActivePanel("analysis"); setIsF2BuildVisible(true); }}
+                          onOpenBuild={() => { setActivePanel("analysis"); setDesktopWorkspace(INITIAL_PROCESSING_WORKSPACE); }}
                         />
                       : f1ProcessingStatus?.assistantId === message.id
                       ? <ProcessingStatus stage={f1ProcessingStatus.stage} />
@@ -1923,21 +1945,8 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
           <div ref={bottomRef} />
         </div>
 
-        {phase !== "intake" && sourceF2Need && !canonicalF2Need && <section className="f2-situation" aria-label="Upřesnění pedagogické potřeby">
-          {needRoute?.key === sourceNeedKey && needRoute.decision.clarification ? <form onSubmit={(event) => void submitNeedClarification(event)}>
-            <label className="f2-parameter"><span>{needRoute.decision.clarification}</span><input aria-label="Požadovaný pedagogický výsledek" value={needClarification} maxLength={Math.max(0, 2000 - sourceF2Need.needText.length - 24)} onChange={(event) => setNeedClarification(event.target.value)} /></label>
-            <button type="submit" disabled={!needClarification.trim() || analysisStatus === "loading"}>Upřesnit potřebu</button>
-          </form> : needRouteError ? <><p role="alert">{needRouteError}</p><button type="button" onClick={() => void resolveActiveNeed(sourceF2Need).catch((cause) => setNeedRouteError(cause.message))}>Zkusit znovu</button></> : <p role="status">Určuji zaměření podle pedagogické potřeby…</p>}
-        </section>}
-        {isF2DesktopLayout && <section className="f2-build-shell" aria-label="Build">
-          <header className="f2-build-header"><div><h2>Build</h2></div><button type="button" onClick={() => setIsF2BuildVisible(false)} aria-label="Skrýt Build a zobrazit chat" title="Zobrazit chat"><ChevronRight aria-hidden="true" /></button></header>
-          <div className="f2-build-body">
-            <F2BuildOperations activeF2Path={activeF2Path} currentRozbor={currentRozbor} setCurrentRozbor={setCurrentRozbor} />
-          </div>
-          <button type="button" className="f2-build-divider-action" onClick={() => void generateCurrentRozbor()} disabled={rozborGenerationStatus === "loading" || !isCurrentRozborUpdatePending || (!hasActiveRozborOperation && activeRozbor.components.length === 0)} aria-label={activeRozbor.components.length ? "Aktualizovat Rozbor" : "Vytvořit Rozbor"}><span>{rozborGenerationStatus === "loading" ? "VYTVÁŘÍM ROZBOR" : activeRozbor.components.length ? "AKTUALIZOVAT ROZBOR" : "VYTVOŘIT ROZBOR"}</span><ChevronLeft aria-hidden="true" /></button>
-          {rozborGenerationError && <p className="f2-generation-error" role="alert">{rozborGenerationError}</p>}
-        </section>}
-
+          </fieldset>
+          {isChatReadOnly ? <div className="composer chat-read-only" role="status">Chat u Výstupu zatím slouží jen k prohlížení historie. Pro pokračování v rozhovoru se vraťte do Rozboru.</div> : (
         <form className="composer" onSubmit={submit}>
           <div className={`composer-field${isComposerExpanded && !isDictating ? " is-expanded" : ""}${isDictating ? " is-dictating" : ""}`}>
             <label className="sr-only" htmlFor="message">Zpráva pro APU</label>
@@ -2016,9 +2025,32 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
               : "Enter odešle · Shift + Enter vloží nový řádek")}
           </p>
         </form>
+          )}
+          </div>
+          <div id="desktop-tool-build" className="workspace-build">
+        {phase !== "intake" && sourceF2Need && !canonicalF2Need && <section className="f2-situation" aria-label="Upřesnění pedagogické potřeby">
+          {needRoute?.key === sourceNeedKey && needRoute.decision.clarification ? <form onSubmit={(event) => void submitNeedClarification(event)}>
+            <label className="f2-parameter"><span>{needRoute.decision.clarification}</span><input aria-label="Požadovaný pedagogický výsledek" value={needClarification} maxLength={Math.max(0, 2000 - sourceF2Need.needText.length - 24)} onChange={(event) => setNeedClarification(event.target.value)} /></label>
+            <button type="submit" disabled={!needClarification.trim() || analysisStatus === "loading"}>Upřesnit potřebu</button>
+          </form> : needRouteError ? <><p role="alert">{needRouteError}</p><button type="button" onClick={() => void resolveActiveNeed(sourceF2Need).catch((cause) => setNeedRouteError(cause.message))}>Zkusit znovu</button></> : <p role="status">Určuji zaměření podle pedagogické potřeby…</p>}
+        </section>}
+        {f2Build && <section className="f2-build-shell" aria-label="Build">
+          <header className="f2-build-header"><h2>Build</h2></header>
+          <div className="f2-build-body">
+            <F2BuildOperations activeF2Path={activeF2Path} currentRozbor={currentRozbor} setCurrentRozbor={setCurrentRozbor} />
+          </div>
+          <button type="button" className="f2-build-divider-action" onClick={() => void generateCurrentRozbor()} disabled={rozborGenerationStatus === "loading" || !isCurrentRozborUpdatePending || (!hasActiveRozborOperation && activeRozbor.components.length === 0)} aria-label={activeRozbor.components.length ? "Aktualizovat Rozbor" : "Vytvořit Rozbor"}><span>{rozborGenerationStatus === "loading" ? "VYTVÁŘÍM ROZBOR" : activeRozbor.components.length ? "AKTUALIZOVAT ROZBOR" : "VYTVOŘIT ROZBOR"}</span><ChevronLeft aria-hidden="true" /></button>
+          {rozborGenerationError && <p className="f2-generation-error" role="alert">{rozborGenerationError}</p>}
+        </section>}
+
+
+          </div>
+          <div id="desktop-tool-output" className="workspace-output-tools" ref={setF3ControlsTarget}>{!f3State && !currentF2ToF3Source.snapshot && <p role="status">Výstup bude dostupný po úspěšném Rozboru. Potřebu můžete upřesnit v Buildu.</p>}</div>
+        </div>
 
         <WorkspacePanel
-          activePanel={activePanel}
+          activePanel={documentPanel}
+          f3ControlsTarget={isF2DesktopLayout ? f3ControlsTarget : null}
           entries={notepad}
           onEntriesChange={setNotepad}
           onEntryNavigate={navigateToSource}
@@ -2063,16 +2095,16 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
           onF3Config={(change: Partial<F3Config>) => setF3State((current) => current ? updateF3Config(current, change) : current)}
           onF3Render={() => void renderF3()}
           onF3Adopt={() => setF3State((current) => current && currentF2ToF3Source.snapshot ? adoptF2Snapshot(current, currentF2ToF3Source.snapshot) : current)}
-          onF3Return={() => { setPhase("development"); setActivePanel("analysis"); setF3Error(null); }}
+          onF3Return={returnToF2}
         />
 
-        {activePanel && <div
+        {documentPanel && <div
           className="workspace-resize-handle"
           role="separator"
-          aria-label={isF2DesktopLayout ? "Změnit šířku Buildu nebo chatu a Rozboru" : "Změnit šířku chatu a pracovního panelu"}
+          aria-label="Změnit šířku nástrojů a dokumentu"
           aria-orientation="vertical"
-          aria-valuemin={Math.round(clampDesktopSplit(0, chatCardRef.current?.getBoundingClientRect().width ?? 720))}
-          aria-valuemax={Math.round(clampDesktopSplit(100, chatCardRef.current?.getBoundingClientRect().width ?? 720))}
+          aria-valuemin={Math.round(clampDesktopSplit(0, chatCardRef.current?.clientWidth ?? 720))}
+          aria-valuemax={Math.round(clampDesktopSplit(100, chatCardRef.current?.clientWidth ?? 720))}
           aria-valuenow={Math.round(effectiveDesktopSplit)}
           tabIndex={0}
           onKeyDown={handleSplitKeyDown}

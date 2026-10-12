@@ -16,6 +16,19 @@ Tento doplněk nahrazuje původní sprintové předpoklady uvedené níže pouze
 - Tisk, PDF přes tiskový mechanismus prohlížeče a kopírování čitelného textu jsou lokální exportní formáty, oddělené od podoby Výstupu. Export nevolá model a nemění zdroj. Původní odklad PDF/Word exportu se tím pro browserový tisk/PDF ruší; DOCX, externí PDF služba a rich editor zůstávají mimo scope.
 - B-01 Session JSON export zůstává samostatnou otevřenou prací; tento doplněk jej neuzavírá.
 
+## Aktuální desktopový UX — doplnění 2026-10-12
+
+Tento doplněk nahrazuje původní sprintové předpoklady o rozmístění pracovních panelů, nikoli analytické kontrakty. Historický obsah roadmapy níže zůstává zachován.
+
+- **Prostor A — F1:** vlevo existující Chat s composerem, vpravo současně Zápisník; vazby zpráv a zápisů zůstávají zachovány.
+- **Prostor B — F2/F3:** vlevo společný nástrojový panel s volbami **Build / Výstup / Chat**, vpravo jediný dokument Rozboru nebo Výstupu. Build je výchozí při vstupu do F2, Výstup při explicitním přechodu do F3. Reprezentace, nastavení, materializace a exportní akce F3 jsou vlevo; čitelný dokument je vpravo.
+- Oba prostory používají stejný splitter. Čerstvá preference je 30 % vlevo / 70 % vpravo, bezpečně omezená minimálními čitelnými šířkami 420/300 px. Explicitně uložené preference včetně původních 60 % se zachovávají. Úzké a portrétní obrazovky nadále používají stávající mobilní/overlay režim.
+- Otevření Chatu mění jen levý nástroj, nikoli pravý dokument, analytický obsah, přijatý snapshot nebo reprezentaci F3; přepnutí samo nevolá model. Volby Build a Výstup používají explicitní existující přechody F2/F3. Přijetí nového zdroje F3 zůstává explicitní.
+- F2 Chat zachovává podporovaný rozhovor a aktualizace Rozboru. F3 Chat nyní zpřístupňuje pouze stejnou historii s jasným omezením, bez aktivního composeru nebo akcí zpráv měnících zdroj.
+- **Contextual Document Chat není implementován.** Budoucí výběr pasáže, kontextové vysvětlení a příklady musí oddělovat diskusi od změny dokumentu a nesmějí automaticky měnit kanonické údaje ani přijaté snapshoty. Samostatná budoucí práce je vedena jako B-06.
+
+Implementováno a technicky ověřeno na vývojové větvi/PR #60; nejde o tvrzení o produkčním nasazení.
+
 ## 1. Definice MVP PASS
 MVP je považováno za hotové pouze tehdy, když reálný uživatelský průchod splní celý následující kontrakt bez porušení source-of-truth hranic:
 - F1 přijme reálnou situaci a vytvoří použitelný Zápisník a pedagogickou potřebu.

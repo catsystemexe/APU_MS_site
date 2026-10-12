@@ -4,6 +4,25 @@ Status: CURRENT
 
 Records significant verified product/runtime/project changes. It is not a complete Git log. Historical Sites-era entries are retained where they remain useful; current deployment state must not be inferred from a changelog entry alone.
 
+## 2026-10-12 — Two desktop workspaces
+
+### Added / Changed
+- F1 now composes existing Chat/composer left and Zápisník right; F2/F3 shares a left Build/Výstup/Chat tool container and a single right Rozbor/Output document.
+- Tool and document selection are independent. Opening Chat preserves the displayed document, Build settings, conversation and accepted F3 content without a model call; explicit F2/F3 navigation and source adoption remain supported.
+- Moved the existing single F3 controls group to the desktop left panel through a portal, preserving document-only print/PDF/copy and one authoritative F3 state.
+- F2 Chat remains interactive; F3 exposes the same history with disabled message actions and a read-only notice instead of an unsupported composer.
+- Fresh split defaults to 30/70 using the shared splitter and content-width clamping; explicit stored preferences, drag/keyboard resizing and mobile/portrait overlays are preserved.
+- Updated current UX/runtime documentation and added future B-06 Contextual Document Chat, explicitly NOT IMPLEMENTED.
+
+### Verification
+- Typecheck and 162 focused layout, intake/navigation, Build, F3 baseline/output, snapshot/stale-state and responsive-contract tests passed.
+- Actual-client Chromium fixture with mocked responses passed cases A–J, supported F2 Chat, both roles, tool/document continuity, accepted-source adoption, drag/keyboard persistence, narrow desktop/portrait and document-only PDF checks. Native print invocation was intercepted headlessly; no live provider evaluations were run.
+- Full authenticated visual verification: NOT VERIFIED — access blocked. No authentication bypass was enabled.
+
+### Preserved scope / observed issue
+- Frozen F1, semantic routing, Build operations/prompts, snapshot validity/schema and F3 materialization/export contracts are unchanged. No new storage, PR merge or production deployment.
+- Confirmed pre-existing omission of source-less manual records from compact requests is documented as KI-02; its correction is outside this layout batch.
+
 ## 2026-10-12 — F2 baseline as default F3 working analysis
 
 ### Added / Changed

@@ -25,6 +25,7 @@ import { GeneratedMarkdown } from "./generated-markdown";
 export type WorkspacePanel = "notepad" | "analysis" | "output" | null;
 
 type WorkspacePanelProps = {
+  f3ControlsTarget?: HTMLElement | null;
   activePanel: WorkspacePanel;
   entries: NotepadState;
   onEntriesChange: (entries: NotepadState) => void;
@@ -355,10 +356,10 @@ function AnalysisPanel(props: Pick<WorkspacePanelProps, "phase" | "analysis" | "
   </div>;
 }
 
-function OutputPanel(props: Pick<WorkspacePanelProps, "f2ToF3Snapshot" | "f2ToF3SourceError" | "f3State" | "f3Status" | "f3Error" | "onF3Representation" | "onF3Config" | "onF3Render" | "onF3Adopt" | "onF3Return">) {
+function OutputPanel(props: Pick<WorkspacePanelProps, "f3ControlsTarget" | "f2ToF3Snapshot" | "f2ToF3SourceError" | "f3State" | "f3Status" | "f3Error" | "onF3Representation" | "onF3Config" | "onF3Render" | "onF3Adopt" | "onF3Return">) {
   return (
     <div id="workspace-output" className="notepad-scroll workspace-panel-body" role="tabpanel" aria-label="Výstup">
-      <F3Finalization snapshot={props.f2ToF3Snapshot} sourceError={props.f2ToF3SourceError} state={props.f3State} status={props.f3Status} error={props.f3Error} onRepresentation={props.onF3Representation} onConfig={props.onF3Config} onRender={props.onF3Render} onAdopt={props.onF3Adopt} onReturn={props.onF3Return} />
+      <F3Finalization controlsTarget={props.f3ControlsTarget} snapshot={props.f2ToF3Snapshot} sourceError={props.f2ToF3SourceError} state={props.f3State} status={props.f3Status} error={props.f3Error} onRepresentation={props.onF3Representation} onConfig={props.onF3Config} onRender={props.onF3Render} onAdopt={props.onF3Adopt} onReturn={props.onF3Return} />
     </div>
   );
 }

@@ -1509,7 +1509,7 @@ button:disabled { cursor: default; opacity: 0.52; }
     grid-template-columns: minmax(0, 1fr);
   }
   .chat-card:has(.notepad-panel.is-open),
-  .chat-card.is-f2-layout { grid-template-columns: var(--desktop-chat-split, 60%) minmax(0, 1fr); }
+  .chat-card.is-f2-layout { grid-template-columns: var(--desktop-chat-split, 30%) minmax(0, 1fr); }
   .message-list { padding-right: 26px; }
   .message-list, .composer { grid-column: 1; }
   .notepad-panel {
@@ -2025,4 +2025,39 @@ button:disabled { cursor: default; opacity: 0.52; }
   .f3-print-document p { white-space: pre-wrap; }
   .f3-print-document .f3-table-wrap { overflow: visible; }
   .f3-print-document tr, .f3-print-document .f3-cards section { break-inside: avoid; }
+}
+
+/* Shared desktop tools/document composition; mobile keeps the existing overlays. */
+.desktop-tools, .workspace-chat, .workspace-build, .chat-history { display: contents; }
+.chat-history { border: 0; margin: 0; padding: 0; min-width: 0; }
+.desktop-tool-tabs, .workspace-output-tools { display: none; }
+.chat-read-only { font-size: 12px; line-height: 1.5; color: var(--text-secondary); }
+.f3-tools { display: grid; gap: 18px; }
+@media (min-width: 1024px), (min-width: 768px) and (orientation: landscape) {
+  .chat-card { grid-template-columns: var(--desktop-chat-split, 30%) minmax(0, 1fr); }
+  .desktop-tools { grid-column: 1; grid-row: 2 / 4; display: grid; grid-template-rows: auto minmax(0, 1fr); min-width: 0; min-height: 0; overflow: hidden; border-right: 1px solid var(--border); }
+  .workspace-chat { grid-column: 1; grid-row: 2; display: grid; grid-template-rows: minmax(0, 1fr) auto; min-width: 0; min-height: 0; overflow: hidden; }
+  .is-intake-workspace .workspace-chat { grid-row: 1 / 3; }
+  .workspace-chat .message-list { grid-row: 1; min-height: 0; overflow-y: auto; padding: 20px; }
+  .workspace-chat .composer { grid-row: 2; min-width: 0; }
+  .is-processing-workspace .desktop-tool-tabs { display: flex; gap: 6px; padding: 10px; border-bottom: 1px solid var(--border); }
+  .desktop-tool-tabs button { flex: 1; min-width: 0; padding: 10px 6px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-surface); color: var(--text-primary); cursor: pointer; font-weight: 700; }
+  .desktop-tool-tabs button[aria-pressed="true"] { border-color: var(--accent); background: var(--surface-hover); }
+  .desktop-tool-tabs button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+  .is-processing-workspace .workspace-chat { display: none; }
+  .is-processing-workspace .desktop-tools[data-tool="chat"] .workspace-chat { display: grid; }
+  .workspace-build, .workspace-output-tools { grid-column: 1; grid-row: 2; min-width: 0; min-height: 0; display: none; overflow-y: auto; }
+  .is-processing-workspace .desktop-tools[data-tool="build"] .workspace-build { display: block; }
+  .is-processing-workspace .desktop-tools[data-tool="output"] .workspace-output-tools { display: block; padding: 16px; }
+  .workspace-build .f2-build-shell { height: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr); opacity: 1; visibility: visible; pointer-events: auto; transform: none; border: 0; overflow: hidden; }
+  .workspace-output-tools .f3-controls { grid-template-columns: 1fr; }
+  .workspace-output-tools .f3-tools > header h2 { margin: 0; font-size: 16px; }
+  .workspace-output-tools .f3-tools > header p { font-size: 12px; line-height: 1.5; color: var(--text-secondary); }
+  .workspace-output-tools .f3-render-action button { width: 100%; }
+  .chat-card .tool-rail-workspace { display: none; }
+  .notepad-panel { grid-row: 2 / 4; }
+}
+@media (max-width: 767px), (min-width: 768px) and (orientation: portrait) {
+  /* Keep the existing floating navigation clear of combined F3 form controls. */
+  .notepad-panel #workspace-output .f3-tools { padding-right: 36px; }
 }

@@ -74,7 +74,7 @@ test("analysis UI exposes the approved POCHOPIT baseline and component architect
   assert.match(source, /Pracovní hypotézy/);
   assert.match(source, /component\.hypothesisId === hypothesis\.id/);
   assert.match(client, /f2-build-shell/);
-  assert.match(client, /is-f2-layout/);
+  assert.match(client, /is-processing-workspace/);
   assert.match(model, /type PochopitBuildConfig/);
   assert.match(model, /type RozborComponent/);
   assert.doesNotMatch(source, /<F2BuildEditor|Směr rozboru|Aktualizovat preview/);
@@ -114,7 +114,7 @@ test("F2 entry chat links to Rozbor and Build without duplicating hypotheses", a
   assert.match(entry, /V kartě Rozbor máte připravené pracovní situační hypotézy/);
   assert.match(entry, /Jednotlivé směry můžete dál rozpracovat v kartě/);
   assert.doesNotMatch(entry, /Možné směry k ověření|hypotheses\.map/);
-  assert.match(client, /usesDesktopWorkspaceLayout\(\)[\s\S]*?setActivePanel\("analysis"\);[\s\S]*?setIsF2BuildVisible\(false\)/);
+  assert.match(client, /usesDesktopWorkspaceLayout\(\)[\s\S]*?setActivePanel\("analysis"\);[\s\S]*?setDesktopWorkspace\(INITIAL_PROCESSING_WORKSPACE\)/);
 });
 
 test("F2 chat uses only nextPrompt and strips a legacy emoji prefix", () => {

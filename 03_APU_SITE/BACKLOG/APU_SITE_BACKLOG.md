@@ -26,6 +26,11 @@ Contains only unfinished or explicitly undecided work. Completed work belongs in
 - Establish a repeatable authenticated smoke/E2E path for critical F1 → F2 → F3 behavior against the hosted environment.
 - Do not weaken Cloudflare Access or introduce a production auth bypass solely for tests.
 
+### B-06 — Contextual Document Chat — NOT IMPLEMENTED
+- Add explicit passage selection/context references for the displayed Rozbor or Výstup while keeping the document visible beside Chat.
+- Support context-aware concept explanations and examples within the document's accepted source and uncertainty boundaries.
+- Keep discussion separate from document modification: no automatic changes to canonical Zápisník facts, working hypotheses or accepted snapshots; modifications require a separate explicit action.
+
 ## NEEDS DECISION
 
 ### D-01 — Legacy export/audit internals

@@ -1,5 +1,6 @@
 "use client";
 
+import { createPortal } from "react-dom";
 import { useMemo, useRef, useState } from "react";
 import { renderWorkingAnalysis } from "./f3-working-analysis";
 import { copyF3Output, printF3Output } from "./f3-output-export";
@@ -13,7 +14,8 @@ const options = {
   structureMode: [["auto", "Podle cíle"], ["text", "Strukturovaný text"], ["table", "Tabulka"], ["cards", "Karty"]],
 } as const;
 
-export function F3Finalization({ snapshot, sourceError, state: providedState, status, error, onRepresentation, onConfig, onRender, onAdopt, onReturn }: {
+export function F3Finalization({ snapshot, sourceError, state: providedState, status, error, onRepresentation, onConfig, onRender, onAdopt, onReturn, controlsTarget }: {
+  controlsTarget?: HTMLElement | null;
   snapshot: F2ToF3Snapshot | null; sourceError: string | null; state: F3State | null; status: "idle" | "loading" | "error"; error: string | null;
   onRepresentation: (representation: F3Representation) => void; onConfig: (change: Partial<F3Config>) => void; onRender: () => void; onAdopt: () => void; onReturn: () => void;
 }) {
@@ -25,8 +27,9 @@ export function F3Finalization({ snapshot, sourceError, state: providedState, st
   if (!state) return null;
   const newer = hasNewerF2Snapshot(state, snapshot); const render = state.finalRender; const content = state.representation === "analysis" ? baseline : render?.content;
   const stale = state.sourceStatus === "stale" || (state.representation === "material" && render?.status === "stale");
-  return <div className="f3-finalization">
-    <header><div><span>F3 · Výstup</span><h2>{state.representation === "analysis" ? "Pracovní pedagogická analýza" : state.target}</h2><p>Pracovní analýzu můžete rovnou exportovat. Nastavení níže slouží jen k vytvoření další podoby Výstupu. Zdroj: Rozbor, revize {state.sourceSnapshotRevision}.</p></div><button type="button" className="f3-secondary" onClick={onReturn}>Vrátit se do Rozboru</button></header>
+  const controls = <div className="f3-tools">
+    <header><h2>Výstup</h2><p>Pracovní analýzu můžete rovnou exportovat. Nastavení níže slouží jen k vytvoření další podoby Výstupu.</p><button type="button" className="f3-secondary" onClick={onReturn}>Vrátit se do Rozboru</button></header>
+
     {state.sourceStatus === "stale" && <aside className="f3-notice"><div><strong>Rozbor se od přijetí zdroje změnil</strong><span>{newer ? "Aktuální Rozbor lze explicitně přijmout; dosavadní výstup zůstane viditelný pro referenci." : sourceError ?? "Nejprve aktualizujte Rozbor, potom jej přijměte jako nový zdroj."}</span></div>{newer && <button type="button" onClick={onAdopt}>Přijmout aktuální Rozbor</button>}</aside>}
     <div className="f3-representations" aria-label="Podoba Výstupu">
       <button type="button" className="f3-secondary" aria-pressed={state.representation === "analysis"} onClick={() => onRepresentation("analysis")}>Pracovní analýza</button>
@@ -36,12 +39,18 @@ export function F3Finalization({ snapshot, sourceError, state: providedState, st
       {(Object.keys(options) as Array<keyof F3Config>).map((key) => <label key={key}><span>{({ audience: "Adresát", languageStyle: "Styl / jazyk", lengthDetail: "Rozsah / detail", structureMode: "Struktura" } as const)[key]}</span><select value={state.config[key]} onChange={(event) => onConfig({ [key]: event.target.value } as Partial<F3Config>)}>{options[key].map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label>)}
     </section>
     <div className="f3-render-action">{render?.status === "stale" && <strong>{render.staleReason === "source" ? "Zdrojový Rozbor se změnil. Dosavadní výstup zůstává pro referenci." : "Formátovací nastavení změněno. Dosavadní výstup zůstává pro referenci."}</strong>}{error && <strong role="alert">{error}</strong>}<button type="button" disabled={status === "loading" || state.sourceStatus === "stale"} onClick={onRender}>{status === "loading" ? "Vytvářím výstup…" : render ? "REGENEROVAT VÝSTUP" : "Vytvořit další podobu"}</button></div>
-    {content?.kind === "boundary_issue" && <aside className="f3-boundary" role="alert"><strong>Finalizace vyžaduje změnu v Rozboru</strong><p>{content.reason}</p><span>Dotčená oblast: {content.affectedArea}</span><button type="button" onClick={onReturn}>Vrátit se do Rozboru</button></aside>}
+
     {content?.kind === "material" && <div className="f3-export" aria-label="Export Výstupu">
       <button type="button" className="f3-secondary" onClick={() => { if (materialRef.current) { try { printF3Output(materialRef.current); } catch { setExportNotice("Tisk se nepodařilo otevřít."); } } }}>Tisk / Uložit jako PDF</button>
       <button type="button" className="f3-secondary" onClick={() => void copyF3Output(content, undefined, stale).then(() => setExportNotice("Text zkopírován.")).catch((cause) => setExportNotice(cause.message))}>Kopírovat text</button>
       {exportNotice && <span role="status">{exportNotice}</span>}
     </div>}
+  </div>;
+  return <div className={`f3-finalization${controlsTarget ? " is-document-only" : ""}`}>
+    {controlsTarget ? createPortal(controls, controlsTarget) : controls}
+    <header><div><span>F3 · Výstup</span><h2>{state.representation === "analysis" ? "Pracovní pedagogická analýza" : state.target}</h2><p>Zdroj: přijatý Rozbor, revize {state.sourceSnapshotRevision}.</p></div></header>
+    {state.sourceStatus === "stale" && <p className="f3-notice" role="status">Rozbor se od přijetí zdroje změnil. Dosavadní výstup zůstává pro referenci.</p>}
+    {content?.kind === "boundary_issue" && <aside className="f3-boundary" role="alert"><strong>Finalizace vyžaduje změnu v Rozboru</strong><p>{content.reason}</p><span>Dotčená oblast: {content.affectedArea}</span><button type="button" onClick={onReturn}>Vrátit se do Rozboru</button></aside>}
     {content?.kind === "material" && <article ref={materialRef} className={`f3-material${stale ? " is-stale" : ""}`}><header><span>{state.representation === "analysis" ? "Pracovní pedagogická analýza" : "Finální výstup"}</span><h2>{content.title}</h2></header>{stale && <p><strong>Starší výstup — zdroj nebo nastavení se změnily.</strong></p>}<p>{content.introduction}</p>{content.sections.map((section) => <section key={section.heading}><h3>{section.heading}</h3><p>{section.content}</p></section>)}{content.table && <div className="f3-table-wrap"><table><thead><tr>{content.table.columns.map((column) => <th key={column}>{column}</th>)}</tr></thead><tbody>{content.table.rows.map((row, index) => <tr key={index}>{row.map((cell, cellIndex) => <td key={cellIndex}>{cell}</td>)}</tr>)}</tbody></table></div>}{content.cards.length > 0 && <div className="f3-cards">{content.cards.map((card, index) => <section key={`${card.title}-${index}`}><h3>{card.title}</h3><p>{card.content}</p></section>)}</div>}{content.usageNote && <aside><strong>Podmínka použití</strong><p>{content.usageNote}</p></aside>}</article>}
   </div>;
 }

@@ -34,7 +34,8 @@ test("Output workspace keeps explicit return, adoption and regeneration transiti
 test("returning from Output preserves current Rozbor and the last valid Output", () => {
   const returnHandlerStart = client.indexOf("onF3Return=");
   assert.notEqual(returnHandlerStart, -1);
-  const returnHandler = client.slice(returnHandlerStart, returnHandlerStart + 220);
+  assert.match(client.slice(returnHandlerStart, returnHandlerStart + 80), /returnToF2/);
+  const returnHandler = client.slice(client.indexOf("function returnToF2"), client.indexOf("function togglePanel"));
   assert.match(returnHandler, /setPhase\("development"\)/);
   assert.match(returnHandler, /setActivePanel\("analysis"\)/);
   assert.doesNotMatch(returnHandler, /setF3State|setCurrentRozbor|setF2Build/);

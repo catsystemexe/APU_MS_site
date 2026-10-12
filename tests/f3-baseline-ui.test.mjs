@@ -12,7 +12,7 @@ import { createF3State } from "../app/f3-finalization-model.ts";
 const require = createRequire(import.meta.url);
 const source = await readFile(new URL("../app/f3-finalization.tsx", import.meta.url), "utf8");
 const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText
-  .replace(/from "(react(?:\/jsx-runtime)?)"/g, (_, name) => `from ${JSON.stringify(pathToFileURL(require.resolve(name)).href)}`)
+  .replace(/from "(react(?:\/jsx-runtime)?|react-dom)"/g, (_, name) => `from ${JSON.stringify(pathToFileURL(require.resolve(name)).href)}`)
   .replace(/from "(\.\/[^";]+)"/g, (_, name) => `from ${JSON.stringify(new URL(`../app/${name.slice(2)}.ts`, import.meta.url).href)}`);
 const { F3Finalization } = await import(`data:text/javascript;base64,${Buffer.from(js).toString("base64")}`);
 const h = { id: "h1", rank: 1, title: "Pracovní možnost", summary: "Není jistý závěr", relevantNeeds: [], supportingInformation: ["Dostupná informace"], limitations: ["Podstatné omezení"], unknowns: ["Neznámá podmínka"], question: null, questions: [] };

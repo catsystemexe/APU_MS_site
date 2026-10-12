@@ -49,7 +49,7 @@ for (const path of Object.keys(labels)) {
 }
 test("client shares routing and Build UI for both modes without a path switch or internal heading", async () => {
   assert.equal((client.match(/<F2BuildOperations /g) ?? []).length, 1);
-  const shell = client.slice(client.indexOf('{isF2DesktopLayout && <section'), client.indexOf('<form className="composer"'));
+  const shell = client.slice(client.indexOf('{f2Build && <section'), client.indexOf('        <WorkspacePanel'));
   assert.doesNotMatch(shell, /isDeveloper|F2 ·|Směr rozboru|onPathChange/);
   assert.match(shell, /<h2>Build<\/h2>/);
   const routing = client.slice(client.indexOf('const sourceF2Need'), client.indexOf('const dictationTranscriptRef'));
