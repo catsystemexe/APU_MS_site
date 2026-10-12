@@ -349,7 +349,7 @@ function AnalysisPanel(props: Pick<WorkspacePanelProps, "phase" | "analysis" | "
     </section>
     <CurrentRozborComponents build={props.f2Build} currentRozbor={props.currentRozbor} />
     <div className="f2-preview-action">
-      <span>{props.f2ToF3Snapshot ? `Aktuální Rozbor revize ${props.f2ToF3Snapshot.sourceRevision} je připraven pro Výstup.` : props.f2ToF3SourceError}</span>
+      <span>{props.f2ToF3Snapshot ? `Pracovní analýza revize ${props.f2ToF3Snapshot.sourceRevision} je připravena k exportu ve Výstupu.` : props.f2ToF3SourceError}</span>
       <button type="button" disabled={!props.f2ToF3Snapshot} onClick={props.onContinueToOutput}>PŘEJÍT K VÝSTUPU</button>
     </div>
   </div>;

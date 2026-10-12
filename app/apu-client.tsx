@@ -1299,8 +1299,8 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
     const turnId = `turn-${createMessageId()}`;
     const userMessage: Message = { id: createMessageId(), role: "user", content: rawText, turnId, createdAt: new Date().toISOString(), phaseLabel: "[FÁZE 2]" };
     const content = resolution === "enter_f3"
-      ? "Otevírám Výstup nad neměnným snapshotem aktuálního Rozboru. Samotný výstup vznikne až vaším explicitním pokynem."
-      : (currentF2ToF3Source.error ?? "Nejprve vytvořte a aktualizujte aktuální Rozbor; potom jej lze otevřít ve Výstupu.");
+      ? "Otevírám Výstup. Pracovní analýza je připravena k tisku, uložení do PDF nebo kopírování. Další podobu Výstupu můžete vytvořit podle potřeby."
+      : (currentF2ToF3Source.error ?? "Nejprve dokončete výchozí Rozbor; pak můžete otevřít pracovní analýzu ve Výstupu.");
     setMessages((current) => [...current, ...(silent ? [] : [userMessage]), { id: createMessageId(), role: "assistant", content, turnId, createdAt: new Date().toISOString(), communicationProfile }]);
     setComposerInput("");
     setIsComposerExpanded(false);
@@ -2037,7 +2037,7 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
           highlightedAnalysisKeys={highlightedAnalysisKeys}
           onAnalysisItemSeen={markAnalysisSeen}
           onConfirmSuggestedNeed={confirmSuggestedNeed}
-          onContinueToOutput={() => void sendMessage("Přejít k vytvoření výstupu", {
+          onContinueToOutput={() => void sendMessage("Přejít k Výstupu", {
             dialogEvent: "continue_to_output",
             silent: true,
           })}

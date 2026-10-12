@@ -23,6 +23,9 @@ for (const path of ["POCHOPIT", "POZOROVAT", "VYTVOŘIT"]) test(`${path} immedia
   const developer = renderToStaticMarkup(React.createElement(F3Finalization, { ...props, isDeveloper: true }));
   assert.equal(normal, developer);
   for (const expected of ["Pracovní pedagogická analýza", "Není jistý závěr", "Dostupná informace", "Podstatné omezení", "Neznámá podmínka", "Tisk / Uložit jako PDF", "Kopírovat text"]) assert.ok(normal.includes(expected), expected);
+  assert.ok(normal.includes("Pracovní analýzu můžete rovnou exportovat."));
+  assert.ok(normal.includes("Nastavení níže slouží jen k vytvoření další podoby Výstupu."));
+  assert.ok(normal.includes('aria-label="Nastavení další podoby Výstupu"'));
   assert.doesNotMatch(normal, /POCHOPIT|POZOROVAT|VYTVOŘIT|diagnostics/);
   const article = normal.slice(normal.indexOf('<article'), normal.indexOf('</article>'));
   assert.doesNotMatch(article, /<button|<select/);

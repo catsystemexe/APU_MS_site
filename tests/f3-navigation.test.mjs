@@ -17,6 +17,9 @@ test("primary F2 to F3 navigation uses current Rozbor and never requires legacy 
   assert.match(intent, /Boolean\(currentF2ToF3Source\.snapshot\)/);
   assert.doesNotMatch(intent, /f2Preview|PREVIEW/);
   assert.match(dialog, /valid current-Rozbor snapshot/);
+  assert.match(intent, /Pracovní analýza je připravena k tisku/);
+  assert.match(intent, /Další podobu Výstupu můžete vytvořit podle potřeby/);
+  assert.doesNotMatch(client, /Samotný výstup vznikne až|Přejít k vytvoření výstupu/);
 });
 
 test("Output workspace keeps explicit return, adoption and regeneration transitions", () => {

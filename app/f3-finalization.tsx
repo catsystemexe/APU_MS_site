@@ -21,18 +21,18 @@ export function F3Finalization({ snapshot, sourceError, state: providedState, st
   const baseline = useMemo(() => state ? renderWorkingAnalysis(state.sourceSnapshot) : null, [state?.sourceSnapshot]);
   const materialRef = useRef<HTMLElement>(null);
   const [exportNotice, setExportNotice] = useState<string | null>(null);
-  if (!snapshot && !state) return <div className="workspace-empty-state"><h2>Výstup</h2><p>{sourceError ?? "Nejprve v Rozboru vytvořte aktuální obsah připravený pro Výstup."}</p><button type="button" className="f3-secondary" onClick={onReturn}>Vrátit se do Rozboru</button></div>;
+  if (!snapshot && !state) return <div className="workspace-empty-state"><h2>Výstup</h2><p>{sourceError ?? "Pracovní analýza bude dostupná po úspěšném vstupu do Rozboru."}</p><button type="button" className="f3-secondary" onClick={onReturn}>Vrátit se do Rozboru</button></div>;
   if (!state) return null;
   const newer = hasNewerF2Snapshot(state, snapshot); const render = state.finalRender; const content = state.representation === "analysis" ? baseline : render?.content;
   const stale = state.sourceStatus === "stale" || (state.representation === "material" && render?.status === "stale");
   return <div className="f3-finalization">
-    <header><div><span>F3 · Výstup</span><h2>{state.representation === "analysis" ? "Pracovní pedagogická analýza" : state.target}</h2><p>Věcný obsah vychází z přijatého Rozboru, revize {state.sourceSnapshotRevision}.</p></div><button type="button" className="f3-secondary" onClick={onReturn}>Vrátit se do Rozboru</button></header>
+    <header><div><span>F3 · Výstup</span><h2>{state.representation === "analysis" ? "Pracovní pedagogická analýza" : state.target}</h2><p>Pracovní analýzu můžete rovnou exportovat. Nastavení níže slouží jen k vytvoření další podoby Výstupu. Zdroj: Rozbor, revize {state.sourceSnapshotRevision}.</p></div><button type="button" className="f3-secondary" onClick={onReturn}>Vrátit se do Rozboru</button></header>
     {state.sourceStatus === "stale" && <aside className="f3-notice"><div><strong>Rozbor se od přijetí zdroje změnil</strong><span>{newer ? "Aktuální Rozbor lze explicitně přijmout; dosavadní výstup zůstane viditelný pro referenci." : sourceError ?? "Nejprve aktualizujte Rozbor, potom jej přijměte jako nový zdroj."}</span></div>{newer && <button type="button" onClick={onAdopt}>Přijmout aktuální Rozbor</button>}</aside>}
     <div className="f3-representations" aria-label="Podoba Výstupu">
       <button type="button" className="f3-secondary" aria-pressed={state.representation === "analysis"} onClick={() => onRepresentation("analysis")}>Pracovní analýza</button>
       <button type="button" className="f3-secondary" aria-pressed={state.representation === "material"} disabled={!render} onClick={() => onRepresentation("material")}>Další podoba Výstupu</button>
     </div>
-    <section className="f3-controls" aria-label="Nastavení finalizace">
+    <section className="f3-controls" aria-label="Nastavení další podoby Výstupu">
       {(Object.keys(options) as Array<keyof F3Config>).map((key) => <label key={key}><span>{({ audience: "Adresát", languageStyle: "Styl / jazyk", lengthDetail: "Rozsah / detail", structureMode: "Struktura" } as const)[key]}</span><select value={state.config[key]} onChange={(event) => onConfig({ [key]: event.target.value } as Partial<F3Config>)}>{options[key].map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label>)}
     </section>
     <div className="f3-render-action">{render?.status === "stale" && <strong>{render.staleReason === "source" ? "Zdrojový Rozbor se změnil. Dosavadní výstup zůstává pro referenci." : "Formátovací nastavení změněno. Dosavadní výstup zůstává pro referenci."}</strong>}{error && <strong role="alert">{error}</strong>}<button type="button" disabled={status === "loading" || state.sourceStatus === "stale"} onClick={onRender}>{status === "loading" ? "Vytvářím výstup…" : render ? "REGENEROVAT VÝSTUP" : "Vytvořit další podobu"}</button></div>
