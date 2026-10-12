@@ -94,7 +94,7 @@ import { F2BuildOperations } from "./f2-build-operations";
 import { activeNeedRoutingKey, bindNeedRoutingDecision, createNeedRouter, type NeedRoutingDecision } from "./f2-need-routing";
 import { DEV_TEST_SCENARIOS, type DevTestScenario } from "./dev-test-scenarios";
 import type { SharedFeedbackResult } from "./shared-feedback";
-import { acceptRenderedPreview, addF2Context, applyCurrentRozborComponentUpdate, applyF2BuildResult, canonicalF1NeedFingerprint, createCurrentRozborGenerationRequest, createCurrentRozborState, createF2BuildRequest, createF2PreviewSnapshot, createF2ToF3Snapshot, currentRozborSourceFingerprint, deriveRequiredCurrentRozborComponents, parameterizeF2Skill, parseF2BuildResult, parseF2RenderedPreview, parseGeneratedRozborComponents, previewStatus, reconcileRozborComponents, removeF2Context, synchronizeF2BuildWithCanonicalNeed, toggleF2Skill, type CurrentRozborState, type F2BuildState, type F2NotebookContextItem, type F2PreviewState } from "./f2-build-model";
+import { acceptRenderedPreview, addF2Context, advanceAcceptedF2Source, applyCurrentRozborComponentUpdate, applyF2BuildResult, canonicalF1NeedFingerprint, createCurrentRozborGenerationRequest, createCurrentRozborState, createF2BuildRequest, createF2PreviewSnapshot, createF2ToF3Snapshot, currentRozborSourceFingerprint, deriveRequiredCurrentRozborComponents, parameterizeF2Skill, parseF2BuildResult, parseF2RenderedPreview, parseGeneratedRozborComponents, previewStatus, reconcileRozborComponents, removeF2Context, synchronizeF2BuildWithCanonicalNeed, toggleF2Skill, type CurrentRozborState, type F2AnalysisContext, type F2ToF3Snapshot, type F2BuildState, type F2NotebookContextItem, type F2PreviewState } from "./f2-build-model";
 import { acceptF3Render, adoptF2Snapshot, createF3RenderRequest, createF3State, markF3SourceStale, parseF3RenderResult, updateF3Config, type F3Config, type F3State } from "./f3-finalization-model";
 
 type SpeechRecognitionEventLike = {
@@ -397,6 +397,7 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
   const [f2BuildError, setF2BuildError] = useState<string | null>(null);
   const [f2PreviewStatus, setF2PreviewStatus] = useState<"idle" | "loading" | "error">("idle");
   const [f2PreviewError, setF2PreviewError] = useState<string | null>(null);
+  const [acceptedF2Source, setAcceptedF2Source] = useState<F2ToF3Snapshot | null>(null);
   const [f3State, setF3State] = useState<F3State | null>(null);
   const [f3Status, setF3Status] = useState<"idle" | "loading" | "error">("idle");
   const [f3Error, setF3Error] = useState<string | null>(null);
@@ -452,28 +453,33 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
     && storedF2Build.activePath === canonicalF2Need.initialF2Path ? storedF2Build : null;
   const activeF2Path = canonicalF2Need?.initialF2Path ?? "POCHOPIT"; // Placeholder is never an active Build.
   const activeRozbor = currentRozbor[activeF2Path];
-  const latestRozborSourceRef = useRef({ need: canonicalF2Need, hypotheses: analysis.hypotheses, activePath: activeF2Path });
-  latestRozborSourceRef.current = { need: canonicalF2Need, hypotheses: analysis.hypotheses, activePath: activeF2Path };
+  const currentAnalysisContext = useMemo(() => analysisSnapshotContext(notepad, analysis, canonicalF2Need?.needId), [notepad, analysis, canonicalF2Need?.needId]);
+  const latestRozborSourceRef = useRef({ need: canonicalF2Need, hypotheses: analysis.hypotheses, activePath: activeF2Path, analysisContext: currentAnalysisContext });
+  latestRozborSourceRef.current = { need: canonicalF2Need, hypotheses: analysis.hypotheses, activePath: activeF2Path, analysisContext: currentAnalysisContext };
   const currentRozborNeedFingerprintRef = useRef<string | null>(null);
   const isF2DesktopLayout = phase === "development" && activePanel === "analysis" && f2Build !== null;
   const currentRozborReconciliation = useMemo(() => canonicalF2Need
     ? reconcileRozborComponents(deriveRequiredCurrentRozborComponents(activeF2Path, canonicalF2Need, analysis.hypotheses, activeRozbor.config), activeRozbor.components)
     : null, [activeF2Path, activeRozbor, analysis.hypotheses, canonicalF2Need]);
-  const currentF2ToF3SourceFingerprint = useMemo(() => canonicalF2Need
-    ? currentRozborSourceFingerprint(canonicalF2Need, analysis.hypotheses, activeF2Path, activeRozbor)
-    : null, [activeF2Path, activeRozbor, analysis.hypotheses, canonicalF2Need]);
+  // F3 observes the last accepted content/configuration, never pending Build selections.
+  const currentF2ToF3SourceFingerprint = useMemo(() => canonicalF2Need && acceptedF2Source
+    ? currentRozborSourceFingerprint(canonicalF2Need, analysis.hypotheses, activeF2Path, acceptedF2Source.currentRozbor, currentAnalysisContext)
+    : null, [activeF2Path, analysis.hypotheses, canonicalF2Need, acceptedF2Source, currentAnalysisContext]);
   const latestF2ToF3FingerprintRef = useRef(currentF2ToF3SourceFingerprint);
   latestF2ToF3FingerprintRef.current = currentF2ToF3SourceFingerprint;
   const currentF2ToF3Source = useMemo(() => {
-    if (!canonicalF2Need || !f2Build) return { snapshot: null, error: "Rozbor čeká na kanonickou pedagogickou potřebu." };
-    try {
-      return { snapshot: createF2ToF3Snapshot(canonicalF2Need, analysis.hypotheses, activeF2Path, activeRozbor, f2Build.buildRevision), error: null };
-    } catch (cause) {
-      return { snapshot: null, error: cause instanceof Error ? cause.message : "Aktuální Rozbor zatím není připraven pro Výstup." };
-    }
-  }, [activeF2Path, activeRozbor, analysis.hypotheses, canonicalF2Need, f2Build]);
+    if (!canonicalF2Need || !acceptedF2Source || acceptedF2Source.sourceFingerprint !== currentF2ToF3SourceFingerprint)
+      return { snapshot: null, error: "Rozbor čeká na úspěšnou analýzu aktuálního Zápisníku a potřeby." };
+    return { snapshot: acceptedF2Source, error: null };
+  }, [canonicalF2Need, acceptedF2Source, currentF2ToF3SourceFingerprint]);
   const hasActiveRozborOperation = Boolean(currentRozborReconciliation && (currentRozborReconciliation.keep.length + currentRozborReconciliation.missing.length + currentRozborReconciliation.stale.length > 0));
   const isCurrentRozborUpdatePending = Boolean(currentRozborReconciliation && !currentRozborReconciliation.isRozborCurrent);
+
+  function analysisSnapshotContext(notepadState: NotepadState, value: AnalysisState, needId?: string): F2AnalysisContext {
+    return { mainUncertainty: value.mainUncertainty, summary: value.chatUpdate.summary,
+      needAnalysis: value.needs.find((item) => item.needId === needId) ?? null,
+      notebookContext: compactNotepad(notepadState).map(({ category, text }) => ({ category, text })) };
+  }
 
   function collectModelUsageRecords(response: unknown) {
     const records = readModelUsageRecords(response);
@@ -522,6 +528,9 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
       setCurrentRozbor(createCurrentRozborState());
     }
   }, [canonicalF2Need]);
+  useEffect(() => {
+    if (currentF2ToF3Source.snapshot) setF3State((current) => current ?? createF3State(currentF2ToF3Source.snapshot));
+  }, [currentF2ToF3Source.snapshot]);
   useEffect(() => {
     setF3State((current) => current ? markF3SourceStale(current, currentF2ToF3SourceFingerprint ?? "unresolved-active-need") : current);
   }, [currentF2ToF3SourceFingerprint]);
@@ -883,10 +892,12 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
     const reconciliation = reconcileRozborComponents(required, pathState.components);
     if (reconciliation.isRozborCurrent) return;
     const request = createCurrentRozborGenerationRequest(path, canonicalF2Need, analysis.hypotheses, pathState.config, pathState.components);
-    const updateSignature = JSON.stringify([path, required.map(({ id, kind, hypothesisId, fingerprint }) => [id, kind, hypothesisId, fingerprint])]);
+    const updateSignature = JSON.stringify([path, required.map(({ id, kind, hypothesisId, fingerprint }) => [id, kind, hypothesisId, fingerprint]), currentAnalysisContext]);
     if (!request) {
       setRozborGenerationError(null);
       setCurrentRozbor((current) => applyCurrentRozborComponentUpdate(current, path, required, []));
+      const updated = applyCurrentRozborComponentUpdate(currentRozbor, path, required, []);
+      setAcceptedF2Source((previous) => advanceAcceptedF2Source(previous, canonicalF2Need, analysis.hypotheses, path, updated[path], currentAnalysisContext));
       setRozborGenerationStatus("idle");
       return;
     }
@@ -901,11 +912,13 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
       if (!latest.need) throw new Error("Výsledek byl zahozen, protože se mezitím změnil výchozí Rozbor nebo Build.");
       const latestPathState = latestCurrentRozborRef.current[latest.activePath];
       const currentSpecs = deriveRequiredCurrentRozborComponents(latest.activePath, latest.need, latest.hypotheses, latestPathState.config);
-      const currentSignature = JSON.stringify([latest.activePath, currentSpecs.map(({ id, kind, hypothesisId, fingerprint }) => [id, kind, hypothesisId, fingerprint])]);
+      const currentSignature = JSON.stringify([latest.activePath, currentSpecs.map(({ id, kind, hypothesisId, fingerprint }) => [id, kind, hypothesisId, fingerprint]), latest.analysisContext]);
       if (currentSignature !== updateSignature) throw new Error("Výsledek byl zahozen, protože se mezitím změnil výchozí Rozbor nebo Build.");
       setCurrentRozbor((current) => JSON.stringify(current[path].config) === JSON.stringify(request.config)
         ? applyCurrentRozborComponentUpdate(current, path, required, generated)
         : current);
+      const updated = applyCurrentRozborComponentUpdate(latestCurrentRozborRef.current, path, required, generated);
+      setAcceptedF2Source((previous) => advanceAcceptedF2Source(previous, latest.need!, latest.hypotheses, path, updated[path], latest.analysisContext));
       setRozborGenerationStatus("idle");
     } catch (cause) { setRozborGenerationError(cause instanceof Error ? cause.message : "Rozbor se nepodařilo vytvořit."); setRozborGenerationStatus("error"); }
   }
@@ -976,6 +989,15 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
       if (turnId && requestId && result.telemetry) {
         setSessionTelemetry((current) => current.map((item) => item.request_id === requestId
           ? mergeSessionTelemetry(item, { ...result.telemetry, phase: "F2", ...(transitionFrom ? { transition_from: transitionFrom } : {}) } as Partial<SessionTelemetry>) : item));
+      }
+      if (resolvedNeed) {
+        const context = analysisSnapshotContext(notepadState, result.analysis, resolvedNeed.needId);
+        const baseline = createCurrentRozborState()[resolvedNeed.initialF2Path];
+        createF2ToF3Snapshot(resolvedNeed, result.analysis.hypotheses, resolvedNeed.initialF2Path, baseline, 0, context);
+        setAcceptedF2Source((previous) => {
+          const unchanged = previous && previous.sourceFingerprint === currentRozborSourceFingerprint(resolvedNeed, result.analysis.hypotheses, resolvedNeed.initialF2Path, previous.currentRozbor, context);
+          return unchanged ? previous : advanceAcceptedF2Source(previous, resolvedNeed, result.analysis.hypotheses, resolvedNeed.initialF2Path, baseline, context);
+        });
       }
       const changes = analysisChangeKeys(analysis, result.analysis);
       setUnseenAnalysisKeys((current) => new Set([...current, ...changes]));
@@ -1492,6 +1514,7 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
     setCurrentRozbor(createCurrentRozborState());
     setRozborGenerationStatus("idle"); setRozborGenerationError(null);
     setIsF2BuildVisible(true);
+    setAcceptedF2Source(null);
     setF3State(null); setF3Status("idle"); setF3Error(null);
     setSessionTelemetry([]);
     setModelUsageSession(createModelUsageSession());
@@ -2036,7 +2059,7 @@ export default function ApuClient({ email, isDeveloper, sharedFeedback }: ApuCli
           f3State={f3State}
           f3Status={f3Status}
           f3Error={f3Error}
-          onF3Enter={enterF3}
+          onF3Representation={(representation) => setF3State((current) => current ? { ...current, representation } : current)}
           onF3Config={(change: Partial<F3Config>) => setF3State((current) => current ? updateF3Config(current, change) : current)}
           onF3Render={() => void renderF3()}
           onF3Adopt={() => setF3State((current) => current && currentF2ToF3Source.snapshot ? adoptF2Snapshot(current, currentF2ToF3Source.snapshot) : current)}

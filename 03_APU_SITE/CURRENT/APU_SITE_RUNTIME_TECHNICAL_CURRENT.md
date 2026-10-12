@@ -7,7 +7,7 @@ Purpose: describe the current repository/runtime contract. Deployment state is r
 ## Repository baseline
 - Canonical repository: `catsystemexe/APU_MS_site`.
 - Stable branch: `main`.
-- Active development branch: `next`.
+- Active F1→F3 development branch: `codex/f1-f3-mvp-stabilization` (PR #60).
 - Application identity: APU Site 0.1 / package name `apu-site-01`.
 - Node requirement: `>=22.13.0`.
 - Current stack: Next.js App Router + Vinext + Vite targeting a standalone Cloudflare Worker.
@@ -51,6 +51,23 @@ Secret values must never be committed, logged, pasted into implementation prompt
 - Technical context composition/routing belongs to the application runtime.
 - F1/F2/F3 boundaries and `Zápisník → Rozbor → Výstup` data ownership remain invariant across hosting changes.
 - Model/KB routing is runtime policy and must not silently change canonical data ownership.
+
+## F2 baseline, accepted snapshots and F3 representations
+
+Implemented and verified in the development branch on 2026-10-12; production deployment was not performed by this batch and production parity is not asserted.
+
+- Successful F2 entry establishes the minimum Rozbor using the existing authoritative working hypotheses and analytical context. Default Build remains `expansionDepth = 0` with all optional operations disabled. No optional component is generated automatically; empty/malformed analysis cannot establish a baseline source.
+- The immutable `F2ToF3Snapshot` accepts a completed zero-component baseline and preserves existing expanded-component reconciliation and content validation. Snapshots retain canonical need, hypotheses, accepted configuration/components, limitations, identity, fingerprint and revision. The added analytical context retains existing summary, main uncertainty, active need analysis and canonical notebook text; it is a copy of the existing source, not a second analytical pipeline.
+- Snapshot readiness for working-analysis export is separate from specialized materialization readiness. POZOROVAT still requires an accepted observation component for specialized rendering; VYTVOŘIT still requires an explicit accepted working approach. These checks apply in the client and independently at `/api/f3` before a model call. Baseline working-analysis export requires neither specialized decision.
+- The client retains the last accepted source snapshot separately from draft Build selections. Selection changes, pending component generation and failed optional generation do not accept draft content or invalidate that snapshot. Successful content updates and explicit removals advance its source revision; unchanged substance reuses its snapshot. Authoritative notebook/need/analysis changes invalidate source currency, and in-flight component responses also check the analytical context before acceptance.
+- Default F3 selection is the locally rendered **Pracovní pedagogická analýza**, immediately available after baseline acceptance without navigation or an additional model request. Deterministic rendering preserves source hypotheses, evidence-related information, questions, context, generated components where present, and uncertainty. It does not claim to complete a specialized intervention or observation specification.
+- Existing optional model-based F3 formats retain their established substance restrictions. Every request includes the accepted immutable F2 snapshot and presentation settings only; previously generated F3 content is never its substantive input. Presentation-setting changes do not mutate F2.
+- Source changes preserve previous F3 content as stale. New source adoption remains explicit; adoption selects the new working-analysis view while keeping the previous model-rendered content stale for reference. Regeneration remains explicit and uses the newly accepted source.
+- Normal and developer accounts share the same presentation, source adoption, rendering and export UI; ordinary F3 headings do not expose internal strategy IDs.
+- **Tisk / Uložit jako PDF** calls the browser print mechanism with a temporary readable-output DOM clone and print CSS that excludes all application siblings. The browser handles PDF saving. **Kopírovat text** writes readable content through the Clipboard API and reports failures; stale exports retain a warning. Neither export invokes a model, changes the accepted source, uploads a document or adds persistence.
+- B-01 Session JSON export remains separate and unchanged; Session JSON still does not export this F3 representation.
+
+Verification: TypeScript passed and 163 focused baseline/Build, snapshot, source ownership/finalization, navigation, routing/UI and export tests passed. An isolated F3 component passed Chromium rendering, real clipboard copy, print isolation/cleanup, PDF content and narrow-viewport checks. The headless smoke intercepts native-dialog invocation and uses Chromium's PDF print pipeline; it does not verify a human print dialog or a physical printer. Authenticated full-application visual smoke is **NOT VERIFIED — access blocked**; no auth bypass was enabled. Production deployment state remains independently verified only.
 
 ## State / persistence
 - User/session persistence must be documented according to verified implementation, not historical Sites assumptions.

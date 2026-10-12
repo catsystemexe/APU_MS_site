@@ -549,5 +549,6 @@ test("incomplete or stale current Rozbor cannot masquerade as a valid F3 handoff
   const changedHypotheses = [hypothesis("h1", "Změněná hypotéza")];
   assert.throws(() => createF2ToF3Snapshot(observation.sourceNeed, changedHypotheses, "POZOROVAT", observation.state, 1), /není aktuální/);
   const emptyPochopit = { config: pochopitConfig(), components: [] };
-  assert.throws(() => createF2ToF3Snapshot(need("POCHOPIT"), [hypothesis("h1")], "POCHOPIT", emptyPochopit, 1), /Nejprve vytvořte/);
+  assert.equal(isF2ToF3Snapshot(createF2ToF3Snapshot(need("POCHOPIT"), [hypothesis("h1")], "POCHOPIT", emptyPochopit, 1)), true);
+  assert.throws(() => createF2ToF3Snapshot(need("POCHOPIT"), [], "POCHOPIT", emptyPochopit, 1), /úspěšný výchozí/);
 });

@@ -2011,3 +2011,18 @@ button:disabled { cursor: default; opacity: 0.52; }
   .access-page { padding: 16px; }
   .access-card { padding: 30px 22px; }
 }
+
+.f3-representations, .f3-export { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.f3-representations button[aria-pressed="true"] { background: var(--surface-hover); border-color: var(--accent-strong); }
+.f3-print-document { display: none; }
+@media print {
+  body.f3-printing > :not(.f3-print-document) { display: none !important; }
+  body.f3-printing { margin: 0; background: white; color: black; }
+  body.f3-printing > .f3-print-document { display: block !important; }
+  .f3-print-document .f3-material { display: block; opacity: 1; border: 0; padding: 0; color: black; }
+  .f3-print-document section, .f3-print-document aside { margin: 1em 0; }
+  .f3-print-document h2, .f3-print-document h3 { break-after: avoid; }
+  .f3-print-document p { white-space: pre-wrap; }
+  .f3-print-document .f3-table-wrap { overflow: visible; }
+  .f3-print-document tr, .f3-print-document .f3-cards section { break-inside: avoid; }
+}

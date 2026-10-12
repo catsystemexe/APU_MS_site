@@ -99,14 +99,15 @@ test("component generation and F2→F3 snapshots reject incompatible ownership",
   const { createF3State, createF3RenderRequest } = await import("../app/f3-finalization-model.ts");
   const canonical = { needId: "n", needText: "Vysvětlit situaci", initialF2Path: "POCHOPIT", f3Target: null };
   const config = { ...DEFAULT_POCHOPIT_BUILD_CONFIG, compareHypotheses: true };
-  const specs = deriveRequiredCurrentRozborComponents("POCHOPIT", canonical, [], config);
+  const hypotheses = [{ id: "h1", rank: 1, title: "Možný vliv", summary: "Pracovní vysvětlení", relevantNeeds: [], supportingInformation: [], limitations: [], unknowns: [], question: null, questions: [] }];
+  const specs = deriveRequiredCurrentRozborComponents("POCHOPIT", canonical, hypotheses, config);
   const state = { config, components: specs.map((spec) => ({ ...spec, content: "Syntéza s přetrvávající nejistotou.", generatedAt: "2026-10-12T00:00:00Z" })) };
-  const snapshot = createF2ToF3Snapshot(canonical, [], "POCHOPIT", state, 0);
+  const snapshot = createF2ToF3Snapshot(canonical, hypotheses, "POCHOPIT", state, 0);
   assert.equal(isF2ToF3Snapshot(snapshot), true);
   assert.equal(createF3RenderRequest(createF3State(snapshot)).sourceSnapshot.activePath, "POCHOPIT");
   for (const path of ["POZOROVAT", "VYTVOŘIT"]) {
     assert.throws(() => createCurrentRozborGenerationRequest(path, canonical, [], config, []), /Strategie/);
-    assert.throws(() => createF2ToF3Snapshot(canonical, [], path, state, 0), /Strategie/);
+    assert.throws(() => createF2ToF3Snapshot(canonical, hypotheses, path, state, 0), /Strategie/);
     assert.equal(isF2ToF3Snapshot({ ...snapshot, activePath: path }), false);
     assert.equal(isF2ToF3Snapshot({ ...snapshot, canonicalNeed: { ...canonical, initialF2Path: path } }), false);
   }

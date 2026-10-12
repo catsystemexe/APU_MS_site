@@ -1,3 +1,4 @@
+import { assertF2SnapshotSupportsMaterialization, isF2ToF3Snapshot } from "./f2-build-model.ts";
 import type { F2ToF3Snapshot } from "./f2-build-model";
 
 export type F3Audience = "teacher" | "parent" | "student" | "internal";
@@ -15,7 +16,9 @@ export type F3Material = {
 export type F3BoundaryIssue = { kind: "boundary_issue"; reason: string; affectedArea: string; suggestedReturnToF2: string };
 export type F3RenderResult = F3Material | F3BoundaryIssue;
 export type F3FinalRender = { sourceSnapshotId: string; f3ConfigRevision: number; content: F3RenderResult; status: "current" | "stale"; staleReason: "configuration" | "source" | null };
+export type F3Representation = "analysis" | "material";
 export type F3State = {
+  representation: F3Representation;
   sourceSnapshotId: string;
   sourceSnapshotRevision: number;
   sourceSnapshot: F2ToF3Snapshot;
@@ -40,6 +43,7 @@ export type F3RenderRequest = {
 export const DEFAULT_F3_CONFIG: F3Config = { audience: "teacher", languageStyle: "plain", lengthDetail: "standard", structureMode: "auto" };
 export function f2SnapshotId(snapshot: F2ToF3Snapshot) { return snapshot.snapshotId; }
 function immutableSnapshot(snapshot: F2ToF3Snapshot) {
+  if (!isF2ToF3Snapshot(snapshot)) throw new Error("Neplatný zdrojový snapshot Rozboru.");
   const freeze = (value: unknown): void => {
     if (!value || typeof value !== "object" || Object.isFrozen(value)) return;
     Object.values(value).forEach(freeze);
@@ -52,6 +56,7 @@ function immutableSnapshot(snapshot: F2ToF3Snapshot) {
 export function createF3State(snapshot: F2ToF3Snapshot): F3State {
   const sourceSnapshot = immutableSnapshot(snapshot);
   return {
+    representation: "analysis",
     sourceSnapshotId: f2SnapshotId(snapshot),
     sourceSnapshotRevision: snapshot.sourceRevision,
     sourceSnapshot,
@@ -93,6 +98,7 @@ export function adoptF2Snapshot(state: F3State, snapshot: F2ToF3Snapshot): F3Sta
   if (snapshot.sourceFingerprint === state.sourceSnapshot.sourceFingerprint && state.sourceStatus === "current") return state;
   return {
     ...state,
+    representation: "analysis",
     sourceSnapshotId: f2SnapshotId(snapshot),
     sourceSnapshotRevision: snapshot.sourceRevision,
     sourceSnapshot: immutableSnapshot(snapshot),
@@ -104,6 +110,7 @@ export function adoptF2Snapshot(state: F3State, snapshot: F2ToF3Snapshot): F3Sta
 }
 export function createF3RenderRequest(state: F3State, model?: string): F3RenderRequest {
   if (state.sourceStatus === "stale") throw new Error("Nejprve přijměte aktuální Rozbor jako nový zdroj Výstupu.");
+  assertF2SnapshotSupportsMaterialization(state.sourceSnapshot);
   return structuredClone({
     kind: "f3-render",
     sourceSnapshot: state.sourceSnapshot,
@@ -135,5 +142,5 @@ export function parseF3RenderResult(value: unknown): F3RenderResult {
 export function acceptF3Render(state: F3State, result: F3RenderResult, request: F3RenderRequest): F3State {
   if (state.sourceStatus !== "current" || request.sourceSnapshotId !== state.sourceSnapshotId || request.sourceFingerprint !== state.sourceSnapshot.sourceFingerprint || request.f3ConfigRevision !== state.configRevision) return state;
   const content = parseF3RenderResult(result);
-  return { ...state, finalRender: { sourceSnapshotId: request.sourceSnapshotId, f3ConfigRevision: request.f3ConfigRevision, content, status: "current", staleReason: null } };
+  return { ...state, representation: "material", finalRender: { sourceSnapshotId: request.sourceSnapshotId, f3ConfigRevision: request.f3ConfigRevision, content, status: "current", staleReason: null } };
 }

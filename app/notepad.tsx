@@ -19,7 +19,7 @@ import type { AnalysisState, SuggestedNeed } from "./analysis-model";
 import type { ConversationPhase } from "./dialog-action";
 import type { CreationApproachesContent, CreationObjectiveContent, CurrentRozborState, F2BuildState, F2PreviewState, F2ToF3Snapshot, FollowUpVerificationContent, ObservationComparisonContent, ObservationIndicatorsContent, ObservationPrioritiesContent, SuccessConditionsContent } from "./f2-build-model";
 import { F3Finalization } from "./f3-finalization";
-import type { F3Config, F3State } from "./f3-finalization-model";
+import type { F3Config, F3Representation, F3State } from "./f3-finalization-model";
 import { GeneratedMarkdown } from "./generated-markdown";
 
 export type WorkspacePanel = "notepad" | "analysis" | "output" | null;
@@ -63,7 +63,7 @@ type WorkspacePanelProps = {
   f3State: F3State | null;
   f3Status: "idle" | "loading" | "error";
   f3Error: string | null;
-  onF3Enter: () => void;
+  onF3Representation: (representation: F3Representation) => void;
   onF3Config: (change: Partial<F3Config>) => void;
   onF3Render: () => void;
   onF3Adopt: () => void;
@@ -355,10 +355,10 @@ function AnalysisPanel(props: Pick<WorkspacePanelProps, "phase" | "analysis" | "
   </div>;
 }
 
-function OutputPanel(props: Pick<WorkspacePanelProps, "f2ToF3Snapshot" | "f2ToF3SourceError" | "f3State" | "f3Status" | "f3Error" | "onF3Enter" | "onF3Config" | "onF3Render" | "onF3Adopt" | "onF3Return">) {
+function OutputPanel(props: Pick<WorkspacePanelProps, "f2ToF3Snapshot" | "f2ToF3SourceError" | "f3State" | "f3Status" | "f3Error" | "onF3Representation" | "onF3Config" | "onF3Render" | "onF3Adopt" | "onF3Return">) {
   return (
     <div id="workspace-output" className="notepad-scroll workspace-panel-body" role="tabpanel" aria-label="Výstup">
-      <F3Finalization snapshot={props.f2ToF3Snapshot} sourceError={props.f2ToF3SourceError} state={props.f3State} status={props.f3Status} error={props.f3Error} onEnter={props.onF3Enter} onConfig={props.onF3Config} onRender={props.onF3Render} onAdopt={props.onF3Adopt} onReturn={props.onF3Return} />
+      <F3Finalization snapshot={props.f2ToF3Snapshot} sourceError={props.f2ToF3SourceError} state={props.f3State} status={props.f3Status} error={props.f3Error} onRepresentation={props.onF3Representation} onConfig={props.onF3Config} onRender={props.onF3Render} onAdopt={props.onF3Adopt} onReturn={props.onF3Return} />
     </div>
   );
 }

@@ -4,6 +4,18 @@
 **Primární cíl:** na konci sprintu existuje stabilní funkční core pipeline F1 → F2 → F3 se třemi F2 cestami POCHOPIT / POZOROVAT / VYTVOŘIT a jedním minimálním F3 strukturovaným textovým Výstupem.
 **Stretch cíl:** stylizovaný DOCX export až po úplném CORE PASS a pouze pokud zbývá čas.
 
+## Aktuální schválený design — doplnění 2026-10-12
+
+Tento doplněk nahrazuje původní sprintové předpoklady uvedené níže pouze v otázce minimálního Build, připravenosti F3 a exportu. Původní roadmapa zůstává zachována jako historický sprintový plán. Implementace je na větvi `codex/f1-f3-mvp-stabilization`, PR #60; ověření kódu neznamená nasazení do produkce.
+
+- Úspěšný vstupní F2 Rozbor s neprázdnými pracovními hypotézami je platný minimální Build: `expansionDepth = 0`, všechny volitelné operace vypnuté, bez automatického generování komponent. Prázdná nebo neúspěšná analýza nestačí.
+- Výchozí F3 podoba je ihned dostupná pracovní pedagogická analýza, deterministicky prezentovaná z přijatého F2 snapshotu bez dalšího LLM volání. Zachovává hypotézy, existující podpůrné informace, kontext Zápisníku, neznámé a omezení. Připravenost sama nepřepíná uživatele z F2 do F3.
+- Neměnný snapshot přijatého Rozboru je jediným autoritativním věcným zdrojem F3. Každá další podporovaná podoba vzniká nezávisle přímo z něj; žádná podoba F3 se nestává zdrojem jiné podoby.
+- Baseline všech tří interních strategií je exportovatelný jako pracovní analýza. Původní požadavek na pozorovací specifikaci či zvolený pracovní přístup se nadále vztahuje na specializovanou materializaci: baseline POZOROVAT není hotový pozorovací plán a baseline VYTVOŘIT není hotová intervence. F3 nesmí chybějící rozhodnutí doplnit.
+- Nepoužité volby Build nejsou přijatý analytický obsah. Během čekání nebo selhání volitelného Build zůstává poslední validní přijatý zdroj. Úspěšná obsahová změna vytvoří novou revizi; F3 zachovává předchozí obsah jako stale a vyžaduje explicitní přijetí nového zdroje a regeneraci další podoby.
+- Tisk, PDF přes tiskový mechanismus prohlížeče a kopírování čitelného textu jsou lokální exportní formáty, oddělené od podoby Výstupu. Export nevolá model a nemění zdroj. Původní odklad PDF/Word exportu se tím pro browserový tisk/PDF ruší; DOCX, externí PDF služba a rich editor zůstávají mimo scope.
+- B-01 Session JSON export zůstává samostatnou otevřenou prací; tento doplněk jej neuzavírá.
+
 ## 1. Definice MVP PASS
 MVP je považováno za hotové pouze tehdy, když reálný uživatelský průchod splní celý následující kontrakt bez porušení source-of-truth hranic:
 - F1 přijme reálnou situaci a vytvoří použitelný Zápisník a pedagogickou potřebu.

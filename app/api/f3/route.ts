@@ -1,5 +1,5 @@
 import { getAccessIdentity } from "../../access-auth";
-import { isF2ToF3Snapshot } from "../../f2-build-model";
+import { assertF2SnapshotSupportsMaterialization, isF2ToF3Snapshot } from "../../f2-build-model";
 import { isSupportedModel } from "../../model-config";
 import { F2_PATHS, type F2Path } from "../../notepad-model";
 import type { F3RenderRequest } from "../../f3-finalization-model";
@@ -23,13 +23,15 @@ export async function POST(request: Request) {
   const apiKey = process.env.OPENAI_API_KEY; if (!apiKey) return error("APU není dokončeno: chybí serverová konfigurace.", 503);
   let body: unknown; try { body = await request.json(); } catch { return error("Neplatný formát požadavku.", 400); }
   if (!valid(body)) return error("Neplatný F3 finalizační požadavek.", 400);
+  try { assertF2SnapshotSupportsMaterialization(body.sourceSnapshot); }
+  catch (cause) { return Response.json({ result: { kind: "boundary_issue", reason: cause instanceof Error ? cause.message : "Chybí věcný podklad.", affectedArea: "Specializovaný výstup", suggestedReturnToF2: "Doplňte potřebný podklad v Rozboru; pracovní analýzu lze exportovat ihned." } }); }
   const model = isSupportedModel(body.model) ? body.model : "gpt-5.6-terra"; const path = body.sourceSnapshot.activePath;
   const collector = createRequestUsageCollector();
   try {
     const source = body.sourceSnapshot;
     const { response, usage_record, application_result } = await callOpenAIResponses({
       api_key: apiKey, request_id: crypto.randomUUID(), phase: "F3", operation: "f3_render", requested_model: model, reasoning_effort: "low", requested_service_tier: "default", collector,
-      payload: { model, reasoning: { effort: "low" }, service_tier: "default", store: false, instructions: `${BOUNDARY}\n\n${PATH[path]}\nCíl a formát přizpůsob pouze parametrům požadavku. Relevantní omezení zachovej stručnou poznámkou. V kořenovém objektu nastav kind a právě jednu odpovídající větev material nebo boundaryIssue; druhá větev musí být null.`, input: JSON.stringify({ source: { canonicalNeed: source.canonicalNeed, activePath: source.activePath, baselineHypotheses: source.baselineHypotheses, currentRozbor: source.currentRozbor, limitations: source.limitations, f3Target: source.f3Target }, presentation: body.config }), text: { format: { type: "json_schema", name: F3_PROVIDER_FORMAT_NAMES[path], strict: true, schema: F3_PROVIDER_SCHEMA } } },
+      payload: { model, reasoning: { effort: "low" }, service_tier: "default", store: false, instructions: `${BOUNDARY}\n\n${PATH[path]}\nCíl a formát přizpůsob pouze parametrům požadavku. Relevantní omezení zachovej stručnou poznámkou. V kořenovém objektu nastav kind a právě jednu odpovídající větev material nebo boundaryIssue; druhá větev musí být null.`, input: JSON.stringify({ source: { canonicalNeed: source.canonicalNeed, activePath: source.activePath, baselineHypotheses: source.baselineHypotheses, analysisContext: source.analysisContext, currentRozbor: source.currentRozbor, limitations: source.limitations, f3Target: source.f3Target }, presentation: body.config }), text: { format: { type: "json_schema", name: F3_PROVIDER_FORMAT_NAMES[path], strict: true, schema: F3_PROVIDER_SCHEMA } } },
       validate_application_response: (providerResponse) => {
         const text = outputText(providerResponse); if (!text) throw new Error("missing structured output");
         return parseF3ProviderResult(JSON.parse(text));

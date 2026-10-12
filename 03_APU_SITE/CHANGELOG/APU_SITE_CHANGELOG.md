@@ -4,6 +4,25 @@ Status: CURRENT
 
 Records significant verified product/runtime/project changes. It is not a complete Git log. Historical Sites-era entries are retained where they remain useful; current deployment state must not be inferred from a changelog entry alone.
 
+## 2026-10-12 — F2 baseline as default F3 working analysis
+
+### Added / Changed
+- A successful nonempty F2 entry now supplies a valid minimum immutable F2→F3 snapshot with zero optional components, depth zero and all optional operations disabled. Existing analytical context and uncertainty are preserved without a second analysis pipeline.
+- F3 initially presents the accepted Rozbor as a deterministic working pedagogical analysis with no additional model request or automatic navigation. Existing supported model-rendered formats each consume the accepted F2 snapshot directly, never another F3 representation.
+- Separated generic working-analysis readiness from specialized observation/intervention materialization guards, enforced in both the client and server.
+- Pending or failed optional Build work preserves the last accepted source. Successful content changes advance its revision; source staleness, explicit adoption, previous-output preservation and explicit regeneration remain supported.
+- Added client-side readable-output printing/browser PDF saving and Clipboard text copy, including stale warnings. Print isolation excludes application controls and diagnostics; no external document service or storage was added.
+- Updated the roadmap with a current-design addendum preserving historical sprint content, and documented the implemented runtime contract.
+
+### Verification
+- Typecheck and 163 focused automated tests passed, including baseline/export for all strategies, scenarios A–F, expanded Build/snapshots, independent F3 source ownership, navigation, normal/developer parity, routing regressions and export boundaries.
+- Isolated F3 Chromium smoke passed rendering, real clipboard copy, print invocation/isolation/cleanup, PDF source-content preservation and narrow viewport. Native print-dialog invocation was intercepted headlessly; PDF was checked through Chromium's print pipeline.
+- Authenticated full-application visual verification: NOT VERIFIED — access blocked. No authentication bypass or live F1 evaluations were performed.
+
+### Preserved scope
+- F1 C3C5F, need routing, existing strategy prompts/operations and standard F3 pedagogical boundaries are unchanged.
+- B-01 Session JSON work, backlog and known-issues files are unchanged. No DOCX, persistent user storage, PR merge or production deployment.
+
 ## 2026-10-12 — Need-driven single-path F2 Build
 
 ### Added / Changed
