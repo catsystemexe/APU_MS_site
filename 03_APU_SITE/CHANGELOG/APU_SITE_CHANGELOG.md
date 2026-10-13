@@ -4,6 +4,20 @@ Status: CURRENT
 
 Records significant verified product/runtime/project changes. It is not a complete Git log. Historical Sites-era entries are retained where they remain useful; current deployment state must not be inferred from a changelog entry alone.
 
+## 2026-10-13 — Default document styles A / B
+
+### Added / Changed
+- Added default **VAR A — Čistý dokument** and optional **VAR B — Strukturovaný dokument** for the deterministic accepted working analysis: one centered white reading page, identical complete content/order, sequential section markers or quiet monochrome orientation icons, thin dividers and no section cards/colored fills.
+- Added isolated client-only style selection in the existing Výstup tool; Build/default Výstup/Chat preserves the choice without API calls, adoption, staleness or source/config revisions. Generated text/table/card representations remain separate and unchanged.
+- Added bounded semantic paragraph/list presentation while preserving original wording and uncertain text literally. Clipboard remains the original full material text. Default print uses the existing article reference with named A4 pages, 18 mm margins, readable typography and continuous pagination; mobile/portrait text clears the existing floating rail.
+- Updated the current-design roadmap addendum and runtime technical-current document. DOCX remains future/out of scope; backlog, Known Issues and workflow files are unchanged.
+
+### Verification
+- Typecheck and 138 focused renderer/content/Build/F3/export/source/state/access/header regressions passed, covering all three internal strategies and accepted expansions.
+- Existing actual-client Chromium fixture passed A–L with realistic long accepted content, A/B semantic/copy identity, unchanged next F3 request/source/config revision, normal/developer roles, navigation, font-size preferences and desktop/800×600/portrait/390 px/320 px layouts. Prior header copy/print/stale and Settings/Session JSON regressions passed.
+- Both variants produced 7-page A4 PDFs. Complete original text/order, all hypotheses/expansions/questions/uncertainty, 18 mm margin bounds, heading/list-label grouping and intact short list items passed text/bounding-box checks. Generated table/card PDF data and document-only export passed. Screen and PDF screenshots were inspected.
+- Hosted authenticated visual verification: **NOT VERIFIED — access blocked**. The isolated fixture uses Arial fallbacks rather than hosted `next/font` assets and intercepts native print-dialog invocation. No authentication bypass, provider-backed benchmark, PR merge or deployment was performed.
+
 ## 2026-10-13 — Document UI consolidation
 
 ### Added / Changed

@@ -15,11 +15,25 @@ const require = createRequire(new URL("../package.json", import.meta.url));
 const fixture = `import React from 'react';
 import { createRoot } from 'react-dom/client';
 import ApuClient from '/workspace/APU_MS_site/app/apu-client';
+import { longHypotheses, longContext, longComponentText } from '/workspace/APU_MS_site/tests/document-style-fixture.mjs';
+import { renderWorkingAnalysis, f3MaterialToText } from '/workspace/APU_MS_site/app/f3-working-analysis';
 const needText = 'Potřebuji pochopit podmínky zapojení.';
 const notebook = { manifestations: [{ id: 'fact1', text: 'Při dlouhém kruhu dítě vstává.', origin: 'extracted', source: { messageId: 'fixture-source', quote: 'Fixture input', start: 0, end: 13 } }], goals: [{ id: 'n1', text: needText, origin: 'extracted', source: { messageId: 'fixture-source', quote: 'Fixture input', start: 0, end: 13 }, needMapping: { f2Path: 'POCHOPIT', f3Target: null } }], context: [], course: [], helps: [] };
 localStorage.setItem('apu-site:notepad-map:v2', JSON.stringify(notebook));
 const h = { id: 'h1', rank: 1, title: 'Testovací hypotéza', summary: 'Pracovní a nejisté vysvětlení.', relevantNeeds: ['n1'], question: null, supportingInformation: ['Kratší situace zvládá.'], limitations: ['Málo evidence.'], unknowns: ['Vliv únavy.'], questions: [] };
 const analysis = { hypotheses: [h], needs: [{ needId: 'n1', title: needText, sourceText: needText, relevantHypotheses: ['h1'], direction: 'Zvažovat možná vysvětlení.', question: null, distinctions: [], parameters: [], limitations: [], questions: [], intendedOutput: '' }], suggestedNeeds: [], mode: 'entry', mainUncertainty: 'Příčinu nelze zatím určit.', chatUpdate: { kind: 'entry', summary: 'Výchozí Rozbor.', notebookChanges: [], hypothesisChanges: [], remainingUncertainty: '', nextPrompt: null }, transitionReady: false };
+const longDocument = new URLSearchParams(location.search).has('document-styles');
+if (longDocument) {
+  analysis.hypotheses = longHypotheses;
+  analysis.needs = [longContext.needAnalysis];
+  analysis.mainUncertainty = longContext.mainUncertainty;
+  analysis.chatUpdate.summary = longContext.summary;
+  notebook.context = [{id:'long-context',text:longContext.notebookContext[1].text,origin:'extracted',source:notebook.manifestations[0].source}];
+  notebook.helps = [{id:'long-helps',text:longContext.notebookContext[2].text,origin:'extracted',source:notebook.manifestations[0].source}];
+  localStorage.setItem('apu-site:notepad-map:v2', JSON.stringify(notebook));
+}
+window.fixtureMaterialForSnapshot = renderWorkingAnalysis;
+window.fixtureTextForSnapshot = (snapshot) => f3MaterialToText(renderWorkingAnalysis(snapshot));
 const nativeFetch = window.fetch.bind(window);
 window.calls = [];
 window.fetch = async (url, init) => {
@@ -30,18 +44,18 @@ window.fetch = async (url, init) => {
   const result = url === '/api/extract' ? { extraction: { situationRelation: 'same', situationReason: null, candidates: [] } }
     : url === '/api/need-route' ? { decision: { path: 'POCHOPIT', clarification: null } }
     : url === '/api/analysis' ? { analysis }
-    : url === '/api/f2' ? { components: body.request.components.map((s) => ({ ...s, content: 'Přijaté rozvinutí hypotézy.' })) }
-    : url === '/api/f3' ? { result: { kind: 'material', title: 'Další podoba ' + window.calls.filter(c => c.url === '/api/f3').length, introduction: 'Podle přijatého zdroje.', sections: [{ heading: 'Vysvětlení', content: 'Nejistota zůstává. GENERATED_' + window.calls.filter(c => c.url === '/api/f3').length }], table: body.config.structureMode === 'table' ? { columns: ['Pozorování'], rows: [['Nejistota zůstává.']] } : null, cards: [], usageNote: null } }
+    : url === '/api/f2' ? { components: body.request.components.map((s) => ({ ...s, content: longDocument ? longComponentText : 'Přijaté rozvinutí hypotézy.' })) }
+    : url === '/api/f3' ? { result: { kind: 'material', title: 'Další podoba ' + window.calls.filter(c => c.url === '/api/f3').length, introduction: 'Podle přijatého zdroje.', sections: [{ heading: 'Vysvětlení', content: 'Nejistota zůstává. GENERATED_' + window.calls.filter(c => c.url === '/api/f3').length }], table: body.config.structureMode === 'table' ? { columns: ['Pozorování'], rows: [['Nejistota zůstává.']] } : null, cards: body.config.structureMode === 'cards' ? [{title:'Doložené podmínky',content:'Nejistota zůstává.'}] : [], usageNote: null } }
     : (() => { throw new Error('unexpected API request: ' + url); })();
   return Response.json(result);
 };
 createRoot(document.getElementById('root')!).render(<ApuClient email='test@example.invalid' isDeveloper={new URLSearchParams(location.search).has('developer')} />);
 `;
-await writeFile(join(artifactRoot, "fixture.tsx"), fixture.replace("/workspace/APU_MS_site/app/apu-client", join(projectRoot, "app/apu-client").replaceAll("\\", "/")));
+await writeFile(join(artifactRoot, "fixture.tsx"), fixture.replaceAll("/workspace/APU_MS_site/", projectRoot.replaceAll("\\", "/") + "/"));
 const esbuild = require("esbuild");
 await esbuild.build({ entryPoints: [join(artifactRoot, "fixture.tsx")], bundle: true, outfile: join(artifactRoot, "app.js"), jsx: "automatic", nodePaths: [join(projectRoot, "node_modules")], define: { "process.env.NODE_ENV": '"production"' } });
 const [js, css] = await Promise.all([readFile(join(artifactRoot, "app.js")), readFile(join(projectRoot, "app/globals.css"))]);
-const server = createServer(async (req, res) => { if (req.url === '/apu-logo-horizontal.png' || req.url === '/apu-flower.svg') { res.setHeader('Content-Type', req.url.endsWith('.svg') ? 'image/svg+xml' : 'image/png'); res.end(await readFile(join(projectRoot, 'public', req.url.slice(1)))); return; } res.setHeader("Content-Type", req.url === "/app.js" ? "application/javascript" : req.url === "/style.css" ? "text/css" : "text/html"); res.end(req.url === "/app.js" ? js : req.url === "/style.css" ? css : '<!doctype html><html lang="cs"><meta charset="utf-8"><link rel="stylesheet" href="/style.css"><div id="root"></div><script src="/app.js"></script></html>'); });
+const server = createServer(async (req, res) => { if (req.url === '/apu-logo-horizontal.png' || req.url === '/apu-flower.svg') { res.setHeader('Content-Type', req.url.endsWith('.svg') ? 'image/svg+xml' : 'image/png'); res.end(await readFile(join(projectRoot, 'public', req.url.slice(1)))); return; } res.setHeader("Content-Type", req.url === "/app.js" ? "application/javascript" : req.url === "/style.css" ? "text/css" : "text/html"); res.end(req.url === "/app.js" ? js : req.url === "/style.css" ? Buffer.concat([css, Buffer.from("\n:root{--font-manrope:Arial;--font-source-sans:Arial;--font-dm-sans:Arial;--font-inter:Arial}")]) : '<!doctype html><html lang="cs"><meta charset="utf-8"><link rel="stylesheet" href="/style.css"><div id="root"></div><script src="/app.js"></script></html>'); });
 await new Promise((resolve) => server.listen(4333, "127.0.0.1", resolve));
 const chrome = spawn(process.env.CHROMIUM_PATH ?? "chromium", ["--headless", "--no-sandbox", "--disable-dev-shm-usage", "--remote-debugging-port=9228", "--user-data-dir="+join(artifactRoot, "profile"), "about:blank"], { stdio: "ignore" });
 let socket;
@@ -150,7 +164,7 @@ try {
 
   await evaluate('window.print=()=>{window.printCalls=(window.printCalls||0)+1}; document.querySelector(".notepad-header .document-actions button:nth-child(2)").click()');
   assert.equal(await evaluate('document.querySelector(".f3-print-document").querySelectorAll("button,textarea,select,nav").length'),0);
-  const baselinePDF=await call('Page.printToPDF',{printBackground:true});
+  const baselinePDF=await call('Page.printToPDF',{printBackground:true,preferCSSPageSize:true});
   await writeFile(join(artifactRoot,'build-baseline.pdf'),Buffer.from(baselinePDF.data,'base64'));
   await evaluate('window.dispatchEvent(new Event("afterprint"))');
   await capture('analysis');
@@ -232,7 +246,7 @@ try {
   await evaluate('window.print=()=>{window.printCalls=(window.printCalls||0)+1}; document.querySelector(".notepad-header .document-actions button:nth-child(2)").click()');
   assert.equal(await evaluate('window.printCalls'), 2);
   assert.equal(await evaluate('document.querySelector(".f3-print-document").querySelectorAll("button,textarea,select,nav").length'), 0);
-  const pdf = await call('Page.printToPDF', { printBackground:true }); await writeFile(join(artifactRoot, 'output.pdf'), Buffer.from(pdf.data,'base64'));
+  const pdf = await call('Page.printToPDF', { printBackground:true,preferCSSPageSize:true }); await writeFile(join(artifactRoot, 'output.pdf'), Buffer.from(pdf.data,'base64'));
   await evaluate('window.dispatchEvent(new Event("afterprint"))');
   // C/D: Generate A from the accepted baseline, although draft Build depth is 2.
   await evaluate('(() => { const el=document.querySelector(".f3-controls select"); el.value="parent"; el.dispatchEvent(new Event("change",{bubbles:true})); })()');
@@ -248,7 +262,7 @@ try {
   await waitFor('document.querySelector(".notepad-header .document-actions").textContent.includes("Text zkopírován.")');
   assert.ok((await evaluate('navigator.clipboard.readText()')).includes('GENERATED_1'));
   await evaluate('window.print=()=>{window.printCalls=(window.printCalls||0)+1}; document.querySelector(".notepad-header .document-actions button:nth-child(2)").click()');
-  const generatedPDF=await call('Page.printToPDF',{printBackground:true});
+  const generatedPDF=await call('Page.printToPDF',{printBackground:true,preferCSSPageSize:true});
   await writeFile(join(artifactRoot,'generated-output.pdf'),Buffer.from(generatedPDF.data,'base64'));
   await evaluate('window.dispatchEvent(new Event("afterprint"))');
   await capture('generated-output');
@@ -299,7 +313,7 @@ try {
   assert.ok((await evaluate('navigator.clipboard.readText()')).startsWith('Starší výstup'));
   await click('.document-actions button:nth-child(2)');
   assert.ok(await evaluate('document.querySelector(".f3-print-document").textContent.includes("Starší výstup")'));
-  const stalePDF=await call('Page.printToPDF',{printBackground:true});
+  const stalePDF=await call('Page.printToPDF',{printBackground:true,preferCSSPageSize:true});
   await writeFile(join(artifactRoot,'stale-output.pdf'),Buffer.from(stalePDF.data,'base64'));
   await evaluate('window.dispatchEvent(new Event("afterprint"))');
 
@@ -408,6 +422,16 @@ try {
   await evaluate('document.querySelector(".chat-history button")?.click()');
   assert.equal(await evaluate('window.calls.length'),developerCalls);
   await click('.desktop-tool-tabs button[aria-controls="desktop-tool-output"]'); await capture('developer-output');
+  const developerStyleCalls=await evaluate('window.calls.length');
+  await click('.document-style-picker button:nth-child(2)');
+  assert.equal(await evaluate('document.querySelector(".working-document").dataset.documentStyle'),'b');
+  await click('.desktop-tool-tabs button[aria-controls="desktop-tool-build"]');
+  assert.equal(await evaluate('document.querySelector(".working-document").dataset.documentStyle'),'b');
+  await click('.desktop-tool-tabs button[aria-controls="desktop-tool-output"]');
+  await click('.document-style-picker button:first-child');
+  assert.equal(await evaluate('document.querySelector(".working-document").dataset.documentStyle'),'a');
+  assert.equal(await evaluate('window.calls.length'),developerStyleCalls);
+
   await call('Emulation.setDeviceMetricsOverride',{width:800,height:600,deviceScaleFactor:1,mobile:false});
   await waitFor('document.querySelector(".desktop-tools").getBoundingClientRect().width >= 419');
   assert.ok(await evaluate('document.querySelector(".notepad-panel").getBoundingClientRect().width')>=300);
@@ -460,6 +484,135 @@ try {
   assert.equal(await evaluate('Array.from(document.querySelectorAll(".document-actions button")).every(el=>el.disabled)'), true);
   assert.equal(await evaluate('document.querySelector(".header-session-export")'), null);
   await checkSettings();
+  // Default styles A–L: real client, realistic accepted long form, no provider calls.
+  await call('Emulation.setDeviceMetricsOverride',{width:1600,height:1000,deviceScaleFactor:1,mobile:false});
+  await call('Page.navigate',{url:'http://127.0.0.1:4333/?document-styles'});
+  await waitFor('document.querySelector(".composer-entry-trigger") && document.querySelector(".notepad-panel textarea")');
+  await click('.composer-entry-trigger');
+  await evaluate('(() => { const el=document.querySelector("#message"); Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,"value").set.call(el,"Přejdi do fáze 2."); el.dispatchEvent(new Event("input",{bubbles:true})); })()');
+  await waitFor('!document.querySelector(".send-button").disabled'); await click('.send-button');
+  await waitFor('document.querySelector(".working-document")');
+  assert.equal(await evaluate('document.querySelector(".working-document").dataset.documentStyle'),'a');
+  assert.equal(await evaluate('document.querySelectorAll(".working-document section").length'),8);
+  await capture('style-a-baseline');
+  // Include all three accepted hypothesis expansions in both long-form PDFs.
+  await click('.f2-depth-options button:nth-child(3)'); await click('.f2-build-action');
+  await waitFor('document.querySelector(".working-document").textContent.includes("Rozvinutí končí")');
+  await click('.desktop-tool-tabs button[aria-controls="desktop-tool-output"]');
+  await waitFor('document.querySelector(".document-style-picker")');
+  if (await evaluate('Boolean(document.querySelector(".workspace-output-tools .f3-notice button"))')) await click('.workspace-output-tools .f3-notice button');
+  await click('.f3-render-action button');
+  await waitFor('document.querySelector(".f3-material h2").textContent === "Další podoba 1"');
+  const initialRequest=await evaluate('window.calls.at(-1).body');
+  assert.equal(initialRequest.sourceSnapshot.currentRozbor.components.length,3);
+  const generatedInitial=await evaluate('document.querySelector(".f3-material").outerHTML');
+  const generatedCount=await evaluate('window.calls.length');
+  await click('.document-style-picker button:nth-child(2)');
+  assert.equal(await evaluate('document.querySelector(".f3-material").outerHTML'),generatedInitial,'style must not alter generated output or mark it stale');
+  assert.equal(await evaluate('window.calls.length'),generatedCount);
+  await click('.f3-representations button:first-child');
+  await waitFor('document.querySelector(".working-document")');
+  const semanticDocument = async () => evaluate('(() => { const root=document.querySelector(".working-document"); return Array.from(root.querySelectorAll("h2,h3,p,li")).map(el=>{const clone=el.cloneNode(true);clone.querySelectorAll("[aria-hidden=true]").forEach(n=>n.remove());return clone.textContent.replace(/\\s+/g," ").trim()}).join("\\n") })()');
+  const checkPage = async () => {
+    assert.equal(await evaluate('(() => { const root=document.querySelector(".working-document");return root.scrollWidth<=root.clientWidth && root.getBoundingClientRect().right<=document.querySelector("#workspace-document").getBoundingClientRect().right; })()'),true,'no clipped reading content');
+    assert.equal(await evaluate('getComputedStyle(document.querySelector(".working-document")).backgroundColor'),'rgb(255, 255, 255)');
+    assert.equal(await evaluate('Array.from(document.querySelectorAll(".working-document > section")).every(el=>getComputedStyle(el).backgroundColor === "rgba(0, 0, 0, 0)" && getComputedStyle(el).borderLeftWidth === "0px" && getComputedStyle(el).borderRightWidth === "0px")'),true);
+    assert.ok(await evaluate('parseFloat(getComputedStyle(document.querySelector(".working-document")).fontSize)')>=14);
+    if (await evaluate('!matchMedia("(min-width: 1024px), (min-width: 768px) and (orientation: landscape)").matches')) {
+      assert.equal(await evaluate('(() => {const rail=document.querySelector(".tool-rail-output").getBoundingClientRect().left;return Array.from(document.querySelectorAll(".working-document h2,.working-document h3,.working-document p,.working-document ul")).every(el=>el.getBoundingClientRect().right<=rail);})()'),true,'floating navigation must not obscure document text');
+    }
+    await checkDocumentHeader();
+  };
+  await call('Browser.grantPermissions',{origin:'http://127.0.0.1:4333',permissions:['clipboardReadWrite','clipboardSanitizedWrite']});
+  const styleEvidence = [];
+  let semanticA; let copyA;
+  for (const style of ['a','b','a']) {
+    await click('.document-style-picker button:nth-child('+(style==='a'?1:2)+')');
+    assert.equal(await evaluate('document.querySelector(".working-document").dataset.documentStyle'),style);
+    assert.equal(await evaluate('window.calls.length'),generatedCount,'style switching must not call any API');
+    const semantic=await semanticDocument();
+    if (!semanticA) semanticA=semantic; else assert.equal(semantic,semanticA);
+    const expected=await evaluate('window.fixtureMaterialForSnapshot(window.calls.at(-1).body.sourceSnapshot)');
+    assert.deepEqual(await evaluate('Array.from(document.querySelectorAll(".document-heading > span:last-child")).map(el=>el.textContent)'),expected.sections.map(section=>section.heading));
+    assert.equal(await evaluate('(() => { const root=document.querySelector(".working-document");return Array.from(root.querySelectorAll("h2,h3,p,li")).map(el=>{const clone=el.cloneNode(true);clone.querySelectorAll("[aria-hidden=true]").forEach(n=>n.remove());return clone.textContent}).join(" ").replace(/\\s+/g," ").trim() })()'),[expected.title,expected.introduction,...expected.sections.flatMap(section=>[section.heading,section.content.replace(/^• /gm,'')]),expected.usageNote].join(' ').replace(/\s+/g,' ').trim());
+    await checkPage();
+    const dimensions=await evaluate('(() => {const el=document.querySelector(".working-document"),r=el.getBoundingClientRect(),s=getComputedStyle(el),parent=el.parentElement.getBoundingClientRect();return {canvas:r.width,reading:r.width-parseFloat(s.paddingLeft)-parseFloat(s.paddingRight)-2,center:r.x+r.width/2,parentCenter:parent.x+parent.width/2,font:s.fontSize}})()');
+    assert.ok(dimensions.canvas<=856.5 && dimensions.reading>=680 && dimensions.reading<=760);
+    assert.ok(Math.abs(dimensions.center-dimensions.parentCenter)<1);
+    assert.equal(await evaluate('getComputedStyle(document.querySelector(".document-section-number")).display'),style==='a'?'block':'none');
+    assert.equal(await evaluate('getComputedStyle(document.querySelector(".document-section-icon")).display'),style==='b'?'block':'none');
+    await click('.document-actions button:first-child');
+    await waitFor('document.querySelector(".document-export-feedback").textContent.includes("Text zkopírován")');
+    const copied=await evaluate('navigator.clipboard.readText()');
+    if (!copyA) copyA=copied; else assert.equal(copied,copyA,'copy text must be identical across A/B');
+    assert.equal(copied,await evaluate('window.fixtureTextForSnapshot(window.calls.at(-1).body.sourceSnapshot)'));
+    if (styleEvidence.some(entry=>entry.style===style)) continue;
+    await writeFile(join(artifactRoot,'style-'+style+'-copied.txt'),copied);
+    await capture('style-'+style+'-desktop');
+    await evaluate('(() => {const region=document.querySelector("#workspace-document"),heading=Array.from(document.querySelectorAll(".document-heading")).find(el=>el.textContent.includes("Pracovní hypotéza 1:"));region.scrollTop+=heading.getBoundingClientRect().top-region.getBoundingClientRect().top-12;})()');
+    await capture('style-'+style+'-hypothesis');
+    await evaluate('document.querySelector("#workspace-document").scrollTop=0');
+
+    await evaluate('window.print=()=>{window.printCalls=(window.printCalls||0)+1}');
+    await click('.document-actions button:nth-child(2)');
+    assert.equal(await evaluate('document.querySelector(".f3-print-document .working-document").dataset.documentStyle'),style);
+    await call('Emulation.setEmulatedMedia',{media:'print'});
+    const printSettings=await evaluate('(() => {const el=document.querySelector(".f3-print-document .working-document"),heading=el.querySelector(".document-heading"),s=getComputedStyle(el);return {page:s.page,font:s.fontSize,lineHeight:s.lineHeight,border:s.borderWidth,headingAfter:getComputedStyle(heading).breakAfter,listInside:getComputedStyle(el.querySelector("li")).breakInside,sectionInside:getComputedStyle(el.querySelector("section")).breakInside,labelAfter:getComputedStyle(el.querySelector(".document-list-label")).breakAfter}})()');
+    assert.equal(printSettings.page,'apu-working-analysis'); assert.equal(printSettings.headingAfter,'avoid'); assert.equal(printSettings.listInside,'avoid'); assert.equal(printSettings.sectionInside,'auto'); assert.equal(printSettings.labelAfter,'avoid');
+    assert.equal(printSettings.border,'0px');
+    const pdf=await call('Page.printToPDF',{printBackground:true,preferCSSPageSize:true,displayHeaderFooter:false});
+    const bytes=Buffer.from(pdf.data,'base64');await writeFile(join(artifactRoot,'style-'+style+'-long.pdf'),bytes);
+    const pages=(bytes.toString('latin1').match(/\/Type\s*\/Page\b/g)||[]).length;
+    assert.ok(pages>1,'long accepted content must flow across multiple pages');
+    const boxes=[...bytes.toString('latin1').matchAll(/\/MediaBox\s*\[\s*0\s+0\s+([\d.]+)\s+([\d.]+)/g)].map(match=>[Number(match[1]),Number(match[2])]);
+    assert.ok(boxes.length>0 && boxes.every(([w,h])=>Math.abs(w-595.28)<1 && Math.abs(h-841.89)<1),'A4 MediaBoxes');
+    styleEvidence.push({style,pages,dimensions,printSettings,headings:expected.sections.map(section=>section.heading)});
+    await call('Emulation.setEmulatedMedia',{media:''}); await evaluate('window.dispatchEvent(new Event("afterprint"))');
+  }
+  // A/B preserves the accepted source and F3 configuration revision on the next explicit render.
+  await click('.f3-render-action button'); await waitFor('document.querySelector(".f3-material h2").textContent === "Další podoba 2"');
+  assert.deepEqual(await evaluate('window.calls.at(-1).body'),initialRequest);
+  assert.equal(await evaluate('document.querySelector(".f3-material").classList.contains("is-stale")'),false);
+  // Table/card paths remain independent from default-document presentation.
+  for (const mode of ['table','cards']) {
+    await evaluate(`(() => {const el=document.querySelector('.f3-controls label:nth-child(4) select');el.value=${JSON.stringify(mode)};el.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+    await click('.f3-render-action button'); await waitFor('!document.querySelector(".f3-render-action button").disabled');
+    await waitFor(mode==='table'?'document.querySelector(".f3-material table")':'document.querySelector(".f3-cards section")');
+    const markup=await evaluate('document.querySelector(".f3-material").outerHTML');const n=await evaluate('window.calls.length');
+    await click('.document-style-picker button:nth-child(2)');await click('.document-style-picker button:first-child');
+    assert.equal(await evaluate('document.querySelector(".f3-material").outerHTML'),markup);assert.equal(await evaluate('window.calls.length'),n);
+    await click('.document-actions button:nth-child(2)');assert.equal(await evaluate('document.querySelector(".f3-print-document .working-document")'),null);
+    await writeFile(join(artifactRoot,'generated-'+mode+'.pdf'),Buffer.from((await call('Page.printToPDF',{printBackground:true,preferCSSPageSize:true})).data,'base64'));
+    await evaluate('window.dispatchEvent(new Event("afterprint"))');
+  }
+  await click('.f3-representations button:first-child');await click('.document-style-picker button:nth-child(2)');
+  const styleCalls=await evaluate('window.calls.length');
+  await click('.desktop-tool-tabs button[aria-controls="desktop-tool-build"]');
+  assert.equal(await evaluate('document.querySelector(".working-document").dataset.documentStyle'),'b');
+  await click('.desktop-tool-tabs button[aria-controls="desktop-tool-chat"]');
+  assert.equal(await evaluate('document.querySelector(".working-document").dataset.documentStyle'),'b');
+  await click('.desktop-tool-tabs button[aria-controls="desktop-tool-output"]');
+  assert.equal(await evaluate('document.querySelector(".document-style-picker button:nth-child(2)").getAttribute("aria-pressed")'),'true');
+  assert.equal(await evaluate('window.calls.length'),styleCalls);
+  for (const [width,height] of [[800,600],[800,1100],[390,844],[320,740]]) {
+    await call('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});await checkPage();
+    await capture('style-b-'+width+'x'+height);
+    if (height>width || width<768) {
+      await evaluate('(() => {const region=document.querySelector("#workspace-document"),article=document.querySelector(".working-document");region.scrollTop+=article.getBoundingClientRect().top-region.getBoundingClientRect().top;})()');
+      await capture('style-b-document-'+width+'x'+height);
+      await evaluate('(() => {const region=document.querySelector("#workspace-document"),heading=Array.from(document.querySelectorAll(".document-heading")).find(el=>el.textContent.includes("Pracovní hypotéza 1:"));region.scrollTop+=heading.getBoundingClientRect().top-region.getBoundingClientRect().top-12;})()');
+      await capture('style-b-hypothesis-'+width+'x'+height);
+      await evaluate('document.querySelector("#workspace-document").scrollTop=0');
+    }
+
+    // Existing font preference remains effective; both choices stay readable without overflow.
+    await evaluate('document.documentElement.dataset.fontSize="larger"');await checkPage();
+    assert.equal(await evaluate('getComputedStyle(document.querySelector(".working-document")).fontSize'),'18.4px');
+    await evaluate('document.documentElement.dataset.fontSize="smaller"');await checkPage();
+    await evaluate('delete document.documentElement.dataset.fontSize');
+  }
+  await writeFile(join(artifactRoot,'document-style-evidence.json'),JSON.stringify(styleEvidence,null,2));
+  console.log('PASS: Default styles A–L: identical complete long-form semantic/copy content, three accepted expansions, isolated A/B state and preserved navigation, named multi-page A4 PDFs, readable 856px/680–760px screen page, semantic lists/heading break rules and untouched generated text/table/cards exports.');
   console.log('Artifacts: ' + artifactRoot);
   console.log('PASS: Document consolidation A–J: header copy/print/share, empty/loading/boundary guards, clipboard/print failures, stale PDF, normal/developer Settings focus/visibility, diagnostic JSON success/error, desktop/portrait/390px/320px control bounds; unified document A–L: F2/F3 exact default identity, accepted-only pending/failure/obsolete guards, stale generated preservation/adoption/config/source-independent regeneration, direct baseline/generated exports; UX refinement: tab order/focus, internal Build CTA/loading/retry, chat scrolling/reader anchoring, compact telemetry/scenarios and removal of notes;  actual client fixture A–J: F1/F2/F3 composition, tool/document preservation, optional Build, explicit adoption, read-only F3 Chat, no switch calls, keyboard persistence, print/PDF, responsive and developer rendering.');
 

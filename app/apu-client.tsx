@@ -46,6 +46,7 @@ import { compareUsageShadow, type UsageShadowComparison } from "./usage-shadow-c
 import { MODEL_CATALOG } from "./model-config";
 import { AUTO_MODEL_SELECTION, type ModelSelection } from "./model-routing";
 import { WorkspacePanel, type WorkspacePanel as WorkspacePanelId, usePersistentNotepad } from "./notepad";
+import type { WorkingDocumentStyle } from "./document-presentation";
 import {
   applyCandidates,
   compactNotepad,
@@ -361,6 +362,7 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
   const [isResizingWorkspace, setIsResizingWorkspace] = useState(false);
   const [isDesktop, setIsDesktop] = useState(false);
   const [desktopWorkspace, setDesktopWorkspace] = useState(INITIAL_PROCESSING_WORKSPACE);
+  const [documentStyle, setDocumentStyle] = useState<WorkingDocumentStyle>("a");
   const [f3ControlsTarget, setF3ControlsTarget] = useState<HTMLDivElement | null>(null);
   const [analysis, setAnalysis] = useState<AnalysisState>(EMPTY_ANALYSIS);
   const [storedF2Build, setF2Build] = useState<F2BuildState | null>(null);
@@ -2185,6 +2187,8 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
         </div>
 
         <WorkspacePanel
+          documentStyle={documentStyle}
+          onDocumentStyle={setDocumentStyle}
           activePanel={documentPanel}
           f3ControlsTarget={isF2DesktopLayout ? f3ControlsTarget : null}
           entries={notepad}

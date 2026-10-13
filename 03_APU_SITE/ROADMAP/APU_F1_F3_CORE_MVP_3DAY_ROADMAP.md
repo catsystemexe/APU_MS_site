@@ -43,6 +43,19 @@ Tento doplněk nahrazuje rozdílnou výchozí prezentaci Rozboru a pracovní ana
 
 Implementováno a ověřeno ve vývojové větvi/PR #60: typecheck, 160 cílených testů a syntetický browser smoke A–L. Ověření autentizovaného živého UI je **NOT VERIFIED — access blocked**. Nejde o produkční nasazení; B-01/B-06 a KI-01/KI-02 se nemění.
 
+## Výchozí styly dokumentu A / B — aktuální design, doplnění 2026-10-13
+
+Tento doplněk upravuje pouze vizuální prezentaci deterministické pracovní analýzy. Předchozí doplňky a historická sprintová roadmapa níže zůstávají zachovány; ověření implementace v PR #60 neznamená nasazení.
+
+- **VAR A — Čistý dokument** je výchozí podoba v nové klientské relaci: bílá centrovaná stránka, jedna čtecí kolona, střídmé postupné číslování sekcí, jemné oddělovače a čitelná typografie.
+- **VAR B — Strukturovaný dokument** je alternativní podoba se stejnou šířkou, obsahem a pořadím; malé jednobarevné dekorativní ikony pomáhají orientaci bez karet, barevných výplní nebo nových významových tvrzení. Neznámé nadpisy zůstávají bez zavádějící ikony.
+- Obě podoby používají tentýž přijatý F2 snapshot, `renderWorkingAnalysis()` a nezměněný `F3Material`. Zachovávají všechny hypotézy, oporu, omezení, nejistoty, otázky, přijatá rozvinutí a podmínky použití.
+- Kompaktní volba v levém nástroji Výstup okamžitě mění pouze klientský vzhled výchozího dokumentu v Build i Výstupu. Navigace Build / Výstup / Chat volbu zachová; změna stylu nevolá model, nepřijímá zdroj, nevytváří stale stav ani revizi F2/F3 konfigurace. Generované podoby text/tabulka/karty zůstávají samostatné.
+- Dokument má čitelné stránkové proporce, plynulé přizpůsobení malé šířce a A4 tisk s rozumnými okraji a více stránkami. Nadpisy a krátké seznamové bloky se drží s navazujícím obsahem. Kopírovaný původní text je v A/B totožný, bez dekorativních čísel a ikon.
+- Sémantické nadpisy, odstavce a přesně rozpoznané seznamy připravují strukturu pro budoucí export; **DOCX zůstává budoucí schopností a v této dávce není implementován**. Nevzniká nový obsahový zdroj, editor ani úložiště šablon.
+
+Ověření: typecheck, 138 cílených testů a existující izolovaný Chromium fixture s realistickým dlouhým přijatým dokumentem prošly. Obě podoby vytvořily sedmistránkové A4 PDF se shodným úplným věcným textem, okraji 18 mm a zachovanými otázkami/nejistotou. Screenshoty desktopu, úzkého desktopu a portrétu/mobilu byly zkontrolovány. Autentizované hostované UI zůstává **NOT VERIFIED — access blocked**; žádný auth bypass, providerový benchmark, merge ani produkční nasazení nebyl proveden.
+
 ## 1. Definice MVP PASS
 MVP je považováno za hotové pouze tehdy, když reálný uživatelský průchod splní celý následující kontrakt bez porušení source-of-truth hranic:
 - F1 přijme reálnou situaci a vytvoří použitelný Zápisník a pedagogickou potřebu.

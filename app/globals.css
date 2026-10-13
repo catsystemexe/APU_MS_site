@@ -2108,3 +2108,68 @@ button:disabled { cursor: default; opacity: 0.52; }
 @media (max-width: 360px) {
   .developer-indicator { display: none; }
 }
+
+/* The default analysis is a reading page; generated F3 text/tables/cards retain
+   their existing renderer and styles. A/B differ only in heading decoration. */
+.document-style-picker { min-width: 0; margin: 0; padding: 12px 0; border: 0; border-bottom: 1px solid var(--border); }
+.document-style-picker legend { padding: 0; color: var(--text-primary); font-size: 12px; font-weight: 700; }
+.document-style-picker > div { display: flex; flex-wrap: wrap; gap: 6px; }
+.document-style-picker .f3-secondary { white-space: normal; text-align: left; }
+.document-style-picker button[aria-pressed="true"] { border-color: var(--accent-strong); background: var(--surface-hover); }
+.document-style-picker button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.document-style-picker p { margin: 8px 0 0; font-size: 11px; line-height: 1.5; color: var(--text-secondary); }
+#workspace-document:has(.working-document) { padding: 0; }
+.f3-finalization:has(> .working-document) { min-width: 0; padding: clamp(10px, 2vw, 24px); }
+.working-document {
+  display: block;
+  width: min(100%, 856px);
+  min-width: 0;
+  margin-inline: auto;
+  padding: clamp(24px, 4vw, 48px) clamp(16px, 6%, 56px);
+  border: 1px solid #e1e4e8;
+  background: #fff;
+  color: #242a31;
+  font-family: var(--font-body);
+  font-size: calc(16px * var(--font-scale));
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+  hyphens: auto;
+}
+.working-document.is-stale { opacity: 1; }
+.working-document > header { margin: 0 0 24px; padding: 0 0 22px; border-bottom: 1px solid #cbd1d8; }
+.working-document > header h2 { margin: 0; color: #20262d; font-size: calc(30px * var(--font-scale)); font-weight: 750; line-height: 1.25; letter-spacing: -.02em; }
+.working-document > section { margin: 28px 0 0; padding: 24px 0 0; border-top: 1px solid #e1e4e8; }
+.working-document .document-heading { display: flex; align-items: baseline; gap: 10px; margin: 0 0 14px; color: #242a31; font-size: calc(18px * var(--font-scale)); font-weight: 700; line-height: 1.4; }
+.working-document .document-heading > span:last-child { min-width: 0; }
+.working-document .document-section-number { flex: none; color: #6b737c; font-family: var(--font-body); font-size: calc(12px * var(--font-scale)); font-weight: 600; font-variant-numeric: tabular-nums; }
+.working-document .document-section-icon { display: none; flex: none; width: 16px; height: 16px; color: #66717b; stroke-width: 1.5; }
+.document-style-b .document-section-number { display: none; }
+.document-style-b .document-section-icon { display: inline-block; align-self: start; margin-top: .25em; }
+.working-document .document-paragraph { margin: 0 0 14px; white-space: pre-wrap; }
+.working-document .document-list-label { margin-bottom: 6px; font-weight: 600; }
+.working-document .document-list { margin: 0 0 18px; padding-left: 1.4em; list-style: disc; }
+.working-document .document-list li { margin: 0 0 8px; padding-left: .2em; white-space: pre-wrap; }
+.working-document > aside { margin: 32px 0 0; padding: 18px 0 0; border: 0; border-top: 1px solid #cbd1d8; color: #4d5660; font-size: calc(13px * var(--font-scale)); line-height: 1.6; }
+.working-document > aside strong { display: block; margin-bottom: 8px; font-weight: 650; }
+.working-document > aside .document-paragraph { margin-bottom: 0; }
+@media (max-width: 767px), (min-width: 768px) and (orientation: portrait) {
+  .notepad-panel .working-document { padding-right: max(48px, 6%); }
+}
+@media print {
+  @page apu-working-analysis { size: A4; margin: 18mm; }
+  .f3-print-document .working-document { page: apu-working-analysis; width: auto; max-width: none; margin: 0; padding: 0; border: 0; box-shadow: none; background: white; color: #111; font-size: 11.5pt; line-height: 1.5; overflow: visible; print-color-adjust: exact; }
+  .f3-print-document .working-document > header { margin-bottom: 6mm; padding-bottom: 5mm; break-inside: avoid; break-after: avoid; }
+  .f3-print-document .working-document > header h2 { font-size: 22pt; line-height: 1.25; }
+  .f3-print-document .working-document > section { margin: 7mm 0 0; padding: 5mm 0 0; break-inside: auto; }
+  .f3-print-document .working-document .document-heading { margin-bottom: 3mm; font-size: 13.5pt; break-inside: avoid; break-after: avoid; }
+  .f3-print-document .working-document .document-section-number { font-size: 9pt; }
+  .f3-print-document .working-document .document-section-icon { width: 11pt; height: 11pt; }
+  .f3-print-document .working-document .document-paragraph { margin-bottom: 3mm; orphans: 3; widows: 3; }
+  .f3-print-document .working-document .document-heading + .document-paragraph,
+  .f3-print-document .working-document .document-heading + .document-list,
+  .f3-print-document .working-document .document-list-label + .document-list { break-before: avoid; }
+  .f3-print-document .working-document .document-list-label { margin-bottom: 1.5mm; break-after: avoid; }
+  .f3-print-document .working-document .document-list { margin-bottom: 4mm; }
+  .f3-print-document .working-document li { margin-bottom: 2mm; break-inside: avoid; orphans: 2; widows: 2; }
+  .f3-print-document .working-document > aside { margin-top: 7mm; padding-top: 4mm; font-size: 10pt; break-inside: avoid; }
+}
