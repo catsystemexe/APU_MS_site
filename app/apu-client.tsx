@@ -208,7 +208,9 @@ const CZK_PER_USD = 21.5;
 const COST_TOOLTIP = "Přibližný přepočet podle usage dat API a nakonfigurovaných sazeb modelu při kurzu 1 USD = 21,5 Kč. Skutečná fakturace se může lišit.";
 const UNKNOWN_COST_TOOLTIP = "Cenová sazba použitého modelu není nakonfigurována; tokeny jsou zobrazeny bez odhadu ceny.";
 const INCOMPLETE_COST_TOOLTIP = "Úplný odhad ceny není k dispozici, protože některé volání nemá spolehlivá usage nebo cenová data. Známý subtotal zůstává uveden níže.";
-const INPUT_PLACEHOLDER = "Napište APU…";
+const INPUT_PLACEHOLDER = "Napište APU...";
+// Presentation only; phase/debug metadata remains available to session instrumentation.
+const SHOW_INLINE_CHAT_DEBUG = false;
 
 function createMessageId() {
   return globalThis.crypto?.randomUUID?.() ??
@@ -593,7 +595,6 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
   }
   const f1ProcessingSequenceRef = useRef<{ assistantId: string; complete: boolean } | null>(null);
   const f1MainPreparingRef = useRef<string | null>(null);
-  const [isComposerExpanded, setIsComposerExpanded] = useState(false);
 
   const legacyDiagnostics = useMemo(
     () => messages.flatMap((message) => [message.diagnostics, message.controllerDiagnostics, message.extractionDiagnostics]),
@@ -717,7 +718,7 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
     if (!textarea) return;
     textarea.style.height = "0px";
     textarea.style.height = `${Math.min(textarea.scrollHeight, 150)}px`;
-  }, [input, isComposerExpanded]);
+  }, [input, isDictating, isChatReadOnly]);
 
   useEffect(() => {
     setIsDictationSupported(Boolean(getSpeechRecognitionConstructor()));
@@ -756,7 +757,6 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
     recognitionRef.current = null;
     setIsDictating(false);
     setHasDictationDraft(false);
-    setIsComposerExpanded(Boolean(inputRef.current.trim()));
     recognition?.abort();
   }
 
@@ -785,7 +785,6 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
     const prefix = dictationPrefixRef.current.trimEnd();
     const completed = [prefix, dictated].filter(Boolean).join(" ");
     setComposerInput(completed);
-    setIsComposerExpanded(Boolean(completed));
     setHasDictationDraft(false);
     setIsDictating(false);
     recognitionRef.current = null;
@@ -883,7 +882,6 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
     speechSegmentsRef.current = [];
     setDictationNotice(null);
     setHasDictationDraft(false);
-    setIsComposerExpanded(false);
     setIsDictating(true);
     startRecognitionCycle(session);
   }
@@ -891,21 +889,13 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
   function handleInputChange(value: string) {
     if (isDictating) cancelDictation();
     setDictationNotice(null);
-    setIsComposerExpanded(true);
     setComposerInput(value);
-  }
-
-  function expandComposer() {
-    if (isDictating || isLoading || !isNotepadHydrated) return;
-    setIsComposerExpanded(true);
-    requestAnimationFrame(() => textareaRef.current?.focus());
   }
 
   function selectDevTestScenario(scenario: DevTestScenario) {
     if (input.trim() && !window.confirm("Composer už obsahuje text. Chcete ho nahradit testovacím scénářem?")) return;
     if (isDictating) cancelDictation();
     setDictationNotice(null);
-    setIsComposerExpanded(true);
     setComposerInput(scenario.text);
     requestAnimationFrame(() => textareaRef.current?.focus());
   }
@@ -1400,7 +1390,6 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
       : (currentF2ToF3Source.error ?? "Nejprve dokončete výchozí Rozbor; pak můžete otevřít pracovní analýzu ve Výstupu.");
     setMessages((current) => [...current, ...(silent ? [] : [userMessage]), { id: createMessageId(), role: "assistant", content, turnId, createdAt: new Date().toISOString(), communicationProfile }]);
     setComposerInput("");
-    setIsComposerExpanded(false);
     setError(null);
     setFailedInput(null);
     if (resolution === "enter_f3" && currentF2ToF3Source.snapshot) {
@@ -1446,7 +1435,6 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
       },
     ]);
     setComposerInput("");
-    setIsComposerExpanded(false);
     setError(null);
     setFailedInput(null);
     setIsLoading(true);
@@ -1597,7 +1585,6 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
     setError(reset.error);
     setFailedInput(reset.failedInput);
     setComposerInput(reset.composerInput);
-    setIsComposerExpanded(reset.isComposerExpanded);
     setIsLoading(reset.isLoading);
     setIsStatsOpen(false);
     setExportStatus(reset.exportStatus);
@@ -2020,7 +2007,7 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
               {message.role === "assistant" ? (
                 <div className="message-author">
                   <ApuLogo className="message-avatar-logo" />
-                  {message.phaseLabel && (
+                  {message.phaseLabel && (SHOW_INLINE_CHAT_DEBUG || !/^\[FÁZE\s+[123]\]$/i.test(message.phaseLabel)) && (
                     <span className="message-phase">{message.phaseLabel.replace(/^\[|\]$/g, "")}</span>
                   )}
                 </div>
@@ -2100,7 +2087,7 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
                   )}
                 </aside>
               )}
-              {isDeveloper && message.role === "assistant" && message.debugText && (
+              {SHOW_INLINE_CHAT_DEBUG && isDeveloper && message.role === "assistant" && message.debugText && (
                 <aside className="response-diagnostics" aria-label="Technická poznámka odpovědi">
                   <div className="diagnostic-debug">{message.debugText}</div>
                 </aside>
@@ -2127,24 +2114,12 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
         </div>
 
           </fieldset>
-          {isProcessingWorkspace && !isChatAtBottom && <button type="button" className="chat-scroll-bottom" aria-label="Přejít na nejnovější zprávy" title="Přejít na nejnovější zprávy" onClick={scrollChatToBottom}><ArrowDown aria-hidden="true" /></button>}
+          {!isChatAtBottom && <button type="button" className="chat-scroll-bottom" aria-label="Přejít na nejnovější zprávy" title="Přejít na nejnovější zprávy" onClick={scrollChatToBottom}><ArrowDown aria-hidden="true" /></button>}
           </div>
           {isChatReadOnly ? <div className="composer chat-read-only" role="status">Chat u Výstupu zatím slouží jen k prohlížení historie. Pro pokračování v rozhovoru se vraťte do Rozboru.</div> : (
         <form className="composer" onSubmit={submit}>
-          <div className={`composer-field${isComposerExpanded && !isDictating ? " is-expanded" : ""}${isDictating ? " is-dictating" : ""}`}>
+          <div className={`composer-field${isDictating ? " is-dictating" : ""}`}>
             <label className="sr-only" htmlFor="message">Zpráva pro APU</label>
-            {isComposerExpanded && !isDictating && (
-              <textarea
-                ref={textareaRef}
-                id="message"
-                rows={1}
-                value={input}
-                onChange={(event) => handleInputChange(event.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder={INPUT_PLACEHOLDER}
-                disabled={isLoading || !isNotepadHydrated}
-              />
-            )}
             <div className="composer-toolbar">
               <button
                 className={`composer-left-action${isDictating ? " is-cancel" : ""}`}
@@ -2166,15 +2141,16 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
                   </span>
                 </div>
               ) : (
-                <button
-                  className="composer-entry-trigger"
-                  type="button"
-                  onClick={expandComposer}
+                <textarea
+                  ref={textareaRef}
+                  id="message"
+                  rows={1}
+                  value={input}
+                  onChange={(event) => handleInputChange(event.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder={INPUT_PLACEHOLDER}
                   disabled={isLoading || !isNotepadHydrated}
-                  aria-label="Napsat zprávu pro APU"
-                >
-                  {!isComposerExpanded && <span>{INPUT_PLACEHOLDER}</span>}
-                </button>
+                />
               )}
               <div className="composer-actions">
                 <button

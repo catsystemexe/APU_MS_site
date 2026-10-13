@@ -75,15 +75,15 @@ test("notepad uses local persistence and floating Lucide tool buttons", () => {
   assert.match(component, /IntersectionObserver/);
   assert.match(page, /\/api\/extract/);
   assert.match(page, /excludeSourceMessageId: sourceMessageId/);
-  assert.match(page, /const INPUT_PLACEHOLDER = "Napište APU…"/);
+  assert.match(page, /const INPUT_PLACEHOLDER = "Napište APU..."/);
   assert.doesNotMatch(page, /Doplňte Zápisník|Upřesněte Rozbor|Upravte Výstup|Popište situaci/);
   assert.match(page, /placeholder=\{INPUT_PLACEHOLDER\}/);
-  assert.match(page, /\{!isComposerExpanded && <span>\{INPUT_PLACEHOLDER\}<\/span>\}/);
+  assert.doesNotMatch(page, /composer-entry-trigger/);
   assert.doesNotMatch(page, /Aktivní kontext:/);
   assert.doesNotMatch(page, /Aktivní vrstva:/);
   assert.doesNotMatch(styles, /\.composer-workspace-indicator/);
   assert.match(styles, /\.composer textarea::placeholder[\s\S]*white-space:\s*nowrap/);
-  assert.match(styles, /\.composer-entry-trigger span[\s\S]*text-overflow:\s*ellipsis/);
+  assert.match(styles, /\.composer textarea[\s\S]*cursor:\s*text/);
 });
 
 test("responsive layout has 30\/70 split and content-only overlay", () => {
@@ -114,7 +114,7 @@ test("responsive layout has 30\/70 split and content-only overlay", () => {
 
 test("desktop starts with the notepad open and keeps the universal composer", () => {
   assert.match(page, /useState<WorkspacePanelId>\("notepad"\)/);
-  assert.match(page, /const INPUT_PLACEHOLDER = "Napište APU…"/);
+  assert.match(page, /const INPUT_PLACEHOLDER = "Napište APU..."/);
   assert.match(page, /activePanel === id \? " is-active"/);
   assert.match(page, /setActivePanel\(\(current\) => current === panel \? null : panel\)/);
 });

@@ -72,7 +72,7 @@ test("desktop panels connect to selected tabs, scroll internally and keep their 
   assert.match(css, /\.desktop-tool-tabs button:focus-visible/);
   assert.match(css, /\.workspace-build \.f2-build-shell[^}]*grid-template-rows: auto minmax\(0, 1fr\) auto/);
   assert.match(css, /\.workspace-output-tools \.f3-tool-body[^}]*overflow-y: auto/);
-  assert.match(css, /\.is-processing-workspace \.message-list[^}]*scrollbar-width: none/);
+  assert.match(css, /\.message-list[^}]*scrollbar-width: none/);
   const client = await readFile(new URL("../app/apu-client.tsx", import.meta.url), "utf8");
   assert.match(client, /onScroll=\{updateChatScrollPosition\} tabIndex=\{0\}/);
   assert.match(client, /!isChatAtBottom && <button[^>]*className="chat-scroll-bottom"/);

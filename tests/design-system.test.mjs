@@ -78,11 +78,11 @@ test("composer is compact by default and expands for typed text", () => {
   assert.match(client, /rows=\{1\}/);
   assert.doesNotMatch(client, /autoFocus/);
   assert.match(client, /requestAnimationFrame\(\(\) => textareaRef\.current\?\.focus\(\)\)/);
-  assert.match(css, /\.composer textarea \{[\s\S]*?min-height: 44px;[\s\S]*?resize: none;/);
-  assert.match(client, /isComposerExpanded/);
+  assert.match(css, /\.composer textarea \{[\s\S]*?min-height: 42px;[\s\S]*?resize: none;/);
+  assert.doesNotMatch(client, /isComposerExpanded|composer-entry-trigger/);
   assert.match(client, /className="composer-toolbar"/);
   assert.match(css, /\.composer-field \{[\s\S]*?min-height: 52px;/);
-  assert.match(css, /\.composer-field\.is-expanded \{[\s\S]*?grid-template-rows: minmax\(44px, auto\) 42px;/);
+  assert.doesNotMatch(css, /\.composer-field\.is-expanded/);
   assert.match(css, /\.composer textarea \{[\s\S]*?width: 100%;/);
 });
 
@@ -99,7 +99,7 @@ test("composer offers persistent Czech speech-to-text with delayed transcript", 
   assert.match(client, /className="dictation-waveform"/);
   assert.match(client, /Zahodit diktovaný text/);
   assert.match(client, /Array\.from\(\{ length: 15 \}/);
-  assert.match(client, /setIsComposerExpanded\(false\);[\s\S]*?setIsDictating\(true\)/);
+  assert.match(client, /setIsDictating\(true\)/);
   assert.doesNotMatch(client, /setComposerInput\(`\$\{prefix\}\$\{transcript\}`\)/);
   assert.match(client, /Diktování ukončíte tlačítkem Stop nebo Odeslat/);
   assert.match(css, /\.dictation-button \{[\s\S]*?width: 42px;[\s\S]*?height: 42px;/);

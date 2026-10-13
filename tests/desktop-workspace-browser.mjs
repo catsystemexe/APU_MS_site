@@ -42,11 +42,31 @@ if (longDocument) {
 }
 window.fixtureMaterialForSnapshot = renderWorkingAnalysis;
 window.fixtureTextForSnapshot = (snapshot) => f3MaterialToText(renderWorkingAnalysis(snapshot));
+// Speech API surface only; real recognition/audio remains outside this fixture.
+window.SpeechRecognition = class {
+  start(){window.fixtureRecognition=this;this.onstart?.();}
+  stop(){this.onend?.();}
+  abort(){this.onend?.();}
+};
 const nativeFetch = window.fetch.bind(window);
 window.calls = [];
 window.fetch = async (url, init) => {
   if (!String(url).startsWith('/api/')) return nativeFetch(url, init);
   const body = JSON.parse(String(init?.body || '{}')); window.calls.push({ url, body });
+  if (url === '/api/chat') {
+    await new Promise(r=>setTimeout(r,120));
+    if (window.failNextChat) {window.failNextChat=false;return Response.json({error:'Testovací chyba Chat.'},{status:500});}
+    const text='[FÁZE 1]\\nČitelná odpověď a nejistota zůstává. '+ 'DlouhýNeoddělenýText'.repeat(75)+'\\n[DEBUG | Profil: P2 | Blok: A | Zóna: 1]';
+    if(window.slowNextChat) {
+      window.slowNextChat=false;
+      const encoder=new TextEncoder();
+      return new Response(new ReadableStream({start(controller){
+        controller.enqueue(encoder.encode(JSON.stringify({type:'delta',text:'STREAM_FIRST '})+'\\n'));
+        setTimeout(()=>{controller.enqueue(encoder.encode(JSON.stringify({type:'delta',text})+'\\n'+JSON.stringify({type:'done',phaseLabel:'[FÁZE 1]',diagnostics:{}})+'\\n'));controller.close();},500);
+      }}));
+    }
+    return new Response(JSON.stringify({type:'delta',text})+'\\n'+JSON.stringify({type:'done',responseId:'fixture-chat',phase:'intake',phaseLabel:'[FÁZE 1]',diagnostics:{},dialogActions:[]})+'\\n',{headers:{'Content-Type':'application/x-ndjson'}});
+  }
   if (url === '/api/f3') { await new Promise(r => setTimeout(r, 350)); if (window.failNextF3) { window.failNextF3=false; return Response.json({error:'Testovací chyba Výstupu.'},{status:500}); } if (window.boundaryNextRender) { window.boundaryNextRender=false; return Response.json({result:{kind:'boundary_issue',reason:'Vyžaduje analytickou změnu.',affectedArea:'Rozbor',suggestedReturnToF2:'Vrátit se'}}); } }
   if (url === '/api/f2') { await new Promise(r => setTimeout(r, 350)); if (window.failNextBuild) { window.failNextBuild = false; return Response.json({ error: 'Testovací chyba Build.' }, { status: 500 }); } }
   const result = url === '/api/extract' ? { extraction: { situationRelation: 'same', situationReason: null, candidates: [] } }
@@ -86,11 +106,127 @@ try {
   const waitFor = async (expression) => { for (let i = 0; i < 150; i++) { if (await evaluate(`Boolean(${expression})`)) return; await new Promise((r) => setTimeout(r, 30)); } throw new Error('Timed out: ' + expression + '\n' + await evaluate('JSON.stringify({calls:window.calls.map(c=>c.url),text:document.body.innerText})')); };
   const click = async (selector) => evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`);
   await call("Emulation.setDeviceMetricsOverride", { width: 1600, height: 1000, deviceScaleFactor: 1, mobile: false });
-  await waitFor('document.querySelector(".workspace-chat .composer-entry-trigger") && document.querySelector(".notepad-panel textarea")');
+  await waitFor('document.querySelector(".workspace-chat #message") && document.querySelector(".notepad-panel textarea")');
   const ratio = await evaluate('document.querySelector(".desktop-tools").getBoundingClientRect().width / document.querySelector(".chat-card").getBoundingClientRect().width');
   assert.ok(Math.abs(ratio - 0.30) < .005, 'fresh split ' + ratio);
   assert.equal(await evaluate('getComputedStyle(document.querySelector(".notepad-panel")).display'), 'block');
   const capture = async (name) => { const image = await call("Page.captureScreenshot", { format: "png", captureBeyondViewport: true }); await writeFile(join(artifactRoot, name + '.png'), Buffer.from(image.data, 'base64')); };
+  const typeInput = async (value) => evaluate(`(() => {const el=document.querySelector('#message');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(el,${JSON.stringify(value)});el.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+  const checkChatBounds = async () => {
+    assert.equal(await evaluate(`(() => {const list=document.querySelector('.message-list');list.scrollLeft=1000;return list.scrollLeft===0 && list.scrollWidth===list.clientWidth;})()`),true,'Chat cannot scroll horizontally');
+    assert.equal(await evaluate(`Array.from(document.querySelectorAll('.assistant-response')).every(el=>getComputedStyle(el).backgroundColor==='rgba(0, 0, 0, 0)')`),true);
+    assert.equal(await evaluate('getComputedStyle(document.querySelector(".message-list")).scrollbarWidth'),'none');
+    assert.equal(await evaluate('document.querySelector(".message-phase, .response-diagnostics, .diagnostic-debug")'),null);
+    assert.equal(await evaluate(`(() => {const r=document.querySelector('.composer').getBoundingClientRect();return r.left>=0 && r.right<=innerWidth && r.bottom<=innerHeight;})()`),true);
+  };
+  const checkWelcome = async () => {
+    await evaluate('document.querySelector("#message").focus();document.querySelector(".welcome-help-trigger").focus()');
+    const point=await evaluate('(() => {const r=document.querySelector(".welcome-help-trigger").getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()');
+    await call('Input.dispatchMouseEvent',{type:'mouseMoved',...point});
+    await waitFor('document.querySelector(".welcome-help")');
+    assert.equal(await evaluate(`(() => {const list=document.querySelector('.message-list').getBoundingClientRect();return ['.welcome-help-trigger','.welcome-help'].every(selector=>{const r=document.querySelector(selector).getBoundingClientRect();return r.left>=list.left && r.right<=list.right && r.top>=list.top && r.bottom<=list.bottom;});})()`),true,'welcome icon and full tooltip fit inside Chat');
+    await checkChatBounds();
+    assert.equal(await evaluate(`(() => {const el=document.querySelector('.welcome-help'),r=el.getBoundingClientRect();return el.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2));})()`),true,'tooltip stays accessible above the Chat surface');
+    await capture('chat-tooltip-'+await evaluate('innerWidth'));
+    await call('Input.dispatchMouseEvent',{type:'mouseMoved',x:0,y:0});
+    await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
+    await waitFor('!document.querySelector(".welcome-help")');
+  };
+  // Fresh F1: click/focus never changes geometry; typing grows only with content.
+  await waitFor('document.querySelector("#message") && !document.querySelector("#message").disabled');
+  assert.equal(await evaluate('document.querySelector("#message").placeholder'),'Napište APU...');
+  assert.equal(await evaluate('getComputedStyle(document.querySelector("#message")).cursor'),'text');
+  const composerGeometry=await evaluate('document.querySelector(".composer").getBoundingClientRect().height');
+  await evaluate('document.querySelector("#message").focus()');
+  await new Promise(r=>setTimeout(r,180));
+  assert.equal(await evaluate('document.querySelector(".composer").getBoundingClientRect().height'),composerGeometry);
+  await call('Input.insertText',{text:'Jedna řádka'});
+  assert.equal(await evaluate('document.querySelector(".composer").getBoundingClientRect().height'),composerGeometry);
+  const beforeTyping=await evaluate('window.calls.length');
+  await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Enter',code:'Enter',windowsVirtualKeyCode:13,modifiers:8,text:'\r'});
+  await call('Input.dispatchKeyEvent',{type:'keyUp',key:'Enter',code:'Enter',windowsVirtualKeyCode:13,modifiers:8});
+  await call('Input.insertText',{text:'Druhá řádka'});
+  await waitFor('document.querySelector("#message").value.includes("\\n")');
+  await waitFor(`document.querySelector('.composer').getBoundingClientRect().height>${composerGeometry}`);
+  assert.equal(await evaluate('window.calls.length'),beforeTyping,'Shift+Enter never sends');
+  await typeInput('řádek\n'.repeat(20));
+  assert.ok(await evaluate('document.querySelector("#message").getBoundingClientRect().height')<=150);
+  await typeInput('');
+  await waitFor(`document.querySelector('.composer').getBoundingClientRect().height===${composerGeometry}`);
+  for(const [width,height] of [[1600,1000],[1024,800],[800,600],[768,1024],[390,844],[320,740]]) {
+    await call('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});
+    if(await evaluate('getComputedStyle(document.querySelector(".desktop-tool-tabs")).display==="none" && document.querySelector(".notepad-panel").classList.contains("is-open")')) await click('.tool-rail-notepad');
+    await checkWelcome();
+    await capture('chat-fresh-'+width);
+  }
+  await call('Emulation.setDeviceMetricsOverride',{width:1600,height:1000,deviceScaleFactor:1,mobile:false});
+  // Exercise F1 Enter/send/failure/retry with actual client and retained debug parsing.
+  await typeInput('První testovací zpráva.');
+  await evaluate('window.failNextChat=true;document.querySelector("#message").focus()');
+  await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Enter',code:'Enter',windowsVirtualKeyCode:13,text:'\r'});
+  await call('Input.dispatchKeyEvent',{type:'keyUp',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});
+  await waitFor('document.querySelector("#message").disabled && document.querySelector(".send-button").disabled && document.querySelector(".dictation-button").disabled');
+  await waitFor('document.querySelector(".error-box button")');
+  const failedChatCalls=await evaluate('window.calls.filter(c=>c.url==="/api/chat").length');
+  await click('.error-box button');
+  await waitFor('!document.querySelector("#message").disabled && !document.querySelector(".error-box")');
+  assert.equal(await evaluate('window.calls.filter(c=>c.url==="/api/chat").length'),failedChatCalls+1);
+  await checkChatBounds();
+  // Dictation start/cancel and start/stop retain the text-entry workflow.
+  await typeInput('Původní text');
+  await click('.dictation-button');
+  await waitFor('document.querySelector(".dictation-waveform")');
+  await click('.composer-left-action');
+  await waitFor('document.querySelector("#message")');
+  assert.equal(await evaluate('document.querySelector("#message").value'),'Původní text');
+  await click('.dictation-button');
+  await evaluate('window.fixtureRecognition.onresult({resultIndex:0,results:[{0:{transcript:"diktovaný doplněk"},isFinal:true}]})');
+  await click('.dictation-button');
+  await waitFor('document.querySelector("#message") && document.querySelector("#message").value.includes("diktovaný doplněk")');
+  await capture('chat-dictation-complete');
+  await typeInput('');
+  await evaluate('window.slowNextChat=true');
+  await typeInput('Test čtení během odpovědi.');await click('.send-button');
+  await waitFor('document.querySelector(".message-list").textContent.includes("STREAM_FIRST")');
+  await evaluate('document.querySelector(".message-list").scrollTo({top:0})');
+  await waitFor('document.querySelector(".chat-scroll-bottom")');
+  await waitFor('!document.querySelector("#message").disabled');
+  assert.equal(await evaluate('document.querySelector(".message-list").scrollTop'),0,'streamed content preserves a reader who scrolled away');
+  // F1 long history: native keyboard/wheel scroll, one opaque arrow, reader stability.
+  await click('.chat-scroll-bottom');await waitFor('!document.querySelector(".chat-scroll-bottom") && document.querySelector(".message-list").scrollHeight-document.querySelector(".message-list").scrollTop-document.querySelector(".message-list").clientHeight<1');
+  await new Promise(r=>setTimeout(r,80));
+  await evaluate(`(() => {const b=document.createElement('div');b.id='f1-scroll-fixture';b.style.height='1800px';document.querySelector('.message-list > div').append(b);})()`);
+  await waitFor('document.querySelector(".message-list").scrollTop>0');
+  await evaluate('document.querySelector(".message-list").scrollTo({top:0})');
+  await waitFor('document.querySelector(".chat-scroll-bottom")');
+  assert.equal(await evaluate(`(() => {const b=document.querySelector('.chat-scroll-bottom'),r=b.getBoundingClientRect(),c=document.querySelector('.composer').getBoundingClientRect();return getComputedStyle(b).backgroundColor==='rgb(255, 255, 255)' && r.bottom<c.top && getComputedStyle(b).borderRadius==='50%';})()`),true);
+  await evaluate('document.querySelector("#f1-scroll-fixture").style.height="2000px"');
+  await new Promise(r=>setTimeout(r,80));
+  assert.equal(await evaluate('document.querySelector(".message-list").scrollTop'),0);
+  const f1Area=await evaluate('(() => {const r=document.querySelector(".message-list").getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()');
+  await call('Input.dispatchMouseEvent',{type:'mouseWheel',...f1Area,deltaX:250,deltaY:150});
+  await waitFor('document.querySelector(".message-list").scrollTop>0');
+  await checkChatBounds();
+  await evaluate('document.querySelector(".message-list").focus()');
+  await call('Input.dispatchKeyEvent',{type:'keyDown',key:'PageDown',code:'PageDown',windowsVirtualKeyCode:34});
+  await call('Input.dispatchKeyEvent',{type:'keyUp',key:'PageDown',code:'PageDown',windowsVirtualKeyCode:34});
+  await call('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'reduce'}]});
+  await click('.chat-scroll-bottom');
+  await waitFor('!document.querySelector(".chat-scroll-bottom")');
+  await call('Emulation.setEmulatedMedia',{features:[]});
+  for(const [width,height] of [[800,600],[768,1024],[390,844],[320,740]]) {
+    await call('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});
+    await checkChatBounds();
+    await evaluate('document.querySelector(".message-list").scrollTo({top:0})');
+    await waitFor('document.querySelector(".chat-scroll-bottom")');
+    await capture('chat-long-'+width);
+    assert.equal(await evaluate(`(() => {const r=document.querySelector('.chat-scroll-bottom').getBoundingClientRect();return document.querySelector('.chat-scroll-bottom').contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2));})()`),true,'arrow must be visible above Chat on mobile');
+    await click('.chat-scroll-bottom');
+    await waitFor('!document.querySelector(".chat-scroll-bottom")');
+  }
+  await call('Emulation.setDeviceMetricsOverride',{width:1600,height:1000,deviceScaleFactor:1,mobile:false});
+  await call('Page.navigate',{url:'http://127.0.0.1:4333/'});
+  await waitFor('document.querySelector("#message") && !document.querySelector("#message").disabled');
   // Settings is a normal-user header control; the closed panel is inert.
   const checkSettings = async () => {
     assert.equal(await evaluate('document.querySelector(".tool-rail-diagnostics, .tool-rail-copy")'), null);
@@ -152,7 +288,7 @@ try {
   assert.equal(await evaluate('window.calls.length'),beforeDisabled);
   assert.ok(await evaluate('Boolean(document.querySelector("#workspace-notepad textarea"))'));
   await capture('intake');
-  await click('.composer-entry-trigger');
+  await click('#message');
   await evaluate('(() => { const el=document.querySelector("#message"); Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,"value").set.call(el,"Přejdi do fáze 2."); el.dispatchEvent(new Event("input",{bubbles:true})); })()');
   await waitFor('!document.querySelector(".send-button").disabled');
   await click('.send-button');
@@ -268,11 +404,11 @@ try {
   await waitFor('!document.querySelector(".chat-scroll-bottom")');
   assert.equal(await evaluate('window.calls.length'),count);
   await evaluate('document.querySelector("#scroll-fixture").remove()');
-  await click('.workspace-chat .composer-entry-trigger');
+  await click('.workspace-chat #message');
   await evaluate('(() => { const el=document.querySelector("#message"); Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,"value").set.call(el,"Doplňuji pohled na situaci."); el.dispatchEvent(new Event("input",{bubbles:true})); })()');
   await waitFor('!document.querySelector(".send-button").disabled');
   const beforeChat = await evaluate('window.calls.length'); await click('.send-button');
-  await waitFor(`window.calls.length>${beforeChat} && window.calls.at(-1).url === '/api/analysis' && !document.querySelector('.composer-entry-trigger').disabled`);
+  await waitFor(`window.calls.length>${beforeChat} && window.calls.at(-1).url === '/api/analysis' && !document.querySelector('#message').disabled`);
   const history = await evaluate('Array.from(document.querySelectorAll(".message[id]")).map(e=>e.id)');
   count = await evaluate('window.calls.length');
   await click('.desktop-tool-tabs button[aria-controls="desktop-tool-build"]');
@@ -313,6 +449,14 @@ try {
   assert.equal(await evaluate('document.querySelector(".f3-material").innerHTML'), outputDocument);
   assert.equal(await evaluate('document.querySelector(".workspace-chat textarea")'), null);
   assert.ok(await evaluate('document.querySelector(".chat-read-only").innerText.includes("jen k prohlížení historie")'));
+  await evaluate('(() => {const block=document.createElement("div");block.id="f3-scroll-fixture";block.style.height="1600px";document.querySelector(".message-list > div").append(block);})()');
+  await waitFor('document.querySelector(".message-list").scrollTop>0');
+  await evaluate('document.querySelector(".message-list").scrollTo({top:0})');
+  await waitFor('document.querySelector(".chat-scroll-bottom")');
+  await click('.chat-scroll-bottom');
+  await waitFor('!document.querySelector(".chat-scroll-bottom")');
+  assert.equal(await evaluate('document.querySelector("#message")'),null);
+  await evaluate('document.querySelector("#f3-scroll-fixture").remove()');
   assert.deepEqual(await evaluate('Array.from(document.querySelectorAll(".message[id]")).map(e=>e.id)'), history);
   assert.equal(await evaluate('window.calls.length'), count);
   await capture('output-chat');
@@ -503,6 +647,16 @@ try {
   assert.equal(await evaluate('document.querySelector("#dev-log-panel, .dev-log-overlay, button[aria-controls=dev-log-panel]")'),null);
   await checkSettings();
   assert.equal(await evaluate('document.querySelector(".header-session-export").closest(".brand") !== null'), true);
+  await waitFor('document.querySelector("#message") && !document.querySelector("#message").disabled');
+  await typeInput('Test DEV metadat.');await click('.send-button');
+  await waitFor('!document.querySelector("#message").disabled && document.querySelector(".message-list").textContent.includes("Čitelná odpověď")');
+  await checkChatBounds();
+  assert.deepEqual(await evaluate(`(() => {let fiber=document.querySelector('.workspace-chat')[Object.keys(document.querySelector('.workspace-chat')).find(key=>key.startsWith('__reactFiber$'))];while(fiber){let hook=fiber.memoizedState;while(hook){const messages=hook.memoizedState;if(Array.isArray(messages)){const message=messages.find(m=>m?.role==='assistant' && m.debugText);if(message)return {phase:message.phaseLabel,debugText:message.debugText,mapping:message.debugMapping};}hook=hook.next;}fiber=fiber.return;}return null;})()`),{phase:'[FÁZE 1]',debugText:'[DEBUG | Profil: P2 | Blok: A | Zóna: 1]',mapping:{profiles:'P2',blocks:'A',zones:'1'}});
+  await typeInput('Další DEV zpráva.');await click('.send-button');
+  await waitFor('!document.querySelector("#message").disabled');
+  assert.deepEqual(await evaluate('window.calls.filter(c=>c.url==="/api/chat").at(-1).body.functionalMapping'),{profiles:'P2',blocks:'A',zones:'1'});
+  await checkChatBounds();
+  await capture('chat-developer-clean');
   assert.equal(await evaluate('(() => { const b=document.querySelector(".developer-log-toggle").getBoundingClientRect(), t=document.querySelector(".conversation-diagnostics .stats-trigger").getBoundingClientRect(), j=document.querySelector(".session-export-trigger").getBoundingClientRect(); return b.right<=t.left && t.right<=j.left; })()'), true);
   await evaluate('window.originalObjectURL=URL.createObjectURL; window.originalAnchorClick=HTMLAnchorElement.prototype.click; URL.createObjectURL=(blob)=>{blob.text().then(text=>window.sessionExportPayload=JSON.parse(text));return window.originalObjectURL(blob)}; HTMLAnchorElement.prototype.click=function(){window.sessionDownloadName=this.download}');
   await click('.session-export-trigger');
@@ -511,6 +665,7 @@ try {
   assert.equal(await evaluate('window.sessionExportPayload.export.format'), 'APU Session JSON');
   assert.equal(await evaluate('window.sessionExportPayload.schema_version'), '1.0');
   assert.equal(await evaluate('window.sessionExportPayload.output'), null);
+  assert.equal(await evaluate('window.sessionExportPayload.chat.some(message=>message.phase==="[FÁZE 1]")'),true,'phase metadata survives developer JSON export');
   assert.ok(await evaluate('window.sessionDownloadName.endsWith(".json")'));
   await evaluate('URL.createObjectURL=()=>{throw new Error("download unavailable")}');
   await click('.session-export-trigger');
@@ -529,7 +684,7 @@ try {
   assert.equal(await evaluate('document.querySelectorAll("#dev-scenario-menu button").length'),9);
   assert.equal(await evaluate('(() => { const el=document.querySelector("#dev-scenario-menu"), r=el.getBoundingClientRect(); return el.contains(document.elementFromPoint(r.right-10,r.top+40)); })()'),true,'scenario popup must remain accessible');
   await click('button[aria-label="Testovací scénáře"]');
-  await click('.composer-entry-trigger');
+  await click('#message');
   await evaluate('(() => { const el=document.querySelector("#message"); Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,"value").set.call(el,"Přejdi do fáze 2."); el.dispatchEvent(new Event("input",{bubbles:true})); })()');
   await waitFor('!document.querySelector(".send-button").disabled'); await click('.send-button');
   await waitFor('document.querySelector("#workspace-document") && document.querySelector(".f2-build-shell")');
@@ -621,8 +776,8 @@ try {
   // Default styles A–L: real client, realistic accepted long form, no provider calls.
   await call('Emulation.setDeviceMetricsOverride',{width:1600,height:1000,deviceScaleFactor:1,mobile:false});
   await call('Page.navigate',{url:'http://127.0.0.1:4333/?document-styles'});
-  await waitFor('document.querySelector(".composer-entry-trigger") && document.querySelector(".notepad-panel textarea")');
-  await click('.composer-entry-trigger');
+  await waitFor('document.querySelector("#message") && document.querySelector(".notepad-panel textarea")');
+  await click('#message');
   await evaluate('(() => { const el=document.querySelector("#message"); Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,"value").set.call(el,"Přejdi do fáze 2."); el.dispatchEvent(new Event("input",{bubbles:true})); })()');
   await waitFor('!document.querySelector(".send-button").disabled'); await click('.send-button');
   await waitFor('document.querySelector(".working-document")');
@@ -816,10 +971,10 @@ try {
   // Upstream analysis acceptance retains explicit adoption protection.
   await click('.desktop-tool-tabs button[aria-controls="desktop-tool-build"]');
   await click('.desktop-tool-tabs button[aria-controls="desktop-tool-chat"]');
-  await click('.workspace-chat .composer-entry-trigger');
+  await click('.workspace-chat #message');
   await evaluate('window.changeNextAnalysis=true; (() => {const el=document.querySelector("#message");Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,"value").set.call(el,"Doplňuji další analytický pohled.");el.dispatchEvent(new Event("input",{bubbles:true}));})()');
   await waitFor('!document.querySelector(".send-button").disabled');await click('.send-button');
-  await waitFor('window.calls.at(-1).url==="/api/analysis" && !document.querySelector(".composer-entry-trigger").disabled');
+  await waitFor('window.calls.at(-1).url==="/api/analysis" && !document.querySelector("#message").disabled');
   await click('.desktop-tool-tabs button[aria-controls="desktop-tool-output"]');
   await waitFor('document.querySelector(".workspace-output-tools .f3-notice button")');
   assert.equal(await evaluate('document.querySelector(".workspace-view-tabs button:nth-child(2)").disabled'),false,'retained valid document remains accessible during upstream staleness');
@@ -865,6 +1020,7 @@ try {
   await new Promise(r=>setTimeout(r,400));
   assert.equal(await evaluate('document.querySelector(".document-creation, .document-update-overlay, .f3-material")'),null,'old project response cannot restore document metadata/content');
   console.log('PASS: Permanent navigation A–P: fresh visible/disabled left and right tabs, guarded internal/mouse navigation, valid phase/readiness activation, independent read-only retrospective notebook and source links, retained default/generated document ownership, no switching API/revision/adoption, default disabled cursor and responsive four-action header.');
+  console.log('PASS: Chat refinement A–R: immediate I-beam textarea and stable focus/one-line geometry; content-driven multiline/150px cap, Enter/Shift+Enter/send/retry/loading, synthetic dictation start/cancel/stop; transparent F1/F2 replies, bounded accessible welcome tooltip and zero horizontal scroll; hidden scrollbar, opaque single bottom arrow in F1/F2/read-only F3, wheel/keyboard/reduced-motion and reader anchoring; DEV phase/debug hidden with retained actual message metadata/functionalMapping/session export; 30/70, narrow desktop, 800x600, portrait, 390px and 320px.');
   console.log('PASS: Change-aware F3/Reset A–O: fresh defaults and config reversion disable updates, actual render provenance restores freshness, no-op/duplicate handler guards, meaningful generation/retry/source changes, instant A/B, preserved generated output/source/timestamp on Reset, protected upstream adoption, monotonic in-flight rejection, pending Reset guards and responsive header.');
   console.log('PASS: Header/update flow A–L: real stable creation timestamp/reset, compact header/major-only dividers, one accessible/reduced-motion overlay for Build/F3, success/failure/obsolete cleanup, async/local Build auto-adoption without F3 calls, retained old cards/config/stale exports, protected upstream adoption and unchanged generated text/table/card paths.');
   await writeFile(join(artifactRoot,'document-style-evidence.json'),JSON.stringify(styleEvidence,null,2));

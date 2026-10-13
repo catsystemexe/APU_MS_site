@@ -4,6 +4,14 @@ Status: CURRENT
 
 Records significant verified product/runtime/project changes. It is not a complete Git log. Historical Sites-era entries are retained where they remain useful; current deployment state must not be inferred from a changelog entry alone.
 
+## 2026-10-13 — Chat composer, message and scrolling presentation
+
+- Replaced focus-triggered composer activation with an immediately editable compact textarea; focus keeps geometry stable and content grows up to 150 px. Existing Enter/Shift+Enter, send/retry/loading, dictation and attachment placeholder behavior remains.
+- Made ordinary assistant replies transparent; constrained Chat text and welcome help to their available width. All Chat phases now hide the visual scrollbar and share the existing opaque, keyboard-accessible bottom arrow, 48 px threshold, reduced-motion scrolling and reader-position safeguards.
+- Disabled inline FÁZE and Profil/Blok/Zóna diagnostics through a client presentation flag, including DEV ON; retained actual message metadata, functional mapping, parsing, developer diagnostics, Session JSON and telemetry. Meaningful notices and interactive cards remain.
+- Verification: typecheck and **239 focused tests** passed. Isolated actual-client Chromium Chat A–R and existing navigation/document/F3/Reset/export suites passed; desktop/mobile screenshots were inspected, including bounded 320 px help, long wrapping and visible bottom controls. Existing six-page A4 A/B PDFs and generated table/card exports passed regression checks. Hosted rendering is **NOT VERIFIED** (branch URL inaccessible); real speech/audio, physical mobile/IME input, Firefox/WebKit runtime, hosted fonts and human print dialog remain unverified. Synthetic responses/recognition and fallback fonts were used without Access bypass or provider-backed F1 benchmarks.
+- Updated Technical Current only. Controlled Notebook Editing, KI-02, roadmap/backlog/Known Issues and analytical/provider contracts are untouched. No merge, deployment or release tag.
+
 ## 2026-10-13 — Permanent workspace navigation, Batch 1
 
 ### Added / Changed

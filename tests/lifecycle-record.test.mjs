@@ -71,6 +71,5 @@ test("only substantive assistant content receives the response surface", async (
   assert.match(styles, /\.user-response \.message-content\s*\{[^}]*?max-width:\s*100%;/);
   assert.doesNotMatch(styles, /\.message--user \.message-content\s*\{[^}]*?(?:width:|min-width:|max-width:)/);
   assert.doesNotMatch(styles, /\.user-response\s*\{[^}]*?min-width:/);
-  assert.doesNotMatch(styles, /\.message-content\s*\{[^}]*?overflow-wrap:\s*anywhere;/);
-  assert.match(styles, /\.message-content\s*\{[^}]*?overflow-wrap:\s*break-word;/);
+  assert.match(styles, /\.message-content\s*\{[^}]*?overflow-wrap:\s*anywhere;/);
 });
