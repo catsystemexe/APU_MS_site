@@ -24,7 +24,9 @@ for (const path of ["POCHOPIT", "POZOROVAT", "VYTVOŘIT"]) test(`A: ${path} mini
   assert.equal(state.finalRender, null);
   const output = renderWorkingAnalysis(state.sourceSnapshot);
   const text = f3MaterialToText(output);
-  for (const expected of ["Pracovní pedagogická analýza", "Vliv h1", "Vliv h2", hypothesis().summary, ...hypothesis().supportingInformation, ...hypothesis().limitations, ...hypothesis().unknowns, hypothesis().question.text, context.mainUncertainty, context.summary, context.notebookContext[0].text]) assert.ok(text.includes(expected), expected);
+  for (const expected of ["Pracovní pedagogická analýza", "Vliv h1", "Vliv h2", hypothesis().summary, ...hypothesis().supportingInformation, ...hypothesis().limitations, ...hypothesis().unknowns, hypothesis().question.text, context.mainUncertainty, context.notebookContext[0].text]) assert.ok(text.includes(expected), expected);
+  assert.ok(!text.includes(context.summary));
+  assert.equal(state.sourceSnapshot.analysisContext.summary, context.summary);
   assert.doesNotMatch(text, /POCHOPIT|POZOROVAT|VYTVOŘIT/);
   assert.notEqual(output.title, source.f3Target);
   let copied;

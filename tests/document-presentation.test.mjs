@@ -33,13 +33,15 @@ test("bounded adapter recognizes explicit bullets and retains uncertain prose li
 });
 
 test("icons use only known deterministic section associations; unknown headings are undecorated", () => {
-  assert.equal(documentSectionKind("Pedagogická potřeba"), "need");
-  assert.equal(documentSectionKind("Pracovní hypotéza 2: Podmínky"), "hypothesis");
-  assert.equal(documentSectionKind("Rozvinutí hypotézy: Podmínky"), "hypothesis");
+  assert.equal(documentSectionKind("Informace ze Zápisníku"), "notebook");
+  assert.equal(documentSectionKind("Pracovní hypotézy"), "hypotheses");
+  assert.equal(documentSectionKind("Pracovní hypotéza 2 — Podmínky"), null);
+  assert.equal(documentSectionKind("Rozšíření analýzy"), "extensions");
+  assert.equal(documentSectionKind("Rozvinutí hypotézy: Podmínky"), null);
   for (const heading of ["Nový název", "Pedagogická potřeba navíc", "Pracovní hypotéza bez známého tvaru", "constructor"]) assert.equal(documentSectionKind(heading), null);
   const html = render({ kind: "material", title: "Název", introduction: "Úvod", sections: [{ heading: "Nový název", content: "Nezměněné znění" }], table: null, cards: [], usageNote: null }, "b");
   assert.ok(!html.includes("<svg"));
-  assert.match(html, /aria-hidden="true">01/);
+  assert.doesNotMatch(html, /document-section-number/);
 });
 
 for (const path of ["POCHOPIT", "POZOROVAT", "VYTVOŘIT"]) for (const expanded of [false, true]) test(`${path} ${expanded ? "accepted expansion" : "baseline"}: A/B preserve every source section, question, uncertainty and copied word`, async () => {
@@ -53,14 +55,16 @@ for (const path of ["POCHOPIT", "POZOROVAT", "VYTVOŘIT"]) for (const expanded o
   const a = render(content, "a"); const b = render(content, "b");
   assert.equal(a.replaceAll("document-style-a", "document-style-b").replaceAll('data-document-style="a"', 'data-document-style="b"'), b);
   assert.equal(semanticText(a), semanticText(b));
-  const expected = [content.title, content.introduction, ...content.sections.flatMap((section) => [section.heading, section.content.replace(/^• /gm, "")]), "Podmínka použití", content.usageNote].join(" ");
+  const expected = [content.title, content.introduction, ...content.documentGroups.flatMap((group) => [group.heading, ...group.sections.flatMap((section) => [section.heading, section.content.replace(/^• /gm, "")])]), "Podmínka použití", content.usageNote].join(" ");
   assert.equal(semanticText(a), normalize(expected));
-  assert.equal((a.match(/<h3/g) ?? []).length, content.sections.length);
+  assert.equal((a.match(/<h3/g) ?? []).length, content.documentGroups.length);
+  assert.equal((a.match(/<h4/g) ?? []).length, content.sections.length);
   assert.equal((a.match(/<h2/g) ?? []).length, 1);
   assert.match(a, /<ul class="document-list"><li>/);
   assert.match(a, /class="document-paragraph document-list-label">Podpůrné informace:/);
-  const numbers = [...a.matchAll(/document-section-number" aria-hidden="true">(\d+)/g)].map((m) => Number(m[1]));
-  assert.deepEqual(numbers, content.sections.map((_, index) => index + 1));
+  assert.doesNotMatch(a, /document-section-number/);
+  assert.deepEqual(content.documentGroups[1].sections.filter(section => section.role === "hypothesis").map(section => section.heading), longHypotheses.map(h => `Pracovní hypotéza ${h.rank} — ${h.title}`));
+  assert.ok(!a.includes(longContext.summary) && !a.includes(longContext.needAnalysis.intendedOutput));
   assert.equal((semanticText(a).match(/Zdroj: přijatý Rozbor, revize 4/g) ?? []).length, 1);
   const copied = [];
   for (const style of ["a", "b"]) { render(content, style); await copyF3Output(content, { writeText: async (text) => copied.push(text) }); }

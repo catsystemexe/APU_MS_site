@@ -8,7 +8,7 @@ import { copyF3Output, printF3Output } from "./f3-output-export";
 import { DocumentContent } from "./document-content";
 import type { WorkingDocumentStyle } from "./document-presentation";
 import type { F2ToF3Snapshot } from "./f2-build-model";
-import { createF3State, hasNewerF2Snapshot, type F3Representation, type F3Config, type F3State } from "./f3-finalization-model";
+import { createF3State, hasNewerF2Snapshot, type F3Material, type F3Representation, type F3Config, type F3State } from "./f3-finalization-model";
 
 const options = {
   audience: [["teacher", "Pro učitele"], ["parent", "Pro rodiče"], ["student", "Pro žáka"], ["internal", "Interní podklad"]],
@@ -34,7 +34,7 @@ export function F3Finalization({ snapshot, sourceError, state: providedState, st
   const source = documentMode === "analysis" ? snapshot : state?.sourceSnapshot;
   const baseline = useMemo(() => source ? renderWorkingAnalysis(source) : null, [source]);
   const materialRef = useRef<HTMLElement>(null);
-  const [exportNotice, setExportNotice] = useState<{ content: typeof baseline; stale: boolean; message: string } | null>(null);
+  const [exportNotice, setExportNotice] = useState<{ content: F3Material | null; stale: boolean; message: string } | null>(null);
   const newer = state ? hasNewerF2Snapshot(state, snapshot) : false; const render = state?.finalRender;
   const workingAnalysis = documentMode === "analysis" || state?.representation === "analysis";
   const content = unavailable ? null : workingAnalysis ? baseline : render?.content;

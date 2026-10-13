@@ -56,6 +56,19 @@ Tento doplněk upravuje pouze vizuální prezentaci deterministické pracovní a
 
 Ověření: typecheck, 138 cílených testů a existující izolovaný Chromium fixture s realistickým dlouhým přijatým dokumentem prošly. Obě podoby vytvořily sedmistránkové A4 PDF se shodným úplným věcným textem, okraji 18 mm a zachovanými otázkami/nejistotou. Screenshoty desktopu, úzkého desktopu a portrétu/mobilu byly zkontrolovány. Autentizované hostované UI zůstává **NOT VERIFIED — access blocked**; žádný auth bypass, providerový benchmark, merge ani produkční nasazení nebyl proveden.
 
+## Hierarchie výchozího dokumentu — aktuální design, doplnění 2026-10-13
+
+Tento doplněk nahrazuje předchozí pravidlo globálního číslování a plochého členění výchozího dokumentu. Předchozí doplňky a historický sprintový plán zůstávají zachovány.
+
+- Výchozí pracovní analýza má společnou hierarchii **Informace ze Zápisníku → Pracovní hypotézy → Rozšíření analýzy**. Poslední skupina vzniká pouze z přijatých neprázdných komponent; pending volby Build nejsou dokumentový obsah.
+- Zápisník používá původní strukturované záznamy: Pedagogická potřeba, Projevy, Kontext, Průběh, Co pomáhá a případné Další pedagogické potřeby. Neprázdné kategorie jsou seznamy v původním pořadí položek. Aktivní potřeba se zobrazí jednou; z dalších potřeb se vynechá pouze její přesná opakovaná hodnota po normalizaci whitespace. Kanonické záznamy se nemění.
+- Zaměření ověřování patří pod Pracovní hypotézy. Hypotézy zachovávají skutečný zdrojový rank, titul, souhrn, oporu, omezení, neznámé a otázky; obecná nejistota následuje za nimi. Přijatá rozšíření zachovávají dosavadní obsah všech podporovaných komponent.
+- `analysisContext.summary` a `needAnalysis.intendedOutput` jsou výslovně vynechány pouze z výchozí projekce a jejích exportů: procesní souhrn a obecný záměr výstupu nejsou standardní sekce dokumentu. Hodnoty zůstávají v přijatém snapshotu pro ostatní oprávněná použití; nevzniká klasifikátor ani náhradní generovaný souhrn.
+- **VAR A** zůstává výchozí čistou nečíslovanou typografií; **VAR B** používá malé dekorativní ikony jen u hlavních skupin a obecné nejistoty. Obě podoby, DOM i Copy Text používají stejnou lokální strukturovanou projekci přijatého zdroje. Číslování se vztahuje pouze na skutečný rank hypotéz.
+- Volba stylu ani nové členění nemění analytický stav, přijetí zdroje, revize, stale pravidla či modelovou materializaci. Čitelné stránkové proporce a více stránkový A4 tisk zůstávají; DOCX je budoucí schopnost.
+
+Ověření: typecheck, 148 cílených testů a existující izolovaný Chromium fixture prošly. A/B mají shodný úplný text projekce v DOM/Copy a šestistránkových A4 PDF, včetně uživatelské podmínky a zdrojové revize. Ověřeny byly kategorie, konzervativní deduplikace, ranky 1/4/8, rozšíření všech tří strategií, navigace, izolace stavu a exportní regrese. Screenshoty desktopu, úzkých a portrétních/mobilních pohledů a tiskové stránky byly zkontrolovány. Autentizované hostované UI, přesné hostované fonty a lidský tiskový dialog zůstávají **NOT VERIFIED**; žádný bypass, providerový benchmark, merge ani nasazení nebyl proveden.
+
 ## 1. Definice MVP PASS
 MVP je považováno za hotové pouze tehdy, když reálný uživatelský průchod splní celý následující kontrakt bez porušení source-of-truth hranic:
 - F1 přijme reálnou situaci a vytvoří použitelný Zápisník a pedagogickou potřebu.

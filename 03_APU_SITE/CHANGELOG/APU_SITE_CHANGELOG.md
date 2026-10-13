@@ -4,6 +4,21 @@ Status: CURRENT
 
 Records significant verified product/runtime/project changes. It is not a complete Git log. Historical Sites-era entries are retained where they remain useful; current deployment state must not be inferred from a changelog entry alone.
 
+## 2026-10-13 — Default document information hierarchy
+
+### Added / Changed
+- Grouped the shared deterministic default document into **Informace ze Zápisníku**, **Pracovní hypotézy** and conditional **Rozšíření analýzy**. Notebook categories use original structured list items; active need repeats are excluded only by trim/whitespace comparison, retaining distinct goals and every stored record.
+- Moved meaningful analytical focus into hypotheses, retained original hypothesis ranks/content and accepted component mappings, and placed general uncertainty after hypotheses. Exact already-displayed local limitations are not repeated; distinct and otherwise unrendered aggregate values remain.
+- Explicitly excluded `analysisContext.summary` and `needAnalysis.intendedOutput` from default DOM/Copy/PDF while retaining them untouched in the accepted snapshot. No classifier, source/schema mutation or model generation was introduced.
+- Replaced global numbers with major/minor semantic headings and shared paragraph/list blocks. VAR A stays default; VAR B icons now orient only major groups/general uncertainty. Copy includes the same full projected hierarchy and usage heading as the visible/printed document. Generated F3 text/table/card contracts, client style state, source adoption/revisions/stale rules and existing header actions remain unchanged.
+- Updated the roadmap current-design addendum and runtime technical-current document; historical roadmap/changelog retained. DOCX remains future; backlog, Known Issues and workflow files are unchanged.
+
+### Verification
+- Typecheck and **148 focused tests** passed: source variations, missing/empty categories and questions, one/two/multiple hypotheses with nonconsecutive ranks, conservative dedup/exclusions, all accepted component kinds across three strategies, F2/F3 default identity, A/B content/Copy parity and state/export regressions.
+- Existing isolated actual-client Chromium fixture passed hierarchy A–L plus prior header/workspace/style checks, with no A/B/navigation API calls or source/config changes. Desktop 30/70, narrow desktop, portrait/mobile, normal/developer mode, copy/print/stale controls and generated outputs passed.
+- A/B each produced **6-page A4 PDFs**, with complete projected text/order equal to Copy, 18 mm margin bounds, headings/list labels followed by content and short items retained. Generated table/card PDF data and document-only isolation passed. Desktop A/B, long hypotheses/mobile and representative print pages were visually inspected.
+- **NOT VERIFIED:** authenticated hosted rendering (branch URL inaccessible), exact hosted fonts, human native print dialog and physical printing. Fixture uses synthetic accepted content, Arial fallbacks and intercepted print-dialog invocation. No auth bypass, provider benchmark, new infrastructure, DOCX, PR merge or production deployment occurred.
+
 ## 2026-10-13 — Default document styles A / B
 
 ### Added / Changed

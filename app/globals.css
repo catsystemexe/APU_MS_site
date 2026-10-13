@@ -2141,9 +2141,11 @@ button:disabled { cursor: default; opacity: 0.52; }
 .working-document > section { margin: 28px 0 0; padding: 24px 0 0; border-top: 1px solid #e1e4e8; }
 .working-document .document-heading { display: flex; align-items: baseline; gap: 10px; margin: 0 0 14px; color: #242a31; font-size: calc(18px * var(--font-scale)); font-weight: 700; line-height: 1.4; }
 .working-document .document-heading > span:last-child { min-width: 0; }
-.working-document .document-section-number { flex: none; color: #6b737c; font-family: var(--font-body); font-size: calc(12px * var(--font-scale)); font-weight: 600; font-variant-numeric: tabular-nums; }
+.working-document .document-major-heading { font-size: calc(20px * var(--font-scale)); }
+.working-document .document-subheading { font-family: var(--font-display); }
+.working-document .document-subsection { margin: 22px 0 0; }
+.working-document .document-subsection[data-document-role="hypothesis"] + .document-subsection { padding-top: 20px; border-top: 1px solid #e1e4e8; }
 .working-document .document-section-icon { display: none; flex: none; width: 16px; height: 16px; color: #66717b; stroke-width: 1.5; }
-.document-style-b .document-section-number { display: none; }
 .document-style-b .document-section-icon { display: inline-block; align-self: start; margin-top: .25em; }
 .working-document .document-paragraph { margin: 0 0 14px; white-space: pre-wrap; }
 .working-document .document-list-label { margin-bottom: 6px; font-weight: 600; }
@@ -2162,10 +2164,13 @@ button:disabled { cursor: default; opacity: 0.52; }
   .f3-print-document .working-document > header h2 { font-size: 22pt; line-height: 1.25; }
   .f3-print-document .working-document > section { margin: 7mm 0 0; padding: 5mm 0 0; break-inside: auto; }
   .f3-print-document .working-document .document-heading { margin-bottom: 3mm; font-size: 13.5pt; break-inside: avoid; break-after: avoid; }
-  .f3-print-document .working-document .document-section-number { font-size: 9pt; }
+  .f3-print-document .working-document .document-major-heading { font-size: 14.5pt; }
+  .f3-print-document .working-document .document-subsection { margin: 5mm 0 0; break-inside: auto; }
+  .f3-print-document .working-document .document-subsection[data-document-role="hypothesis"] + .document-subsection { padding-top: 4mm; }
   .f3-print-document .working-document .document-section-icon { width: 11pt; height: 11pt; }
   .f3-print-document .working-document .document-paragraph { margin-bottom: 3mm; orphans: 3; widows: 3; }
   .f3-print-document .working-document .document-heading + .document-paragraph,
+  .f3-print-document .working-document .document-major-heading + .document-subsection,
   .f3-print-document .working-document .document-heading + .document-list,
   .f3-print-document .working-document .document-list-label + .document-list { break-before: avoid; }
   .f3-print-document .working-document .document-list-label { margin-bottom: 1.5mm; break-after: avoid; }
