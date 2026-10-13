@@ -4,6 +4,12 @@ Status: CURRENT
 
 Records significant verified product/runtime/project changes. It is not a complete Git log. Historical Sites-era entries are retained where they remain useful; current deployment state must not be inferred from a changelog entry alone.
 
+## 2026-10-14 — Cloudflare development toolchain compatibility repair
+
+- Removed the duplicate local `nodejs_compat` override from `vite.config.ts`; preserved `wrangler.jsonc` byte-for-byte, including compatibility date **2026-08-21**. Updated only the three requested direct development dependencies: Wrangler **4.150.0**, Cloudflare Vite plugin **1.63.2**, Workers types **5.20261006.1**; regenerated the npm lockfile and matching Cloudflare/native-tooling transitives without force or legacy peer overrides.
+- Verification PASS in Codex Cloud/Linux: lockfile installation through the existing environment wrapper, clean full installed dependency tree/no peer conflicts, typecheck, **107 relevant tests**, bounded build, standalone Worker artifact validation and diff check. Generated configuration has the unchanged compatibility date and exactly one compatibility flag. Existing install-only unused platform helpers were cleaned without changing cross-platform lock metadata; application code and scripts are unchanged.
+- Updated Runtime Technical Current. Local Windows install/startup/browser smoke and production runtime are **NOT VERIFIED**; build/artifact PASS does not imply either. No unrelated direct dependency upgrades, model/API/prompt/Core changes, PR merge or deployment. Backlog and Known Issues are unchanged.
+
 ## 2026-10-14 — Quest Controller contract consistency and fallback observability
 
 - Reimplemented directly on F1–F3 baseline `a912aa82983f62522819c830afd142308365ec35`, without fetching/merging PR #61 or using a B1.4 worktree. Controller NAV instructions, deterministic NAV and strict option validation now share the canonical label from `dialog-action.ts`.

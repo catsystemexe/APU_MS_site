@@ -39,6 +39,13 @@ Purpose: describe the current repository/runtime contract. Deployment state is r
 - Production deployment is a distinct operation and is not authorized merely because build/tests pass.
 - Cloudflare is the hosted runtime/deployment platform; repository code owns the deployment contract while Cloudflare owns hosted runtime values.
 
+### Cloudflare development toolchain repair (2026-10-14)
+
+- On stabilization baseline `c0965ea76990dbc0dfa76da7d9f5d497446767f0`, the exact development dependencies are Wrangler **4.150.0**, `@cloudflare/vite-plugin` **1.63.2**, and `@cloudflare/workers-types` **5.20261006.1**. `package-lock.json` was regenerated with npm, without force/legacy peer overrides. Cloudflare's corresponding transitive tooling resolves to Workerd **1.20261006.1** and Miniflare **5.20261006.2-beta**; other direct dependencies and scripts remain unchanged.
+- `vite.config.ts` local binding overrides specify the source Worker entry only; the duplicate `nodejs_compat` override was removed. Canonical `wrangler.jsonc` remains byte-for-byte unchanged, with `compatibility_date: 2026-08-21` and its existing compatibility flag. The generated Worker config retains that date and exactly one `nodejs_compat` declaration.
+- Verified in Codex Cloud/Linux with Node **24.19.0** and npm **11.9.0**: lockfile installation, full dependency-tree consistency/no peer conflicts, `npm run typecheck`, **107 relevant tests**, bounded `npm run build`, standalone ESM `default.fetch` artifact validation and `git diff --check` all passed. Installation used `bash scripts/sites-env.sh -- npm run install:ci` to avoid the existing direct helper executable-bit issue, without modifying scripts. Unused platform/WASM helper packages marked extraneous by npm were removed from the Linux installation only; cross-platform lockfile metadata remains intact. Build warnings concern proxy detection and production bundling fields ignored by Vite; the build completes successfully.
+- This verifies dependency/configuration/build compatibility, not local Windows startup or hosted production runtime. Fresh Windows installation, `npm run dev:local` startup and browser smoke remain **NOT VERIFIED** and must be performed separately after integration. Application/model/API/Core behavior and compatibility date were not changed. No PR merge or deployment occurred.
+
 ## Authentication and access
 - Cloudflare Access is the intended hosted authentication gate for the Worker.
 - OpenAI-backed API requests additionally validate the Cloudflare Access JWT as defense in depth.
