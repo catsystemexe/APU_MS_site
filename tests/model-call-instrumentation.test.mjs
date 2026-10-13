@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { pathToFileURL } from "node:url";
 
-const moduleUrl = pathToFileURL(new URL("../app/model-call-instrumentation.ts", import.meta.url).pathname).href;
+const moduleUrl = new URL("../app/model-call-instrumentation.ts", import.meta.url).href;
 const { createInstrumentedModelCallLifecycle, InstrumentedModelCallError, runInstrumentedModelCall } = await import(moduleUrl);
 
 function baseInput(overrides = {}) {

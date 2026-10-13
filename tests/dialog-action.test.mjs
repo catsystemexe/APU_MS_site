@@ -4,7 +4,8 @@ import test from "node:test";
 import {
   cleanDialogActionQuestion, cleanStructuredQuestionText, fallbackQuestController, requiredIntakeTarget, resolveDialogEvent, resolveF2OutputNavigation, resolveTextDialogEvent, validateQuestControllerResult,
 } from "../app/dialog-action.ts";
-import { canBypassQuestController, QUEST_CONTROLLER_SCHEMA } from "../app/quest-controller.ts";
+import { canBypassQuestController, QUEST_CONTROLLER_SCHEMA, questControllerFallbackReason } from "../app/quest-controller.ts";
+import { InstrumentedModelCallError } from "../app/model-call-instrumentation.ts";
 
 const manifestation = { category: "manifestations", text: "Při samostatné práci odloží tužku a nezačne." };
 const goal = { category: "goals", text: "Potřebuji podpořit zahájení práce bez opakovaných výzev." };
@@ -143,11 +144,44 @@ test("controller output validation enforces priority order, independent SIDE, an
   assert.deepEqual(validateQuestControllerResult(valid, [manifestation, goal], "intake")?.dialog_actions, valid.dialog_actions);
   assert.equal(validateQuestControllerResult({ phase: "intake", transition_ready: true, intake_question_policy_applies: true, dialog_actions: [nav(), side()] }, [manifestation, goal], "intake"), null);
   assert.equal(validateQuestControllerResult(valid, [manifestation, goal], "intake", { askedTargets: ["context"] }), null);
+  assert.deepEqual(
+    validateQuestControllerResult(valid, [manifestation, goal], "intake", {
+      askedTargets: ["context"],
+      pendingSide: { target: "context", question: valid.dialog_actions[0].question },
+    })?.dialog_actions,
+    valid.dialog_actions,
+  );
+  assert.equal(validateQuestControllerResult(valid, [manifestation, goal], "intake", {
+    askedTargets: ["context"],
+    pendingSide: { target: "context", question: "A different question" },
+  }), null);
+  assert.equal(validateQuestControllerResult(valid, [manifestation, goal, { category: "context", text: "In the classroom" }], "intake", {
+    askedTargets: ["context"],
+    pendingSide: { target: "context", question: valid.dialog_actions[0].question },
+  }), null);
   assert.equal(validateQuestControllerResult({ phase: "intake", transition_ready: false, intake_question_policy_applies: true, dialog_actions: [main("observed_phenomenon")] }, [manifestation], "intake"), null);
   assert.equal(validateQuestControllerResult({ phase: "intake", transition_ready: true, intake_question_policy_applies: true, dialog_actions: [] }, [manifestation, goal], "intake"), null);
   assert.deepEqual(validateQuestControllerResult({ phase: "intake", transition_ready: false, intake_question_policy_applies: false, dialog_actions: [] }, [manifestation, goal], "intake"), {
     phase: "intake", transition_ready: false, intake_question_policy_applies: false, dialog_actions: [],
   });
+});
+
+test("controller fallback reasons distinguish provider and application failures", () => {
+  const record = (provider_status, application_status = "failed") => ({ provider_status, application_status });
+  assert.equal(questControllerFallbackReason(record("failed")), "provider_failure");
+  assert.equal(questControllerFallbackReason(record("incomplete")), "incomplete_provider_response");
+  assert.equal(questControllerFallbackReason(record("transport_error")), "transport_failure");
+
+  const invalidRecord = record("completed", "rejected_invalid_output");
+  assert.equal(questControllerFallbackReason(
+    invalidRecord,
+    new InstrumentedModelCallError("Model response failed application validation", invalidRecord, new SyntaxError("invalid JSON")),
+  ), "json_parse_failure");
+  assert.equal(questControllerFallbackReason(
+    invalidRecord,
+    new InstrumentedModelCallError("Model response failed application validation", invalidRecord, new Error("invalid controller response")),
+  ), "controller_contract_validation_failure");
+  assert.equal(questControllerFallbackReason(record("unknown")), "unknown_failure");
 });
 
 test("controlled navigation changes phase without creating a fact", () => {
@@ -220,6 +254,7 @@ test("Quest Controller uses Core as the pedagogical source and a strict technica
   assert.match(source, /args\.coreInstructions/);
   assert.match(source, /strict: true/);
   assert.match(source, /store: false/);
+  assert.match(source, /NAV pro přechod do řešení použije option continue_to_solution s labelem „Můžeme se teď podívat, co z dosavadních informací vyplývá\?“/);
   assert.match(source, /chat_navigation_event === "continue_to_solution"/);
   assert.doesNotMatch(source, /MAIN má absolutní prioritu|Po splnění minima vyber/);
 });
@@ -317,7 +352,7 @@ test("chat route records deterministic Controller bypass without inventing an LL
   ]);
   assert.match(route, /canBypassQuestController/);
   assert.match(route, /mode: "deterministic_bypass"/);
-  assert.match(route, /controller: \{ mode: controllerMode \}/);
+  assert.match(route, /controller: \{[^}]*mode: controllerMode,[^}]*fallback_reason: controllerFallbackReason/);
   assert.match(client, /controllerFastPathEligible/);
   assert.match(exportSource, /deterministic_bypass/);
 });

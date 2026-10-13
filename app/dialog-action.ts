@@ -253,7 +253,10 @@ export function validateQuestControllerResult(
     (priority.options.length !== 1 || priority.options[0].id !== CONTINUE_OPTION.id || priority.options[0].label !== CONTINUE_OPTION.label)) return null;
 
   const askedTargets = [...new Set(refinement.askedTargets)];
-  if (sides[0] && askedTargets.includes(sides[0].target)) return null;
+  if (sides[0] && askedTargets.includes(sides[0].target)) {
+    const pendingSide = refinement.pendingSide;
+    if (!pendingSide || pendingSide.target !== sides[0].target || pendingSide.question !== sides[0].question) return null;
+  }
   const sideCategory = sides[0] ? SIDE_NOTEBOOK_CATEGORY[sides[0].target] : undefined;
   if (sideCategory && hasCategory(notebook, sideCategory)) return null;
   return value as QuestControllerResult;

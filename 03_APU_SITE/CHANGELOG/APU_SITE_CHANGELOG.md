@@ -4,6 +4,13 @@ Status: CURRENT
 
 Records significant verified product/runtime/project changes. It is not a complete Git log. Historical Sites-era entries are retained where they remain useful; current deployment state must not be inferred from a changelog entry alone.
 
+## 2026-10-14 — Quest Controller contract and fallback observability
+
+- Aligned the controller's NAV label instruction with the strictly validated canonical label. An unchanged pending SIDE may now survive target-history validation only when its target and question match the pending item and its Notebook category remains unanswered; unrelated repeats remain rejected.
+- Exposed safe controller fallback reasons for provider failure, incomplete response, transport failure, JSON parse failure, controller contract validation failure, and unknown failure. Canonical provider/application usage status and records remain unchanged; no response or user content is added to telemetry.
+- Updated the two instrumentation test loaders to import modules through their existing file URLs, so the suites resolve correctly on Windows without changing test cases.
+- Verification: 49 focused dialog/controller/F1/instrumentation tests and typecheck passed; `git diff --check` is clean. No paid API tests, merge or deployment were performed.
+
 ## 2026-10-13 — Chat composer, message and scrolling presentation
 
 - Replaced focus-triggered composer activation with an immediately editable compact textarea; focus keeps geometry stable and content grows up to 150 px. Existing Enter/Shift+Enter, send/retry/loading, dictation and attachment placeholder behavior remains.

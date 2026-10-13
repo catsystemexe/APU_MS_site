@@ -297,6 +297,7 @@ export async function POST(request: Request) {
   const controllerMode = controlledResult ? "controlled_navigation" as const
     : controllerBypass ? "deterministic_bypass" as const
       : controllerRun.usedFallback ? "llm_fallback" as const : "llm" as const;
+  const controllerFallbackReason = "fallbackReason" in controllerRun ? controllerRun.fallbackReason : undefined;
   const controllerResult = {
     ...controllerRun.result,
     dialog_actions: controllerRun.result.dialog_actions.map(cleanDialogActionQuestion),
@@ -454,7 +455,10 @@ export async function POST(request: Request) {
               ],
               context_sizes: { unit: "chars", core: instructions.length, runtime_instructions: Math.max(0, composedInstructions.length - instructions.length), notebook: JSON.stringify(notebook).length, previous_analysis: body.analysisContext ? JSON.stringify(body.analysisContext).length : 0, user_message: (body.message as string).length, previous_response_context: typeof body.previousResponseId === "string" ? null : 0 },
               tools: { file_search: { available: execution.useKnowledgeBase, invoked: fileSearchCalls > 0, calls: fileSearchCalls, duration_ms: null } },
-              controller: { mode: controllerMode },
+              controller: {
+                mode: controllerMode,
+                ...(controllerFallbackReason ? { fallback_reason: controllerFallbackReason } : {}),
+              },
               streaming: { model: true, backend: true, transport: true, ui: true },
             } } : {}),
             model_usage_records: usageCollector.records(),

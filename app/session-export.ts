@@ -2,6 +2,7 @@ import type { AnalysisState } from "./analysis-model";
 import type { CommunicationProfileId } from "./communication-profile";
 import type { Diagnostics } from "./conversation-diagnostics";
 import type { ConversationPhase } from "./dialog-action";
+import type { QuestControllerFallbackReason } from "./quest-controller.ts";
 import type { WorkspacePanel } from "./notepad";
 import type { NotepadState } from "./notepad-model";
 
@@ -54,7 +55,10 @@ export type SessionTelemetry = {
     generation: number | null;
   };
   transition_from?: "F1" | "F2" | "F3";
-  controller?: { mode: "llm" | "llm_fallback" | "deterministic_bypass" | "controlled_navigation" };
+  controller?: {
+    mode: "llm" | "llm_fallback" | "deterministic_bypass" | "controlled_navigation";
+    fallback_reason?: QuestControllerFallbackReason;
+  };
   stages: SessionStage[];
   context_sizes: ContextSizes;
   tools: { file_search: { available: boolean; invoked: boolean; calls: number; duration_ms: number | null } };

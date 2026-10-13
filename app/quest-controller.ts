@@ -10,6 +10,8 @@ import {
 } from "./dialog-action.ts";
 import type { DebugMapping } from "./response-metadata.ts";
 import { callOpenAIResponses, type RequestUsageCollector } from "./openai-responses-instrumentation.ts";
+import { InstrumentedModelCallError } from "./model-call-instrumentation.ts";
+import type { ModelUsageRecord } from "./usage-ledger.ts";
 
 export const QUEST_CONTROLLER_MODEL = "gpt-5.6-luna";
 
@@ -89,11 +91,33 @@ const CONTROLLER_INSTRUCTIONS = `Jsi technický Quest Controller APU Site. Pedag
 - Pokud pendingSide existuje, sémanticky posuď, zda ji currentMessage zodpověděla a zda je stále relevantní. Je-li nezodpovězená a relevantní, vrať ji beze změny jako SIDE. Je-li zodpovězená nebo již nerelevantní, vyber další SIDE podle Core.
 - intake_question_policy_applies klasifikuje, zda jde podle Core o relevantní intake tah. Pokud je true, dialog_actions musí obsahovat prioritní otázku; pokud je false nebo se přechází mimo intake, vrať prázdné dialog_actions.
 - SIDE target technicky klasifikuj podle obsahu: context = kdy/kde/při čem/s kým; course = četnost/délka/intenzita/trend; helps = co bylo vyzkoušeno a s jakým účinkem; hypothesis = interpretace pedagoga.
-- NAV pro přechod do řešení použije option continue_to_solution s labelem „Chcete přejít k návrhům podpory?“.
+- NAV pro přechod do řešení použije option continue_to_solution s labelem „Můžeme se teď podívat, co z dosavadních informací vyplývá?“.
 - chat_navigation_event nastav na continue_to_solution pouze tehdy, když currentMessage obsahuje jednoznačný uživatelský pokyn přejít k návrhům, doporučením, řešení či pokračovat dál. Kliknutí na NAV a takový chatový pokyn jsou rovnocenné. Pouhá odpověď na SIDE, otázka o možnosti přechodu, negace, odklad nebo nejednoznačné „ano“ znamenají none.
 - Target uvedený v askedRefinementTargets neopakuj. SIDE na context, course nebo helps nepokládej ani tehdy, když už příslušná kategorie obsahuje údaj v currentNotebook.
 - Komunikační profil neznáš a nesmí ovlivnit strukturu rozhodnutí.
 - Confirmed Zápisník je kanonický pracovní kontext; unconfirmed zápis je pouze pracovní vodítko.`;
+
+export type QuestControllerFallbackReason =
+  | "provider_failure"
+  | "incomplete_provider_response"
+  | "transport_failure"
+  | "json_parse_failure"
+  | "controller_contract_validation_failure"
+  | "unknown_failure";
+
+export function questControllerFallbackReason(
+  usageRecord: ModelUsageRecord | undefined,
+  error?: unknown,
+): QuestControllerFallbackReason {
+  if (usageRecord?.provider_status === "failed") return "provider_failure";
+  if (usageRecord?.provider_status === "incomplete") return "incomplete_provider_response";
+  if (usageRecord?.provider_status === "transport_error") return "transport_failure";
+  if (usageRecord?.application_status === "rejected_invalid_output") {
+    const cause = error instanceof InstrumentedModelCallError ? error.cause : error;
+    return cause instanceof SyntaxError ? "json_parse_failure" : "controller_contract_validation_failure";
+  }
+  return "unknown_failure";
+}
 
 export async function runQuestController(args: {
   apiKey: string;
@@ -155,9 +179,22 @@ export async function runQuestController(args: {
         return result;
       },
     });
-    if (usage_record.provider_status !== "completed" || !application_result) return { result: fallback, response: null, usedFallback: true };
+    if (usage_record.provider_status !== "completed" || !application_result) {
+      return {
+        result: fallback,
+        response: null,
+        usedFallback: true,
+        fallbackReason: questControllerFallbackReason(usage_record),
+      };
+    }
     return { result: application_result, response: response.body as ControllerResponse, usedFallback: false };
-  } catch {
-    return { result: fallback, response: null, usedFallback: true };
+  } catch (error) {
+    const usageRecord = error instanceof InstrumentedModelCallError ? error.usage_record : undefined;
+    return {
+      result: fallback,
+      response: null,
+      usedFallback: true,
+      fallbackReason: questControllerFallbackReason(usageRecord, error),
+    };
   }
 }
