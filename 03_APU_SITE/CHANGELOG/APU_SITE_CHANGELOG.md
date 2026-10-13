@@ -4,6 +4,22 @@ Status: CURRENT
 
 Records significant verified product/runtime/project changes. It is not a complete Git log. Historical Sites-era entries are retained where they remain useful; current deployment state must not be inferred from a changelog entry alone.
 
+## 2026-10-13 — Document UI consolidation
+
+### Added / Changed
+- Unified Build and Výstup primary labels as **AKTUALIZOVAT DOKUMENT** / **AKTUALIZUJI DOKUMENT**, preserving their separate F2 acceptance and F3 rendering handlers/guards.
+- Moved existing selected-document Copy and browser Print / Save as PDF into the shared **Dokument** header, with accessible icons, export feedback and a disabled **Připravujeme** Share placeholder. Removed footer export duplicates; accepted-only targets and stale warnings remain intact, with unavailable/loading export guards.
+- Moved unchanged diagnostic APU Session JSON download beside beaker/dollar in the left header, developer-only. Moved Settings into the right header for both roles, retaining communication/appearance preferences and keeping model/usage/diagnostics under the developer dollar icon. Removed floating Settings/Session JSON controls; retained responsive navigation and document styling.
+- Updated the technical-current action ownership and role-visibility rules. Backlog, Known Issues, roadmap and workflow documents are unchanged.
+
+### Verification
+- Typecheck and 175 focused workspace/Build/F3/snapshot/export/navigation, Settings/access, Session JSON and usage tests passed.
+- Actual-client Chromium fixture with synthetic responses passed scenarios A–J, including copy/print in Build/Output, representation switching, stale copied/printed warnings, empty/loading/boundary guards, failure feedback, role visibility, native Settings keyboard/focus/outside closing and desktop/800×600/portrait/390 px/320 px bounds. Screenshots were inspected. Default Build/Output PDF text is identical; generated/stale PDF preserves content/warnings and excludes application controls. Native print-dialog invocation is intercepted headlessly.
+- Authenticated live visual verification: **NOT VERIFIED — access blocked**; hosted URL unavailable to this environment. No authentication bypass or provider-backed calls were used.
+
+### Preserved scope
+- Document substance, structure and typography, frozen F1, F2 analytical/routing operations, accepted snapshots and F3 materialization/source contracts are unchanged. No sharing, new document format/persistence, PR merge or production deployment.
+
 ## 2026-10-12 — Unified F2/F3 document workspace
 
 ### Added / Changed

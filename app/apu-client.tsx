@@ -362,7 +362,6 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
   const [isDesktop, setIsDesktop] = useState(false);
   const [desktopWorkspace, setDesktopWorkspace] = useState(INITIAL_PROCESSING_WORKSPACE);
   const [f3ControlsTarget, setF3ControlsTarget] = useState<HTMLDivElement | null>(null);
-  const [analysisExportTarget, setAnalysisExportTarget] = useState<HTMLDivElement | null>(null);
   const [analysis, setAnalysis] = useState<AnalysisState>(EMPTY_ANALYSIS);
   const [storedF2Build, setF2Build] = useState<F2BuildState | null>(null);
   const [currentRozbor, setCurrentRozbor] = useState<CurrentRozborState>(() => createCurrentRozborState());
@@ -407,6 +406,8 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const statsRef = useRef<HTMLDivElement>(null);
   const statsButtonRef = useRef<HTMLButtonElement>(null);
+  const settingsButtonRef = useRef<HTMLButtonElement>(null);
+  const settingsDrawerRef = useRef<HTMLElement>(null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const speechSegmentsRef = useRef<SpeechTranscriptSegment[]>([]);
   const dictationSessionRef = useRef(0);
@@ -659,6 +660,26 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
     observer.observe(content);
     return () => observer.disconnect();
   }, []);
+
+  useEffect(() => {
+    if (!isDiagnosticsDrawerOpen) return;
+    (settingsDrawerRef.current?.querySelector("select") as HTMLSelectElement | null)?.focus();
+    const closeOutside = (event: PointerEvent) => {
+      if (!settingsDrawerRef.current?.contains(event.target as Node) && !settingsButtonRef.current?.contains(event.target as Node)) setIsDiagnosticsDrawerOpen(false);
+    };
+    const closeWithEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsDiagnosticsDrawerOpen(false);
+        settingsButtonRef.current?.focus();
+      }
+    };
+    document.addEventListener("pointerdown", closeOutside);
+    document.addEventListener("keydown", closeWithEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOutside);
+      document.removeEventListener("keydown", closeWithEscape);
+    };
+  }, [isDiagnosticsDrawerOpen]);
 
   useEffect(() => {
     if (!isStatsOpen) return;
@@ -1827,10 +1848,40 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
                 </div>
               )}
             </div>}
+            {isDeveloper && <div className="header-session-export">
+              <button
+                className={`stats-trigger session-export-trigger${exportStatus === "downloaded" ? " is-confirmed" : ""}`}
+                type="button"
+                onClick={exportSessionJson}
+                aria-label="Stáhnout APU Session JSON"
+                title="Stáhnout APU Session JSON"
+              >
+                {exportStatus === "downloaded"
+                  ? <Check aria-hidden="true" />
+                  : <Download aria-hidden="true" />}
+              </button>
+              <span className="session-export-feedback" role="status" aria-live="polite">
+                {exportStatus === "downloaded" ? "APU Session JSON byl stažen."
+                      : exportStatus === "error" ? "Export se nepodařilo dokončit."
+                        : ""}
+              </span>
+            </div>}
             <h1 className="sr-only">APU — Asistent pedagogické podpory</h1>
           </div>
 
           <nav className="project-actions" aria-label="Projekt a účet">
+            <button
+              ref={settingsButtonRef}
+              className={isDiagnosticsDrawerOpen ? "is-active" : undefined}
+              type="button"
+              onClick={() => setIsDiagnosticsDrawerOpen((open) => !open)}
+              aria-expanded={isDiagnosticsDrawerOpen}
+              aria-controls="diagnostics-drawer"
+              aria-label={isDiagnosticsDrawerOpen ? "Zavřít nastavení" : "Otevřít nastavení"}
+              title="Nastavení"
+            >
+              <Settings aria-hidden="true" />
+            </button>
             <button type="button" onClick={requestNewProject} disabled={isLoading} aria-label="Nový projekt" title="Nový projekt">
               <FilePlus2 aria-hidden="true" />
             </button>
@@ -1844,6 +1895,64 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
               <UserRound aria-hidden="true" />
             </button>
           </nav>
+          <aside
+            ref={settingsDrawerRef}
+            id="diagnostics-drawer"
+            className={`diagnostics-drawer${isDiagnosticsDrawerOpen ? " is-open" : ""}`}
+            aria-label="Nastavení APU"
+            aria-hidden={!isDiagnosticsDrawerOpen}
+            inert={!isDiagnosticsDrawerOpen}
+          >
+            <div className="diagnostics-drawer-content">
+              <div className="diagnostics-drawer-body">
+                <section className="settings-section" aria-labelledby="profile-settings-title">
+                  <h2 id="profile-settings-title">Komunikační profil</h2>
+                  <label className="sr-only" htmlFor="drawer-profile-select">Komunikační profil APU pro další odpověď</label>
+                  <select
+                    id="drawer-profile-select"
+                    value={communicationProfile}
+                    onChange={(event) => setCommunicationProfile(event.target.value as CommunicationProfileId)}
+                    disabled={isLoading}
+                  >
+                    {COMMUNICATION_PROFILE_OPTIONS.map((profile) => (
+                      <option key={profile.id} value={profile.id}>{profile.label}</option>
+                    ))}
+                  </select>
+                </section>
+                <section className="settings-section design-settings-body" aria-labelledby="design-settings-title">
+                  <h2 id="design-settings-title">Vzhled</h2>
+                  <label htmlFor="color-theme-select">Barevná paleta</label>
+                  <select
+                    id="color-theme-select"
+                    value={design.colorTheme}
+                    onChange={(event) => design.setColorTheme(event.target.value as ColorThemeId)}
+                  >
+                    {COLOR_THEMES.map((theme) => <option key={theme.id} value={theme.id}>{theme.label}</option>)}
+                  </select>
+
+                  <label htmlFor="typography-select">Písmo</label>
+                  <select
+                    id="typography-select"
+                    value={design.typography}
+                    onChange={(event) => design.setTypography(event.target.value as TypographyPresetId)}
+                  >
+                    {TYPOGRAPHY_PRESETS.map((preset) => <option key={preset.id} value={preset.id}>{preset.label}</option>)}
+                  </select>
+
+                  <label htmlFor="font-size-select">Velikost písma</label>
+                  <select
+                    id="font-size-select"
+                    value={design.fontSize}
+                    onChange={(event) => design.setFontSize(event.target.value as FontSizeId)}
+                  >
+                    {FONT_SIZE_OPTIONS.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+                  </select>
+
+                  <button className="design-reset" type="button" onClick={design.reset}>Vrátit APU Default</button>
+                </section>
+              </div>
+            </div>
+          </aside>
         </header>
 
         <div className="desktop-tools" data-tool={desktopWorkspace.tool}>
@@ -2066,8 +2175,7 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
           <footer className="f2-build-actions">
             {isCurrentRozborUpdatePending && <p className="f2-pending-notice" role="status">Změny v Buildu zatím nejsou přijaty do dokumentu.</p>}
             {rozborGenerationError && <p className="f2-generation-error" role="alert">{rozborGenerationError}</p>}
-            <button type="button" className="f2-build-action" onClick={() => void generateCurrentRozbor()} disabled={rozborGenerationStatus === "loading" || !isCurrentRozborUpdatePending || (!hasActiveRozborOperation && activeRozbor.components.length === 0)} aria-label={activeRozbor.components.length ? "Aktualizovat Rozbor" : "Vytvořit Rozbor"}>{rozborGenerationStatus === "loading" ? "VYTVÁŘÍM ROZBOR" : activeRozbor.components.length ? "AKTUALIZOVAT ROZBOR" : "VYTVOŘIT ROZBOR"}</button>
-            <div className="working-analysis-export" ref={setAnalysisExportTarget} />
+            <button type="button" className="f2-build-action" onClick={() => void generateCurrentRozbor()} disabled={rozborGenerationStatus === "loading" || !isCurrentRozborUpdatePending || (!hasActiveRozborOperation && activeRozbor.components.length === 0)} title="Přijmout zvolené analytické změny do Rozboru">{rozborGenerationStatus === "loading" ? "AKTUALIZUJI DOKUMENT" : "AKTUALIZOVAT DOKUMENT"}</button>
           </footer>
         </section>}
 
@@ -2079,7 +2187,6 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
         <WorkspacePanel
           activePanel={documentPanel}
           f3ControlsTarget={isF2DesktopLayout ? f3ControlsTarget : null}
-          analysisExportTarget={isF2DesktopLayout ? analysisExportTarget : null}
           entries={notepad}
           onEntriesChange={setNotepad}
           onEntryNavigate={navigateToSource}
@@ -2155,116 +2262,7 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
           onPointerCancel={() => setIsResizingWorkspace(false)}
         />}
 
-        {isDeveloper && <aside
-          id="diagnostics-drawer"
-          className={`diagnostics-drawer${isDiagnosticsDrawerOpen ? " is-open" : ""}`}
-          aria-label="Nastavení modelu, diagnostiky a vzhledu"
-        >
-          <div className="diagnostics-drawer-content">
-            <div className="diagnostics-drawer-body">
-              <section className="settings-section" aria-labelledby="model-settings-title">
-                <h2 id="model-settings-title">Model</h2>
-                <label className="sr-only" htmlFor="drawer-model-select">Model pro další odpověď</label>
-                <select
-                  id="drawer-model-select"
-                  value={selectedModel}
-                  onChange={(event) => setSelectedModel(event.target.value as ModelSelection)}
-                  disabled={isLoading}
-                >
-                  <option value={AUTO_MODEL_OPTION.id}>{AUTO_MODEL_OPTION.label}</option>
-                  {MODEL_OPTIONS.map((model) => (
-                    <option key={model.id} value={model.id}>{model.label}</option>
-                  ))}
-                </select>
-              </section>
-              <section className="settings-section" aria-labelledby="profile-settings-title">
-                <h2 id="profile-settings-title">Komunikační profil</h2>
-                <label className="sr-only" htmlFor="drawer-profile-select">Komunikační profil APU pro další odpověď</label>
-                <select
-                  id="drawer-profile-select"
-                  value={communicationProfile}
-                  onChange={(event) => setCommunicationProfile(event.target.value as CommunicationProfileId)}
-                  disabled={isLoading}
-                >
-                  {COMMUNICATION_PROFILE_OPTIONS.map((profile) => (
-                    <option key={profile.id} value={profile.id}>{profile.label}</option>
-                  ))}
-                </select>
-              </section>
-              <section className="settings-section" aria-labelledby="usage-settings-title">
-                <h2 id="usage-settings-title">Tato konverzace</h2>
-                <dl>
-                  <div className="stats-token-pair">
-                    <div><dt>IN</dt><dd>{formatInteger(canonicalUsageSummary.inputTokens)}</dd></div>
-                    <div><dt>OUT</dt><dd>{formatInteger(canonicalUsageSummary.outputTokens)}</dd></div>
-                  </div>
-                  <div><dt>Celkem</dt><dd>{formatInteger(canonicalUsageSummary.totalTokens)} tok.</dd></div>
-                  <div><dt>Odhad ceny</dt><dd>{formatCost(canonicalUsageSummary.estimatedCostUsd)}</dd></div>
-                </dl>
-              </section>
-              <section className="settings-section design-settings-body" aria-labelledby="design-settings-title">
-                <h2 id="design-settings-title">Vzhled</h2>
-                <label htmlFor="color-theme-select">Barevná paleta</label>
-                <select
-                  id="color-theme-select"
-                  value={design.colorTheme}
-                  onChange={(event) => design.setColorTheme(event.target.value as ColorThemeId)}
-                >
-                  {COLOR_THEMES.map((theme) => <option key={theme.id} value={theme.id}>{theme.label}</option>)}
-                </select>
-
-                <label htmlFor="typography-select">Písmo</label>
-                <select
-                  id="typography-select"
-                  value={design.typography}
-                  onChange={(event) => design.setTypography(event.target.value as TypographyPresetId)}
-                >
-                  {TYPOGRAPHY_PRESETS.map((preset) => <option key={preset.id} value={preset.id}>{preset.label}</option>)}
-                </select>
-
-                <label htmlFor="font-size-select">Velikost písma</label>
-                <select
-                  id="font-size-select"
-                  value={design.fontSize}
-                  onChange={(event) => design.setFontSize(event.target.value as FontSizeId)}
-                >
-                  {FONT_SIZE_OPTIONS.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
-                </select>
-
-                <button className="design-reset" type="button" onClick={design.reset}>Vrátit APU Default</button>
-              </section>
-            </div>
-          </div>
-        </aside>}
-
         <nav className="tool-rail" aria-label="Rychlé nástroje">
-          {isDeveloper && <button
-            className={`tool-rail-button tool-rail-diagnostics${isDiagnosticsDrawerOpen ? " is-active" : ""}`}
-            type="button"
-            onClick={() => setIsDiagnosticsDrawerOpen((open) => !open)}
-            aria-expanded={isDiagnosticsDrawerOpen}
-            aria-controls="diagnostics-drawer"
-            aria-label={isDiagnosticsDrawerOpen ? "Zavřít nastavení" : "Otevřít nastavení"}
-            title="Nastavení"
-          >
-            <Settings aria-hidden="true" />
-          </button>}
-          <button
-            className={`tool-rail-button tool-rail-copy${exportStatus === "downloaded" ? " is-confirmed" : ""}`}
-            type="button"
-            onClick={exportSessionJson}
-            aria-label="Stáhnout APU Session JSON"
-            title="Stáhnout APU Session JSON"
-          >
-            {exportStatus === "downloaded"
-              ? <Check aria-hidden="true" />
-              : <Download aria-hidden="true" />}
-          </button>
-          <span className="export-feedback" role="status" aria-live="polite">
-            {exportStatus === "downloaded" ? "APU Session JSON byl stažen."
-                  : exportStatus === "error" ? "Export se nepodařilo dokončit."
-                    : ""}
-          </span>
           {([
             { id: "notepad" as const, label: "Zápisník", Icon: NotebookPen },
             { id: "analysis" as const, label: "Rozbor", Icon: ScanSearch },

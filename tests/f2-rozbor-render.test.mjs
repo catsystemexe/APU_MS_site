@@ -12,8 +12,8 @@ test("F2 uses the shared accepted-snapshot document instead of another live comp
   assert.doesNotMatch(panel, /function AnalysisPanel|function OutputPanel|CurrentRozborComponents|workingHypotheses.map|currentRozbor\[/);
 });
 
-test("first success changes CTA label and the new flow never invokes Preview", () => {
-  assert.match(client, /AKTUALIZOVAT ROZBOR/);
+test("primary CTA uses document terminology and the flow never invokes Preview", () => {
+  assert.match(client, /AKTUALIZOVAT DOKUMENT/);
   assert.match(client, /operation: "generate-rozbor-components"/);
   const generation = client.slice(client.indexOf("async function generateCurrentRozbor"), client.indexOf("async function renderF2Preview"));
   assert.equal(generation.includes('operation: "build"'), false);

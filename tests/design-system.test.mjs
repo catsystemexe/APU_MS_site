@@ -46,9 +46,10 @@ test("all experimental presets override tokens without component variants", () =
   assert.match(css, /:root\[data-font-size="larger"\]/);
 });
 
-test("model, usage and design controls share the right settings drawer", () => {
-  assert.match(client, /aria-label="Nastavení modelu, diagnostiky a vzhledu"/);
-  assert.match(client, /id="drawer-model-select"/);
+test("user settings retain appearance and communication; model and usage stay in developer telemetry", () => {
+  assert.match(client, /aria-label="Nastavení APU"/);
+  assert.doesNotMatch(client, /id="drawer-model-select"|id="usage-settings-title"/);
+  assert.match(client, /id="drawer-profile-select"/);
   assert.match(client, /id="color-theme-select"/);
   assert.match(client, /id="typography-select"/);
   assert.match(client, /id="font-size-select"/);

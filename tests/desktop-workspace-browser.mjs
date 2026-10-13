@@ -25,6 +25,7 @@ window.calls = [];
 window.fetch = async (url, init) => {
   if (!String(url).startsWith('/api/')) return nativeFetch(url, init);
   const body = JSON.parse(String(init?.body || '{}')); window.calls.push({ url, body });
+  if (url === '/api/f3') { await new Promise(r => setTimeout(r, 150)); if (window.boundaryNextRender) { window.boundaryNextRender=false; return Response.json({result:{kind:'boundary_issue',reason:'Vyžaduje analytickou změnu.',affectedArea:'Rozbor',suggestedReturnToF2:'Vrátit se'}}); } }
   if (url === '/api/f2') { await new Promise(r => setTimeout(r, 150)); if (window.failNextBuild) { window.failNextBuild = false; return Response.json({ error: 'Testovací chyba Build.' }, { status: 500 }); } }
   const result = url === '/api/extract' ? { extraction: { situationRelation: 'same', situationReason: null, candidates: [] } }
     : url === '/api/need-route' ? { decision: { path: 'POCHOPIT', clarification: null } }
@@ -67,6 +68,47 @@ try {
   assert.ok(Math.abs(ratio - 0.30) < .005, 'fresh split ' + ratio);
   assert.equal(await evaluate('getComputedStyle(document.querySelector(".notepad-panel")).display'), 'block');
   const capture = async (name) => { const image = await call("Page.captureScreenshot", { format: "png", captureBeyondViewport: true }); await writeFile(join(artifactRoot, name + '.png'), Buffer.from(image.data, 'base64')); };
+  // Settings is a normal-user header control; the closed panel is inert.
+  const checkSettings = async () => {
+    assert.equal(await evaluate('document.querySelector(".tool-rail-diagnostics, .tool-rail-copy")'), null);
+    assert.equal(await evaluate('document.querySelector("#diagnostics-drawer").inert'), true);
+    await click('.project-actions button[aria-controls="diagnostics-drawer"]');
+    await waitFor('document.activeElement.id === "drawer-profile-select"');
+    assert.equal(await evaluate('document.querySelector("#diagnostics-drawer").inert'), false);
+    assert.equal(await evaluate('document.querySelector("#diagnostics-drawer #drawer-model-select, #diagnostics-drawer #model-select, #diagnostics-drawer #usage-settings-title")'), null);
+    assert.deepEqual(await evaluate('Array.from(document.querySelectorAll("#diagnostics-drawer h2")).map(el=>el.textContent)'), ['Komunikační profil','Vzhled']);
+    assert.equal(await evaluate('(() => { const el=document.querySelector("#diagnostics-drawer"), r=el.getBoundingClientRect(); return r.left>=0 && r.right<=innerWidth && el.contains(document.elementFromPoint(r.left+20,r.top+20)); })()'), true);
+    const original = await evaluate('document.querySelector("#drawer-profile-select").value');
+    await evaluate('(() => { const el=document.querySelector("#drawer-profile-select"); el.value=el.options[1].value; el.dispatchEvent(new Event("change",{bubbles:true})); })()');
+    assert.equal(await evaluate('document.querySelector("#drawer-profile-select").value === document.querySelector("#drawer-profile-select").options[1].value'), true);
+    await evaluate(`(() => { const el=document.querySelector("#drawer-profile-select"); el.value=${JSON.stringify(original)}; el.dispatchEvent(new Event("change",{bubbles:true})); })()`);
+    await capture('settings-' + (await evaluate('innerWidth')));
+    await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
+    await waitFor('document.querySelector("#diagnostics-drawer").inert');
+    assert.equal(await evaluate('document.activeElement.getAttribute("aria-controls")'), 'diagnostics-drawer');
+    await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Enter',code:'Enter',windowsVirtualKeyCode:13,text:'\r'});
+    await waitFor('!document.querySelector("#diagnostics-drawer").inert');
+    await evaluate('document.querySelector(".brand-mark").dispatchEvent(new PointerEvent("pointerdown",{bubbles:true}))');
+    await waitFor('document.querySelector("#diagnostics-drawer").inert');
+  };
+  const checkFeedbackVisible = async (selector) => {
+    assert.equal(await evaluate(`(() => { const el=document.querySelector(${JSON.stringify(selector)}), r=el.getBoundingClientRect(); return r.left>=0 && r.right<=innerWidth && r.top>=0 && r.bottom<=innerHeight && el.contains(document.elementFromPoint(r.left+r.width/2,r.top+r.height/2)); })()`), true, 'export feedback must be visible: ' + selector);
+  };
+  const checkDocumentHeader = async () => {
+    if (await evaluate('Boolean(document.querySelector(".header-session-export"))')) {
+      assert.equal(await evaluate('(() => { const b=document.querySelector(".developer-log-toggle").getBoundingClientRect(), t=document.querySelector(".conversation-diagnostics .stats-trigger").getBoundingClientRect(), j=document.querySelector(".session-export-trigger").getBoundingClientRect(), right=document.querySelector(".project-actions").getBoundingClientRect(); return b.right<=t.left && t.right<=j.left && j.left-t.right<=20 && j.right<=right.left; })()'), true, 'developer entries must stay adjacent on the left at every viewport');
+    }
+
+    assert.equal(await evaluate('document.querySelector(".notepad-header h2").textContent'), 'Dokument');
+    assert.equal(await evaluate('document.querySelectorAll(".document-actions").length'), 1);
+    assert.equal(await evaluate('document.querySelector(".f2-build-actions .document-actions, .f3-tool-actions .document-actions, #workspace-document .document-actions")'), null);
+    assert.deepEqual(await evaluate('Array.from(document.querySelectorAll(".document-actions button")).map(el=>el.getAttribute("aria-label"))'), ['Kopírovat dokument','Tisk / Uložit jako PDF','Sdílet dokument — Připravujeme']);
+    assert.equal(await evaluate('document.querySelector(".document-actions button:last-of-type").disabled'), true);
+    assert.ok(await evaluate('document.querySelector(".document-actions button:last-of-type").textContent.includes("Připravujeme")'));
+    assert.equal(await evaluate('(() => { const h=document.querySelector(".notepad-header").getBoundingClientRect(); const nodes=Array.from(document.querySelectorAll(".notepad-header .panel-title, .document-actions button, .notepad-help-toggle")); const rects=nodes.map(el=>el.getBoundingClientRect()); return rects.every(r=>r.left>=h.left && r.right<=h.right+.5 && r.top>=h.top && r.bottom<=h.bottom+.5) && rects.every((a,i)=>rects.slice(i+1).every(b=>a.right<=b.left || b.right<=a.left || a.bottom<=b.top || b.bottom<=a.top)); })()'), true, 'header controls must fit without overlap');
+  };
+  assert.equal(await evaluate('document.querySelector(".header-session-export, .dev-scenario-picker, .conversation-diagnostics")'), null);
+  await checkSettings();
   await capture('intake');
   await click('.composer-entry-trigger');
   await evaluate('(() => { const el=document.querySelector("#message"); Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,"value").set.call(el,"Přejdi do fáze 2."); el.dispatchEvent(new Event("input",{bubbles:true})); })()');
@@ -86,16 +128,27 @@ try {
     await call('Input.dispatchKeyEvent',{type:'keyUp',key:'Tab',code:'Tab',windowsVirtualKeyCode:9});
     assert.equal(await evaluate('document.activeElement.textContent'),label);
   }
-  await waitFor('document.querySelector(".working-analysis-export .f3-export") && document.querySelector(".f3-material")');
+  await waitFor('document.querySelector(".notepad-header .document-actions") && document.querySelector(".f3-material")');
+  await checkDocumentHeader();
+  assert.equal(await evaluate('document.querySelector(".f2-build-action").textContent'), "AKTUALIZOVAT DOKUMENT");
   const defaultDocument = await evaluate('document.querySelector("#workspace-document").innerHTML');
   const defaultVisual = await evaluate('JSON.stringify(Array.from(document.querySelectorAll("#workspace-document .f3-material, #workspace-document h2, #workspace-document h3, #workspace-document p")).map(el=>{ const s=getComputedStyle(el); return [s.fontSize,s.color,s.margin,s.padding,s.fontFamily,s.lineHeight]; }))');
   await evaluate('void(window.documentWorkspaceNode=document.querySelector("#workspace-document"))');
   assert.equal(await evaluate('document.querySelectorAll("#workspace-document .f3-material").length'),1);
   await call('Browser.grantPermissions',{origin:'http://127.0.0.1:4333',permissions:['clipboardReadWrite','clipboardSanitizedWrite']});
-  await click('.working-analysis-export .f3-export button:nth-child(2)');
-  await waitFor('document.querySelector(".working-analysis-export").textContent.includes("Text zkopírován.")');
+  await click('.notepad-header .document-actions button:first-child');
+  await waitFor('document.querySelector(".notepad-header .document-actions").textContent.includes("Text zkopírován.")');
+  await checkFeedbackVisible('.document-export-feedback');
   const buildText = await evaluate('navigator.clipboard.readText()');
-  await evaluate('window.print=()=>{window.printCalls=(window.printCalls||0)+1}; document.querySelector(".working-analysis-export .f3-export button").click()');
+  await evaluate('Object.defineProperty(navigator.clipboard,"writeText",{configurable:true,value:async()=>{throw new Error("Testovací chyba kopírování.")}})');
+  await click('.document-actions button:first-child');
+  await waitFor('document.querySelector(".document-export-feedback").textContent.includes("Testovací chyba kopírování")');
+  await evaluate('delete navigator.clipboard.writeText');
+  await evaluate('window.print=()=>{throw new Error("print unavailable")}; document.querySelector(".document-actions button:nth-child(2)").click()');
+  await waitFor('document.querySelector(".document-export-feedback").textContent.includes("Tisk se nepodařilo")');
+  assert.equal(await evaluate('document.querySelector(".f3-print-document")'), null);
+
+  await evaluate('window.print=()=>{window.printCalls=(window.printCalls||0)+1}; document.querySelector(".notepad-header .document-actions button:nth-child(2)").click()');
   assert.equal(await evaluate('document.querySelector(".f3-print-document").querySelectorAll("button,textarea,select,nav").length'),0);
   const baselinePDF=await call('Page.printToPDF',{printBackground:true});
   await writeFile(join(artifactRoot,'build-baseline.pdf'),Buffer.from(baselinePDF.data,'base64'));
@@ -171,12 +224,12 @@ try {
   await capture('output-chat');
   await click('.desktop-tool-tabs button[aria-controls="desktop-tool-output"]');
   await call('Browser.grantPermissions',{origin:'http://127.0.0.1:4333',permissions:['clipboardReadWrite','clipboardSanitizedWrite']});
-  await click('.f3-export button:nth-child(2)');
-  await waitFor('document.querySelector(".f3-export").textContent.includes("Text zkopírován.")');
+  await click('.notepad-header .document-actions button:first-child');
+  await waitFor('document.querySelector(".notepad-header .document-actions").textContent.includes("Text zkopírován.")');
   const copied = await evaluate('navigator.clipboard.readText()');
   assert.equal(copied,buildText,'F2 and F3 baseline copied content must match');
   assert.ok(copied.includes('Testovací hypotéza') && copied.includes('Málo evidence.') && copied.includes('Vliv únavy.'));
-  await evaluate('window.print=()=>{window.printCalls=(window.printCalls||0)+1}; document.querySelector(".f3-export button").click()');
+  await evaluate('window.print=()=>{window.printCalls=(window.printCalls||0)+1}; document.querySelector(".notepad-header .document-actions button:nth-child(2)").click()');
   assert.equal(await evaluate('window.printCalls'), 2);
   assert.equal(await evaluate('document.querySelector(".f3-print-document").querySelectorAll("button,textarea,select,nav").length'), 0);
   const pdf = await call('Page.printToPDF', { printBackground:true }); await writeFile(join(artifactRoot, 'output.pdf'), Buffer.from(pdf.data,'base64'));
@@ -184,15 +237,17 @@ try {
   // C/D: Generate A from the accepted baseline, although draft Build depth is 2.
   await evaluate('(() => { const el=document.querySelector(".f3-controls select"); el.value="parent"; el.dispatchEvent(new Event("change",{bubbles:true})); })()');
   await click('.f3-render-action button');
+  await waitFor('document.querySelector(".f3-render-action button").textContent === "AKTUALIZUJI DOKUMENT"');
+  assert.equal(await evaluate('Array.from(document.querySelectorAll(".document-actions button")).every(el=>el.disabled)'), true);
   await waitFor('document.querySelector(".f3-material h2").textContent === "Další podoba 1"');
   const sourceA=await evaluate('window.calls.at(-1).body.sourceSnapshot');
   assert.equal(sourceA.currentRozbor.components.length,0);
   assert.equal(sourceA.currentRozbor.config.expansionDepth,0);
   const generatedA=await evaluate('document.querySelector(".f3-material").innerHTML');
-  await click('.f3-export button:nth-child(2)');
-  await waitFor('document.querySelector(".f3-export").textContent.includes("Text zkopírován.")');
+  await click('.notepad-header .document-actions button:first-child');
+  await waitFor('document.querySelector(".notepad-header .document-actions").textContent.includes("Text zkopírován.")');
   assert.ok((await evaluate('navigator.clipboard.readText()')).includes('GENERATED_1'));
-  await evaluate('window.print=()=>{window.printCalls=(window.printCalls||0)+1}; document.querySelector(".f3-export button").click()');
+  await evaluate('window.print=()=>{window.printCalls=(window.printCalls||0)+1}; document.querySelector(".notepad-header .document-actions button:nth-child(2)").click()');
   const generatedPDF=await call('Page.printToPDF',{printBackground:true});
   await writeFile(join(artifactRoot,'generated-output.pdf'),Buffer.from(generatedPDF.data,'base64'));
   await evaluate('window.dispatchEvent(new Event("afterprint"))');
@@ -209,7 +264,7 @@ try {
   // G: Failure preserves both accepted source and generated A.
   await evaluate('window.failNextBuild=true');
   await click('.f2-build-action');
-  await waitFor('document.querySelector(".f2-build-action").disabled && document.querySelector(".f2-build-action").textContent === "VYTVÁŘÍM ROZBOR"');
+  await waitFor('document.querySelector(".f2-build-action").disabled && document.querySelector(".f2-build-action").textContent === "AKTUALIZUJI DOKUMENT"');
   await waitFor('document.querySelector(".f2-generation-error")');
   assert.equal(await evaluate('document.querySelector(".f2-build-action").disabled'),false);
   assert.equal(await evaluate('document.querySelector("#workspace-document").innerHTML'),defaultDocument);
@@ -229,7 +284,7 @@ try {
   const updatedDefault=await evaluate('document.querySelector("#workspace-document").innerHTML');
   assert.ok(updatedDefault.includes('revize 1'));
   assert.equal(await evaluate('document.querySelector(".f2-pending-notice")'),null);
-  assert.equal(await evaluate('document.querySelector(".f2-build-action").textContent'),'AKTUALIZOVAT ROZBOR');
+  assert.equal(await evaluate('document.querySelector(".f2-build-action").textContent'),'AKTUALIZOVAT DOKUMENT');
   assert.equal(await evaluate('document.querySelector(".f2-build-action").disabled'),true);
   count=await evaluate('window.calls.length');
   await click('.desktop-tool-tabs button[aria-controls="desktop-tool-output"]');
@@ -239,9 +294,15 @@ try {
   assert.equal(await evaluate('document.querySelector(".f3-material").classList.contains("is-stale")'),true);
   assert.equal(await evaluate('document.querySelector(".f3-render-action button").disabled'),true);
   assert.equal(await evaluate('document.querySelector(".f3-controls select").value'),'parent');
-  await click('.f3-export button:nth-child(2)');
-  await waitFor('document.querySelector(".f3-export").textContent.includes("Text zkopírován.")');
+  await click('.notepad-header .document-actions button:first-child');
+  await waitFor('document.querySelector(".notepad-header .document-actions").textContent.includes("Text zkopírován.")');
   assert.ok((await evaluate('navigator.clipboard.readText()')).startsWith('Starší výstup'));
+  await click('.document-actions button:nth-child(2)');
+  assert.ok(await evaluate('document.querySelector(".f3-print-document").textContent.includes("Starší výstup")'));
+  const stalePDF=await call('Page.printToPDF',{printBackground:true});
+  await writeFile(join(artifactRoot,'stale-output.pdf'),Buffer.from(stalePDF.data,'base64'));
+  await evaluate('window.dispatchEvent(new Event("afterprint"))');
+
   await click('.workspace-output-tools .f3-notice button');
   await waitFor('document.querySelector(".f3-material").innerText.includes("Přijaté rozvinutí")');
   assert.equal(await evaluate('document.querySelector("#workspace-document").innerHTML'),updatedDefault);
@@ -267,7 +328,7 @@ try {
   await waitFor('document.querySelector(".f3-material").classList.contains("is-stale")');
   assert.equal(await evaluate('window.calls.length'),count,'presentation setting alone must not call a model');
   await click('.f3-render-action button');
-  await waitFor(`window.calls.length>${count} && document.querySelector('.f3-render-action button').textContent === 'REGENEROVAT VÝSTUP'`);
+  await waitFor(`window.calls.length>${count} && document.querySelector('.f3-render-action button').textContent === 'AKTUALIZOVAT DOKUMENT'`);
   assert.deepEqual(await evaluate('window.calls.at(-1).body.sourceSnapshot'),acceptedSource);
   assert.equal(acceptedSource.sourceRevision,1);
   assert.equal(await evaluate('window.calls.at(-1).body.config.structureMode'),'table');
@@ -287,6 +348,7 @@ try {
   await call('Emulation.setDeviceMetricsOverride',{width:800,height:600,deviceScaleFactor:1,mobile:false});
   await waitFor('document.querySelector(".desktop-tools").getBoundingClientRect().width >= 419');
   assert.ok(await evaluate('document.querySelector(".notepad-panel").getBoundingClientRect().width') >= 300);
+  await checkSettings();
   await capture('narrow-desktop');
   await call('Emulation.setDeviceMetricsOverride',{width:800,height:1100,deviceScaleFactor:1,mobile:false});
   await waitFor('getComputedStyle(document.querySelector(".desktop-tools")).display === "contents"');
@@ -297,10 +359,25 @@ try {
   await waitFor('document.querySelector(".developer-indicator") && document.querySelector(".desktop-tools")');
   assert.equal(await evaluate('document.querySelectorAll(".workspace-chat").length'),1);
   assert.ok(await evaluate('Boolean(document.querySelector(".dev-scenario-picker > button"))'));
-  assert.equal(await evaluate('document.querySelectorAll(".stats-trigger").length'),1);
+  assert.equal(await evaluate('document.querySelectorAll(".conversation-diagnostics .stats-trigger").length'),1);
   assert.equal(await evaluate('document.querySelector("#model-select")'),null,'model chooser must be inside closed telemetry');
   assert.equal(await evaluate('document.querySelector("#dev-log-panel, .dev-log-overlay, button[aria-controls=dev-log-panel]")'),null);
-  await click('.stats-trigger');
+  await checkSettings();
+  assert.equal(await evaluate('document.querySelector(".header-session-export").closest(".brand") !== null'), true);
+  assert.equal(await evaluate('(() => { const b=document.querySelector(".developer-log-toggle").getBoundingClientRect(), t=document.querySelector(".conversation-diagnostics .stats-trigger").getBoundingClientRect(), j=document.querySelector(".session-export-trigger").getBoundingClientRect(); return b.right<=t.left && t.right<=j.left; })()'), true);
+  await evaluate('window.originalObjectURL=URL.createObjectURL; window.originalAnchorClick=HTMLAnchorElement.prototype.click; URL.createObjectURL=(blob)=>{blob.text().then(text=>window.sessionExportPayload=JSON.parse(text));return window.originalObjectURL(blob)}; HTMLAnchorElement.prototype.click=function(){window.sessionDownloadName=this.download}');
+  await click('.session-export-trigger');
+  await waitFor('window.sessionExportPayload && document.querySelector(".session-export-feedback").textContent.includes("byl stažen")');
+  await checkFeedbackVisible('.session-export-feedback');
+  assert.equal(await evaluate('window.sessionExportPayload.export.format'), 'APU Session JSON');
+  assert.equal(await evaluate('window.sessionExportPayload.schema_version'), '1.0');
+  assert.equal(await evaluate('window.sessionExportPayload.output'), null);
+  assert.ok(await evaluate('window.sessionDownloadName.endsWith(".json")'));
+  await evaluate('URL.createObjectURL=()=>{throw new Error("download unavailable")}');
+  await click('.session-export-trigger');
+  await waitFor('document.querySelector(".session-export-feedback").textContent.includes("nepodařilo")');
+  await evaluate('URL.createObjectURL=window.originalObjectURL; HTMLAnchorElement.prototype.click=window.originalAnchorClick');
+  await click('.conversation-diagnostics .stats-trigger');
   await waitFor('document.querySelector("#conversation-stats-popover #model-select")');
   assert.ok(await evaluate('document.querySelector("#conversation-stats-popover").textContent.includes("Vstupní tokeny")'));
   assert.equal(await evaluate('(() => { const el=document.querySelector("#conversation-stats-popover"), r=el.getBoundingClientRect(); return el.contains(document.elementFromPoint(r.right-10,r.top+40)); })()'),true,'telemetry popup must remain above the right document');
@@ -342,10 +419,15 @@ try {
   await capture('developer-narrow-output');
   const mobileCalls = await evaluate('window.calls.length');
   const desktopContent = await evaluate('document.querySelector(".f3-material").innerHTML');
+  await call('Emulation.setDeviceMetricsOverride',{width:800,height:600,deviceScaleFactor:1,mobile:false});
+  await checkDocumentHeader();
+  await capture('narrow-document-header');
   await call('Emulation.setDeviceMetricsOverride',{width:800,height:1100,deviceScaleFactor:1,mobile:false});
   await waitFor('getComputedStyle(document.querySelector(".desktop-tools")).display === "contents" && document.querySelector(".notepad-panel .f3-controls")');
   assert.equal(await evaluate('document.querySelector(".f3-material").innerHTML'),desktopContent);
   assert.equal(await evaluate('(() => { const rail=document.querySelector(".tool-rail-output").getBoundingClientRect().left; return Array.from(document.querySelectorAll(".notepad-panel .f3-controls select, .notepad-panel .f3-render-action button")).every(el=>el.getBoundingClientRect().right < rail); })()'),true);
+  await checkDocumentHeader();
+  await checkSettings();
   await capture('portrait-output');
   await call('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:false});
   await waitFor('document.documentElement.clientWidth === 390 && document.querySelector(".notepad-panel .f3-controls")');
@@ -354,8 +436,31 @@ try {
   assert.equal(await evaluate('window.calls.length'),mobileCalls);
   assert.equal(await evaluate('getComputedStyle(document.querySelector(".desktop-tool-tabs")).display'),'none');
   assert.equal(await evaluate('(() => { const rail=document.querySelector(".tool-rail-output").getBoundingClientRect().left; return Array.from(document.querySelectorAll(".notepad-panel .f3-controls select, .notepad-panel .f3-render-action button")).every(el=>el.getBoundingClientRect().right < rail); })()'),true);
+  await checkDocumentHeader();
+  await checkSettings();
   await capture('mobile-output');
+  await call('Emulation.setDeviceMetricsOverride',{width:320,height:740,deviceScaleFactor:1,mobile:false});
+  await checkDocumentHeader();
+  await checkSettings();
+  assert.equal(await evaluate('(() => { const left=document.querySelector(".brand").getBoundingClientRect(), right=document.querySelector(".project-actions").getBoundingClientRect(); return left.right<=right.left && right.right<=innerWidth; })()'), true);
+  await capture('mobile-320');
+  // An unavailable F3 boundary result cannot export the preceding material.
+  await evaluate('window.boundaryNextRender=true');
+  await click('.f3-render-action button');
+  await waitFor('document.querySelector(".f3-boundary")');
+  assert.equal(await evaluate('Array.from(document.querySelectorAll(".document-actions button")).every(el=>el.disabled)'), true);
+  await click('.f3-representations button:first-child');
+  await waitFor('document.querySelector(".f3-material")');
+  assert.equal(await evaluate('document.querySelector(".document-actions button:first-child").disabled'), false);
+  // Source-less mobile analysis retains visible disabled document actions.
+  await call('Page.navigate',{url:'http://127.0.0.1:4333/'});
+  await waitFor('document.querySelector(".tool-rail-analysis")');
+  await click('.tool-rail-analysis');
+  await waitFor('document.querySelector(".document-actions")');
+  assert.equal(await evaluate('Array.from(document.querySelectorAll(".document-actions button")).every(el=>el.disabled)'), true);
+  assert.equal(await evaluate('document.querySelector(".header-session-export")'), null);
+  await checkSettings();
   console.log('Artifacts: ' + artifactRoot);
-  console.log('PASS: Unified document A–L: F2/F3 exact default identity, accepted-only pending/failure/obsolete guards, stale generated preservation/adoption/config/source-independent regeneration, direct baseline/generated exports; UX refinement: tab order/focus, internal Build CTA/loading/retry, chat scrolling/reader anchoring, compact telemetry/scenarios and removal of notes;  actual client fixture A–J: F1/F2/F3 composition, tool/document preservation, optional Build, explicit adoption, read-only F3 Chat, no switch calls, keyboard persistence, print/PDF, responsive and developer rendering.');
+  console.log('PASS: Document consolidation A–J: header copy/print/share, empty/loading/boundary guards, clipboard/print failures, stale PDF, normal/developer Settings focus/visibility, diagnostic JSON success/error, desktop/portrait/390px/320px control bounds; unified document A–L: F2/F3 exact default identity, accepted-only pending/failure/obsolete guards, stale generated preservation/adoption/config/source-independent regeneration, direct baseline/generated exports; UX refinement: tab order/focus, internal Build CTA/loading/retry, chat scrolling/reader anchoring, compact telemetry/scenarios and removal of notes;  actual client fixture A–J: F1/F2/F3 composition, tool/document preservation, optional Build, explicit adoption, read-only F3 Chat, no switch calls, keyboard persistence, print/PDF, responsive and developer rendering.');
 
 } finally { socket?.close(); chrome.kill(); server.close(); }

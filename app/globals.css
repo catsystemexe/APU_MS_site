@@ -1397,29 +1397,6 @@ button:disabled { cursor: default; opacity: 0.52; }
   color: var(--text-secondary);
   pointer-events: auto;
 }
-.tool-rail-diagnostics { top: 6px; }
-.tool-rail-copy { top: 56px; }
-.export-feedback:not(:empty) {
-  position: fixed;
-  z-index: 100;
-  left: 50%;
-  bottom: 18px;
-  width: max-content;
-  max-width: calc(100vw - 28px);
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 9px 12px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--bg-surface);
-  box-shadow: 0 12px 30px var(--shadow-color);
-  color: var(--text-primary);
-  font-size: 11px;
-  pointer-events: auto;
-  transform: translateX(-50%);
-}
-.export-feedback a { color: var(--accent-strong); font-weight: 700; }
 .tool-rail-notepad { top: calc(50% - 50px); transform: translateY(-50%); }
 .tool-rail-analysis { top: 50%; transform: translateY(-50%); }
 .tool-rail-output { top: calc(50% + 50px); transform: translateY(-50%); }
@@ -2011,7 +1988,7 @@ button:disabled { cursor: default; opacity: 0.52; }
   .access-card { padding: 30px 22px; }
 }
 
-.f3-representations, .f3-export { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.f3-representations { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
 .f3-representations button[aria-pressed="true"] { background: var(--surface-hover); border-color: var(--accent-strong); }
 .f3-print-document { display: none; }
 @media print {
@@ -2037,7 +2014,7 @@ button:disabled { cursor: default; opacity: 0.52; }
 /* Compact developer entry; the existing model selector and usage are in its popup. */
 .app-header { grid-template-columns: minmax(0, 1fr) auto; }
 .app-header:has(.stats-popover), .app-header:has(.dev-scenario-menu) { z-index: 30; }
-.conversation-diagnostics { min-width: 0; display: inline-flex; flex: none; }
+.conversation-diagnostics { min-width: 0; width: auto; display: inline-flex; flex: none; }
 .stats-trigger { width: 28px; height: 28px; padding: 0; border-radius: 6px; color: #7a4c00; cursor: pointer; }
 .stats-trigger:hover { background: color-mix(in srgb, #e6a817 12%, transparent); }
 .stats-trigger svg { width: 16px; height: 16px; }
@@ -2087,7 +2064,7 @@ button:disabled { cursor: default; opacity: 0.52; }
   .workspace-output-tools .f3-tool-body > header p { margin: 6px 0 10px; font-size: 12px; line-height: 1.5; color: var(--text-secondary); }
   .workspace-output-tools .f3-render-action button { width: 100%; }
   .workspace-output-tools .f3-render-action { gap: 8px; }
-  .workspace-output-tools .f3-representations, .workspace-output-tools .f3-export { gap: 6px; }
+  .workspace-output-tools .f3-representations { gap: 6px; }
   .workspace-output-tools .f3-secondary { padding: 7px 9px; font-size: 11px; }
   .chat-card .tool-rail-workspace { display: none; }
   .notepad-panel { grid-row: 2 / 4; }
@@ -2098,7 +2075,36 @@ button:disabled { cursor: default; opacity: 0.52; }
   .notepad-panel #workspace-document .f3-tools, .notepad-panel #workspace-document .working-analysis-actions { padding-right: 36px; }
 }
 
-.working-analysis-actions { display: grid; gap: 10px; margin-bottom: 16px; }
 .f2-pending-notice { margin: 0 0 8px; color: var(--text-secondary); font-size: 11px; line-height: 1.4; }
-.working-analysis-export .f3-export { gap: 6px; margin-top: 10px; }
-.working-analysis-export .f3-secondary { padding: 7px 9px; font-size: 11px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-surface); color: var(--text-primary); }
+.working-analysis-actions { display: grid; gap: 10px; margin-bottom: 16px; }
+
+/* Document actions reuse the selected material and its existing print reference. */
+.notepad-header:has(.document-actions-target) { flex-wrap: wrap; gap: 6px; }
+.panel-header-actions { display: flex; align-items: center; gap: 4px; margin-left: auto; min-width: 0; max-width: 100%; }
+.document-actions-target { min-width: 0; }
+.document-actions { display: flex; align-items: center; gap: 4px; }
+.document-actions button { display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-width: 32px; min-height: 32px; padding: 5px; border: 1px solid var(--border); border-radius: 7px; background: var(--bg-surface); color: var(--text-primary); cursor: pointer; }
+.document-actions button:hover:not(:disabled) { background: var(--surface-hover); color: var(--accent-dark); }
+.document-actions button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.document-actions button:disabled { opacity: .5; cursor: default; }
+.document-actions button svg { width: 16px; height: 16px; flex: none; }
+.document-actions button span { font-size: 10px; }
+.header-session-export { position: relative; flex: none; }
+.session-export-trigger.is-confirmed { color: var(--accent); background: var(--accent-soft); }
+.document-export-feedback:empty, .session-export-feedback:empty { display: none; }
+.document-export-feedback, .session-export-feedback { position: absolute; z-index: 10; top: calc(100% + 6px); right: 0; width: max-content; max-width: min(280px, calc(100vw - 36px)); padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-surface); color: var(--text-primary); box-shadow: 0 4px 14px var(--shadow-color); font-size: 12px; }
+.document-export-feedback { right: 8px; }
+.session-export-feedback { position: fixed; z-index: 100; top: auto; left: 50%; right: auto; bottom: 18px; transform: translateX(-50%); max-width: calc(100vw - 28px); }
+/* Settings is anchored to the application header for both account roles. */
+.app-header:has(.diagnostics-drawer.is-open), .app-header:has(.session-export-feedback:not(:empty)) { z-index: 30; }
+.app-header > .diagnostics-drawer { position: absolute; top: calc(100% + 6px); right: 8px; width: min(320px, calc(100% - 16px)); margin: 0; transform: none; visibility: hidden; }
+.app-header > .diagnostics-drawer.is-open { visibility: visible; }
+.app-header .diagnostics-drawer-content { border-right: 1px solid var(--border); border-radius: 13px; max-height: calc(100dvh - 100px); }
+@media (max-width: 640px) {
+  .brand { gap: 4px; }
+  .brand .account-email { display: none; }
+  .document-actions button { min-height: 36px; }
+}
+@media (max-width: 360px) {
+  .developer-indicator { display: none; }
+}

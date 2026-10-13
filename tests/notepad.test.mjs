@@ -15,7 +15,8 @@ test("notepad uses local persistence and floating Lucide tool buttons", () => {
   assert.match(component, /NotebookPen/);
   assert.match(page, /className="tool-rail"/);
   assert.match(page, /\bSettings\b/);
-  assert.match(page, /tool-rail-diagnostics/);
+  assert.match(page, /ref=\{settingsButtonRef\}/);
+  assert.doesNotMatch(page, /tool-rail-diagnostics|tool-rail-copy/);
   assert.match(page, /tool-rail-\$\{id\}/);
   assert.match(component, /id="workspace-document"/);
   assert.match(component, /documentMode=\{workingAnalysis \? "analysis" : "output"\}/);
@@ -98,7 +99,7 @@ test("responsive layout has 30\/70 split and content-only overlay", () => {
   assert.match(styles, /\.notepad-panel[\s\S]*transform:\s*translateX\(calc\(100% \+ 48px\)\)/);
   assert.match(styles, /\.notepad-panel\.is-open\s*\{\s*transform:\s*translateX\(0\)/);
   assert.match(styles, /prefers-reduced-motion:\s*reduce/);
-  assert.match(styles, /\.tool-rail-diagnostics\s*\{\s*top:\s*6px/);
+  assert.match(styles, /\.app-header > \.diagnostics-drawer/);
   assert.match(styles, /\.tool-rail-notepad\s*\{\s*top:\s*calc\(50% - 50px\)/);
   assert.match(styles, /\.tool-rail-analysis\s*\{\s*top:\s*50%/);
   assert.match(styles, /\.tool-rail-output\s*\{\s*top:\s*calc\(50% \+ 50px\)/);

@@ -25,7 +25,6 @@ export type WorkspacePanel = "notepad" | "analysis" | "output" | null;
 
 type WorkspacePanelProps = {
   f3ControlsTarget?: HTMLElement | null;
-  analysisExportTarget?: HTMLElement | null;
   activePanel: WorkspacePanel;
   entries: NotepadState;
   onEntriesChange: (entries: NotepadState) => void;
@@ -285,9 +284,9 @@ function NotepadPanel({
 
 function DocumentPanel(props: Pick<WorkspacePanelProps,
   "activePanel" | "phase" | "analysisStatus" | "analysisError" | "onRetryAnalysis" |
-  "f2ToF3Snapshot" | "f2ToF3SourceError" | "f3ControlsTarget" | "analysisExportTarget" | "onContinueToOutput" |
+  "f2ToF3Snapshot" | "f2ToF3SourceError" | "f3ControlsTarget" | "onContinueToOutput" |
   "f3State" | "f3Status" | "f3Error" | "onF3Representation" | "onF3Config" | "onF3Render" | "onF3Adopt" | "onF3Return"
->) {
+> & { documentActionsTarget: HTMLElement | null }) {
   const workingAnalysis = props.activePanel === "analysis";
   let unavailable = null;
   if (workingAnalysis && !props.f2ToF3Snapshot) {
@@ -297,7 +296,7 @@ function DocumentPanel(props: Pick<WorkspacePanelProps,
     else unavailable = <div className="analysis-state"><p>{props.f2ToF3SourceError ?? "Rozbor čeká na kanonickou pedagogickou potřebu v Zápisníku."}</p></div>;
   }
   return <div id="workspace-document" className="notepad-scroll workspace-panel-body" role="region" aria-label="Dokument">
-    {unavailable ?? <F3Finalization documentMode={workingAnalysis ? "analysis" : "output"} analysisExportTarget={props.analysisExportTarget} onContinueToOutput={props.onContinueToOutput} controlsTarget={props.f3ControlsTarget} snapshot={props.f2ToF3Snapshot} sourceError={props.f2ToF3SourceError} state={props.f3State} status={props.f3Status} error={props.f3Error} onRepresentation={props.onF3Representation} onConfig={props.onF3Config} onRender={props.onF3Render} onAdopt={props.onF3Adopt} onReturn={props.onF3Return} />}
+    <F3Finalization documentMode={workingAnalysis ? "analysis" : "output"} documentActionsTarget={props.documentActionsTarget} unavailable={unavailable} controlsTarget={props.f3ControlsTarget} snapshot={props.f2ToF3Snapshot} sourceError={props.f2ToF3SourceError} state={props.f3State} status={props.f3Status} error={props.f3Error} onRepresentation={props.onF3Representation} onConfig={props.onF3Config} onRender={props.onF3Render} onAdopt={props.onF3Adopt} onReturn={props.onF3Return} onContinueToOutput={props.onContinueToOutput} />
   </div>;
 }
 
@@ -307,7 +306,9 @@ function PanelHeader({
   onDescriptionToggle,
   descriptionRef,
   documentWorkspace,
+  onDocumentActionsTarget,
 }: {
+  onDocumentActionsTarget: (target: HTMLDivElement | null) => void;
   documentWorkspace: boolean;
   panel: OpenWorkspacePanel;
   isDescriptionVisible: boolean;
@@ -322,22 +323,25 @@ function PanelHeader({
         <Icon aria-hidden="true" />
         <h2>{label}</h2>
       </div>
-      <div className="panel-info" ref={descriptionRef}>
-        <button
-          className={`notepad-help-toggle${isDescriptionVisible ? " is-active" : ""}`}
-          type="button"
-          aria-label={isDescriptionVisible ? `Skrýt popis vrstvy ${label}` : `Zobrazit popis vrstvy ${label}`}
-          aria-expanded={isDescriptionVisible}
-          aria-controls="workspace-panel-description"
-          onClick={onDescriptionToggle}
-        >
-          <Info aria-hidden="true" />
-        </button>
-        {isDescriptionVisible && (
-          <p id="workspace-panel-description" className="panel-description" role="note">
-            {description}
-          </p>
-        )}
+      <div className="panel-header-actions">
+        {panel !== "notepad" && <div className="document-actions-target" ref={onDocumentActionsTarget} />}
+        <div className="panel-info" ref={descriptionRef}>
+          <button
+            className={`notepad-help-toggle${isDescriptionVisible ? " is-active" : ""}`}
+            type="button"
+            aria-label={isDescriptionVisible ? `Skrýt popis vrstvy ${label}` : `Zobrazit popis vrstvy ${label}`}
+            aria-expanded={isDescriptionVisible}
+            aria-controls="workspace-panel-description"
+            onClick={onDescriptionToggle}
+          >
+            <Info aria-hidden="true" />
+          </button>
+          {isDescriptionVisible && (
+            <p id="workspace-panel-description" className="panel-description" role="note">
+              {description}
+            </p>
+          )}
+        </div>
       </div>
     </header>
   );
@@ -353,6 +357,7 @@ export function WorkspacePanel({
 }: WorkspacePanelProps) {
   const [describedPanel, setDescribedPanel] = useState<OpenWorkspacePanel | null>(null);
   const descriptionRef = useRef<HTMLDivElement>(null);
+  const [documentActionsTarget, setDocumentActionsTarget] = useState<HTMLDivElement | null>(null);
   const isOpen = activePanel !== null;
   const isDescriptionVisible = activePanel !== null && describedPanel === activePanel;
 
@@ -382,6 +387,7 @@ export function WorkspacePanel({
             isDescriptionVisible={isDescriptionVisible}
             onDescriptionToggle={() => setDescribedPanel((current) => current === activePanel ? null : activePanel)}
             descriptionRef={descriptionRef}
+            onDocumentActionsTarget={setDocumentActionsTarget}
           />
         )}
 
@@ -393,7 +399,7 @@ export function WorkspacePanel({
             onEntrySeen={onEntrySeen}
           />
         )}
-        {(activePanel === "analysis" || activePanel === "output") && <DocumentPanel {...analysisProps} activePanel={activePanel} />}
+        {(activePanel === "analysis" || activePanel === "output") && <DocumentPanel {...analysisProps} activePanel={activePanel} documentActionsTarget={documentActionsTarget} />}
       </div>
     </aside>
   );

@@ -26,7 +26,7 @@ test("Output workspace keeps explicit return, adoption and regeneration transiti
   assert.match(output, /Vrátit se do Rozboru/);
   assert.match(output, /Přijmout aktuální Rozbor/);
   assert.match(output, /state\.sourceStatus === "stale"/);
-  assert.match(output, /REGENEROVAT VÝSTUP/);
+  assert.match(output, /AKTUALIZOVAT DOKUMENT/);
   assert.match(output, /[Dd]osavadní výstup zůst/);
   assert.doesNotMatch(output, /PREVIEW|preview/);
 });

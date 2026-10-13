@@ -55,10 +55,11 @@ test("Build action is an internal footer with unchanged explicit generation guar
   assert.match(footer, /className="f2-build-action"/);
   assert.match(footer, /onClick=\{\(\) => void generateCurrentRozbor\(\)\}/);
   assert.match(footer, /rozborGenerationStatus === "loading" \|\| !isCurrentRozborUpdatePending \|\| \(!hasActiveRozborOperation && activeRozbor.components.length === 0\)/);
-  assert.match(footer, /VYTVÁŘÍM ROZBOR.*AKTUALIZOVAT ROZBOR.*VYTVOŘIT ROZBOR/);
+  assert.match(footer, /AKTUALIZUJI DOKUMENT.*AKTUALIZOVAT DOKUMENT/);
+  assert.doesNotMatch(footer, /export|copyF3Output|printF3Output/i);
   assert.match(footer, /f2-generation-error.*role="alert"/);
   assert.doesNotMatch(client, /f2-build-divider-action/);
-  const divider = client.slice(client.indexOf('className="workspace-resize-handle"'), client.indexOf('id="diagnostics-drawer"'));
+  const divider = client.slice(client.indexOf('className="workspace-resize-handle"'), client.indexOf('className="tool-rail"'));
   assert.match(divider, /onPointerDown|onPointerMove|onPointerUp|onKeyDown/);
   assert.doesNotMatch(divider, /generateCurrentRozbor|<button|VYTVOŘIT ROZBOR/);
 });
@@ -84,7 +85,8 @@ test("G: F3 portals only controls while the single readable document retains pri
   assert.equal((document.match(/<article ref=\{documentRef\}/g) ?? []).length, 1);
   assert.equal((output.match(/<DocumentContent /g) ?? []).length, 1);
   assert.match(output, /createPortal\(controls, controlsTarget\)/);
-  assert.match(output, /createPortal\(exportControls, analysisExportTarget\)/);
+  assert.match(output, /createPortal\(exportControls, documentActionsTarget\)/);
+  assert.doesNotMatch(output, /analysisExportTarget/);
   assert.match(output, /printF3Output\(materialRef.current\)/);
   assert.match(output, /copyF3Output\(content, undefined, stale\)/);
   const controls = output.slice(output.indexOf("const controls ="), output.indexOf("return <div className={`f3-finalization"));
