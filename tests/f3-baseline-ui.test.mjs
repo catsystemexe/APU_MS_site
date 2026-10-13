@@ -124,7 +124,7 @@ test("retained stale material warns only when selected; routine Output has no re
   const newer = baselineFor("POCHOPIT", 1, [{...h,summary:"Updated"}]);
   const adopted = adoptF2Snapshot(generated, newer);
   const normal = render(propsFor(newer, adopted));
-  assert.doesNotMatch(normal, /Starší výstup|Dosavadní výstup|Přijmout aktuální Rozbor|Vrátit se do Rozboru|Přejít do Buildu/);
+  assert.doesNotMatch(normal, /Starší výstup|Dosavadní výstup|Přijmout aktuální Rozbor|Vrátit se do Rozboru|Přejít do Obsahu/);
   const retained = render(propsFor(newer, {...adopted,representation:"material"}));
   assert.match(retained, /OLD_CARD|Starší výstup|dříve přijatý Rozbor/);
 });

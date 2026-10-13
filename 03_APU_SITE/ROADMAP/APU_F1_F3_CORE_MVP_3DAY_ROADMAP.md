@@ -82,6 +82,19 @@ Tento doplněk nahrazuje starší předpoklad povinného explicitního přijetí
 
 Ověření: typecheck a 155 cílených testů prošly; existující actual-client Chromium fixture ověřil scénáře A–L včetně automatického přijetí, zachování starých karet/nastavení, explicitní ochrany upstream, chyb/obsolete, lokálního odebrání, resetu během pending požadavku, reduced-motion, navigace a A/B. Obě podoby mají šestistránkové A4 PDF s jedním skutečným datem a úplným zdrojovým textem; screenshoty hlavičky/overlay/mobile a tiskových stránek byly prohlédnuty. Autentizované hosted UI, přesné hosted fonty, lidský tiskový dialog a fyzický tisk jsou **NOT VERIFIED**. Žádný auth bypass, providerový benchmark, nové úložiště, DOCX, merge, release tag ani nasazení nebyl proveden.
 
+## Trvalá navigace pracovních panelů — Batch 1, doplnění 2026-10-13
+
+Tento doplněk nahrazuje dřívější podmíněnou navigaci panelů a uživatelské označení Build. Historické doplňky a sprintový obsah níže zůstávají zachovány; analytická vrstva je interně nadále Rozbor/Build.
+
+- Desktop od začátku případu trvale ukazuje vlevo **Chat | Obsah | Výstup** a vpravo **Zápisník | Dokument**. V nové F1 je vybrán Chat/Zápisník; Obsah, Výstup a Dokument jsou viditelné, ale nativně disabled. Klik, klávesnice ani interní handlery neobejdou dostupnost.
+- Obsah zpřístupňuje podporovanou F2 práci a upřesnění potřeby až po vstupu do F2. Výstup vyžaduje aktuální přijatý zdroj nebo zachovaný F3 stav; Dokument se zpřístupní po první validní přijaté analýze a zůstává dostupný pro uchovaný obsah při pozdější stale situaci. Tato dostupnost nikdy nenahrazuje validační podmínky materializace.
+- Samostatná klientská volba pravého pohledu dovolí prohlížet Zápisník bez změny levého nástroje, fáze, snapshotu či F3 konfigurace. Chat a ruční volba Obsah/Výstup zachovají záměrný pohled do Zápisníku; úspěšný první vstup do F2 a explicitní workflow přechod mohou vybrat Dokument. Obnovení dokumentu nic negeneruje ani nepřijímá nový zdroj.
+- Po přijatém F2 je Zápisník retrospektivně pouze pro čtení: původní položky, kategorie, výběr textu a odkazy do Chatu zůstávají; add/edit/delete jsou zakázány také v callbackách. Před přijetím baseline zůstává F1 editovatelná. Podporované Chat/extraction aktualizace a source-currency ochrany se nemění.
+- Sdílená hlavička používá pravé navigační záložky bez dalšího duplicitního titulku. Reset/Copy/Print/Share se ukazují pouze při Dokumentu; kontextová nápověda zůstává. Disabled F3 update používá `cursor: default`, skutečné čekání nadále hlásí existující overlay/spinner.
+- Interní `build` identifikátory, API a analytické kontrakty se nepřejmenovávají. Dokumentové styly, obsah, metadata, přijetí úspěšného Build, stale podoby, F3 eligibility/Reset, A4 export a split preference zůstávají. Mobil/portrét používá stávající overlay navigaci.
+
+Batch 1 ověřen v PR #60: typecheck, 187 cílených testů a existující actual-client Chromium fixture A–P plus předchozí regrese. Screenshoty F1, read-only Zápisníku, úzkého desktopu a portrétu/mobilu byly prohlédnuty; A/B více stránkový A4 export a generované podoby prošly. Hosted autentizované vykreslení je **NOT VERIFIED — access blocked**. **Řízené úpravy Zápisníku, draft/save/reanalysis a oprava KI-02 zůstávají pozastaveny; nejsou součástí této dávky.** Žádný merge, deployment, release tag, auth bypass ani providerový F1 benchmark nebyl proveden.
+
 ## 1. Definice MVP PASS
 MVP je považováno za hotové pouze tehdy, když reálný uživatelský průchod splní celý následující kontrakt bez porušení source-of-truth hranic:
 - F1 přijme reálnou situaci a vytvoří použitelný Zápisník a pedagogickou potřebu.

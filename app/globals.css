@@ -1967,7 +1967,7 @@ button:disabled { cursor: default; opacity: 0.52; }
 .f3-secondary { border: 1px solid var(--border); border-radius: 9px; padding: 8px 10px; background: transparent; color: var(--text-primary); font-weight: 700; white-space: nowrap; cursor: pointer; }
 .f3-controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }.f3-controls label { display: grid; gap: 6px; color: var(--text-secondary); font-size: 12px; font-weight: 700; }.f3-controls select { width: 100%; border: 1px solid var(--border); border-radius: 8px; padding: 9px; background: var(--surface); color: var(--text-primary); }
 .f3-notice, .f3-boundary { display: flex; align-items: center; justify-content: space-between; gap: 14px; border-radius: 10px; padding: 12px; background: #fff4db; }.f3-notice div { display: grid; gap: 3px; }.f3-notice span, .f3-boundary span { font-size: 12px; color: var(--text-secondary); }
-.f3-render-action { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 12px; }.f3-render-action strong { color: #496b87; font-size: 12px; }.f3-render-action button:disabled { opacity: .55; cursor: wait; }
+.f3-render-action { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 12px; }.f3-render-action strong { color: #496b87; font-size: 12px; }.f3-render-action button:disabled { opacity: .55; cursor: default; }
 .f3-boundary { display: grid; border: 1px solid #dfb75f; }.f3-boundary p { margin: 0; }
 .f3-material { display: grid; gap: 13px; border-top: 2px solid var(--accent-strong); padding-top: 16px; }.f3-material.is-stale { opacity: .72; }.f3-material section p { white-space: pre-wrap; }.f3-material aside { border-left: 3px solid #dfb75f; padding-left: 12px; }.f3-table-wrap { overflow-x: auto; }.f3-material table { width: 100%; border-collapse: collapse; }.f3-material th, .f3-material td { border: 1px solid var(--border); padding: 8px; text-align: left; vertical-align: top; }.f3-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }.f3-cards section { border: 1px solid var(--border); border-radius: 10px; padding: 12px; }
 @media (max-width: 620px) { .f3-finalization > header { display: grid; }.f3-controls, .f3-cards { grid-template-columns: 1fr; }.f3-notice { align-items: stretch; flex-direction: column; }.f3-render-action { align-items: stretch; flex-direction: column; }.f3-render-action button { width: 100%; } }
@@ -2027,7 +2027,6 @@ button:disabled { cursor: default; opacity: 0.52; }
   .chat-card { grid-template-columns: var(--desktop-chat-split, 30%) minmax(0, 1fr); }
   .desktop-tools { grid-column: 1; grid-row: 2 / 4; display: grid; grid-template-rows: auto minmax(0, 1fr); min-width: 0; min-height: 0; overflow: hidden; border-right: 1px solid var(--border); }
   .workspace-chat { grid-column: 1; grid-row: 2; display: grid; grid-template-rows: minmax(0, 1fr) auto; min-width: 0; min-height: 0; overflow: hidden; }
-  .is-intake-workspace .workspace-chat { grid-row: 1 / 3; }
   .chat-scroll-region { position: relative; display: grid; grid-template-rows: minmax(0, 1fr); min-width: 0; min-height: 0; overflow: hidden; }
   .workspace-chat .message-list { grid-row: 1; min-height: 0; overflow-y: auto; padding: 20px; }
   .is-processing-workspace .message-list { scrollbar-width: none; }
@@ -2037,9 +2036,9 @@ button:disabled { cursor: default; opacity: 0.52; }
   .chat-scroll-bottom svg { width: 18px; height: 18px; }
   .chat-scroll-bottom:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
   .workspace-chat .composer { grid-row: 2; min-width: 0; }
-  .is-processing-workspace .desktop-tool-tabs { display: flex; align-items: end; gap: 3px; padding: 8px 10px 0; border-bottom: 1px solid var(--border); background: var(--surface-hover); }
+  .desktop-tool-tabs { display: flex; align-items: end; gap: 3px; padding: 8px 10px 0; border-bottom: 1px solid var(--border); background: var(--surface-hover); }
   .desktop-tool-tabs button { position: relative; flex: 1; min-width: 0; margin-bottom: -1px; padding: 10px 6px; border: 1px solid transparent; border-bottom: 1px solid var(--border); border-radius: 10px 10px 0 0; background: transparent; color: var(--text-secondary); cursor: pointer; font-size: 13px; font-weight: 700; }
-  .desktop-tool-tabs button:hover { color: var(--text-primary); background: color-mix(in srgb, var(--bg-surface) 60%, transparent); }
+  .desktop-tool-tabs button:hover:not(:disabled) { color: var(--text-primary); background: color-mix(in srgb, var(--bg-surface) 60%, transparent); }
   .desktop-tool-tabs button[aria-pressed="true"] { border-color: var(--border); border-bottom-color: var(--bg-surface); background: var(--bg-surface); color: var(--accent-strong); box-shadow: inset 0 2px var(--accent); }
   .desktop-tool-tabs button:focus-visible { z-index: 1; outline: 2px solid var(--focus-ring); outline-offset: -3px; }
   .is-processing-workspace .workspace-chat { display: none; }
@@ -2198,4 +2197,20 @@ button:disabled { cursor: default; opacity: 0.52; }
   .f3-print-document .working-document .document-list { margin-bottom: 4mm; }
   .f3-print-document .working-document li { margin-bottom: 2mm; break-inside: avoid; orphans: 2; widows: 2; }
   .f3-print-document .working-document > aside { margin-top: 7mm; padding-top: 4mm; font-size: 10pt; break-inside: avoid; }
+}
+
+/* Permanent desktop navigation; source/view selection stays client-only. */
+.desktop-tool-tabs { display: none; }
+.workspace-view-tabs { display: flex; align-items: end; gap: 3px; min-width: 0; }
+.workspace-view-tabs button { min-height: 32px; padding: 7px 9px; margin-bottom: -1px; border: 1px solid transparent; border-bottom: 1px solid var(--border); border-radius: 8px 8px 0 0; background: transparent; color: var(--text-secondary); font-size: 12px; font-weight: 650; cursor: pointer; }
+.workspace-view-tabs button[aria-pressed="true"] { border-color: var(--border); border-bottom-color: var(--bg-surface); background: var(--bg-surface); color: var(--accent-strong); box-shadow: inset 0 2px var(--accent); }
+.workspace-view-tabs button:hover:not(:disabled) { color: var(--text-primary); background: var(--surface-hover); }
+.workspace-view-tabs button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+.workspace-view-tabs button:disabled, .desktop-tool-tabs button:disabled { opacity: .5; cursor: default; }
+.notepad-source-status { margin: 0; padding: 12px 16px; color: var(--text-secondary); font-size: 12px; line-height: 1.5; }
+.notepad-entry-text { margin: 0; padding: 3px 0; min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5; }
+.document-workspace-content[hidden], #workspace-notepad[hidden] { display: none; }
+@media (min-width: 1024px), (min-width: 768px) and (orientation: landscape) {
+  .desktop-tool-tabs { display: flex; }
+  .notepad-header:has(.workspace-view-tabs) { flex-wrap: wrap; gap: 6px; }
 }

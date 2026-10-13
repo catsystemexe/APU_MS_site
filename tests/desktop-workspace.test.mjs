@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
-import { clampDesktopSplit, DEFAULT_DESKTOP_SPLIT, DESKTOP_WORKSPACE_QUERY, INITIAL_PROCESSING_WORKSPACE, readDesktopSplitPreference, selectDesktopTool } from "../app/desktop-workspace.ts";
+import { clampDesktopSplit, DEFAULT_DESKTOP_SPLIT, DESKTOP_WORKSPACE_QUERY, INITIAL_INTAKE_WORKSPACE, INITIAL_PROCESSING_WORKSPACE, readDesktopSplitPreference, selectDesktopTool, selectDesktopView, workspaceAvailability } from "../app/desktop-workspace.ts";
 
 test("A/H: fresh 30/70 defaults respect readable minimums and preserve explicit legacy preferences", () => {
   assert.equal(DEFAULT_DESKTOP_SPLIT, 30);
@@ -16,17 +16,19 @@ test("A/H: fresh 30/70 defaults respect readable minimums and preserve explicit 
   assert.match(DESKTOP_WORKSPACE_QUERY, /orientation: landscape/);
 });
 
+const ready = workspaceAvailability(true, true, true, true);
+
 test("B–F: independent tool/document navigation preserves the displayed document through Chat", () => {
   let workspace = { ...INITIAL_PROCESSING_WORKSPACE };
-  workspace = selectDesktopTool(workspace, "chat");
-  assert.deepEqual(workspace, { tool: "chat", document: "analysis" });
-  workspace = selectDesktopTool(workspace, "build");
+  workspace = selectDesktopTool(workspace, "chat", ready);
+  assert.deepEqual(workspace, { tool: "chat", document: "analysis", view: "document" });
+  workspace = selectDesktopTool(workspace, "build", ready);
   assert.deepEqual(workspace, INITIAL_PROCESSING_WORKSPACE);
-  workspace = selectDesktopTool(workspace, "output");
-  assert.deepEqual(workspace, { tool: "output", document: "output" });
-  workspace = selectDesktopTool(workspace, "chat");
-  assert.deepEqual(workspace, { tool: "chat", document: "output" });
-  workspace = selectDesktopTool(workspace, "output");
+  workspace = selectDesktopTool(workspace, "output", ready);
+  assert.deepEqual(workspace, { tool: "output", document: "output", view: "document" });
+  workspace = selectDesktopTool(workspace, "chat", ready);
+  assert.deepEqual(workspace, { tool: "chat", document: "output", view: "document" });
+  workspace = selectDesktopTool(workspace, "output", ready);
   assert.equal(workspace.document, "output");
 });
 
@@ -43,7 +45,7 @@ test("I/J: one Chat instance, pure UI switching, safe F3 history and shared role
   assert.match(client, /f3ControlsTarget=\{isF2DesktopLayout \? f3ControlsTarget : null\}/);
   const nav = client.slice(client.indexOf('className="desktop-tool-tabs"'), client.indexOf('id="desktop-tool-chat"'));
   assert.doesNotMatch(nav, /isDeveloper|POCHOPIT|POZOROVAT|VYTVOŘIT/);
-  assert.match(nav, /\['chat', 'Chat'\], \['build', 'Build'\], \['output', 'Výstup'\]/);
+  assert.match(nav, /\['chat', 'Chat'\], \['build', 'Obsah'\], \['output', 'Výstup'\]/);
   assert.match(nav, /aria-pressed=\{desktopWorkspace.tool === tool\}/);
   assert.match(client, /localStorage.setItem\(DESKTOP_SPLIT_STORAGE_KEY/);
   assert.match(client, /onKeyDown=\{handleSplitKeyDown\}/);
@@ -93,4 +95,35 @@ test("G: F3 portals only controls while the single readable document retains pri
   assert.match(controls, /onRepresentation/);
   assert.match(controls, /onConfig/);
   assert.doesNotMatch(controls, /<article|content.sections.map/);
+});
+
+
+test("permanent initial navigation guards disabled tools and document view, even through internal selection", () => {
+  const initial = { ...INITIAL_INTAKE_WORKSPACE };
+  const unavailable = workspaceAvailability(false, true, true, false);
+  assert.deepEqual(unavailable, {chat:true,build:false,output:false,document:false});
+  for (const tool of ["build","output"]) assert.equal(selectDesktopTool(initial,tool,unavailable),initial);
+  assert.equal(selectDesktopView(initial,"document",unavailable),initial);
+  assert.equal(selectDesktopView(initial,"notepad",unavailable),initial);
+  const f2WithoutBaseline = workspaceAvailability(true,true,false,false);
+  assert.equal(f2WithoutBaseline.build,true);
+  assert.equal(f2WithoutBaseline.output,false);
+  assert.equal(f2WithoutBaseline.document,false);
+});
+
+test("right notebook viewing is independent of left tools, document ownership and retained availability", () => {
+  let current = selectDesktopView(INITIAL_PROCESSING_WORKSPACE,"notepad",ready);
+  for (const tool of ["chat","output","build"]) {
+    current=selectDesktopTool(current,tool,ready);
+    assert.equal(current.view,"notepad");
+    assert.equal(current.tool,tool);
+  }
+  const before={...current};
+  const document=selectDesktopView(current,"document",ready);
+  assert.equal(document.tool,before.tool);
+  assert.equal(document.document,before.document);
+  assert.equal(current.view,"notepad");
+  const retained=workspaceAvailability(true,false,true,true);
+  assert.equal(selectDesktopTool(current,"build",retained),current);
+  assert.equal(selectDesktopView(current,"document",retained).view,"document");
 });

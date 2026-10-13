@@ -23,9 +23,13 @@ import type { F3Config, F3Representation, F3State } from "./f3-finalization-mode
 import type { WorkingDocumentMetadata } from "./working-document-lifecycle";
 import type { WorkingDocumentStyle } from "./document-presentation";
 
+type DesktopPanelNavigation = { view: "notepad" | "document"; documentPanel: "analysis" | "output"; documentAvailable: boolean; onView: (view: "notepad" | "document") => void };
+
 export type WorkspacePanel = "notepad" | "analysis" | "output" | null;
 
 type WorkspacePanelProps = {
+  desktopNavigation?: DesktopPanelNavigation;
+  notebookReadOnly?: boolean;
   documentStyle: WorkingDocumentStyle;
   onDocumentReset: () => void;
   documentMetadata: WorkingDocumentMetadata | null;
@@ -154,6 +158,7 @@ function ItemEditor({
   entry,
   label,
   autoFocus,
+  readOnly,
   onChange,
   onRemove,
   onNavigate,
@@ -162,6 +167,7 @@ function ItemEditor({
   entry: NotepadEntry;
   label: string;
   autoFocus: boolean;
+  readOnly: boolean;
   onChange: (value: string) => void;
   onRemove: () => void;
   onNavigate: () => void;
@@ -204,7 +210,7 @@ function ItemEditor({
             ? "Zobrazit zdroj v chatu"
             : "Ručně zadaná položka"}
       />
-      <textarea
+      {readOnly ? <p className="notepad-entry-text">{entry.text}</p> : <textarea
         ref={ref}
         rows={1}
         value={entry.text}
@@ -215,7 +221,7 @@ function ItemEditor({
         }}
         aria-label={`${label} – položka`}
         placeholder="Napište položku…"
-      />
+      />}
     </li>
   );
 }
@@ -225,16 +231,20 @@ function NotepadPanel({
   onEntriesChange,
   onEntryNavigate,
   onEntrySeen,
-}: Pick<WorkspacePanelProps, "entries" | "onEntriesChange" | "onEntryNavigate" | "onEntrySeen">) {
+  readOnly = false,
+  hidden = false,
+}: { readOnly?: boolean; hidden?: boolean } & Pick<WorkspacePanelProps, "entries" | "onEntriesChange" | "onEntryNavigate" | "onEntrySeen">) {
   const [focusedItem, setFocusedItem] = useState<string | null>(null);
 
   function addItem(category: CategoryId) {
+    if (readOnly) return;
     const entry: NotepadEntry = { id: createLocalId(), text: "", origin: "manual", ...(category === "goals" ? { needMapping: mapPedagogicalNeed("") } : {}) };
     setFocusedItem(entry.id);
     onEntriesChange({ ...entries, [category]: [...entries[category], entry] });
   }
 
   function updateItem(category: CategoryId, index: number, value: string) {
+    if (readOnly) return;
     setFocusedItem(null);
     const next = [...entries[category]];
     next[index] = { id: next[index].id, text: value, origin: "manual", ...(category === "goals" ? { needMapping: mapPedagogicalNeed(value) } : {}) };
@@ -242,6 +252,7 @@ function NotepadPanel({
   }
 
   function removeItem(category: CategoryId, index: number) {
+    if (readOnly) return;
     setFocusedItem(null);
     onEntriesChange({
       ...entries,
@@ -250,7 +261,8 @@ function NotepadPanel({
   }
 
   return (
-    <div id="workspace-notepad" className="notepad-scroll" role="tabpanel" aria-label="Zápisník">
+    <div id="workspace-notepad" hidden={hidden} className="notepad-scroll" role="tabpanel" aria-label="Zápisník">
+      {readOnly && <p className="notepad-source-status">Zápisník je zdrojem aktuální analýzy. Úpravy budou dostupné v řízeném režimu.</p>}
       <div className="situation-map" aria-label="Mapa situace">
             {NOTEPAD_CATEGORIES.map(({ id, label, icon: Icon }) => (
               <section className="notepad-category" key={id} aria-labelledby={`notepad-${id}`}>
@@ -269,6 +281,7 @@ function NotepadPanel({
                         entry={entry}
                         label={label}
                         autoFocus={focusedItem === entry.id}
+                        readOnly={readOnly}
                         onChange={(value) => updateItem(id, index, value)}
                         onRemove={() => removeItem(id, index)}
                         onNavigate={() => onEntryNavigate(entry)}
@@ -278,10 +291,10 @@ function NotepadPanel({
                   </ul>
                 ) : null}
 
-                <button className="add-notepad-item" type="button" onClick={() => addItem(id)}>
+                {!readOnly && <button className="add-notepad-item" type="button" onClick={() => addItem(id)}>
                   <Plus aria-hidden="true" />
                   <span>Přidat položku</span>
-                </button>
+                </button>}
               </section>
             ))}
       </div>
@@ -293,7 +306,7 @@ function DocumentPanel(props: Pick<WorkspacePanelProps,
   "activePanel" | "phase" | "analysisStatus" | "analysisError" | "onRetryAnalysis" |
   "f2ToF3Snapshot" | "f2ToF3SourceError" | "f3ControlsTarget" | "onContinueToOutput" |
   "f3State" | "f3Status" | "f3Error" | "onF3Representation" | "onF3Config" | "onF3Render" | "onF3Adopt" | "onF3Return" | "documentStyle" | "onDocumentStyle" | "documentMetadata" | "documentUpdating" | "onDocumentReset"
-> & { documentActionsTarget: HTMLElement | null }) {
+> & { documentActionsTarget: HTMLElement | null; hidden?: boolean }) {
   const workingAnalysis = props.activePanel === "analysis";
   let unavailable = null;
   if (workingAnalysis && !props.f2ToF3Snapshot) {
@@ -302,7 +315,7 @@ function DocumentPanel(props: Pick<WorkspacePanelProps,
     else if (props.analysisStatus === "error") unavailable = <div className="analysis-state"><p>{props.analysisError}</p><button type="button" onClick={props.onRetryAnalysis}>Zkusit znovu</button></div>;
     else unavailable = <div className="analysis-state"><p>{props.f2ToF3SourceError ?? "Rozbor čeká na kanonickou pedagogickou potřebu v Zápisníku."}</p></div>;
   }
-  return <div className="document-workspace-content">
+  return <div className="document-workspace-content" hidden={props.hidden}>
   <div id="workspace-document" aria-busy={props.documentUpdating} className="notepad-scroll workspace-panel-body" role="region" aria-label="Dokument">
     <F3Finalization documentMode={workingAnalysis ? "analysis" : "output"} documentActionsTarget={props.documentActionsTarget} unavailable={unavailable} controlsTarget={props.f3ControlsTarget} snapshot={props.f2ToF3Snapshot} sourceError={props.f2ToF3SourceError} state={props.f3State} status={props.f3Status} error={props.f3Error} onRepresentation={props.onF3Representation} onConfig={props.onF3Config} onRender={props.onF3Render} onAdopt={props.onF3Adopt} onReturn={props.onF3Return} onContinueToOutput={props.onContinueToOutput} documentStyle={props.documentStyle} onDocumentStyle={props.onDocumentStyle} documentMetadata={props.documentMetadata} documentUpdating={props.documentUpdating} onReset={props.onDocumentReset} />
   </div>
@@ -317,7 +330,9 @@ function PanelHeader({
   descriptionRef,
   documentWorkspace,
   onDocumentActionsTarget,
+  navigation,
 }: {
+  navigation?: DesktopPanelNavigation;
   onDocumentActionsTarget: (target: HTMLDivElement | null) => void;
   documentWorkspace: boolean;
   panel: OpenWorkspacePanel;
@@ -329,10 +344,13 @@ function PanelHeader({
 
   return (
     <header className="notepad-header">
-      <div className="panel-title">
+      {navigation ? <nav className="workspace-view-tabs" aria-label="Pravý pracovní panel">
+        <button type="button" aria-pressed={navigation.view === "notepad"} aria-controls="workspace-notepad" onClick={() => navigation.onView("notepad")}>Zápisník</button>
+        <button type="button" disabled={!navigation.documentAvailable} aria-pressed={navigation.view === "document"} aria-controls="workspace-document" onClick={() => { if (navigation.documentAvailable) navigation.onView("document"); }}>Dokument</button>
+      </nav> : <div className="panel-title">
         <Icon aria-hidden="true" />
         <h2>{label}</h2>
-      </div>
+      </div>}
       <div className="panel-header-actions">
         {panel !== "notepad" && <div className="document-actions-target" ref={onDocumentActionsTarget} />}
         <div className="panel-info" ref={descriptionRef}>
@@ -358,6 +376,8 @@ function PanelHeader({
 }
 
 export function WorkspacePanel({
+  desktopNavigation,
+  notebookReadOnly = false,
   activePanel,
   entries,
   onEntriesChange,
@@ -393,6 +413,7 @@ export function WorkspacePanel({
         {activePanel && (
           <PanelHeader
             panel={activePanel}
+            navigation={desktopNavigation}
             documentWorkspace={activePanel !== "notepad" && analysisProps.phase !== "intake"}
             isDescriptionVisible={isDescriptionVisible}
             onDescriptionToggle={() => setDescribedPanel((current) => current === activePanel ? null : activePanel)}
@@ -401,15 +422,17 @@ export function WorkspacePanel({
           />
         )}
 
-        {activePanel === "notepad" && (
+        {(activePanel === "notepad" || desktopNavigation) && (
           <NotepadPanel
             entries={entries}
+            readOnly={notebookReadOnly}
+            hidden={activePanel !== "notepad"}
             onEntriesChange={onEntriesChange}
             onEntryNavigate={onEntryNavigate}
             onEntrySeen={onEntrySeen}
           />
         )}
-        {(activePanel === "analysis" || activePanel === "output") && <DocumentPanel {...analysisProps} activePanel={activePanel} documentActionsTarget={documentActionsTarget} />}
+        {(activePanel === "analysis" || activePanel === "output" || desktopNavigation) && <DocumentPanel {...analysisProps} activePanel={desktopNavigation?.documentPanel ?? activePanel} hidden={activePanel === "notepad"} documentActionsTarget={documentActionsTarget} />}
       </div>
     </aside>
   );

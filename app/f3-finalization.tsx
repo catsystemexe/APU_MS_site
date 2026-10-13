@@ -46,7 +46,7 @@ export function F3Finalization({ snapshot, sourceError, state: providedState, st
   const generation = f3GenerationEligibility(state, documentUpdating || status === "loading");
   const generationTitle = generation.enabled ? "Vytvořit zvolenou podobu z přijatého Rozboru" : ({
     unavailable: "Dokument zatím není dostupný.", loading: "Probíhá aktualizace dokumentu.",
-    adoption: "Nejprve přijměte aktuální Rozbor.", prerequisites: "Nejprve doplňte potřebný obsah v Buildu.",
+    adoption: "Nejprve přijměte aktuální Rozbor.", prerequisites: "Nejprve doplňte potřebný obsah v Obsahu.",
     default: "Pro další podobu změňte nastavení Výstupu.", current: "Zvolená podoba odpovídá zdroji a nastavení.",
     configuration: "", source: "",
   } as const)[generation.reason];
@@ -70,7 +70,7 @@ export function F3Finalization({ snapshot, sourceError, state: providedState, st
         <button type="button" className="f3-secondary" aria-pressed={documentStyle === "a"} onClick={() => onDocumentStyle?.("a")}>VAR A — Čistý dokument</button>
         <button type="button" className="f3-secondary" aria-pressed={documentStyle === "b"} onClick={() => onDocumentStyle?.("b")}>VAR B — Strukturovaný dokument</button>
       </div>
-      <p>Stejný přijatý obsah, pouze jiný vzhled. Platí i v Buildu; další generované podoby se nemění.</p>
+      <p>Stejný přijatý obsah, pouze jiný vzhled. Platí i v Obsahu; další generované podoby se nemění.</p>
     </fieldset>
 
     {state.sourceStatus === "stale" && <aside className="f3-notice"><div><strong>Rozbor se od přijetí zdroje změnil</strong><span>{newer ? "Aktuální Rozbor lze explicitně přijmout; dosavadní výstup zůstane viditelný pro referenci." : sourceError ?? "Nejprve aktualizujte Rozbor, potom jej přijměte jako nový zdroj."}</span></div>{newer && <button type="button" onClick={onAdopt}>Přijmout aktuální Rozbor</button>}</aside>}
@@ -88,14 +88,14 @@ export function F3Finalization({ snapshot, sourceError, state: providedState, st
   </div>;
   const actions = documentActionsTarget ? createPortal(exportControls, documentActionsTarget) : null;
   if (unavailable) return <>{actions}{unavailable}</>;
-  if (!snapshot && !state) return <>{actions}<div className="workspace-empty-state"><h2>Výstup</h2><p>{sourceError ?? "Pracovní analýza bude dostupná po úspěšném vstupu do Rozboru."}</p><button type="button" className="f3-secondary" onClick={onReturn}>Přejít do Buildu</button></div></>;
+  if (!snapshot && !state) return <>{actions}<div className="workspace-empty-state"><h2>Výstup</h2><p>{sourceError ?? "Pracovní analýza bude dostupná po úspěšném vstupu do Rozboru."}</p><button type="button" className="f3-secondary" onClick={onReturn}>Přejít do Obsahu</button></div></>;
   if (!state) return <>{actions}</>;
   return <div className={`f3-finalization${controlsTarget || documentMode === "analysis" ? " is-document-only" : ""}`}>
     {actions}
     {documentMode === "output" && (controlsTarget ? createPortal(controls, controlsTarget) : controls)}
     {documentMode === "analysis" && !controlsTarget && onContinueToOutput && <div className="working-analysis-actions"><button type="button" className="f3-secondary" onClick={onContinueToOutput}>Další podoba Výstupu</button></div>}
     {documentMode === "output" && state.sourceStatus === "stale" && <p className="f3-notice" role="status">Rozbor se od přijetí zdroje změnil. Dosavadní výstup zůstává pro referenci.</p>}
-    {content?.kind === "boundary_issue" && <aside className="f3-boundary" role="alert"><strong>Finalizace vyžaduje změnu v Rozboru</strong><p>{content.reason}</p><span>Dotčená oblast: {content.affectedArea}</span><button type="button" onClick={onReturn}>Přejít do Buildu</button></aside>}
+    {content?.kind === "boundary_issue" && <aside className="f3-boundary" role="alert"><strong>Finalizace vyžaduje změnu v Rozboru</strong><p>{content.reason}</p><span>Dotčená oblast: {content.affectedArea}</span><button type="button" onClick={onReturn}>Přejít do Obsahu</button></aside>}
     {content?.kind === "material" && <DocumentContent content={content} documentRef={materialRef} stale={stale} workingAnalysis={workingAnalysis} sourceRevision={workingAnalysis ? source?.sourceRevision ?? null : render?.sourceSnapshotId === state.sourceSnapshotId ? state.sourceSnapshotRevision : null} documentStyle={documentStyle} documentMetadata={documentMetadata} />}
   </div>;
 }

@@ -91,7 +91,7 @@ import { createProjectResetState, shouldResetCurrentProject } from "./project-se
 import { analysisChangeKeys, EMPTY_ANALYSIS, formatAnalysisChat, preserveAnalysisSelection, type AnalysisNextPrompt, type AnalysisState, type SuggestedNeed } from "./analysis-model";
 import { CompletedLifecycleStatus, ProcessingStatus, type F1ProcessingStage } from "./processing-status";
 import { addCompletedLifecycleRecord, withCompletedLifecycleRecord, type CompletedLifecycleRecord } from "./lifecycle-record";
-import { clampDesktopSplit, DEFAULT_DESKTOP_SPLIT, DESKTOP_SPLIT_STORAGE_KEY, DESKTOP_WORKSPACE_QUERY, INITIAL_PROCESSING_WORKSPACE, readDesktopSplitPreference, selectDesktopTool, type DesktopTool } from "./desktop-workspace";
+import { clampDesktopSplit, DEFAULT_DESKTOP_SPLIT, DESKTOP_SPLIT_STORAGE_KEY, DESKTOP_WORKSPACE_QUERY, INITIAL_INTAKE_WORKSPACE, INITIAL_PROCESSING_WORKSPACE, readDesktopSplitPreference, selectDesktopTool, selectDesktopView, workspaceAvailability, type DesktopTool, type DesktopView } from "./desktop-workspace";
 import { F2BuildOperations } from "./f2-build-operations";
 import { activeNeedRoutingKey, bindNeedRoutingDecision, createNeedRouter, type NeedRoutingDecision } from "./f2-need-routing";
 import { DEV_TEST_SCENARIOS, type DevTestScenario } from "./dev-test-scenarios";
@@ -362,7 +362,7 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
   const [effectiveDesktopSplit, setEffectiveDesktopSplit] = useState(DEFAULT_DESKTOP_SPLIT);
   const [isResizingWorkspace, setIsResizingWorkspace] = useState(false);
   const [isDesktop, setIsDesktop] = useState(false);
-  const [desktopWorkspace, setDesktopWorkspace] = useState(INITIAL_PROCESSING_WORKSPACE);
+  const [desktopWorkspace, setDesktopWorkspace] = useState(INITIAL_INTAKE_WORKSPACE);
   const [documentMetadata, setDocumentMetadata] = useState<WorkingDocumentMetadata | null>(null);
   const projectEpochRef = useRef(0);
   const [documentStyle, setDocumentStyle] = useState<WorkingDocumentStyle>("a");
@@ -451,7 +451,7 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
   const currentRozborNeedFingerprintRef = useRef<string | null>(null);
   const isProcessingWorkspace = phase !== "intake";
   const isF2DesktopLayout = isDesktop && isProcessingWorkspace;
-  const documentPanel = isDesktop ? (isProcessingWorkspace ? desktopWorkspace.document : "notepad") : activePanel;
+  const documentPanel = isDesktop ? (desktopWorkspace.view === "notepad" ? "notepad" : desktopWorkspace.document) : activePanel;
   const isChatReadOnly = phase === "output" || (isDesktop && isProcessingWorkspace && desktopWorkspace.document === "output");
   const currentRozborReconciliation = useMemo(() => canonicalF2Need
     ? reconcileRozborComponents(deriveRequiredCurrentRozborComponents(activeF2Path, canonicalF2Need, analysis.hypotheses, activeRozbor.config), activeRozbor.components)
@@ -467,6 +467,8 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
       return { snapshot: null, error: "Rozbor čeká na úspěšnou analýzu aktuálního Zápisníku a potřeby." };
     return { snapshot: acceptedF2Source, error: null };
   }, [canonicalF2Need, acceptedF2Source, currentF2ToF3SourceFingerprint]);
+  const navigationAvailability = workspaceAvailability(isProcessingWorkspace, Boolean(sourceF2Need || f2Build), Boolean(currentF2ToF3Source.snapshot || f3State), Boolean(acceptedF2Source || f3State));
+
   const hasActiveRozborOperation = Boolean(currentRozborReconciliation && (currentRozborReconciliation.keep.length + currentRozborReconciliation.missing.length + currentRozborReconciliation.stale.length > 0));
   const isCurrentRozborUpdatePending = Boolean(currentRozborReconciliation && !currentRozborReconciliation.isRozborCurrent);
 
@@ -909,16 +911,25 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
   }
 
   function selectTool(tool: DesktopTool) {
-    setDesktopWorkspace((current) => selectDesktopTool(current, tool));
-    if (tool === "build") returnToF2();
+    if (!navigationAvailability[tool]) return;
+    if (tool === "build") { returnToF2(); return; }
     if (tool === "output") {
       if (isDictating) cancelDictation();
       enterF3();
+      return;
     }
+    setDesktopWorkspace((current) => selectDesktopTool(current, tool, navigationAvailability));
+  }
+
+  function selectRightView(view: DesktopView) {
+    setDesktopWorkspace((current) => selectDesktopView(current, view, navigationAvailability));
   }
 
   function returnToF2() {
-    setPhase("development"); setActivePanel("analysis"); setDesktopWorkspace(INITIAL_PROCESSING_WORKSPACE); setF3Error(null);
+    if (!navigationAvailability.build) return;
+    setPhase("development"); setActivePanel("analysis");
+    setDesktopWorkspace((current) => selectDesktopTool(current, "build", navigationAvailability));
+    setF3Error(null);
   }
 
   function togglePanel(panel: WorkspacePanelId) {
@@ -1007,7 +1018,7 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
   function enterF3() {
     if (!currentF2ToF3Source.snapshot && !f3State) return;
     if (currentF2ToF3Source.snapshot) setF3State((current) => current ?? createF3State(currentF2ToF3Source.snapshot));
-    setDesktopWorkspace({ tool: "output", document: "output" });
+    setDesktopWorkspace((current) => selectDesktopTool(current, "output", navigationAvailability));
     setF3Error(null); setPhase("output"); setActivePanel("output");
   }
 
@@ -1394,7 +1405,7 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
     setFailedInput(null);
     if (resolution === "enter_f3" && currentF2ToF3Source.snapshot) {
       setF3State((current) => current ?? createF3State(currentF2ToF3Source.snapshot));
-      setDesktopWorkspace({ tool: "output", document: "output" });
+      setDesktopWorkspace({ tool: "output", document: "output", view: "document" });
       setPhase("output");
       setActivePanel("output");
     } else {
@@ -1606,7 +1617,7 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
     setF2Build(null); setF2Preview(null); setF2BuildStatus("idle"); setF2BuildError(null); setF2PreviewStatus("idle"); setF2PreviewError(null);
     setCurrentRozbor(createCurrentRozborState());
     setRozborGenerationStatus("idle"); setRozborGenerationError(null);
-    setDesktopWorkspace(INITIAL_PROCESSING_WORKSPACE);
+    setDesktopWorkspace(INITIAL_INTAKE_WORKSPACE);
     setAcceptedF2Source(null);
     setF3State(null); setF3Status("idle"); setF3Error(null);
     setSessionTelemetry([]);
@@ -1675,7 +1686,7 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
 
   function navigateToSource(entry: NotepadEntry) {
     if (!entry.source) return;
-    if (isDesktop && isProcessingWorkspace) setDesktopWorkspace((current) => selectDesktopTool(current, "chat"));
+    if (isDesktop && isProcessingWorkspace) setDesktopWorkspace((current) => selectDesktopTool(current, "chat", navigationAvailability));
     const sourceMessageId = entry.source.messageId;
     requestAnimationFrame(() => document.getElementById(`message-${sourceMessageId}`)?.scrollIntoView({
       behavior: "smooth",
@@ -1995,9 +2006,9 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
         </header>
 
         <div className="desktop-tools" data-tool={desktopWorkspace.tool}>
-          {isProcessingWorkspace && <nav className="desktop-tool-tabs" aria-label="Nástroje pracovního prostoru">
-            {([['chat', 'Chat'], ['build', 'Build'], ['output', 'Výstup']] as const).map(([tool, label]) => <button key={tool} type="button" aria-pressed={desktopWorkspace.tool === tool} aria-controls={`desktop-tool-${tool}`} onClick={() => selectTool(tool)}>{label}</button>)}
-          </nav>}
+          <nav className="desktop-tool-tabs" aria-label="Nástroje pracovního prostoru">
+            {([['chat', 'Chat'], ['build', 'Obsah'], ['output', 'Výstup']] as const).map(([tool, label]) => <button key={tool} type="button" disabled={!navigationAvailability[tool]} aria-pressed={desktopWorkspace.tool === tool} aria-controls={`desktop-tool-${tool}`} onClick={() => selectTool(tool)}>{label}</button>)}
+          </nav>
           <div id="desktop-tool-chat" className="workspace-chat">
           <div className="chat-scroll-region">
           <fieldset className="chat-history" disabled={isChatReadOnly} aria-label={isChatReadOnly ? "Historie konverzace — pouze pro čtení" : "Konverzace"}>
@@ -2038,8 +2049,8 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
                       )
                     : message.analysisEntryHypotheses
                       ? <F2EntrySummary
-                          onOpenAnalysis={() => setActivePanel("analysis")}
-                          onOpenBuild={() => { setActivePanel("analysis"); setDesktopWorkspace(INITIAL_PROCESSING_WORKSPACE); }}
+                          onOpenAnalysis={() => { if (isDesktop) selectRightView("document"); else setActivePanel("analysis"); }}
+                          onOpenBuild={() => selectTool("build")}
                         />
                       : f1ProcessingStatus?.assistantId === message.id
                       ? <ProcessingStatus stage={f1ProcessingStatus.stage} />
@@ -2206,13 +2217,13 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
             <button type="submit" disabled={!needClarification.trim() || analysisStatus === "loading"}>Upřesnit potřebu</button>
           </form> : needRouteError ? <><p role="alert">{needRouteError}</p><button type="button" onClick={() => void resolveActiveNeed(sourceF2Need).catch((cause) => setNeedRouteError(cause.message))}>Zkusit znovu</button></> : <p role="status">Určuji zaměření podle pedagogické potřeby…</p>}
         </section>}
-        {f2Build && <section className="f2-build-shell" aria-label="Build">
-          <header className="f2-build-header"><h2>Build</h2></header>
+        {f2Build && <section className="f2-build-shell" aria-label="Obsah">
+          <header className="f2-build-header"><h2>Obsah</h2></header>
           <div className="f2-build-body">
             <F2BuildOperations activeF2Path={activeF2Path} currentRozbor={currentRozbor} setCurrentRozbor={setCurrentRozbor} />
           </div>
           <footer className="f2-build-actions">
-            {isCurrentRozborUpdatePending && <p className="f2-pending-notice" role="status">Změny v Buildu zatím nejsou přijaty do dokumentu.</p>}
+            {isCurrentRozborUpdatePending && <p className="f2-pending-notice" role="status">Změny Obsahu zatím nejsou přijaty do dokumentu.</p>}
             {rozborGenerationError && <p className="f2-generation-error" role="alert">{rozborGenerationError}</p>}
             <button type="button" className="f2-build-action" onClick={() => void generateCurrentRozbor()} disabled={rozborGenerationStatus === "loading" || !isCurrentRozborUpdatePending || (!hasActiveRozborOperation && activeRozbor.components.length === 0)} title="Přijmout zvolené analytické změny do Rozboru">{rozborGenerationStatus === "loading" ? "AKTUALIZUJI DOKUMENT" : "AKTUALIZOVAT DOKUMENT"}</button>
           </footer>
@@ -2220,10 +2231,12 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
 
 
           </div>
-          <div id="desktop-tool-output" className="workspace-output-tools" ref={setF3ControlsTarget}>{!f3State && !currentF2ToF3Source.snapshot && <p role="status">Výstup bude dostupný po úspěšném Rozboru. Potřebu můžete upřesnit v Buildu.</p>}</div>
+          <div id="desktop-tool-output" className="workspace-output-tools" ref={setF3ControlsTarget}>{!f3State && !currentF2ToF3Source.snapshot && <p role="status">Výstup bude dostupný po úspěšném Rozboru. Potřebu můžete upřesnit v Obsahu.</p>}</div>
         </div>
 
         <WorkspacePanel
+          desktopNavigation={isDesktop ? { view: desktopWorkspace.view, documentPanel: desktopWorkspace.document, documentAvailable: navigationAvailability.document, onView: selectRightView } : undefined}
+          notebookReadOnly={Boolean(acceptedF2Source)}
           onDocumentReset={resetDocumentPresentation}
           documentMetadata={documentMetadata}
           documentUpdating={rozborGenerationStatus === "loading" || f3Status === "loading"}

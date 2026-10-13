@@ -99,14 +99,14 @@ test("structured Phase 2 entry does not duplicate the canonical callout text", (
   assert.match(text, /Nejdůležitější nejistota: U/);
 });
 
-test("F2 entry chat links to Rozbor and Build without duplicating hypotheses", async () => {
+test("F2 entry chat links to Dokument and Obsah without duplicating hypotheses", async () => {
   const [client, entry] = await Promise.all([
     readFile(new URL("../app/apu-client.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/f2-entry-summary.tsx", import.meta.url), "utf8"),
   ]);
   assert.match(client, /content: "", analysisEntryHypotheses: entryHypotheses\(result\.analysis\)/);
   assert.match(client, /result\.analysis\.chatUpdate\.kind === "entry"[\s\S]*?analysisEntryHypotheses: entryHypotheses\(result\.analysis\)/);
-  assert.match(client, /<F2EntrySummary[\s\S]*?onOpenAnalysis=\{\(\) => setActivePanel\("analysis"\)\}[\s\S]*?onOpenBuild=/);
+  assert.match(client, /<F2EntrySummary[\s\S]*?onOpenAnalysis=\{\(\) => \{ if \(isDesktop\) selectRightView\("document"\); else setActivePanel\("analysis"\); \}\}[\s\S]*?onOpenBuild=/);
   assert.match(client, /assistant-response--f2-entry/);
   assert.doesNotMatch(await readFile(new URL("../app/analysis-model.ts", import.meta.url), "utf8"), /Připravil jsem kartu Rozbor/);
   assert.doesNotMatch(client, /if \(phase === "intake" && nextPhase === "development"\) setActivePanel\("analysis"\)/);

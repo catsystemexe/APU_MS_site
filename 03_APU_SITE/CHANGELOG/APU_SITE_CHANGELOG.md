@@ -4,6 +4,19 @@ Status: CURRENT
 
 Records significant verified product/runtime/project changes. It is not a complete Git log. Historical Sites-era entries are retained where they remain useful; current deployment state must not be inferred from a changelog entry alone.
 
+## 2026-10-13 — Permanent workspace navigation, Batch 1
+
+### Added / Changed
+- Added permanent desktop **Chat / Obsah / Výstup** and **Zápisník / Dokument** rows. Fresh F1 selects Chat/notepad with future tools visible/disabled; phase/readiness and guarded native/internal handlers control availability. Retained Document viewing remains accessible through stale source situations without permitting invalid generation.
+- Added independent right viewing state while retaining analysis/output ownership. Left tool/Chat selection preserves deliberate notebook viewing; returning Document restores one mounted default/generated view and its existing controls without calls, source adoption, reset or revision. Right tabs replace the duplicate header title; document actions remain exclusive to Document.
+- Added retrospective read-only notebook presentation after accepted F2, preserving source wording/order/links and guarding callbacks. Editable F1, supported Chat/extraction updates and all F2/F3 contracts remain unchanged. Scoped user-facing Build labels/guidance become Obsah; internal names remain.
+- Changed disabled Output update cursor from `wait` to `default`; existing enabled pointer/loading feedback and F3 eligibility are preserved. Updated roadmap/runtime documentation. Controlled notebook edits/drafts/reanalysis remain paused; KI-02, backlog and Known Issues are unchanged.
+
+### Verification
+- Typecheck and **187 focused tests** passed: navigation availability/state isolation, read-only UI/callback enforcement, contextual labels/links, F1 edit controls and existing source/phase/F3/export regressions.
+- Existing isolated actual-client Chromium smoke passed A–P plus prior suites: fresh rows, disabled mouse/keyboard/internal activation, F2 readiness, read-only source review/navigation, retained documents/Output controls, computed cursor states, no navigation API/revision/adoption, header actions and normal/developer responsive 30/70/resized/800×600/portrait/390 px/320 px. Screenshots were inspected; A/B PDFs remain 6 complete A4 pages and generated formats/export retain their data.
+- Hosted authenticated rendering is **NOT VERIFIED** (branch URL inaccessible), separately from synthetic PASS. Exact hosted fonts, human native print dialog, physical printing and physical Windows cursor appearance remain unverified; computed cursor states pass. No Access bypass, provider-backed F1 benchmark, controlled editing/KI-02 fix, release tag, merge or deployment occurred.
+
 ## 2026-10-13 — Change-aware F3 update and document presentation Reset
 
 ### Added / Changed
