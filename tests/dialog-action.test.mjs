@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
-  cleanDialogActionQuestion, cleanStructuredQuestionText, fallbackQuestController, requiredIntakeTarget, resolveDialogEvent, resolveF2OutputNavigation, resolveTextDialogEvent, validateQuestControllerResult,
+  cleanDialogActionQuestion, cleanStructuredQuestionText, CONTINUE_TO_SOLUTION_LABEL, fallbackQuestController, requiredIntakeTarget, resolveDialogEvent, resolveF2OutputNavigation, resolveTextDialogEvent, validateQuestControllerResult,
 } from "../app/dialog-action.ts";
 import { canBypassQuestController, QUEST_CONTROLLER_SCHEMA } from "../app/quest-controller.ts";
 
@@ -317,7 +317,72 @@ test("chat route records deterministic Controller bypass without inventing an LL
   ]);
   assert.match(route, /canBypassQuestController/);
   assert.match(route, /mode: "deterministic_bypass"/);
-  assert.match(route, /controller: \{ mode: controllerMode \}/);
+  assert.match(route, /controller: \{ mode: controllerMode, fallback_reason: controllerRun\.fallbackReason \}/);
+  const developerTelemetry = route.slice(route.indexOf("...(isDeveloper ? { telemetry:"), route.indexOf("model_usage_records: usageCollector.records()", route.indexOf("...(isDeveloper ? { telemetry:")));
+  assert.match(developerTelemetry, /fallback_reason: controllerRun\.fallbackReason/);
   assert.match(client, /controllerFastPathEligible/);
   assert.match(exportSource, /deterministic_bypass/);
+});
+
+test("NAV uses one canonical label in instructions, fallback and strict option validation", async () => {
+  const source = await readFile(new URL("../app/quest-controller.ts", import.meta.url), "utf8");
+  assert.match(source, /s labelem „\$\{CONTINUE_TO_SOLUTION_LABEL\}“; stejný text použij jako question/);
+  assert.doesNotMatch(source, /Chcete přejít k návrhům podpory/);
+  const result = fallbackQuestController([manifestation, goal], "intake");
+  const navigation = result.dialog_actions[1];
+  assert.equal(navigation.question, CONTINUE_TO_SOLUTION_LABEL);
+  assert.equal(navigation.options[0].label, CONTINUE_TO_SOLUTION_LABEL);
+  assert.ok(validateQuestControllerResult(result, [manifestation, goal], "intake"));
+  for (const invalidOption of [
+    { id: "continue_to_solution", label: "Chcete přejít k návrhům podpory?" },
+    { id: "continue_to_output", label: CONTINUE_TO_SOLUTION_LABEL },
+  ]) {
+    const invalid = structuredClone(result);
+    invalid.dialog_actions[1].options = [invalidOption];
+    assert.equal(validateQuestControllerResult(invalid, [manifestation, goal], "intake"), null);
+  }
+});
+
+for (const target of ["context", "course", "helps", "hypothesis"]) {
+  test(`exact unanswered pending SIDE ${target} survives asked-target history`, () => {
+    const refinement = { askedTargets: [target], pendingSide: { target, question: "Stále nezodpovězená otázka?" } };
+    for (const notebook of [[manifestation], [manifestation, goal]]) {
+      const result = fallbackQuestController(notebook, "intake", refinement);
+      assert.ok(validateQuestControllerResult(result, notebook, "intake", refinement));
+      const pending = result.dialog_actions.find(action => action.type === "SIDE");
+      assert.equal(pending.target, target);
+      assert.equal(pending.question, refinement.pendingSide.question);
+      for (const question of ["Jiná otázka?", "Stále nezodpovězená otázka? "]) {
+        const duplicate = structuredClone(result);
+        duplicate.dialog_actions.find(action => action.type === "SIDE").question = question;
+        assert.equal(validateQuestControllerResult(duplicate, notebook, "intake", refinement), null);
+      }
+      assert.equal(validateQuestControllerResult(result, notebook, "intake", { askedTargets: [target] }), null);
+    }
+  });
+}
+
+test("pending SIDE exemption never reopens answered canonical categories or unrelated targets", () => {
+  for (const item of [context, course, helps]) {
+    const refinement = { askedTargets: [item.category], pendingSide: { target: item.category, question: "Otázka?" } };
+    const result = fallbackQuestController([manifestation, goal], "intake", refinement);
+    assert.equal(validateQuestControllerResult(result, [manifestation, goal, item], "intake", refinement), null);
+    assert.ok(validateQuestControllerResult(result, [manifestation, goal, { ...item, text: "  " }], "intake", refinement));
+    const next = fallbackQuestController([manifestation, goal, item], "intake", refinement);
+    assert.notEqual(next.dialog_actions[0].target, item.category);
+    assert.ok(validateQuestControllerResult(next, [manifestation, goal, item], "intake", refinement));
+  }
+  const result = { phase: "intake", transition_ready: true, intake_question_policy_applies: true, dialog_actions: [side("helps"), nav()] };
+  assert.equal(validateQuestControllerResult(result, [manifestation, goal], "intake", {
+    askedTargets: ["helps"], pendingSide: { target: "context", question: result.dialog_actions[0].question },
+  }), null);
+});
+
+test("pending SIDE instructions explicitly exempt valid history matches and retain Notebook answer/relevance checks", async () => {
+  const source = await readFile(new URL("../app/quest-controller.ts", import.meta.url), "utf8");
+  assert.match(source, /stále relevantní/);
+  assert.match(source, /přesně stejný target a question beze změny/);
+  assert.match(source, /i když je target v askedRefinementTargets/);
+  assert.match(source, /Target uvedený v askedRefinementTargets neopakuj, s jedinou výjimkou/);
+  assert.match(source, /toto omezení platí i pro pendingSide/);
 });

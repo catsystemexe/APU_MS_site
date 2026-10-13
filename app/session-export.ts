@@ -4,6 +4,7 @@ import type { Diagnostics } from "./conversation-diagnostics";
 import type { ConversationPhase } from "./dialog-action";
 import type { WorkspacePanel } from "./notepad";
 import type { NotepadState } from "./notepad-model";
+import type { QuestControllerFallbackReason } from "./quest-controller";
 
 export const SESSION_EXPORT_SCHEMA_VERSION = "1.0" as const;
 
@@ -54,7 +55,10 @@ export type SessionTelemetry = {
     generation: number | null;
   };
   transition_from?: "F1" | "F2" | "F3";
-  controller?: { mode: "llm" | "llm_fallback" | "deterministic_bypass" | "controlled_navigation" };
+  controller?: {
+    mode: "llm" | "llm_fallback" | "deterministic_bypass" | "controlled_navigation";
+    fallback_reason?: QuestControllerFallbackReason | null;
+  };
   stages: SessionStage[];
   context_sizes: ContextSizes;
   tools: { file_search: { available: boolean; invoked: boolean; calls: number; duration_ms: number | null } };

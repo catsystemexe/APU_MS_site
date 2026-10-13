@@ -4,6 +4,14 @@ Status: CURRENT
 
 Records significant verified product/runtime/project changes. It is not a complete Git log. Historical Sites-era entries are retained where they remain useful; current deployment state must not be inferred from a changelog entry alone.
 
+## 2026-10-14 — Quest Controller contract consistency and fallback observability
+
+- Reimplemented directly on F1–F3 baseline `a912aa82983f62522819c830afd142308365ec35`, without fetching/merging PR #61 or using a B1.4 worktree. Controller NAV instructions, deterministic NAV and strict option validation now share the canonical label from `dialog-action.ts`.
+- Aligned pending SIDE instructions and validation: an exact retained target/question may survive asked-target history while relevant/unanswered; answered canonical context/course/helps categories and unrelated duplicate questions remain rejected. Semantic relevance/answer interpretation stays with the Controller/Core; deterministic validation checks identity and canonical Notebook evidence. Navigation minimums, explicit transitions and deterministic bypass boundaries remain unchanged.
+- Added six allowlisted fallback reasons: `provider_failure`, `incomplete_provider_response`, `transport_failure`, `json_parse_failure`, `controller_contract_validation_failure`, `unknown_failure`. Developer telemetry/Session JSON retain the reason without prompts, generated content or exception text; canonical provider/application status, token usage and pricing records remain intact. No model/reasoning changes, retry calls or streaming changes.
+- Fixed direct file-URL resolution in the two specified instrumentation/usage-collection test loaders, preserving their existing assertions.
+- Verification: the initial four-file baseline had **48 existing tests PASS** (the requested estimate was 49); the expanded controller/dialog, F1 response-contract, instrumentation, usage/ledger and export regression suite has **94 tests PASS**, including new contract/fallback assertions. `npm run typecheck` and `git diff --check` passed. All provider scenarios used local mocks; no paid API tests. Native Windows execution and hosted/provider integration remain **NOT VERIFIED**. At verification, commit/push awaited subsequent authorization. No PR merge or deployment was performed.
+
 ## 2026-10-13 — Chat composer, message and scrolling presentation
 
 - Replaced focus-triggered composer activation with an immediately editable compact textarea; focus keeps geometry stable and content grows up to 150 px. Existing Enter/Shift+Enter, send/retry/loading, dictation and attachment placeholder behavior remains.

@@ -110,9 +110,11 @@ export function resolveF2OutputNavigation(
   return hasCurrentRozborSnapshot ? "enter_f3" : "stay_for_rozbor";
 }
 
+export const CONTINUE_TO_SOLUTION_LABEL = "Můžeme se teď podívat, co z dosavadních informací vyplývá?";
+
 const CONTINUE_OPTION: DialogActionOption = {
   id: "continue_to_solution",
-  label: "Můžeme se teď podívat, co z dosavadních informací vyplývá?",
+  label: CONTINUE_TO_SOLUTION_LABEL,
 };
 
 function fallbackSideAction(notebook: IntakeNotebookItem[], askedTargets: DialogActionTarget[]): DialogAction {
@@ -163,7 +165,7 @@ function navAction(): DialogAction {
   return {
     type: "NAV",
     target: "phase",
-    question: "Můžeme se teď podívat, co z dosavadních informací vyplývá?",
+    question: CONTINUE_TO_SOLUTION_LABEL,
     required: false,
     options: [CONTINUE_OPTION],
   };
@@ -253,7 +255,9 @@ export function validateQuestControllerResult(
     (priority.options.length !== 1 || priority.options[0].id !== CONTINUE_OPTION.id || priority.options[0].label !== CONTINUE_OPTION.label)) return null;
 
   const askedTargets = [...new Set(refinement.askedTargets)];
-  if (sides[0] && askedTargets.includes(sides[0].target)) return null;
+  const pending = pendingSideAction(refinement.pendingSide, notebook);
+  const preservesPending = pending !== null && sides[0].target === pending.target && sides[0].question === pending.question;
+  if (askedTargets.includes(sides[0].target) && !preservesPending) return null;
   const sideCategory = sides[0] ? SIDE_NOTEBOOK_CATEGORY[sides[0].target] : undefined;
   if (sideCategory && hasCategory(notebook, sideCategory)) return null;
   return value as QuestControllerResult;

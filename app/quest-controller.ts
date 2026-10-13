@@ -1,4 +1,5 @@
 import {
+  CONTINUE_TO_SOLUTION_LABEL,
   fallbackQuestController,
   missingRequiredIntakeTargets,
   requiredIntakeTarget,
@@ -10,8 +11,30 @@ import {
 } from "./dialog-action.ts";
 import type { DebugMapping } from "./response-metadata.ts";
 import { callOpenAIResponses, type RequestUsageCollector } from "./openai-responses-instrumentation.ts";
+import { InstrumentedModelCallError } from "./model-call-instrumentation.ts";
 
 export const QUEST_CONTROLLER_MODEL = "gpt-5.6-luna";
+
+export type QuestControllerFallbackReason =
+  | "provider_failure"
+  | "incomplete_provider_response"
+  | "transport_failure"
+  | "json_parse_failure"
+  | "controller_contract_validation_failure"
+  | "unknown_failure";
+
+class ControllerContractValidationError extends Error {}
+
+function controllerFallbackReason(error: unknown): QuestControllerFallbackReason {
+  if (error instanceof InstrumentedModelCallError) {
+    if (error.usage_record.provider_status === "failed") return "provider_failure";
+    if (error.usage_record.provider_status === "incomplete") return "incomplete_provider_response";
+    if (error.usage_record.provider_status === "transport_error") return "transport_failure";
+    if (error.cause instanceof SyntaxError) return "json_parse_failure";
+    if (error.cause instanceof ControllerContractValidationError) return "controller_contract_validation_failure";
+  }
+  return "unknown_failure";
+}
 
 export function canBypassQuestController(input: {
   phase: ConversationPhase;
@@ -86,12 +109,12 @@ const CONTROLLER_INSTRUCTIONS = `Jsi technický Quest Controller APU Site. Pedag
 - dialog_actions je seřazené pole samostatně renderovaných otázek. Pokud chybí povinné minimum, MAIN je první a SIDE druhá. Po splnění minima je SIDE první a NAV poslední.
 - Hodnota dialog_actions[].question je čistý datový text: nikdy do ní nevkládej emoji, prefix 💬 ani jiné vizuální označení. Ikonu dodává výhradně UI.
 - phase je skutečný runtime stav. Neměň jej jen proto, že je minimum intake splněné nebo zobrazuješ NAV. transition_ready pouze říká, že lze nabídnout NAV; phase zůstává intake až do samostatné explicitní dialogové akce uživatele.
-- Pokud pendingSide existuje, sémanticky posuď, zda ji currentMessage zodpověděla a zda je stále relevantní. Je-li nezodpovězená a relevantní, vrať ji beze změny jako SIDE. Je-li zodpovězená nebo již nerelevantní, vyber další SIDE podle Core.
+- Pokud pendingSide existuje, sémanticky posuď, zda ji currentMessage zodpověděla a zda je stále relevantní. Je-li nezodpovězená a relevantní a příslušná kanonická kategorie currentNotebook není zodpovězená, vrať přesně stejný target a question beze změny jako SIDE, i když je target v askedRefinementTargets. Je-li zodpovězená nebo již nerelevantní, vyber další SIDE podle Core.
 - intake_question_policy_applies klasifikuje, zda jde podle Core o relevantní intake tah. Pokud je true, dialog_actions musí obsahovat prioritní otázku; pokud je false nebo se přechází mimo intake, vrať prázdné dialog_actions.
 - SIDE target technicky klasifikuj podle obsahu: context = kdy/kde/při čem/s kým; course = četnost/délka/intenzita/trend; helps = co bylo vyzkoušeno a s jakým účinkem; hypothesis = interpretace pedagoga.
-- NAV pro přechod do řešení použije option continue_to_solution s labelem „Chcete přejít k návrhům podpory?“.
+- NAV pro přechod do řešení použije option continue_to_solution s labelem „${CONTINUE_TO_SOLUTION_LABEL}“; stejný text použij jako question.
 - chat_navigation_event nastav na continue_to_solution pouze tehdy, když currentMessage obsahuje jednoznačný uživatelský pokyn přejít k návrhům, doporučením, řešení či pokračovat dál. Kliknutí na NAV a takový chatový pokyn jsou rovnocenné. Pouhá odpověď na SIDE, otázka o možnosti přechodu, negace, odklad nebo nejednoznačné „ano“ znamenají none.
-- Target uvedený v askedRefinementTargets neopakuj. SIDE na context, course nebo helps nepokládej ani tehdy, když už příslušná kategorie obsahuje údaj v currentNotebook.
+- Target uvedený v askedRefinementTargets neopakuj, s jedinou výjimkou přesně zachované, stále relevantní a nezodpovězené pendingSide popsané výše. SIDE na context, course nebo helps nepokládej ani tehdy, když už příslušná kategorie obsahuje údaj v currentNotebook; toto omezení platí i pro pendingSide.
 - Komunikační profil neznáš a nesmí ovlivnit strukturu rozhodnutí.
 - Confirmed Zápisník je kanonický pracovní kontext; unconfirmed zápis je pouze pracovní vodítko.`;
 
@@ -151,13 +174,17 @@ export async function runQuestController(args: {
           const transitioned = resolveDialogEvent("continue_to_solution", args.notebook, args.phase);
           if (transitioned) return transitioned;
         }
-        if (!result) throw new Error("invalid controller response");
+        if (!result) throw new ControllerContractValidationError("invalid controller response");
         return result;
       },
     });
-    if (usage_record.provider_status !== "completed" || !application_result) return { result: fallback, response: null, usedFallback: true };
-    return { result: application_result, response: response.body as ControllerResponse, usedFallback: false };
-  } catch {
-    return { result: fallback, response: null, usedFallback: true };
+    if (usage_record.provider_status !== "completed" || !application_result) {
+      const fallbackReason: QuestControllerFallbackReason = usage_record.provider_status === "failed" ? "provider_failure"
+        : usage_record.provider_status === "incomplete" ? "incomplete_provider_response" : "unknown_failure";
+      return { result: fallback, response: null, usedFallback: true, fallbackReason };
+    }
+    return { result: application_result, response: response.body as ControllerResponse, usedFallback: false, fallbackReason: null };
+  } catch (error) {
+    return { result: fallback, response: null, usedFallback: true, fallbackReason: controllerFallbackReason(error) };
   }
 }

@@ -1,9 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { pathToFileURL } from "node:url";
 
-const collectionUrl = pathToFileURL(new URL("../app/model-usage-collection.ts", import.meta.url).pathname).href;
-const ledgerUrl = pathToFileURL(new URL("../app/usage-ledger.ts", import.meta.url).pathname).href;
+const collectionUrl = new URL("../app/model-usage-collection.ts", import.meta.url).href;
+const ledgerUrl = new URL("../app/usage-ledger.ts", import.meta.url).href;
 const {
   appendModelUsageRecords,
   appendModelUsageSessionRecords,
