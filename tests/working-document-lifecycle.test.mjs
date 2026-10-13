@@ -28,7 +28,7 @@ for (const path of ["POCHOPIT", "POZOROVAT", "VYTVOŘIT"]) test(`${path}: Build 
   let f3 = updateF3Config(createF3State(s0), { audience: "parent", lengthDetail: "detailed", structureMode: "cards" });
   // Specialized prerequisites remain covered separately; attach an already accepted
   // old representation without weakening those guards for this lifecycle test.
-  const request = { sourceSnapshotId: f3.sourceSnapshotId, sourceFingerprint: s0.sourceFingerprint, f3ConfigRevision: f3.configRevision };
+  const request = { sourceSnapshotId: f3.sourceSnapshotId, sourceFingerprint: s0.sourceFingerprint, f3ConfigRevision: f3.configRevision, config: { ...f3.config } };
   f3 = acceptF3Render(f3, material, request);
   const before = JSON.stringify([s0, f3]);
   const config = { ...s0.currentRozbor.config, expansionDepth: 2 };

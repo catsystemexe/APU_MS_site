@@ -117,6 +117,9 @@ try {
   const checkFeedbackVisible = async (selector) => {
     assert.equal(await evaluate(`(() => { const el=document.querySelector(${JSON.stringify(selector)}), r=el.getBoundingClientRect(); return r.left>=0 && r.right<=innerWidth && r.top>=0 && r.bottom<=innerHeight && el.contains(document.elementFromPoint(r.left+r.width/2,r.top+r.height/2)); })()`), true, 'export feedback must be visible: ' + selector);
   };
+  const invokeGenerationHandler = async (times=1) => evaluate(`(() => {const b=document.querySelector('.f3-render-action button'); const key=Object.keys(b).find(key=>key.startsWith('__reactProps$'));for(let i=0;i<${times};i++)b[key].onClick();})()`);
+  const resetSelector='.document-actions button[aria-label="Obnovit výchozí podobu dokumentu"]';
+  const selectConfig = async (index,value) => evaluate(`(() => {const el=document.querySelector('.f3-controls label:nth-child(${index}) select');el.value=${JSON.stringify(value)};el.dispatchEvent(new Event('change',{bubbles:true}));})()`);
   const checkDocumentHeader = async () => {
     if (await evaluate('Boolean(document.querySelector(".header-session-export"))')) {
       assert.equal(await evaluate('(() => { const b=document.querySelector(".developer-log-toggle").getBoundingClientRect(), t=document.querySelector(".conversation-diagnostics .stats-trigger").getBoundingClientRect(), j=document.querySelector(".session-export-trigger").getBoundingClientRect(), right=document.querySelector(".project-actions").getBoundingClientRect(); return b.right<=t.left && t.right<=j.left && j.left-t.right<=20 && j.right<=right.left; })()'), true, 'developer entries must stay adjacent on the left at every viewport');
@@ -125,7 +128,7 @@ try {
     assert.equal(await evaluate('document.querySelector(".notepad-header h2").textContent'), 'Dokument');
     assert.equal(await evaluate('document.querySelectorAll(".document-actions").length'), 1);
     assert.equal(await evaluate('document.querySelector(".f2-build-actions .document-actions, .f3-tool-actions .document-actions, #workspace-document .document-actions")'), null);
-    assert.deepEqual(await evaluate('Array.from(document.querySelectorAll(".document-actions button")).map(el=>el.getAttribute("aria-label"))'), ['Kopírovat dokument','Tisk / Uložit jako PDF','Sdílet dokument — Připravujeme']);
+    assert.deepEqual(await evaluate('Array.from(document.querySelectorAll(".document-actions button")).map(el=>el.getAttribute("aria-label"))'), ['Obnovit výchozí podobu dokumentu','Kopírovat dokument','Tisk / Uložit jako PDF','Sdílet dokument — Připravujeme']);
     assert.equal(await evaluate('document.querySelector(".document-actions button:last-of-type").disabled'), true);
     assert.ok(await evaluate('document.querySelector(".document-actions button:last-of-type").textContent.includes("Připravujeme")'));
     assert.equal(await evaluate('(() => { const h=document.querySelector(".notepad-header").getBoundingClientRect(); const nodes=Array.from(document.querySelectorAll(".notepad-header .panel-title, .document-actions button, .notepad-help-toggle")); const rects=nodes.map(el=>el.getBoundingClientRect()); return rects.every(r=>r.left>=h.left && r.right<=h.right+.5 && r.top>=h.top && r.bottom<=h.bottom+.5) && rects.every((a,i)=>rects.slice(i+1).every(b=>a.right<=b.left || b.right<=a.left || a.bottom<=b.top || b.bottom<=a.top)); })()'), true, 'header controls must fit without overlap');
@@ -162,19 +165,19 @@ try {
   await evaluate('void(window.documentWorkspaceNode=document.querySelector("#workspace-document"))');
   assert.equal(await evaluate('document.querySelectorAll("#workspace-document .f3-material").length'),1);
   await call('Browser.grantPermissions',{origin:'http://127.0.0.1:4333',permissions:['clipboardReadWrite','clipboardSanitizedWrite']});
-  await click('.notepad-header .document-actions button:first-child');
+  await click('.notepad-header .document-actions button:nth-child(2)');
   await waitFor('document.querySelector(".notepad-header .document-actions").textContent.includes("Text zkopírován.")');
   await checkFeedbackVisible('.document-export-feedback');
   const buildText = await evaluate('navigator.clipboard.readText()');
   await evaluate('Object.defineProperty(navigator.clipboard,"writeText",{configurable:true,value:async()=>{throw new Error("Testovací chyba kopírování.")}})');
-  await click('.document-actions button:first-child');
+  await click('.document-actions button:nth-child(2)');
   await waitFor('document.querySelector(".document-export-feedback").textContent.includes("Testovací chyba kopírování")');
   await evaluate('delete navigator.clipboard.writeText');
-  await evaluate('window.print=()=>{throw new Error("print unavailable")}; document.querySelector(".document-actions button:nth-child(2)").click()');
+  await evaluate('window.print=()=>{throw new Error("print unavailable")}; document.querySelector(".document-actions button:nth-child(3)").click()');
   await waitFor('document.querySelector(".document-export-feedback").textContent.includes("Tisk se nepodařilo")');
   assert.equal(await evaluate('document.querySelector(".f3-print-document")'), null);
 
-  await evaluate('window.print=()=>{window.printCalls=(window.printCalls||0)+1}; document.querySelector(".notepad-header .document-actions button:nth-child(2)").click()');
+  await evaluate('window.print=()=>{window.printCalls=(window.printCalls||0)+1}; document.querySelector(".notepad-header .document-actions button:nth-child(3)").click()');
   assert.equal(await evaluate('document.querySelector(".f3-print-document").querySelectorAll("button,textarea,select,nav").length'),0);
   const baselinePDF=await call('Page.printToPDF',{printBackground:true,preferCSSPageSize:true});
   await writeFile(join(artifactRoot,'build-baseline.pdf'),Buffer.from(baselinePDF.data,'base64'));
@@ -239,6 +242,24 @@ try {
   assert.equal(await evaluate('document.querySelector("#workspace-document").innerHTML'),defaultDocument,'default F2 and F3 must be identical');
   assert.equal(await evaluate('document.querySelector("#workspace-document") === window.documentWorkspaceNode'),true,'one persistent document workspace');
   assert.equal(await evaluate('JSON.stringify(Array.from(document.querySelectorAll("#workspace-document .f3-material, #workspace-document h2, #workspace-document h3, #workspace-document p")).map(el=>{ const s=getComputedStyle(el); return [s.fontSize,s.color,s.margin,s.padding,s.fontFamily,s.lineHeight]; }))'),defaultVisual);
+  assert.equal(await evaluate('document.querySelector(".f3-render-action button").disabled'),true,'fresh defaults need no materialization');
+  assert.equal(await evaluate('document.querySelector(".f3-render-action button").title'),'Pro další podobu změňte nastavení Výstupu.');
+  const beforeDefaultNoop=await evaluate('window.calls.length');
+  await invokeGenerationHandler(2);
+  assert.equal(await evaluate('window.calls.length'),beforeDefaultNoop);
+  assert.equal(await evaluate('document.querySelector(".document-update-overlay")'),null);
+  await selectConfig(1,'parent');
+  assert.equal(await evaluate('document.querySelector(".f3-render-action button").disabled'),false);
+  await selectConfig(1,'teacher');
+  assert.equal(await evaluate('document.querySelector(".f3-render-action button").disabled'),true);
+  await selectConfig(2,'professional');await click('.document-style-picker button:nth-child(2)');
+  const beforeFreshReset=await evaluate('window.calls.length');
+  await click(resetSelector);
+  assert.equal(await evaluate('document.querySelector(".working-document").dataset.documentStyle'),'a');
+  assert.deepEqual(await evaluate('Array.from(document.querySelectorAll(".f3-controls select")).map(el=>el.value)'),['teacher','plain','standard','auto']);
+  assert.equal(await evaluate('document.querySelector(".f3-render-action button").disabled'),true);
+  assert.equal(await evaluate('document.querySelector(".document-creation time").dateTime'),createdAt);
+  assert.equal(await evaluate('window.calls.length'),beforeFreshReset);
   await capture('output');
   const outputDocument = await evaluate('document.querySelector(".f3-material").innerHTML');
   await click('.desktop-tool-tabs button[aria-controls="desktop-tool-chat"]');
@@ -250,12 +271,12 @@ try {
   await capture('output-chat');
   await click('.desktop-tool-tabs button[aria-controls="desktop-tool-output"]');
   await call('Browser.grantPermissions',{origin:'http://127.0.0.1:4333',permissions:['clipboardReadWrite','clipboardSanitizedWrite']});
-  await click('.notepad-header .document-actions button:first-child');
+  await click('.notepad-header .document-actions button:nth-child(2)');
   await waitFor('document.querySelector(".notepad-header .document-actions").textContent.includes("Text zkopírován.")');
   const copied = await evaluate('navigator.clipboard.readText()');
   assert.equal(copied,buildText,'F2 and F3 baseline copied content must match');
   assert.ok(copied.includes('Testovací hypotéza') && copied.includes('Málo evidence.') && copied.includes('Vliv únavy.'));
-  await evaluate('window.print=()=>{window.printCalls=(window.printCalls||0)+1}; document.querySelector(".notepad-header .document-actions button:nth-child(2)").click()');
+  await evaluate('window.print=()=>{window.printCalls=(window.printCalls||0)+1}; document.querySelector(".notepad-header .document-actions button:nth-child(3)").click()');
   assert.equal(await evaluate('window.printCalls'), 2);
   assert.equal(await evaluate('document.querySelector(".f3-print-document").querySelectorAll("button,textarea,select,nav").length'), 0);
   const pdf = await call('Page.printToPDF', { printBackground:true,preferCSSPageSize:true }); await writeFile(join(artifactRoot, 'output.pdf'), Buffer.from(pdf.data,'base64'));
@@ -266,7 +287,9 @@ try {
   // C/D: Generate A from the accepted baseline, although draft Build depth is 2.
   await evaluate('(() => { const el=document.querySelector(".f3-controls select"); el.value="parent"; el.dispatchEvent(new Event("change",{bubbles:true})); })()');
   await evaluate('(() => {const el=document.querySelector(".f3-controls label:nth-child(4) select");el.value="cards";el.dispatchEvent(new Event("change",{bubbles:true}));})()');
-  await click('.f3-render-action button');
+  const beforeFirstGeneration=await evaluate('window.calls.filter(c=>c.url==="/api/f3").length');
+  await invokeGenerationHandler(2);
+  assert.equal(await evaluate('window.calls.filter(c=>c.url==="/api/f3").length'),beforeFirstGeneration+1,'same-event repeated handler invocation must not duplicate the request');
   await waitFor('document.querySelector(".document-update-overlay")');
   assert.equal(await evaluate('document.querySelector("#workspace-document").getAttribute("aria-busy")'),'true');
   assert.equal(await evaluate('document.querySelector(".document-creation time").dateTime'),createdAt);
@@ -275,14 +298,21 @@ try {
   assert.equal(await evaluate('Array.from(document.querySelectorAll(".document-actions button")).every(el=>el.disabled)'), true);
   await waitFor('document.querySelector(".f3-material h2").textContent === "Další podoba 1"');
   assert.equal(await evaluate('document.querySelector(".document-update-overlay")'),null);
+  assert.equal(await evaluate('document.querySelector(".f3-render-action button").disabled'),true,'accepted material matches actual config/source');
+  const afterFirstGeneration=await evaluate('window.calls.length');await invokeGenerationHandler();assert.equal(await evaluate('window.calls.length'),afterFirstGeneration);
+  await selectConfig(2,'professional');
+  assert.equal(await evaluate('document.querySelector(".f3-render-action button").disabled'),false);
+  await selectConfig(2,'plain');
+  assert.equal(await evaluate('document.querySelector(".f3-render-action button").disabled'),true);
+  assert.equal(await evaluate('document.querySelector(".f3-material").classList.contains("is-stale")'),false,'configuration reversion restores actual render currency');
   const sourceA=await evaluate('window.calls.at(-1).body.sourceSnapshot');
   assert.equal(sourceA.currentRozbor.components.length,0);
   assert.equal(sourceA.currentRozbor.config.expansionDepth,0);
   const generatedA=await evaluate('document.querySelector(".f3-material").innerHTML');
-  await click('.notepad-header .document-actions button:first-child');
+  await click('.notepad-header .document-actions button:nth-child(2)');
   await waitFor('document.querySelector(".notepad-header .document-actions").textContent.includes("Text zkopírován.")');
   assert.ok((await evaluate('navigator.clipboard.readText()')).includes('GENERATED_1'));
-  await evaluate('window.print=()=>{window.printCalls=(window.printCalls||0)+1}; document.querySelector(".notepad-header .document-actions button:nth-child(2)").click()');
+  await evaluate('window.print=()=>{window.printCalls=(window.printCalls||0)+1}; document.querySelector(".notepad-header .document-actions button:nth-child(3)").click()');
   const generatedPDF=await call('Page.printToPDF',{printBackground:true,preferCSSPageSize:true});
   await writeFile(join(artifactRoot,'generated-output.pdf'),Buffer.from(generatedPDF.data,'base64'));
   await evaluate('window.dispatchEvent(new Event("afterprint"))');
@@ -345,10 +375,10 @@ try {
   assert.equal(await evaluate('document.querySelector(".f3-material").classList.contains("is-stale")'),true);
   assert.ok(await evaluate('document.querySelector(".f3-material").textContent.includes("dříve přijatý Rozbor")'));
   assert.equal(await evaluate('document.querySelector(".f3-material .document-creation")'),null,'never relabel old generated content with working-document creation metadata');
-  await click('.notepad-header .document-actions button:first-child');
+  await click('.notepad-header .document-actions button:nth-child(2)');
   await waitFor('document.querySelector(".notepad-header .document-actions").textContent.includes("Text zkopírován.")');
   assert.ok((await evaluate('navigator.clipboard.readText()')).startsWith('Starší výstup'));
-  await click('.document-actions button:nth-child(2)');
+  await click('.document-actions button:nth-child(3)');
   assert.ok(await evaluate('document.querySelector(".f3-print-document").textContent.includes("Starší výstup")'));
   const stalePDF=await call('Page.printToPDF',{printBackground:true,preferCSSPageSize:true});
   await writeFile(join(artifactRoot,'stale-output.pdf'),Buffer.from(stalePDF.data,'base64'));
@@ -465,7 +495,8 @@ try {
   await click('.desktop-tool-tabs button[aria-controls="desktop-tool-build"]');
   assert.equal(await evaluate('document.querySelector(".working-document").dataset.documentStyle'),'b');
   await click('.desktop-tool-tabs button[aria-controls="desktop-tool-output"]');
-  await click('.document-style-picker button:first-child');
+  assert.equal(await evaluate('document.querySelector(".f3-render-action button").disabled'),true);
+  await click(resetSelector);
   assert.equal(await evaluate('document.querySelector(".working-document").dataset.documentStyle'),'a');
   assert.equal(await evaluate('window.calls.length'),developerStyleCalls);
 
@@ -506,13 +537,15 @@ try {
   assert.equal(await evaluate('(() => { const left=document.querySelector(".brand").getBoundingClientRect(), right=document.querySelector(".project-actions").getBoundingClientRect(); return left.right<=right.left && right.right<=innerWidth; })()'), true);
   await capture('mobile-320');
   // An unavailable F3 boundary result cannot export the preceding material.
+  await selectConfig(2,'professional');
   await evaluate('window.boundaryNextRender=true');
   await click('.f3-render-action button');
   await waitFor('document.querySelector(".f3-boundary")');
-  assert.equal(await evaluate('Array.from(document.querySelectorAll(".document-actions button")).every(el=>el.disabled)'), true);
+  assert.equal(await evaluate('Array.from(document.querySelectorAll(".document-actions button:not(:first-child)")).every(el=>el.disabled)'), true);
+  assert.equal(await evaluate('document.querySelector(".document-actions button:first-child").disabled'),false,'Reset can recover a valid adopted baseline from boundary feedback');
   await click('.f3-representations button:first-child');
   await waitFor('document.querySelector(".f3-material")');
-  assert.equal(await evaluate('document.querySelector(".document-actions button:first-child").disabled'), false);
+  assert.equal(await evaluate('document.querySelector(".document-actions button:nth-child(2)").disabled'), false);
   // Source-less mobile analysis retains visible disabled document actions.
   await call('Page.navigate',{url:'http://127.0.0.1:4333/'});
   await waitFor('document.querySelector(".tool-rail-analysis")');
@@ -549,6 +582,8 @@ try {
   await click('.desktop-tool-tabs button[aria-controls="desktop-tool-output"]');
   await waitFor('document.querySelector(".document-style-picker")');
   assert.equal(await evaluate('document.querySelector(".workspace-output-tools .f3-notice button")'),null,'accepted Build needs no adoption prompt');
+  assert.equal(await evaluate('document.querySelector(".f3-render-action button").disabled'),true,'Build revision alone does not materialize untouched defaults');
+  await selectConfig(1,'parent');
   await click('.f3-render-action button');
   await waitFor('document.querySelector(".f3-material h2").textContent === "Další podoba 1"');
   const initialRequest=await evaluate('window.calls.at(-1).body');
@@ -562,6 +597,23 @@ try {
   await click('.document-style-picker button:nth-child(2)');
   assert.equal(await evaluate('document.querySelector(".f3-material").outerHTML'),generatedInitial,'style must not alter generated output or mark it stale');
   assert.equal(await evaluate('window.calls.length'),generatedCount);
+  assert.equal(await evaluate('document.querySelector(".f3-render-action button").disabled'),true);
+  await evaluate('document.querySelector(".document-actions button:first-child").focus()');
+  assert.equal(await evaluate('document.activeElement.getAttribute("aria-label")'),'Obnovit výchozí podobu dokumentu');
+  await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Enter',code:'Enter',windowsVirtualKeyCode:13,text:'\r'});
+  await call('Input.dispatchKeyEvent',{type:'keyUp',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});
+  assert.equal(await evaluate('document.querySelector(".working-document").dataset.documentStyle'),'a');
+  assert.deepEqual(await evaluate('Array.from(document.querySelectorAll(".f3-controls select")).map(el=>el.value)'),['teacher','plain','standard','auto']);
+  assert.equal(await evaluate('document.querySelector(".document-creation time").dateTime'),longCreatedAt);
+  assert.equal(await evaluate('window.calls.length'),generatedCount);
+  assert.equal(await evaluate('document.querySelector(".f3-render-action button").disabled'),false,'reset defaults differ from retained parent material');
+  assert.equal(await evaluate('document.querySelector(".document-actions button:first-child").disabled'),true,'already reset is a no-op');
+  await click('.f3-representations button:nth-child(2)');
+  assert.ok(await evaluate('document.querySelector(".f3-material").textContent.includes("GENERATED_1")'));
+  assert.equal(await evaluate('document.querySelector(".f3-material").classList.contains("is-stale")'),true);
+  await selectConfig(1,'parent');
+  assert.equal(await evaluate('document.querySelector(".f3-material").outerHTML'),generatedInitial,'returning to actual generation config restores retained output');
+  assert.equal(await evaluate('document.querySelector(".f3-render-action button").disabled'),true);
   await click('.f3-representations button:first-child');
   await waitFor('document.querySelector(".working-document")');
   const semanticDocument = async () => evaluate('(() => { const root=document.querySelector(".working-document"); return Array.from(root.querySelectorAll("h2,h3,h4,p,li,aside > strong")).map(el=>{const clone=el.cloneNode(true);clone.querySelectorAll("[aria-hidden=true]").forEach(n=>n.remove());return clone.textContent.replace(/\\s+/g," ").trim()}).join("\\n") })()');
@@ -604,7 +656,7 @@ try {
     assert.equal(await evaluate('document.querySelectorAll(".working-document svg").length'),4);
     assert.equal(await evaluate('document.querySelector(".document-group:first-of-type").textContent.includes("Lépe rozlišit vliv hluku.") && document.querySelector(".document-group:first-of-type").textContent.includes("Porozumět potřebě podpory při přechodu.")'),true);
     assert.equal(await evaluate('getComputedStyle(document.querySelector(".document-section-icon")).display'),style==='b'?'block':'none');
-    await click('.document-actions button:first-child');
+    await click('.document-actions button:nth-child(2)');
     await waitFor('document.querySelector(".document-export-feedback").textContent.includes("Text zkopírován")');
     const copied=await evaluate('navigator.clipboard.readText()');
     if (!copyA) copyA=copied; else assert.equal(copied,copyA,'copy text must be identical across A/B');
@@ -620,7 +672,7 @@ try {
     await evaluate('document.querySelector("#workspace-document").scrollTop=0');
 
     await evaluate('window.print=()=>{window.printCalls=(window.printCalls||0)+1}');
-    await click('.document-actions button:nth-child(2)');
+    await click('.document-actions button:nth-child(3)');
     assert.equal(await evaluate('document.querySelector(".f3-print-document .working-document").dataset.documentStyle'),style);
     await call('Emulation.setEmulatedMedia',{media:'print'});
     const printSettings=await evaluate('(() => {const el=document.querySelector(".f3-print-document .working-document"),heading=el.querySelector(".document-heading"),s=getComputedStyle(el);return {page:s.page,font:s.fontSize,lineHeight:s.lineHeight,border:s.borderWidth,headingAfter:getComputedStyle(heading).breakAfter,listInside:getComputedStyle(el.querySelector("li")).breakInside,sectionInside:getComputedStyle(el.querySelector("section")).breakInside,labelAfter:getComputedStyle(el.querySelector(".document-list-label")).breakAfter}})()');
@@ -636,18 +688,23 @@ try {
     await call('Emulation.setEmulatedMedia',{media:''}); await evaluate('window.dispatchEvent(new Event("afterprint"))');
   }
   // A/B preserves the accepted source and F3 configuration revision on the next explicit render.
-  await click('.f3-render-action button'); await waitFor('document.querySelector(".f3-material h2").textContent === "Další podoba 2"');
+  assert.equal(await evaluate('document.querySelector(".f3-render-action button").disabled'),true);
+  await invokeGenerationHandler(2);
+  assert.equal(await evaluate('window.calls.length'),generatedCount);
   assert.deepEqual(await evaluate('window.calls.at(-1).body'),initialRequest);
   assert.equal(await evaluate('document.querySelector(".f3-material").classList.contains("is-stale")'),false);
   // Table/card paths remain independent from default-document presentation.
   for (const mode of ['table','cards']) {
     await evaluate(`(() => {const el=document.querySelector('.f3-controls label:nth-child(4) select');el.value=${JSON.stringify(mode)};el.dispatchEvent(new Event('change',{bubbles:true}));})()`);
-    await click('.f3-render-action button'); await waitFor('!document.querySelector(".f3-render-action button").disabled');
+    await click('.f3-render-action button'); await waitFor('document.querySelector(".document-update-overlay")');
+    assert.equal(await evaluate('document.querySelector(".document-actions button:first-child").disabled'),true,'Reset disabled while pending');
+    await waitFor('!document.querySelector(".document-update-overlay")');
+    assert.equal(await evaluate('document.querySelector(".f3-render-action button").disabled'),true);
     await waitFor(mode==='table'?'document.querySelector(".f3-material table")':'document.querySelector(".f3-cards section")');
     const markup=await evaluate('document.querySelector(".f3-material").outerHTML');const n=await evaluate('window.calls.length');
     await click('.document-style-picker button:nth-child(2)');await click('.document-style-picker button:first-child');
     assert.equal(await evaluate('document.querySelector(".f3-material").outerHTML'),markup);assert.equal(await evaluate('window.calls.length'),n);
-    await click('.document-actions button:nth-child(2)');assert.equal(await evaluate('document.querySelector(".f3-print-document .working-document")'),null);
+    await click('.document-actions button:nth-child(3)');assert.equal(await evaluate('document.querySelector(".f3-print-document .working-document")'),null);
     await writeFile(join(artifactRoot,'generated-'+mode+'.pdf'),Buffer.from((await call('Page.printToPDF',{printBackground:true,preferCSSPageSize:true})).data,'base64'));
     await evaluate('window.dispatchEvent(new Event("afterprint"))');
   }
@@ -703,6 +760,12 @@ try {
   await waitFor('document.querySelector(".workspace-output-tools .f3-notice button")');
   assert.equal(await evaluate('document.querySelector(".f3-render-action button").disabled'),true);
   assert.equal(await evaluate('document.querySelector(".document-creation time").dateTime'),longCreatedAt);
+  const oldAdoptedDocument=await evaluate('document.querySelector(".working-document").textContent');
+  await click(resetSelector);
+  assert.equal(await evaluate('document.querySelector(".working-document").dataset.documentStyle'),'a');
+  assert.equal(await evaluate('document.querySelector(".working-document").textContent'),oldAdoptedDocument);
+  assert.equal(await evaluate('document.querySelector(".f3-render-action button").disabled'),true);
+  assert.ok(await evaluate('Boolean(document.querySelector(".workspace-output-tools .f3-notice button"))'));
   const beforeAdoption=await evaluate('window.calls.length');
   await click('.workspace-output-tools .f3-notice button');
   assert.equal(await evaluate('document.querySelector(".document-update-overlay")'),null);
@@ -719,6 +782,7 @@ try {
   await click('.f3-render-action button');
   await waitFor('document.querySelector(".document-update-overlay")');
   await evaluate('(() => {const el=document.querySelector(".f3-controls select");el.value="internal";el.dispatchEvent(new Event("change",{bubbles:true}));})()');
+  await selectConfig(1,'teacher');
   await waitFor('!document.querySelector(".document-update-overlay")');
   assert.equal(await evaluate('document.querySelector(".working-document").innerHTML'),validBeforeF3);
   await call('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'reduce'}]});
@@ -728,12 +792,14 @@ try {
   await waitFor('!document.querySelector(".document-update-overlay")');
   await call('Emulation.setEmulatedMedia',{features:[]});
   // A new project discards session metadata and cannot label an unknown document.
+  await selectConfig(1,'parent');
   await click('.f3-render-action button');await waitFor('document.querySelector(".document-update-overlay")');
   await evaluate('window.confirm=()=>true');await click('button[aria-label="Nový projekt"]');
   await waitFor('document.querySelector(".message-list").textContent.includes("Popište mi situaci") && !document.querySelector(".document-creation, .f3-material")');
   assert.equal(await evaluate('document.querySelector(".document-update-overlay")'),null);
   await new Promise(r=>setTimeout(r,400));
   assert.equal(await evaluate('document.querySelector(".document-creation, .document-update-overlay, .f3-material")'),null,'old project response cannot restore document metadata/content');
+  console.log('PASS: Change-aware F3/Reset A–O: fresh defaults and config reversion disable updates, actual render provenance restores freshness, no-op/duplicate handler guards, meaningful generation/retry/source changes, instant A/B, preserved generated output/source/timestamp on Reset, protected upstream adoption, monotonic in-flight rejection, pending Reset guards and responsive header.');
   console.log('PASS: Header/update flow A–L: real stable creation timestamp/reset, compact header/major-only dividers, one accessible/reduced-motion overlay for Build/F3, success/failure/obsolete cleanup, async/local Build auto-adoption without F3 calls, retained old cards/config/stale exports, protected upstream adoption and unchanged generated text/table/card paths.');
   await writeFile(join(artifactRoot,'document-style-evidence.json'),JSON.stringify(styleEvidence,null,2));
   console.log('PASS: Document hierarchy A–L: notebook categories/one active need/distinct goals, source ranks 1/4/8, process exclusions with intact snapshot, major/subsection structure, optional accepted extensions and limited major/uncertainty icons; default styles A–L: identical complete long-form semantic/copy content, three accepted expansions, isolated A/B state and preserved navigation, named multi-page A4 PDFs, readable 856px/680–760px screen page, semantic lists/heading break rules and untouched generated text/table/cards exports.');

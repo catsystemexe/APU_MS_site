@@ -128,3 +128,22 @@ test("retained stale material warns only when selected; routine Output has no re
   const retained = render(propsFor(newer, {...adopted,representation:"material"}));
   assert.match(retained, /OLD_CARD|Starší výstup|dříve přijatý Rozbor/);
 });
+
+test("primary Output button uses effective config/source equality and preserves disabled-state explanations", () => {
+  const snapshot = baselineFor("POCHOPIT");
+  const initial = createF3State(snapshot);
+  const primary = state => render(propsFor(snapshot,state)).match(/<button[^>]*title="([^"]+)"[^>]*>AKTUALIZOVAT DOKUMENT<\/button>/)?.[0];
+  assert.match(primary(initial), /disabled/);
+  assert.match(primary(initial), /Pro další podobu změňte/);
+  const configured = updateF3Config(initial,{audience:"parent"});
+  assert.doesNotMatch(primary(configured), /disabled/);
+  const content = {kind:"material",title:"Parent",introduction:"Accepted",sections:[{heading:"Data",content:"Data"}],table:null,cards:[],usageNote:null};
+  const generated = acceptF3Render(configured, content, createF3RenderRequest(configured));
+  assert.match(primary(generated), /disabled/);
+  assert.match(primary(generated), /odpovídá zdroji a nastavení/);
+  const changed = updateF3Config(generated,{languageStyle:"professional"});
+  assert.doesNotMatch(primary(changed), /disabled/);
+  const reverted = updateF3Config(changed,{languageStyle:"plain"});
+  assert.match(primary(reverted), /disabled/);
+  assert.doesNotMatch(render(propsFor(snapshot,reverted)), /Formátovací nastavení změněno|Starší výstup/);
+});

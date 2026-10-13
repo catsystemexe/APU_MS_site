@@ -97,7 +97,7 @@ import { activeNeedRoutingKey, bindNeedRoutingDecision, createNeedRouter, type N
 import { DEV_TEST_SCENARIOS, type DevTestScenario } from "./dev-test-scenarios";
 import { acceptRenderedPreview, addF2Context, advanceAcceptedF2Source, applyCurrentRozborComponentUpdate, applyF2BuildResult, canonicalF1NeedFingerprint, createCurrentRozborGenerationRequest, createCurrentRozborState, createF2BuildRequest, createF2PreviewSnapshot, createF2ToF3Snapshot, currentRozborSourceFingerprint, deriveRequiredCurrentRozborComponents, parameterizeF2Skill, parseF2BuildResult, parseF2RenderedPreview, parseGeneratedRozborComponents, previewStatus, reconcileRozborComponents, removeF2Context, synchronizeF2BuildWithCanonicalNeed, toggleF2Skill, type CurrentRozborState, type F2AnalysisContext, type F2ToF3Snapshot, type F2BuildState, type F2NotebookContextItem, type F2PreviewState } from "./f2-build-model";
 import { acceptBuildDocumentUpdate, acceptWorkingDocumentMetadata, type WorkingDocumentMetadata } from "./working-document-lifecycle";
-import { acceptF3Render, adoptF2Snapshot, createF3RenderRequest, createF3State, markF3SourceStale, parseF3RenderResult, updateF3Config, type F3Config, type F3State } from "./f3-finalization-model";
+import { acceptF3Render, adoptF2Snapshot, createF3RenderRequest, createF3State, f3GenerationEligibility, isDefaultF3Presentation, markF3SourceStale, resetF3Presentation, parseF3RenderResult, updateF3Config, type F3Config, type F3State } from "./f3-finalization-model";
 
 type SpeechRecognitionEventLike = {
   resultIndex: number;
@@ -385,6 +385,7 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
   acceptedF2SourceRef.current = acceptedF2Source;
   const f3StateRef = useRef(f3State);
   f3StateRef.current = f3State;
+  const f3GenerationEpochRef = useRef<number | null>(null);
   const [f3Status, setF3Status] = useState<"idle" | "loading" | "error">("idle");
   const [f3Error, setF3Error] = useState<string | null>(null);
   const [analysisStatus, setAnalysisStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
@@ -1010,9 +1011,17 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
     setF3Error(null); setPhase("output"); setActivePanel("output");
   }
 
+  function resetDocumentPresentation() {
+    if (!f3State || f3Status === "loading" || rozborGenerationStatus === "loading" || f3GenerationEpochRef.current === projectEpochRef.current) return;
+    if (documentStyle === "a" && isDefaultF3Presentation(f3State)) return;
+    setF3State((current) => current ? resetF3Presentation(current) : current);
+    setDocumentStyle("a");
+  }
+
   async function renderF3() {
-    if (!f3State) return;
     const projectEpoch = projectEpochRef.current;
+    if (!f3State || f3State.sourceSnapshot.sourceFingerprint !== latestF2ToF3FingerprintRef.current || f3GenerationEpochRef.current === projectEpoch || !f3GenerationEligibility(f3State, f3Status === "loading" || rozborGenerationStatus === "loading").enabled) return;
+    f3GenerationEpochRef.current = projectEpoch;
     setF3Status("loading"); setF3Error(null);
     try {
       const renderRequest = createF3RenderRequest(f3State, selectedModel);
@@ -1025,6 +1034,7 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
       if (renderRequest.sourceSnapshot.sourceFingerprint !== latestF2ToF3FingerprintRef.current) throw new Error("Výsledek byl zahozen, protože se mezitím změnil zdrojový Rozbor.");
       setF3State((current) => current ? acceptF3Render(current, result, renderRequest) : current); setF3Status("idle");
     } catch (cause) { if (projectEpoch !== projectEpochRef.current) return; setF3Error(cause instanceof Error ? cause.message : "Finální výstup se nepodařilo vytvořit."); setF3Status("error"); }
+    finally { if (f3GenerationEpochRef.current === projectEpoch) f3GenerationEpochRef.current = null; }
   }
 
   async function refreshStructuredAnalysis(notepadState: NotepadState, focusInstruction = "", turnId?: string, requestId?: string, transitionFrom?: "F1" | "F2" | "F3") {
@@ -2214,6 +2224,7 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
         </div>
 
         <WorkspacePanel
+          onDocumentReset={resetDocumentPresentation}
           documentMetadata={documentMetadata}
           documentUpdating={rozborGenerationStatus === "loading" || f3Status === "loading"}
           documentStyle={documentStyle}

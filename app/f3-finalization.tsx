@@ -1,7 +1,7 @@
 "use client";
 
 import { createPortal } from "react-dom";
-import { Copy, Printer, Share2 } from "lucide-react";
+import { Copy, Printer, RotateCcw, Share2 } from "lucide-react";
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import { renderWorkingAnalysis } from "./f3-working-analysis";
 import { copyF3Output, printF3Output } from "./f3-output-export";
@@ -9,7 +9,7 @@ import { DocumentContent } from "./document-content";
 import type { WorkingDocumentMetadata } from "./working-document-lifecycle";
 import type { WorkingDocumentStyle } from "./document-presentation";
 import type { F2ToF3Snapshot } from "./f2-build-model";
-import { createF3State, hasNewerF2Snapshot, type F3Material, type F3Representation, type F3Config, type F3State } from "./f3-finalization-model";
+import { createF3State, f3GenerationEligibility, hasNewerF2Snapshot, isDefaultF3Presentation, type F3Material, type F3Representation, type F3Config, type F3State } from "./f3-finalization-model";
 
 const options = {
   audience: [["teacher", "Pro učitele"], ["parent", "Pro rodiče"], ["student", "Pro žáka"], ["internal", "Interní podklad"]],
@@ -18,7 +18,8 @@ const options = {
   structureMode: [["auto", "Podle cíle"], ["text", "Strukturovaný text"], ["table", "Tabulka"], ["cards", "Karty"]],
 } as const;
 
-export function F3Finalization({ snapshot, sourceError, state: providedState, status, error, onRepresentation, onConfig, onRender, onAdopt, onReturn, controlsTarget, documentMode = "output", documentActionsTarget, unavailable, onContinueToOutput, documentStyle = "a", onDocumentStyle, documentMetadata, documentUpdating = false }: {
+export function F3Finalization({ snapshot, sourceError, state: providedState, status, error, onRepresentation, onConfig, onRender, onAdopt, onReturn, controlsTarget, documentMode = "output", documentActionsTarget, unavailable, onContinueToOutput, documentStyle = "a", onDocumentStyle, documentMetadata, documentUpdating = false, onReset }: {
+  onReset?: () => void;
   documentMetadata?: WorkingDocumentMetadata | null;
   documentUpdating?: boolean;
   documentStyle?: WorkingDocumentStyle;
@@ -42,9 +43,18 @@ export function F3Finalization({ snapshot, sourceError, state: providedState, st
   const workingAnalysis = documentMode === "analysis" || state?.representation === "analysis";
   const content = unavailable ? null : workingAnalysis ? baseline : render?.content;
   const stale = documentMode === "output" && (state?.sourceStatus === "stale" || (state?.representation === "material" && render?.status === "stale"));
+  const generation = f3GenerationEligibility(state, documentUpdating || status === "loading");
+  const generationTitle = generation.enabled ? "Vytvořit zvolenou podobu z přijatého Rozboru" : ({
+    unavailable: "Dokument zatím není dostupný.", loading: "Probíhá aktualizace dokumentu.",
+    adoption: "Nejprve přijměte aktuální Rozbor.", prerequisites: "Nejprve doplňte potřebný obsah v Buildu.",
+    default: "Pro další podobu změňte nastavení Výstupu.", current: "Zvolená podoba odpovídá zdroji a nastavení.",
+    configuration: "", source: "",
+  } as const)[generation.reason];
+  const resettable = Boolean(state && onReset && !unavailable && !documentUpdating && status !== "loading" && (documentStyle !== "a" || !isDefaultF3Presentation(state)));
   const exportable = content?.kind === "material" && !documentUpdating && status !== "loading";
   const reportExport = (message: string) => setExportNotice({ content: content?.kind === "material" ? content : null, stale, message });
   const exportControls = <div className="document-actions" role="group" aria-label="Akce dokumentu">
+    <button type="button" disabled={!resettable} aria-label="Obnovit výchozí podobu dokumentu" title="Obnovit výchozí podobu" onClick={() => { if (resettable) onReset?.(); }}><RotateCcw aria-hidden="true" /></button>
     <button type="button" disabled={!exportable} aria-label="Kopírovat dokument" title="Kopírovat dokument" onClick={() => { if (exportable) void copyF3Output(content, undefined, stale).then(() => reportExport("Text zkopírován.")).catch((cause) => reportExport(cause instanceof Error ? cause.message : "Kopírování se nepodařilo.")); }}><Copy aria-hidden="true" /></button>
     <button type="button" disabled={!exportable} aria-label="Tisk / Uložit jako PDF" title="Tisk / Uložit jako PDF" onClick={() => { if (exportable && materialRef.current) { try { printF3Output(materialRef.current); } catch { reportExport("Tisk se nepodařilo otevřít."); } } }}><Printer aria-hidden="true" /></button>
     <button type="button" disabled aria-label="Sdílet dokument — Připravujeme" title="Sdílet dokument — Připravujeme"><Share2 aria-hidden="true" /><span>Připravujeme</span></button>
@@ -73,7 +83,7 @@ export function F3Finalization({ snapshot, sourceError, state: providedState, st
     </section>
     </div>
     <footer className="f3-tool-actions">
-    <div className="f3-render-action">{state.representation === "material" && render?.status === "stale" && <strong>{render.staleReason === "source" ? "Zdrojový Rozbor se změnil. Dosavadní výstup zůstává pro referenci." : "Formátovací nastavení změněno. Dosavadní výstup zůstává pro referenci."}</strong>}{error && <strong role="alert">{error}</strong>}<button type="button" disabled={status === "loading" || state.sourceStatus === "stale"} onClick={onRender} title="Vytvořit zvolenou podobu z přijatého Rozboru">{status === "loading" ? "AKTUALIZUJI DOKUMENT" : "AKTUALIZOVAT DOKUMENT"}</button></div>
+    <div className="f3-render-action">{state.representation === "material" && render?.status === "stale" && <strong>{render.staleReason === "source" ? "Zdrojový Rozbor se změnil. Dosavadní výstup zůstává pro referenci." : "Formátovací nastavení změněno. Dosavadní výstup zůstává pro referenci."}</strong>}{error && <strong role="alert">{error}</strong>}<button type="button" disabled={!generation.enabled} onClick={onRender} title={generationTitle}>{status === "loading" ? "AKTUALIZUJI DOKUMENT" : "AKTUALIZOVAT DOKUMENT"}</button></div>
     </footer>
   </div>;
   const actions = documentActionsTarget ? createPortal(exportControls, documentActionsTarget) : null;

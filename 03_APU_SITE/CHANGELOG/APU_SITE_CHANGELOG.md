@@ -4,6 +4,19 @@ Status: CURRENT
 
 Records significant verified product/runtime/project changes. It is not a complete Git log. Historical Sites-era entries are retained where they remain useful; current deployment state must not be inferred from a changelog entry alone.
 
+## 2026-10-13 — Change-aware F3 update and document presentation Reset
+
+### Added / Changed
+- Added one deterministic F3 generation decision for the primary button and handler: untouched/default or matching retained source/config needs no model call; meaningful effective settings or a new adopted source with retained material permit explicit generation, subject to existing source/readiness/loading protections. No-op and same-event duplicate invocations cannot start requests or overlays.
+- Retained generated source fingerprint and copied effective settings as local render provenance. Configuration Q → R → Q restores matching render freshness only for the same current adopted source; source-stale material stays stale. Monotonic configuration/request guards remain separate from equality; provider/snapshot contracts and persistence are unchanged.
+- Added accessible Reset before Copy/Print/Share in the shared header. It instantly restores analysis, VAR A and default F3 settings, retaining accepted source, Build/notebook/hypotheses, timestamp and old generated content/provenance. Reset is disabled when already default or generation is pending, never adopts upstream content or calls a model, and recomputes normal generation eligibility. Instant A/B and accepted Build auto-adoption remain unchanged.
+- Updated runtime technical-current documentation only. Roadmap, backlog, Known Issues, workflow/Core and overall project-reset behavior remain unchanged.
+
+### Verification
+- `npm run typecheck` and **164 focused tests** passed: eligibility/default and generated configuration reversion, source identity/provenance, Reset preservation/no-op, specialized prerequisites, monotonic in-flight rejection and existing source/navigation/header/export regressions.
+- Existing isolated actual-client Chromium fixture passed A–O and prior suites: meaningful/no-op/duplicate handler behavior, retry, accepted new-source regeneration, retained stale output, protected upstream Reset, instant A/B, pending guards, keyboard Reset, normal/developer and narrow desktop/portrait/mobile header bounds. Screenshots were visually inspected. A/B PDFs remain 6 complete A4 pages; Copy/source identity, creation date/margins/pagination, stale exports and generated text/table/card data passed.
+- Hosted authenticated visual inspection is **NOT VERIFIED** (branch URL inaccessible), separately from the synthetic fixture PASS. Exact hosted fonts, human native print dialog and physical printing remain unverified. No auth bypass, live provider benchmark, new infrastructure/persistence, DOCX, sharing, release tag, PR merge or deployment occurred.
+
 ## 2026-10-13 — Document header and update flow refinement
 
 ### Added / Changed
