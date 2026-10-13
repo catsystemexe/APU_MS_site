@@ -30,7 +30,7 @@ test("client checks current deterministic fingerprints before applying an in-fli
 test("incremental CTA is reconciliation-derived and removals are deferred to explicit update", () => {
   assert.match(client, /isCurrentRozborUpdatePending/);
   assert.match(client, /!currentRozborReconciliation\.isRozborCurrent/);
-  assert.match(client, /applyCurrentRozborComponentUpdate\(current, path, required, \[\]\)/);
+  assert.match(client, /applyCurrentRozborComponentUpdate\(currentRozbor, path, required, \[\]\)/);
   assert.doesNotMatch(client, /removedIds = new Set/);
 });
 

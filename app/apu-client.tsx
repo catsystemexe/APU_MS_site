@@ -96,6 +96,7 @@ import { F2BuildOperations } from "./f2-build-operations";
 import { activeNeedRoutingKey, bindNeedRoutingDecision, createNeedRouter, type NeedRoutingDecision } from "./f2-need-routing";
 import { DEV_TEST_SCENARIOS, type DevTestScenario } from "./dev-test-scenarios";
 import { acceptRenderedPreview, addF2Context, advanceAcceptedF2Source, applyCurrentRozborComponentUpdate, applyF2BuildResult, canonicalF1NeedFingerprint, createCurrentRozborGenerationRequest, createCurrentRozborState, createF2BuildRequest, createF2PreviewSnapshot, createF2ToF3Snapshot, currentRozborSourceFingerprint, deriveRequiredCurrentRozborComponents, parameterizeF2Skill, parseF2BuildResult, parseF2RenderedPreview, parseGeneratedRozborComponents, previewStatus, reconcileRozborComponents, removeF2Context, synchronizeF2BuildWithCanonicalNeed, toggleF2Skill, type CurrentRozborState, type F2AnalysisContext, type F2ToF3Snapshot, type F2BuildState, type F2NotebookContextItem, type F2PreviewState } from "./f2-build-model";
+import { acceptBuildDocumentUpdate, acceptWorkingDocumentMetadata, type WorkingDocumentMetadata } from "./working-document-lifecycle";
 import { acceptF3Render, adoptF2Snapshot, createF3RenderRequest, createF3State, markF3SourceStale, parseF3RenderResult, updateF3Config, type F3Config, type F3State } from "./f3-finalization-model";
 
 type SpeechRecognitionEventLike = {
@@ -362,6 +363,8 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
   const [isResizingWorkspace, setIsResizingWorkspace] = useState(false);
   const [isDesktop, setIsDesktop] = useState(false);
   const [desktopWorkspace, setDesktopWorkspace] = useState(INITIAL_PROCESSING_WORKSPACE);
+  const [documentMetadata, setDocumentMetadata] = useState<WorkingDocumentMetadata | null>(null);
+  const projectEpochRef = useRef(0);
   const [documentStyle, setDocumentStyle] = useState<WorkingDocumentStyle>("a");
   const [f3ControlsTarget, setF3ControlsTarget] = useState<HTMLDivElement | null>(null);
   const [analysis, setAnalysis] = useState<AnalysisState>(EMPTY_ANALYSIS);
@@ -378,6 +381,10 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
   const [f2PreviewError, setF2PreviewError] = useState<string | null>(null);
   const [acceptedF2Source, setAcceptedF2Source] = useState<F2ToF3Snapshot | null>(null);
   const [f3State, setF3State] = useState<F3State | null>(null);
+  const acceptedF2SourceRef = useRef(acceptedF2Source);
+  acceptedF2SourceRef.current = acceptedF2Source;
+  const f3StateRef = useRef(f3State);
+  f3StateRef.current = f3State;
   const [f3Status, setF3Status] = useState<"idle" | "loading" | "error">("idle");
   const [f3Error, setF3Error] = useState<string | null>(null);
   const [analysisStatus, setAnalysisStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
@@ -936,8 +943,19 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
     } catch (cause) { setF2BuildError(cause instanceof Error ? cause.message : "Build se nepodařilo rozpracovat."); setF2BuildStatus("error"); }
   }
 
+  // Both asynchronous generation and synchronous removal commit through this path.
+  function commitBuildDocument(updated: CurrentRozborState, need: NonNullable<typeof canonicalF2Need>, hypotheses: AnalysisState["hypotheses"], path: F2ToF3Snapshot["activePath"], context: F2AnalysisContext) {
+    const result = acceptBuildDocumentUpdate(acceptedF2SourceRef.current, f3StateRef.current, need, hypotheses, path, updated[path], context);
+    setCurrentRozbor(updated);
+    acceptedF2SourceRef.current = result.snapshot;
+    setAcceptedF2Source(result.snapshot);
+    f3StateRef.current = result.f3;
+    setF3State(result.f3);
+  }
+
   async function generateCurrentRozbor() {
     if (!f2Build || !canonicalF2Need || rozborGenerationStatus === "loading") return;
+    const projectEpoch = projectEpochRef.current;
     const path = f2Build.activePath;
     const pathState = currentRozbor[path];
     const required = deriveRequiredCurrentRozborComponents(path, canonicalF2Need, analysis.hypotheses, pathState.config);
@@ -947,9 +965,8 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
     const updateSignature = JSON.stringify([path, required.map(({ id, kind, hypothesisId, fingerprint }) => [id, kind, hypothesisId, fingerprint]), currentAnalysisContext]);
     if (!request) {
       setRozborGenerationError(null);
-      setCurrentRozbor((current) => applyCurrentRozborComponentUpdate(current, path, required, []));
       const updated = applyCurrentRozborComponentUpdate(currentRozbor, path, required, []);
-      setAcceptedF2Source((previous) => advanceAcceptedF2Source(previous, canonicalF2Need, analysis.hypotheses, path, updated[path], currentAnalysisContext));
+      commitBuildDocument(updated, canonicalF2Need, analysis.hypotheses, path, currentAnalysisContext);
       setRozborGenerationStatus("idle");
       return;
     }
@@ -960,19 +977,17 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
       collectModelUsageRecords(payload);
       if (!response.ok || !payload?.components) throw new Error(isDeveloper && payload?.diagnostic ? `${payload.error ?? "Rozbor se nepodařilo vytvořit."} ${payload.diagnostic}` : payload?.error || "Rozbor se nepodařilo vytvořit.");
       const generated = parseGeneratedRozborComponents({ components: payload.components }, request.components);
+      if (projectEpoch !== projectEpochRef.current) return;
       const latest = latestRozborSourceRef.current;
       if (!latest.need) throw new Error("Výsledek byl zahozen, protože se mezitím změnil výchozí Rozbor nebo Build.");
       const latestPathState = latestCurrentRozborRef.current[latest.activePath];
       const currentSpecs = deriveRequiredCurrentRozborComponents(latest.activePath, latest.need, latest.hypotheses, latestPathState.config);
       const currentSignature = JSON.stringify([latest.activePath, currentSpecs.map(({ id, kind, hypothesisId, fingerprint }) => [id, kind, hypothesisId, fingerprint]), latest.analysisContext]);
-      if (currentSignature !== updateSignature) throw new Error("Výsledek byl zahozen, protože se mezitím změnil výchozí Rozbor nebo Build.");
-      setCurrentRozbor((current) => JSON.stringify(current[path].config) === JSON.stringify(request.config)
-        ? applyCurrentRozborComponentUpdate(current, path, required, generated)
-        : current);
+      if (currentSignature !== updateSignature || JSON.stringify(latestPathState.config) !== JSON.stringify(request.config)) throw new Error("Výsledek byl zahozen, protože se mezitím změnil výchozí Rozbor nebo Build.");
       const updated = applyCurrentRozborComponentUpdate(latestCurrentRozborRef.current, path, required, generated);
-      setAcceptedF2Source((previous) => advanceAcceptedF2Source(previous, latest.need!, latest.hypotheses, path, updated[path], latest.analysisContext));
+      commitBuildDocument(updated, latest.need, latest.hypotheses, path, latest.analysisContext);
       setRozborGenerationStatus("idle");
-    } catch (cause) { setRozborGenerationError(cause instanceof Error ? cause.message : "Rozbor se nepodařilo vytvořit."); setRozborGenerationStatus("error"); }
+    } catch (cause) { if (projectEpoch !== projectEpochRef.current) return; setRozborGenerationError(cause instanceof Error ? cause.message : "Rozbor se nepodařilo vytvořit."); setRozborGenerationStatus("error"); }
   }
 
   async function renderF2Preview() {
@@ -997,6 +1012,7 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
 
   async function renderF3() {
     if (!f3State) return;
+    const projectEpoch = projectEpochRef.current;
     setF3Status("loading"); setF3Error(null);
     try {
       const renderRequest = createF3RenderRequest(f3State, selectedModel);
@@ -1004,13 +1020,15 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
       const payload = await response.json().catch(() => null) as ({ result?: unknown; error?: string; diagnostic?: string } & ModelUsageRecordsResponse) | null;
       collectModelUsageRecords(payload);
       if (!response.ok || !payload?.result) throw new Error(isDeveloper && payload?.diagnostic ? `${payload.error ?? "Finální výstup se nepodařilo vytvořit."} ${payload.diagnostic}` : payload?.error || "Finální výstup se nepodařilo vytvořit.");
+      if (projectEpoch !== projectEpochRef.current) return;
       const result = parseF3RenderResult(payload.result);
       if (renderRequest.sourceSnapshot.sourceFingerprint !== latestF2ToF3FingerprintRef.current) throw new Error("Výsledek byl zahozen, protože se mezitím změnil zdrojový Rozbor.");
       setF3State((current) => current ? acceptF3Render(current, result, renderRequest) : current); setF3Status("idle");
-    } catch (cause) { setF3Error(cause instanceof Error ? cause.message : "Finální výstup se nepodařilo vytvořit."); setF3Status("error"); }
+    } catch (cause) { if (projectEpoch !== projectEpochRef.current) return; setF3Error(cause instanceof Error ? cause.message : "Finální výstup se nepodařilo vytvořit."); setF3Status("error"); }
   }
 
   async function refreshStructuredAnalysis(notepadState: NotepadState, focusInstruction = "", turnId?: string, requestId?: string, transitionFrom?: "F1" | "F2" | "F3") {
+    const projectEpoch = projectEpochRef.current;
     setAnalysisStatus("loading");
     setAnalysisError(null);
     try {
@@ -1037,6 +1055,7 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
       const responseResult = await response.json().catch(() => null) as ({ analysis?: AnalysisState; diagnostics?: Diagnostics; telemetry?: Partial<SessionTelemetry>; error?: string } & ModelUsageRecordsResponse) | null;
       collectModelUsageRecords(responseResult);
       if (!response.ok || !responseResult?.analysis) throw new Error(responseResult?.error || "Rozbor se nepodařilo aktualizovat.");
+      if (projectEpoch !== projectEpochRef.current) return null;
       if (sourceNeed && latestSourceNeedKeyRef.current !== activeNeedRoutingKey(sourceNeed)) throw new Error("Pedagogická potřeba se mezitím změnila.");
       const result = responseResult as { analysis: AnalysisState; diagnostics?: Diagnostics; telemetry?: Partial<SessionTelemetry> } & ModelUsageRecordsResponse;
       if (turnId && requestId && result.telemetry) {
@@ -1047,10 +1066,13 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
         const context = analysisSnapshotContext(notepadState, result.analysis, resolvedNeed.needId);
         const baseline = createCurrentRozborState()[resolvedNeed.initialF2Path];
         createF2ToF3Snapshot(resolvedNeed, result.analysis.hypotheses, resolvedNeed.initialF2Path, baseline, 0, context);
-        setAcceptedF2Source((previous) => {
-          const unchanged = previous && previous.sourceFingerprint === currentRozborSourceFingerprint(resolvedNeed, result.analysis.hypotheses, resolvedNeed.initialF2Path, previous.currentRozbor, context);
-          return unchanged ? previous : advanceAcceptedF2Source(previous, resolvedNeed, result.analysis.hypotheses, resolvedNeed.initialF2Path, baseline, context);
-        });
+        const previous = acceptedF2SourceRef.current;
+        const unchanged = previous && previous.sourceFingerprint === currentRozborSourceFingerprint(resolvedNeed, result.analysis.hypotheses, resolvedNeed.initialF2Path, previous.currentRozbor, context);
+        const accepted = unchanged ? previous : advanceAcceptedF2Source(previous, resolvedNeed, result.analysis.hypotheses, resolvedNeed.initialF2Path, baseline, context);
+        acceptedF2SourceRef.current = accepted;
+        setAcceptedF2Source(accepted);
+        const acceptedAt = new Date().toISOString();
+        setDocumentMetadata((current) => acceptWorkingDocumentMetadata(current, acceptedAt));
       }
       const changes = analysisChangeKeys(analysis, result.analysis);
       setUnseenAnalysisKeys((current) => new Set([...current, ...changes]));
@@ -1069,6 +1091,7 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
       }
       return result;
     } catch (cause) {
+      if (projectEpoch !== projectEpochRef.current) return null;
       setAnalysisError(cause instanceof Error ? cause.message : "Rozbor se nepodařilo aktualizovat.");
       setAnalysisStatus("error");
       throw cause;
@@ -1535,6 +1558,10 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
   }
 
   function resetCurrentProject() {
+    projectEpochRef.current += 1;
+    setDocumentMetadata(null);
+    acceptedF2SourceRef.current = null;
+    f3StateRef.current = null;
     const reset = createProjectResetState(WELCOME);
     cancelDictation();
     speechSegmentsRef.current = [];
@@ -2187,6 +2214,8 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
         </div>
 
         <WorkspacePanel
+          documentMetadata={documentMetadata}
+          documentUpdating={rozborGenerationStatus === "loading" || f3Status === "loading"}
           documentStyle={documentStyle}
           onDocumentStyle={setDocumentStyle}
           activePanel={documentPanel}

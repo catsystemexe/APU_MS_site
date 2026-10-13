@@ -95,3 +95,36 @@ for (const path of ["POCHOPIT", "POZOROVAT", "VYTVOŘIT"]) test(`${path}: accept
   assert.equal(build, article(render({ ...props, documentMode: "output" })));
   for (const text of ["PŘIJATÉ ROZVINUTÍ", "Dostupná informace", "Podstatné omezení", "Neznámá podmínka", "revize 1"]) assert.ok(build.includes(text), text);
 });
+
+
+test("compact metadata header is identical in Build/A/B/default Output and omitted for unknown/generated documents", () => {
+  const snapshot = baselineFor("POCHOPIT");
+  const metadata = { createdAt: "2026-10-13T12:34:56.789Z" };
+  const props = { ...propsFor(snapshot), documentMetadata: metadata };
+  const a = article(render({ ...props, documentStyle: "a" }));
+  const b = article(render({ ...props, documentStyle: "b" }));
+  assert.equal(a.replaceAll("document-style-a", "document-style-b").replace('data-document-style="a"','data-document-style="b"'), b);
+  assert.equal(a, article(render({ ...props, documentMode: "analysis" })));
+  assert.match(a, /Vytvořeno v APU/);
+  assert.match(a, /dateTime="2026-10-13T12:34:56.789Z">13. 10. 2026/);
+  const header = a.slice(a.indexOf("<header"), a.indexOf("</header>"));
+  assert.match(header, /<h2>Pracovní pedagogická analýza<\/h2><p class="document-subtitle">Pracovní hypotézy/);
+  assert.equal((a.match(/Pracovní hypotézy a jejich omezení podle/g) ?? []).length, 1);
+  assert.equal((a.match(/Vytvořeno v APU/g) ?? []).length, 1);
+  assert.doesNotMatch(article(render(propsFor(snapshot))), /Vytvořeno v APU|<time/);
+  const content = { kind: "material", title: "Generated", introduction: "Original intro", sections: [{heading:"Original",content:"Original"}], cards: [], table: null, usageNote: null };
+  const state = acceptF3Render(props.state, content, createF3RenderRequest(props.state));
+  assert.doesNotMatch(article(render({ ...props, state })), /Vytvořeno v APU|document-subtitle/);
+});
+
+test("retained stale material warns only when selected; routine Output has no redundant return control", () => {
+  const old = baselineFor("POCHOPIT");
+  const content = {kind:"material",title:"OLD_CARD",introduction:"Old",sections:[{heading:"Old",content:"Old"}],cards:[{title:"Old card",content:"Retained"}],table:null,usageNote:null};
+  const generated = acceptF3Render(createF3State(old), content, createF3RenderRequest(createF3State(old)));
+  const newer = baselineFor("POCHOPIT", 1, [{...h,summary:"Updated"}]);
+  const adopted = adoptF2Snapshot(generated, newer);
+  const normal = render(propsFor(newer, adopted));
+  assert.doesNotMatch(normal, /Starší výstup|Dosavadní výstup|Přijmout aktuální Rozbor|Vrátit se do Rozboru|Přejít do Buildu/);
+  const retained = render(propsFor(newer, {...adopted,representation:"material"}));
+  assert.match(retained, /OLD_CARD|Starší výstup|dříve přijatý Rozbor/);
+});

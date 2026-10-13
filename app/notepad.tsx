@@ -20,12 +20,15 @@ import type { ConversationPhase } from "./dialog-action";
 import type { CurrentRozborState, F2BuildState, F2PreviewState, F2ToF3Snapshot } from "./f2-build-model";
 import { F3Finalization } from "./f3-finalization";
 import type { F3Config, F3Representation, F3State } from "./f3-finalization-model";
+import type { WorkingDocumentMetadata } from "./working-document-lifecycle";
 import type { WorkingDocumentStyle } from "./document-presentation";
 
 export type WorkspacePanel = "notepad" | "analysis" | "output" | null;
 
 type WorkspacePanelProps = {
   documentStyle: WorkingDocumentStyle;
+  documentMetadata: WorkingDocumentMetadata | null;
+  documentUpdating: boolean;
   onDocumentStyle: (style: WorkingDocumentStyle) => void;
   f3ControlsTarget?: HTMLElement | null;
   activePanel: WorkspacePanel;
@@ -288,7 +291,7 @@ function NotepadPanel({
 function DocumentPanel(props: Pick<WorkspacePanelProps,
   "activePanel" | "phase" | "analysisStatus" | "analysisError" | "onRetryAnalysis" |
   "f2ToF3Snapshot" | "f2ToF3SourceError" | "f3ControlsTarget" | "onContinueToOutput" |
-  "f3State" | "f3Status" | "f3Error" | "onF3Representation" | "onF3Config" | "onF3Render" | "onF3Adopt" | "onF3Return" | "documentStyle" | "onDocumentStyle"
+  "f3State" | "f3Status" | "f3Error" | "onF3Representation" | "onF3Config" | "onF3Render" | "onF3Adopt" | "onF3Return" | "documentStyle" | "onDocumentStyle" | "documentMetadata" | "documentUpdating"
 > & { documentActionsTarget: HTMLElement | null }) {
   const workingAnalysis = props.activePanel === "analysis";
   let unavailable = null;
@@ -298,8 +301,11 @@ function DocumentPanel(props: Pick<WorkspacePanelProps,
     else if (props.analysisStatus === "error") unavailable = <div className="analysis-state"><p>{props.analysisError}</p><button type="button" onClick={props.onRetryAnalysis}>Zkusit znovu</button></div>;
     else unavailable = <div className="analysis-state"><p>{props.f2ToF3SourceError ?? "Rozbor čeká na kanonickou pedagogickou potřebu v Zápisníku."}</p></div>;
   }
-  return <div id="workspace-document" className="notepad-scroll workspace-panel-body" role="region" aria-label="Dokument">
-    <F3Finalization documentMode={workingAnalysis ? "analysis" : "output"} documentActionsTarget={props.documentActionsTarget} unavailable={unavailable} controlsTarget={props.f3ControlsTarget} snapshot={props.f2ToF3Snapshot} sourceError={props.f2ToF3SourceError} state={props.f3State} status={props.f3Status} error={props.f3Error} onRepresentation={props.onF3Representation} onConfig={props.onF3Config} onRender={props.onF3Render} onAdopt={props.onF3Adopt} onReturn={props.onF3Return} onContinueToOutput={props.onContinueToOutput} documentStyle={props.documentStyle} onDocumentStyle={props.onDocumentStyle} />
+  return <div className="document-workspace-content">
+  <div id="workspace-document" aria-busy={props.documentUpdating} className="notepad-scroll workspace-panel-body" role="region" aria-label="Dokument">
+    <F3Finalization documentMode={workingAnalysis ? "analysis" : "output"} documentActionsTarget={props.documentActionsTarget} unavailable={unavailable} controlsTarget={props.f3ControlsTarget} snapshot={props.f2ToF3Snapshot} sourceError={props.f2ToF3SourceError} state={props.f3State} status={props.f3Status} error={props.f3Error} onRepresentation={props.onF3Representation} onConfig={props.onF3Config} onRender={props.onF3Render} onAdopt={props.onF3Adopt} onReturn={props.onF3Return} onContinueToOutput={props.onContinueToOutput} documentStyle={props.documentStyle} onDocumentStyle={props.onDocumentStyle} documentMetadata={props.documentMetadata} documentUpdating={props.documentUpdating} />
+  </div>
+  {props.documentUpdating && <div className="document-update-overlay" role="status" aria-live="polite"><span className="document-update-spinner" aria-hidden="true" /><span>AKTUALIZUJI DOKUMENT</span></div>}
   </div>;
 }
 

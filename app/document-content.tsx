@@ -3,6 +3,7 @@
 import type { RefObject } from "react";
 import { CircleHelp, Lightbulb, NotebookPen, Layers, type LucideIcon } from "lucide-react";
 import type { F3Material } from "./f3-finalization-model";
+import { workingDocumentCreationDate, type WorkingDocumentMetadata } from "./working-document-lifecycle";
 import { documentSectionKind, documentTextBlocks, hasWorkingDocumentProjection, type DocumentTextBlock, type DocumentSectionKind, type WorkingDocumentStyle } from "./document-presentation";
 
 const sectionIcons: Record<DocumentSectionKind, LucideIcon> = {
@@ -27,22 +28,26 @@ function DocumentHeading({ heading, level }: { heading: string; level: 3 | 4 }) 
 
 // One readable document for accepted working analysis and existing F3 materials.
 // Controls and source adoption remain owned by the surrounding workspace.
-export function DocumentContent({ content, documentRef, stale, workingAnalysis, sourceRevision, documentStyle = "a" }: {
+export function DocumentContent({ content, documentRef, stale, workingAnalysis, sourceRevision, documentStyle = "a", documentMetadata }: {
   content: F3Material;
   documentRef: RefObject<HTMLElement | null>;
   stale: boolean;
   workingAnalysis: boolean;
   sourceRevision: number | null;
   documentStyle?: WorkingDocumentStyle;
+  documentMetadata?: WorkingDocumentMetadata | null;
 }) {
+  const creationDate = workingAnalysis ? workingDocumentCreationDate(documentMetadata) : null;
   return <article ref={documentRef} className={`f3-material${stale ? " is-stale" : ""}${workingAnalysis ? ` working-document document-style-${documentStyle}` : ""}`} data-document-style={workingAnalysis ? documentStyle : undefined}>
-    <header>
+    <header className={workingAnalysis ? "working-document-header" : undefined}>
+      {creationDate && <div className="document-creation"><span>Vytvořeno v APU</span><time dateTime={documentMetadata!.createdAt}>{creationDate}</time></div>}
       {!workingAnalysis && <span>Další podoba Výstupu</span>}
       <h2>{content.title}</h2>
+      {workingAnalysis && <p className="document-subtitle">{content.introduction}</p>}
       {!workingAnalysis && <p>{sourceRevision === null ? "Zdroj: dříve přijatý Rozbor (starší výstup)." : `Zdroj: přijatý Rozbor, revize ${sourceRevision}.`}</p>}
     </header>
     {stale && <p><strong>Starší výstup — zdroj nebo nastavení se změnily.</strong></p>}
-    {workingAnalysis ? <DocumentText text={content.introduction} /> : <p>{content.introduction}</p>}
+    {!workingAnalysis && <p>{content.introduction}</p>}
     {workingAnalysis && hasWorkingDocumentProjection(content) ? content.documentGroups.map((group) => <section className="document-group" key={group.heading}>
       <DocumentHeading heading={group.heading} level={3} />
       {group.sections.map((section, index) => <section className="document-subsection" data-document-role={section.role} key={`${index}-${section.heading}`}>

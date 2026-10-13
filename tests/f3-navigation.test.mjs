@@ -22,8 +22,9 @@ test("primary F2 to F3 navigation uses current Rozbor and never requires legacy 
   assert.doesNotMatch(client, /Samotný výstup vznikne až|Přejít k vytvoření výstupu/);
 });
 
-test("Output workspace keeps explicit return, adoption and regeneration transitions", () => {
-  assert.match(output, /Vrátit se do Rozboru/);
+test("Output keeps contextual recovery, protected upstream adoption and explicit regeneration", () => {
+  assert.match(output, /Přejít do Buildu/);
+  assert.doesNotMatch(output, /Vrátit se do Rozboru/);
   assert.match(output, /Přijmout aktuální Rozbor/);
   assert.match(output, /state\.sourceStatus === "stale"/);
   assert.match(output, /AKTUALIZOVAT DOKUMENT/);

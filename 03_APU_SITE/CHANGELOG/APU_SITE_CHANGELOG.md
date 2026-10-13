@@ -4,6 +4,21 @@ Status: CURRENT
 
 Records significant verified product/runtime/project changes. It is not a complete Git log. Historical Sites-era entries are retained where they remain useful; current deployment state must not be inferred from a changelog entry alone.
 
+## 2026-10-13 — Document header and update flow refinement
+
+### Added / Changed
+- Added genuine session-only working-document creation metadata at first validated F2 baseline acceptance, preserved across revisions/navigation/styles/generation and cleared by a new project. Czech date appears once in default Build/Output headers and PDF; unknown dates and generated representations receive no invented creation label. No source/provider/persistence/session-export schema change.
+- Combined the unchanged title/methodological introduction into a compact responsive header. Dividers now appear only after that header and between major groups; categories/hypotheses/final note use spacing. A/B content, hierarchy, ranks, lists, icons and A4 reading dimensions remain.
+- Added one accessible document-area **AKTUALIZUJI DOKUMENT** overlay for real pending Build/F3 generation, retaining valid content and reading position. Reduced-motion is respected; header exports are disabled while pending. Success/failure/obsolete/reset clears progress; local acceptance/navigation/selections/adoption create no artificial spinner.
+- Unified explicit Build acceptance through a validated pure orchestration and client commit path: changed async generated components or local removal advance F2 and adopt into F3, activating current default without confirmation/model calls. Identical fingerprints remain unchanged. Retained old generated outputs/config stay available as stale; warnings appear when old output is displayed. Upstream changes outside Build retain explicit adoption protections; regeneration still reads the newly adopted immutable snapshot directly.
+- Removed routine **Vrátit se do Rozboru** from Output; Build tab remains, with **Přejít do Buildu** for contextual recovery. Updated roadmap/runtime docs; historical decisions retained, backlog/Known Issues unchanged.
+
+### Verification
+- `npm run typecheck` and **155 focused tests** passed, including metadata/unknown dates, Build acceptance/local removal/revision identity, immutable source/stale/config ownership, protected upstream adoption, default/generated rendering, navigation and export regressions.
+- Existing isolated actual-client Chromium fixture passed header/update A–L and prior suites: stable actual timestamp/reset, compact header/major-only dividers, Build/F3 progress and cleanup, no navigation/style/config/adoption model requests, preserved reading position, successful auto-adoption, old S0 cards/stale exports, direct S1 regeneration, failure/obsolete handling, local removal and upstream explicit adoption. Reset during pending F3 rejects the old-project response. Normal/developer, desktop/narrow/portrait/mobile, keyboard/actions and reduced-motion passed.
+- A/B each produced **6-page A4 PDFs**, with actual creation metadata once, full source/Copy text/order, 18 mm bounds and heading/list pagination. Generated table/card data and stale export warnings remain intact. Desktop A/B, mobile headers, Build/F3 overlays and representative print pages were visually inspected.
+- **NOT VERIFIED:** authenticated hosted rendering (branch URL inaccessible), exact hosted fonts, human native print dialog and physical printing. Fixture uses synthetic responses/Arial fallbacks and intercepted print invocation. No auth bypass, provider-backed benchmark, new infrastructure/storage, DOCX, release tag, PR merge or deployment occurred.
+
 ## 2026-10-13 — Default document information hierarchy
 
 ### Added / Changed
