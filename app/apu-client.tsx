@@ -367,6 +367,8 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
   const [desktopWorkspace, setDesktopWorkspace] = useState(INITIAL_INTAKE_WORKSPACE);
   const [documentMetadata, setDocumentMetadata] = useState<WorkingDocumentMetadata | null>(null);
   const projectEpochRef = useRef(0);
+  const assistantRequestRef = useRef<{ requestId: string; assistantId: string; epoch: number; previewAllowed: boolean } | null>(null);
+  const [dialogActionsPreview, setDialogActionsPreview] = useState<{ requestId: string; assistantId: string; actions: DialogAction[] } | null>(null);
   const [documentStyle, setDocumentStyle] = useState<WorkingDocumentStyle>("a");
   const [f3ControlsTarget, setF3ControlsTarget] = useState<HTMLDivElement | null>(null);
   const [analysis, setAnalysis] = useState<AnalysisState>(EMPTY_ANALYSIS);
@@ -545,6 +547,22 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
   const [f1ProcessingStatus, setF1ProcessingStatus] = useState<{ assistantId: string; stage: F1ProcessingStage } | null>(null);
   const f1ProcessingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const quickResponseSubmittingRef = useRef(false);
+
+  useEffect(() => () => {
+    assistantRequestRef.current = null;
+    projectEpochRef.current += 1;
+  }, []);
+
+  useEffect(() => {
+    if (phase !== "intake" || desktopWorkspace.tool !== "chat") {
+      setDialogActionsPreview(null);
+      if (assistantRequestRef.current) assistantRequestRef.current.previewAllowed = false;
+    }
+  }, [phase, desktopWorkspace.tool]);
+
+  function clearDialogActionsPreview(requestId: string) {
+    setDialogActionsPreview((current) => current?.requestId === requestId ? null : current);
+  }
 
   useEffect(() => {
     setPreferredDesktopSplit(readDesktopSplitPreference(window.localStorage.getItem(DESKTOP_SPLIT_STORAGE_KEY)));
@@ -1195,6 +1213,10 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
     dialogEvent?: string,
     controllerFastPathEligible = false,
   ) {
+    const requestScope = assistantRequestRef.current;
+    const isCurrentRequest = () => requestScope?.requestId === requestId && requestScope.assistantId === assistantId
+      && assistantRequestRef.current === requestScope && projectEpochRef.current === requestScope.epoch;
+    if (!isCurrentRequest()) return;
     const textTransition = resolveTextDialogEvent(rawText, compactNotepad(notepadForChat), phase);
     if (phase === "intake" && (dialogEvent === "continue_to_solution" || textTransition === "continue_to_solution")) {
       setPhase("development");
@@ -1272,6 +1294,7 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
       }),
     });
 
+    if (!isCurrentRequest()) { await request.body?.cancel().catch(() => {}); return; }
     if (!request.ok || !request.body) {
       const detail = await request.json().catch(() => null) as { error?: string } | null;
       throw new Error(detail?.error || "APU teď nemůže odpovědět.");
@@ -1286,9 +1309,13 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
     let receivedFirstDelta = false;
 
     const processLine = (line: string) => {
-      if (!line.trim()) return;
+      if (!line.trim() || !isCurrentRequest()) return;
       const event = JSON.parse(line);
       collectModelUsageRecords(event);
+      if (event.type === "dialog_actions_preview" && phase === "intake" && requestScope?.previewAllowed
+        && !receivedDone && Array.isArray(event.dialogActions) && event.dialogActions.length > 0) {
+        setDialogActionsPreview({ requestId, assistantId, actions: event.dialogActions as DialogAction[] });
+      }
       if (event.type === "status" && event.status === "preparing_response" && phase === "intake") {
         markF1MainPreparing(assistantId);
       }
@@ -1315,6 +1342,7 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
       }
       if (event.type === "done") {
         receivedDone = true;
+        clearDialogActionsPreview(requestId);
         const separated = splitAssistantMetadata(completeText, { ensureDebug: true });
         completeText = separated.visibleContent;
         if (event.responseId) setResponseId(event.responseId);
@@ -1352,6 +1380,7 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
 
     while (true) {
       const { value, done } = await reader.read();
+      if (!isCurrentRequest()) { await reader.cancel().catch(() => {}); return; }
       if (done) break;
       buffer += decoder.decode(value, { stream: true });
       const lines = buffer.split("\n");
@@ -1418,6 +1447,10 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
     telemetryClockRef.current.set(requestId, { actionStartedAt: performance.now() });
     const userMessage: Message = { id: createMessageId(), role: "user", content: rawText, turnId, createdAt: startedAt, telemetryRefs: [requestId], phaseLabel: phase === "intake" ? "[FÁZE 1]" : phase === "development" ? "[FÁZE 2]" : "[FÁZE 3]" };
     const assistantId = createMessageId();
+    const requestScope = { requestId, assistantId, epoch: projectEpochRef.current, previewAllowed: phase === "intake" };
+    assistantRequestRef.current = requestScope;
+    setDialogActionsPreview(null);
+    const isCurrentRequest = () => assistantRequestRef.current === requestScope && projectEpochRef.current === requestScope.epoch;
     const isF1ProcessingTurn = phase === "intake" && !options?.dialogEvent;
     setSessionTelemetry((current) => [...current, createSessionTelemetry({ requestId, turnId, phase, startedAt })]);
     setMessages((current) => [
@@ -1474,6 +1507,7 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
           diagnostics?: Diagnostics;
           telemetry?: Partial<SessionTelemetry>;
         } & ModelUsageRecordsResponse;
+        if (!isCurrentRequest()) return;
         collectModelUsageRecords(result);
         if (result.telemetry) setSessionTelemetry((current) => current.map((item) => item.request_id === requestId
           ? mergeSessionTelemetry(item, result.telemetry as Partial<SessionTelemetry>) : item));
@@ -1505,6 +1539,7 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
             : message,
         ));
       } catch (extractionCause) {
+        if (!isCurrentRequest()) return;
         setMessages((current) => current.map((message) =>
           message.id === userMessage.id
             ? {
@@ -1526,14 +1561,19 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
         setAnalysisFocus({ text: rawText, nonce: Date.now() });
       }
     } catch (cause) {
+      if (!isCurrentRequest()) return;
       clearF1ProcessingStatus();
       setMessages((current) => current.filter((message) => message.id !== assistantId));
       setFailedInput(rawText);
       setError(cause instanceof Error ? cause.message : "Nastala technická chyba.");
     } finally {
-      setSessionTelemetry((current) => current.map((item) => item.request_id === requestId
-        ? mergeSessionTelemetry(item, { completed_at: new Date().toISOString(), latency_ms: { total: Math.max(0, Date.now() - new Date(item.started_at).getTime()) } }) : item));
-      setIsLoading(false);
+      if (isCurrentRequest()) {
+        clearDialogActionsPreview(requestId);
+        assistantRequestRef.current = null;
+        setSessionTelemetry((current) => current.map((item) => item.request_id === requestId
+          ? mergeSessionTelemetry(item, { completed_at: new Date().toISOString(), latency_ms: { total: Math.max(0, Date.now() - new Date(item.started_at).getTime()) } }) : item));
+        setIsLoading(false);
+      }
     }
   }
 
@@ -1568,6 +1608,9 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
 
   function resetCurrentProject() {
     projectEpochRef.current += 1;
+    assistantRequestRef.current = null;
+    setDialogActionsPreview(null);
+    clearF1ProcessingStatus();
     setDocumentMetadata(null);
     acceptedF2SourceRef.current = null;
     f3StateRef.current = null;
@@ -1693,6 +1736,10 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
     const assistantId = createMessageId();
     const turnId = message.turnId ?? `turn-${createMessageId()}`;
     const requestId = `req-${createMessageId()}`;
+    const requestScope = { requestId, assistantId, epoch: projectEpochRef.current, previewAllowed: phase === "intake" };
+    assistantRequestRef.current = requestScope;
+    setDialogActionsPreview(null);
+    const isCurrentRequest = () => assistantRequestRef.current === requestScope && projectEpochRef.current === requestScope.epoch;
     const startedAt = new Date().toISOString();
     telemetryClockRef.current.set(requestId, { actionStartedAt: performance.now() });
     setSessionTelemetry((current) => [...current, createSessionTelemetry({ requestId, turnId, phase, startedAt })]);
@@ -1712,13 +1759,18 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
     try {
       await requestAssistant(message.content, assistantId, notebookState, message.id, turnId, requestId);
     } catch (cause) {
+      if (!isCurrentRequest()) return;
       setMessages((current) => current.filter((item) => item.id !== assistantId));
       setFailedInput(message.content);
       setError(cause instanceof Error ? cause.message : "Nastala technická chyba.");
     } finally {
-      setSessionTelemetry((current) => current.map((item) => item.request_id === requestId
-        ? mergeSessionTelemetry(item, { completed_at: new Date().toISOString(), latency_ms: { total: Math.max(0, Date.now() - new Date(item.started_at).getTime()) } }) : item));
-      setIsLoading(false);
+      if (isCurrentRequest()) {
+        clearDialogActionsPreview(requestId);
+        assistantRequestRef.current = null;
+        setSessionTelemetry((current) => current.map((item) => item.request_id === requestId
+          ? mergeSessionTelemetry(item, { completed_at: new Date().toISOString(), latency_ms: { total: Math.max(0, Date.now() - new Date(item.started_at).getTime()) } }) : item));
+        setIsLoading(false);
+      }
     }
   }
 
@@ -2045,6 +2097,17 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
                 </div>
                 {message.role === "assistant" && message.analysisNextPrompt?.type === "question" && (
                   <AnalysisQuestionRow text={message.analysisNextPrompt.text} className="analysis-chat-question" />
+                )}
+                {message.role === "assistant" && isLoading && phase === "intake" && desktopWorkspace.tool === "chat"
+                  && dialogActionsPreview?.assistantId === message.id
+                  && !message.dialogActions?.length && (
+                  <div className="dialog-actions-preview" role="group" aria-label="Předběžný náhled možností" aria-busy="true">
+                    <small className="processing-status">Možnosti budou dostupné po dokončení odpovědi.</small>
+                    {dialogActionsPreview.actions.map((action, actionIndex) => (
+                      <DialogActionCard key={`${action.type}-${action.target}-${actionIndex}`} action={action} active={false}
+                        onSelect={selectDialogAction} />
+                    ))}
+                  </div>
                 )}
                 {message.role === "assistant" && message.dialogActions?.map((action, actionIndex) => (
                   <DialogActionCard

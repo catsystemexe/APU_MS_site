@@ -17,6 +17,7 @@ import { createRoot } from 'react-dom/client';
 import ApuClient from '/workspace/APU_MS_site/app/apu-client';
 import { longHypotheses, longContext, longComponentText } from '/workspace/APU_MS_site/tests/document-style-fixture.mjs';
 import { renderWorkingAnalysis, f3MaterialToText } from '/workspace/APU_MS_site/app/f3-working-analysis';
+import { fallbackQuestController } from '/workspace/APU_MS_site/app/dialog-action';
 const needText = 'Potřebuji pochopit podmínky zapojení.';
 const notebook = { manifestations: [{ id: 'fact1', text: 'Při dlouhém kruhu dítě vstává.', origin: 'extracted', source: { messageId: 'fixture-source', quote: 'Fixture input', start: 0, end: 13 } }], goals: [{ id: 'n1', text: needText, origin: 'extracted', source: { messageId: 'fixture-source', quote: 'Fixture input', start: 0, end: 13 }, needMapping: { f2Path: 'POCHOPIT', f3Target: null } }], context: [], course: [], helps: [] };
 localStorage.setItem('apu-site:notepad-map:v2', JSON.stringify(notebook));
@@ -50,10 +51,32 @@ window.SpeechRecognition = class {
 };
 const nativeFetch = window.fetch.bind(window);
 window.calls = [];
+window.fixtureMountId = Math.random().toString(36);
+window.previewChats = [];
+window.previewActions = fallbackQuestController([{category:'manifestations',text:'Synthetic observation.'},{category:'goals',text:'Understand the situation.'}], 'intake').dialog_actions;
+window.finishPreview = (kind='done', index=window.previewChats.length-1, text='Dokončená odpověď.') => {
+  const c=window.previewChats[index];
+  const send=event=>c.enqueue(new TextEncoder().encode(JSON.stringify(event)+'\\n'));
+  if(kind==='interrupt') {c.close();return;}
+  if(kind==='exception') {c.error(new Error('Synthetic stream exception'));return;}
+  if(kind==='error' || kind==='incomplete') send({type:'error',message:'Testovací selhání Main.'});
+  else {
+    send({type:'delta',text});
+    send({type:'done',responseId:'fixture-preview-'+index,phase:'intake',phaseLabel:'[FÁZE 1]',dialogActions:window.previewActions});
+  }
+  c.close();
+};
 window.fetch = async (url, init) => {
   if (!String(url).startsWith('/api/')) return nativeFetch(url, init);
   const body = JSON.parse(String(init?.body || '{}')); window.calls.push({ url, body });
   if (url === '/api/chat') {
+    if(window.previewNextChat) {
+      window.previewNextChat=false;
+      return new Response(new ReadableStream({start(controller){
+        window.previewChats.push(controller);
+        controller.enqueue(new TextEncoder().encode(JSON.stringify({type:'status',status:'preparing_response'})+'\\n'+JSON.stringify({type:'dialog_actions_preview',dialogActions:window.previewActions})+'\\n'));
+      }}), {headers:{'Content-Type':'application/x-ndjson'}});
+    }
     await new Promise(r=>setTimeout(r,120));
     if (window.failNextChat) {window.failNextChat=false;return Response.json({error:'Testovací chyba Chat.'},{status:500});}
     const text='[FÁZE 1]\\nČitelná odpověď a nejistota zůstává. '+ 'DlouhýNeoddělenýText'.repeat(75)+'\\n[DEBUG | Profil: P2 | Blok: A | Zóna: 1]';
@@ -78,7 +101,9 @@ window.fetch = async (url, init) => {
   if (url === '/api/analysis') { window.acceptedAnalysisResponseAt=Date.now(); if (window.changeNextAnalysis) { window.changeNextAnalysis=false; result.analysis={...analysis,mainUncertainty:'Upstream uncertainty outside explicit Build.'}; } }
   return Response.json(result);
 };
-createRoot(document.getElementById('root')!).render(<ApuClient email='test@example.invalid' isDeveloper={new URLSearchParams(location.search).has('developer')} />);
+const fixtureRoot=createRoot(document.getElementById('root')!);
+window.unmountFixture=()=>fixtureRoot.unmount();
+fixtureRoot.render(<ApuClient email='test@example.invalid' isDeveloper={new URLSearchParams(location.search).has('developer')} />);
 `;
 await writeFile(join(artifactRoot, "fixture.tsx"), fixture.replaceAll("/workspace/APU_MS_site/", projectRoot.replaceAll("\\", "/") + "/"));
 const esbuild = require("esbuild");
@@ -132,6 +157,79 @@ try {
     await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
     await waitFor('!document.querySelector(".welcome-help")');
   };
+  if (process.argv.includes('--f1-preview-only')) {
+    const fresh = async (developer=false, width=1600) => {
+      const previousMount = await evaluate('window.fixtureMountId');
+      await call('Emulation.setDeviceMetricsOverride',{width,height:width<800?844:1000,deviceScaleFactor:1,mobile:false});
+      await call('Page.navigate',{url:'http://127.0.0.1:4333/'+(developer?'?developer=1':'')});
+      await waitFor(`window.fixtureMountId!==${JSON.stringify(previousMount)} && document.querySelector("#message") && !document.querySelector("#message").disabled && window.previewChats`);
+      if(width<800 && await evaluate('document.querySelector(".notepad-panel").classList.contains("is-open")')) {
+        await click('.tool-rail-notepad'); await waitFor('!document.querySelector(".notepad-panel").classList.contains("is-open")');
+      }
+    };
+    const begin = async (text='Testovací zpráva.') => {
+      await evaluate('window.previewNextChat=true'); await typeInput(text);
+      await waitFor('!document.querySelector(".send-button").disabled'); await click('.send-button');
+      await waitFor('document.querySelector(".dialog-actions-preview")');
+    };
+    for (const developer of [false,true]) for (const width of [1600,390]) {
+      await fresh(developer,width); await begin();
+      assert.equal(await evaluate('document.querySelectorAll(".dialog-actions-preview .dialog-action").length'),2);
+      assert.equal(await evaluate('Array.from(document.querySelectorAll(".dialog-actions-preview button")).every(b=>b.disabled)'),true);
+      assert.equal(await evaluate('Boolean(document.querySelector(".dialog-actions-preview").closest(".message").querySelector(".message-content .processing-status"))'),true,'existing F1 processing status stays visible beside preview');
+      const before=await evaluate('window.calls.length');
+      await evaluate('document.querySelector(".dialog-actions-preview button").click();document.querySelector(".dialog-actions-preview button").focus()');
+      assert.equal(await evaluate('Boolean(document.activeElement.closest(".dialog-actions-preview"))'),false);
+      assert.equal(await evaluate('window.calls.length'),before,'preview cannot trigger navigation/model calls');
+      assert.equal(await evaluate('document.querySelector(".message-list").scrollWidth===document.querySelector(".message-list").clientWidth'),true);
+      await capture('f1-preview-disabled-'+(developer?'dev':'normal')+'-'+width);
+      if(developer) {
+        await evaluate('URL.createObjectURL=(blob)=>{blob.text().then(text=>window.sessionExportPayload=JSON.parse(text));return "blob:unit"};HTMLAnchorElement.prototype.click=function(){}');
+        await click('.session-export-trigger'); await waitFor('window.sessionExportPayload');
+        assert.ok(!JSON.stringify(await evaluate('window.sessionExportPayload')).includes('dialogActionsPreview'));
+        assert.ok(!JSON.stringify(await evaluate('window.sessionExportPayload')).includes('dialog_actions_preview'));
+        assert.ok(!JSON.stringify(await evaluate('window.sessionExportPayload')).includes(await evaluate('window.previewActions[0].question')),'provisional question never enters exported history');
+      } else assert.equal(await evaluate('document.querySelector(".session-export-trigger")'),null);
+      const previewText=await evaluate('Array.from(document.querySelectorAll(".dialog-actions-preview .dialog-action")).map(c=>c.textContent)');
+      await evaluate('window.finishPreview()');
+      await waitFor('!document.querySelector(".dialog-actions-preview") && !document.querySelector("#message").disabled');
+      assert.equal(await evaluate('document.querySelectorAll(".dialog-action").length'),2);
+      assert.equal(await evaluate('document.querySelectorAll(".dialog-action button:not(:disabled)").length'),1);
+      assert.deepEqual(await evaluate('Array.from(document.querySelectorAll(".dialog-action")).map(c=>c.textContent)'),previewText);
+      await capture('f1-preview-final-'+(developer?'dev':'normal')+'-'+width);
+    }
+    for(const failure of ['error','incomplete','interrupt','exception']) {
+      await fresh(); await begin(); await evaluate(`window.finishPreview(${JSON.stringify(failure)})`);
+      await waitFor('document.querySelector(".error-box") && !document.querySelector("#message").disabled');
+      assert.equal(await evaluate('document.querySelector(".dialog-actions-preview, .dialog-action")'),null,'failed preview leaves no completed/active cards');
+      await evaluate('window.previewNextChat=true'); await click('.error-box button');
+      await waitFor('document.querySelector(".dialog-actions-preview")');
+      assert.deepEqual(await evaluate('window.calls.filter(c=>c.url==="/api/chat").at(-1).body.askedRefinementTargets'),[]);
+      assert.equal(await evaluate('window.calls.filter(c=>c.url==="/api/chat").at(-1).body.pendingSide'),undefined);
+      await evaluate('window.finishPreview()'); await waitFor('!document.querySelector("#message").disabled');
+    }
+    await fresh(); await begin('Stará zpráva.');
+    await evaluate(`window.confirm=()=>true; (()=>{const b=document.querySelector('button[aria-label="Nový projekt"]');const k=Object.keys(b).find(k=>k.startsWith('__reactProps$'));b[k].onClick();})()`);
+    await waitFor('!document.querySelector(".dialog-actions-preview") && !document.querySelector("#message").disabled');
+    await begin('Nová zpráva.');
+    await evaluate('window.finishPreview("done",0,"OLD_F1_RESPONSE")');
+    await new Promise(resolve=>setTimeout(resolve,50));
+    assert.equal(await evaluate('document.body.textContent.includes("OLD_F1_RESPONSE")'),false);
+    assert.equal(await evaluate('document.querySelectorAll(".dialog-actions-preview").length'),1);
+    assert.equal(await evaluate('document.querySelectorAll(".dialog-action button:not(:disabled)").length'),0);
+    assert.equal(await evaluate('document.querySelector("#message").disabled'),true,'old finally cannot unlock new request');
+    await evaluate('window.finishPreview("done",1)'); await waitFor('!document.querySelector("#message").disabled');
+    assert.equal(await evaluate('document.querySelectorAll(".dialog-action").length'),2);
+    await fresh(); await begin(); await evaluate('window.unmountFixture();window.finishPreview("done",0,"UNMOUNTED_RESPONSE")');
+    await new Promise(resolve=>setTimeout(resolve,50));
+    assert.equal(await evaluate('document.querySelector("#root").children.length'),0);
+    await fresh(); assert.equal(await evaluate('document.querySelector(".dialog-actions-preview, .dialog-action")'),null);
+    await begin(); await evaluate('window.finishPreview()'); await waitFor('!document.querySelector("#message").disabled');
+    await click('.dialog-action-nav-card'); await waitFor('window.calls.some(c=>c.url==="/api/analysis") && !document.querySelector("#message").disabled');
+    assert.equal(await evaluate('window.calls.filter(c=>c.url==="/api/chat").length'),1,'final NAV uses existing explicit transition path');
+    console.log('PASS: F1 preview actual-client Chromium: disabled -> one final enabled set, normal/developer 1600px and 390px, canonical labels/order, processing status, pending Session JSON exclusion, failure/incomplete/interruption/exception/retry, project/new-request stale events, unmount/navigation, unchanged explicit final NAV.');
+    console.log('Artifacts: '+artifactRoot);
+  } else {
   // Fresh F1: click/focus never changes geometry; typing grows only with content.
   await waitFor('document.querySelector("#message") && !document.querySelector("#message").disabled');
   assert.equal(await evaluate('document.querySelector("#message").placeholder'),'Napište APU...');
@@ -1028,4 +1126,5 @@ try {
   console.log('Artifacts: ' + artifactRoot);
   console.log('PASS: Document consolidation A–J: header copy/print/share, empty/loading/boundary guards, clipboard/print failures, stale PDF, normal/developer Settings focus/visibility, diagnostic JSON success/error, desktop/portrait/390px/320px control bounds; unified document A–L: F2/F3 exact default identity, accepted-only pending/failure/obsolete guards, stale generated preservation/adoption/config/source-independent regeneration, direct baseline/generated exports; UX refinement: tab order/focus, internal Build CTA/loading/retry, chat scrolling/reader anchoring, compact telemetry/scenarios and removal of notes;  actual client fixture A–J: F1/F2/F3 composition, tool/document preservation, optional Build, explicit adoption, read-only F3 Chat, no switch calls, keyboard persistence, print/PDF, responsive and developer rendering.');
 
+  }
 } finally { socket?.close(); chrome.kill(); server.close(); }

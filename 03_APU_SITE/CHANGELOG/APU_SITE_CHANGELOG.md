@@ -4,6 +4,12 @@ Status: CURRENT
 
 Records significant verified product/runtime/project changes. It is not a complete Git log. Historical Sites-era entries are retained where they remain useful; current deployment state must not be inferred from a changelog entry alone.
 
+## 2026-10-14 — B1.8-A early validated F1 action preview
+
+- Chat emits a lightweight `dialog_actions_preview` event after existing Controller resolution, only for structured intake turns. The client displays canonical actions provisionally through unchanged `DialogActionCard` components with all choices inactive; `done` alone accepts final message actions and replaces the preview with one final card set. Existing processing status and buffered, safety-filtered Main prose remain intact.
+- Preview state is request/message-scoped and excluded from canonical history, Session JSON, Notebook, F2/F3 and routing. Failure/incomplete/interrupted/exception paths, reset, relevant navigation and teardown clear it; request/project guards reject late events and prevent old cleanup from unlocking a newer turn. Prompts, validation, provider payloads/calls/settings/cache, usage/latency telemetry and existing F2/F3 behavior are unchanged.
+- Verification PASS: typecheck, **125 focused provider-free/mocked regressions**, diff check/review, isolated actual-client Chromium preview checks and the existing full workspace smoke. Visually inspected disabled/final states at desktop and mobile widths; verified normal/developer behavior, pending JSON exclusion, failures/retry, reset/new-request races and teardown. Authenticated hosted and native Windows/browser verification remain **NOT VERIFIED**; no backend-latency or measured native-Windows UX improvement is claimed. No paid API calls, merge or deployment; Backlog and Known Issues unchanged.
+
 ## 2026-10-14 — B1.7-A cache-aware F1 request envelopes
 
 - Added GPT-5.6 explicit-only cache boundaries after the complete unchanged developer instructions for extraction, primary grounding, rescue grounding and Quest Controller. Dynamic user/Notebook/candidate/Controller context follows outside the boundary; models, reasoning, service tiers, schemas, token limits, store settings, validation, routing, provider-call counts and canonical usage/latency telemetry remain unchanged. No cache key, prewarming or retention override was added.

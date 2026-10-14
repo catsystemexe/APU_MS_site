@@ -371,6 +371,9 @@ export async function POST(request: Request) {
 
       const emit = (event: unknown) => controller.enqueue(encoder.encode(JSON.stringify(event) + "\n"));
       if (executionPhase === "intake") emit({ type: "status", status: "preparing_response" });
+      if (executionPhase === "intake" && bufferStructuredF1Prose) {
+        emit({ type: "dialog_actions_preview", dialogActions: controllerResult.dialog_actions });
+      }
       const mainStarted = performance.now();
       let upstream: Response;
       try {
