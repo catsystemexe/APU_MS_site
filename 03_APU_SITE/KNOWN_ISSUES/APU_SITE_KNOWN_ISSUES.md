@@ -4,14 +4,10 @@ Status: CURRENT
 
 This file contains confirmed current defects or concrete verification gaps only. Product limitations and future capabilities belong in Backlog. Historical resolved defects belong in Changelog/checkpoints.
 
-## OPEN
+## RESOLUTION REFERENCES
 
-### KI-02 — Manual notebook records without source references are omitted from compact requests
-**Status:** confirmed pre-existing defect; found during the isolated desktop fixture setup on 2026-10-12. No serialization or F1 extraction/grounding code was changed by the layout batch.
-
-`compactNotepad()` compares `entry.source?.messageId` with an optional `excludeSourceMessageId` even when both are undefined. Consequently manual records without a source reference disappear from a normal compact request. A local, non-provider reproduction with one nonempty manual manifestation returned `[]`; the same source filter also affects manual needs and can prevent their use at F1→F2/analysis boundaries. Browser workflow smoke therefore uses sourced records matching normal F1 extraction output.
-
-**Close when:** a separately approved serialization correction retains source-less manual records while preserving explicit source-message exclusion, with focused notebook/analysis contract verification. This is outside the authorized frozen-F1/layout change.
+### KI-02 — Manual Notebook serialization — RESOLVED in source (2026-10-14)
+B1.9-R1 corrected the undefined/undefined exclusion comparison in `compactNotepad()`. Nonempty manual records, including source-less edits, now survive default serialization; explicit source-message exclusion remains exact. Typecheck and **249 focused provider-free/mocked regressions** passed, including actual F1 request boundaries, all three F2 canonical-need paths and immutable downstream source behavior. Native Windows, hosted/live-provider and production verification are not claimed. Historical defect and repair details are recorded in the [Changelog](../CHANGELOG/APU_SITE_CHANGELOG.md#2026-10-14--b19-r1-manual-notebook-serialization-repair).
 
 ## VERIFICATION GAPS
 

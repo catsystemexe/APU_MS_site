@@ -4,6 +4,12 @@ Status: CURRENT
 
 Records significant verified product/runtime/project changes. It is not a complete Git log. Historical Sites-era entries are retained where they remain useful; current deployment state must not be inferred from a changelog entry alone.
 
+## 2026-10-14 — B1.9-R1 manual Notebook serialization repair
+
+- Resolved KI-02: the previous default filter compared two undefined source IDs and silently omitted source-less manual records. `compactNotepad()` now applies source exclusion only when an explicit exclusion ID exists. All nonempty manual/sourced records retain existing order, IDs, text trimming and need mapping; manual edits remain available. Main's current-turn source exclusion is preserved without extra provider calls.
+- Verification PASS: typecheck, **249 focused provider-free/mocked regressions**, diff check/review. Eight new tests cover empty/default compaction, all five manual categories, exact source exclusion, source-less edits, unchanged mapping, actual extraction/Controller/Main context, all three F2 analysis canonical-need paths, strict invalid-need rejection and immutable snapshot/F3 currency behavior. Only `app/notepad-model.ts` changed in production; prompts, grounding, NAV/readiness, cache, model parameters, snapshot schemas/fingerprint algorithm, F3 ownership and project-scoped usage remain unchanged.
+- Updated Runtime Technical Current and resolved only KI-02 in Known Issues; Backlog and KI-01 unchanged. The full suite was not rerun; the three documented pre-existing baseline failures remain outside scope. Native Windows, authenticated hosted/live-provider and production verification remain **NOT VERIFIED**. No paid API calls, PR merge or deployment.
+
 ## 2026-10-14 — B1.8-A early validated F1 action preview
 
 - Chat emits a lightweight `dialog_actions_preview` event after existing Controller resolution, only for structured intake turns. The client displays canonical actions provisionally through unchanged `DialogActionCard` components with all choices inactive; `done` alone accepts final message actions and replaces the preview with one final card set. Existing processing status and buffered, safety-filtered Main prose remain intact.
