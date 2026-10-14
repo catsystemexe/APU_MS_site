@@ -21,21 +21,30 @@ const baseline = {
 const root = fileURLToPath(new URL("..", import.meta.url));
 const artifacts = await mkdtemp(join(tmpdir(), "apu-f1-cache-"));
 after(() => rm(artifacts, { recursive: true, force: true }));
-const handlers = {};
-for (const operation of ["extract", "chat"]) {
-  const outfile = join(artifacts, `${operation}.mjs`);
-  await build({
-    entryPoints: [join(root, `app/api/${operation}/route.ts`)], outfile,
-    bundle: true, platform: "node", format: "esm", logLevel: "silent",
-    plugins: [{ name: "mock-unit-boundaries", setup(plugin) {
-      plugin.onResolve({ filter: /access-auth$/ }, () => ({ path: "auth", namespace: "unit" }));
-      plugin.onLoad({ filter: /.*/, namespace: "unit" }, () => ({ contents: `export async function getAccessIdentity(headers) { return {email:'fixture@example.invalid',role:headers.get('x-fixture-role')}; }`, loader: "js" }));
-      plugin.onResolve({ filter: /\.md\?raw$/ }, args => ({ path: join(dirname(args.importer), args.path.replace(/\?raw$/, "")), namespace: "raw" }));
-      plugin.onLoad({ filter: /.*/, namespace: "raw" }, async args => ({ contents: `export default ${JSON.stringify(await readFile(args.path, "utf8"))}`, loader: "js" }));
-    } }],
-  });
-  handlers[operation] = (await import(pathToFileURL(outfile).href)).POST;
+async function buildHandlers(simulateCRLF = false) {
+  const handlers = {};
+  for (const operation of ["extract", "chat"]) {
+    const outfile = join(artifacts, `${simulateCRLF ? "crlf" : "native"}-${operation}.mjs`);
+    await build({
+      entryPoints: [join(root, `app/api/${operation}/route.ts`)], outfile,
+      bundle: true, platform: "node", format: "esm", logLevel: "silent",
+      plugins: [{ name: "mock-unit-boundaries", setup(plugin) {
+        plugin.onResolve({ filter: /access-auth$/ }, () => ({ path: "auth", namespace: "unit" }));
+        plugin.onLoad({ filter: /.*/, namespace: "unit" }, () => ({ contents: `export async function getAccessIdentity(headers) { return {email:'fixture@example.invalid',role:headers.get('x-fixture-role')}; }`, loader: "js" }));
+        plugin.onResolve({ filter: /\.md\?raw$/ }, args => ({ path: join(dirname(args.importer), args.path.replace(/\?raw$/, "")), namespace: "raw" }));
+        plugin.onLoad({ filter: /.*/, namespace: "raw" }, async args => {
+          const markdown = await readFile(args.path, "utf8");
+          const fixture = simulateCRLF ? markdown.replace(/\r?\n/g, "\r\n") : markdown;
+          // Canonicalize fixture Markdown only; request/user strings stay byte-exact.
+          return { contents: `export default ${JSON.stringify(fixture.replace(/\r\n/g, "\n"))}`, loader: "js" };
+        });
+      } }],
+    });
+    handlers[operation] = (await import(pathToFileURL(outfile).href)).POST;
+  }
+  return handlers;
 }
+const handlers = await buildHandlers();
 
 const message = "  Synthetic observation. Another observation. 🧪\nPreserve whitespace.  ";
 const notebook = [
@@ -75,7 +84,17 @@ function assertCached(payload) {
   for (const field of ["prompt_cache_key", "prompt_cache_retention"]) assert.equal(Object.hasOwn(payload, field), false);
 }
 
-async function run(t, operation, { role = "developer", rescue = true, currentMessage = message, currentNotebook = notebook, previousResponseId, context = {} } = {}) {
+function assertBaselineRequests(payloads, names) {
+  assert.equal(payloads.length, names.length, "unchanged provider-call count");
+  for (const [index, name] of names.entries()) {
+    const payload = payloads[index];
+    if (!name.startsWith("main_")) assertCached(payload);
+    assert.equal(signature(effective(payload)), baseline[name], name);
+  }
+}
+const extractionNames = ["apu_notepad_extraction", "apu_notepad_grounding_verification", "apu_notepad_grounding_rescue"];
+
+async function run(t, operation, { role = "developer", rescue = true, currentMessage = message, currentNotebook = notebook, previousResponseId, context = {}, fixtureHandlers = handlers } = {}) {
   for (const key of ["OPENAI_API_KEY", "APU_VECTOR_STORE_ID"]) {
     const previous = process.env[key];
     process.env[key] = "synthetic-unit-only";
@@ -100,7 +119,7 @@ async function run(t, operation, { role = "developer", rescue = true, currentMes
     else throw new Error("Unexpected provider call");
     return Response.json({ ...response, output_text: JSON.stringify(result) });
   });
-  const response = await handlers[operation](new Request(`http://unit.invalid/api/${operation}`, {
+  const response = await fixtureHandlers[operation](new Request(`http://unit.invalid/api/${operation}`, {
     method: "POST", headers: { "Content-Type": "application/json", "x-fixture-role": role },
     body: JSON.stringify({ message: currentMessage, notebook: currentNotebook, phase: "intake", turnId: "fixture-turn", previousResponseId, ...context }),
   }));
@@ -111,12 +130,9 @@ async function run(t, operation, { role = "developer", rescue = true, currentMes
 
 test("extraction, primary and rescue preserve complete baseline requests and usage with a stable developer-only boundary", async t => {
   const { payloads, result } = await run(t, "extract");
-  assert.equal(payloads.length, 3);
+  assertBaselineRequests(payloads, extractionNames);
   assert.equal(result.extraction.candidates.length, 2);
   for (const payload of payloads) {
-    assertCached(payload);
-    const name = payload.text.format.name;
-    assert.equal(signature(effective(payload)), baseline[name], name);
     const context = JSON.parse(effective(payload).input);
     assert.equal(context.newUserMessage, message);
     assert.deepEqual(context.currentNotebook, notebook);
@@ -176,11 +192,8 @@ test("Controller changing context stays entirely in the user block and preserves
 for (const previousResponseId of [undefined, "previous-fixture"]) {
   test(`Controller envelope preserves authority and Main remains byte-equivalent (${previousResponseId ?? "first turn"})`, async t => {
     const { payloads, result } = await run(t, "chat", { previousResponseId });
-    assert.equal(payloads.length, 2, "one Controller call and one Main call, no retries/prewarming");
+    assertBaselineRequests(payloads, ["apu_quest_controller", previousResponseId ? "main_followup" : "main_initial"]);
     const [controller, main] = payloads;
-    assertCached(controller);
-    assert.equal(signature(effective(controller)), baseline.apu_quest_controller);
-    assert.equal(signature(main), baseline[previousResponseId ? "main_followup" : "main_initial"]);
     assert.equal(main.input, message);
     assert.equal(typeof main.instructions, "string");
     assert.ok(main.instructions.includes(JSON.stringify(notebook)));
@@ -193,3 +206,44 @@ for (const previousResponseId of [undefined, "previous-fixture"]) {
     assert.equal(complete.model_usage_records.length, 2);
   });
 }
+
+test("simulated Windows CRLF Markdown preserves every original request baseline", async t => {
+  const fixtureHandlers = await buildHandlers(true);
+  const extraction = await run(t, "extract", { fixtureHandlers });
+  assertBaselineRequests(extraction.payloads, extractionNames);
+  for (const previousResponseId of [undefined, "previous-fixture"]) {
+    const chat = await run(t, "chat", { fixtureHandlers, previousResponseId });
+    assertBaselineRequests(chat.payloads, ["apu_quest_controller", previousResponseId ? "main_followup" : "main_initial"]);
+  }
+});
+
+test("fixture EOL repair still rejects non-EOL instruction, input, schema, settings and call-count mutations", async t => {
+  const { payloads } = await run(t, "extract");
+  assertBaselineRequests(payloads, extractionNames);
+  for (const [name, mutate] of [
+    ["instruction character", calls => { calls[0].input[0].content[0].text += "!"; }],
+    ["user character", calls => {
+      const context = JSON.parse(calls[0].input[1].content[0].text);
+      context.newUserMessage += "!";
+      calls[0].input[1].content[0].text = JSON.stringify(context);
+    }],
+    ["user line endings", calls => { calls[0].input[1].content[0].text = JSON.stringify({ currentNotebook: notebook, newUserMessage: message.replace(/\n/g, "\r\n") }); }],
+    ["Notebook context", calls => {
+      const context = JSON.parse(calls[0].input[1].content[0].text);
+      context.currentNotebook[0].text += "!";
+      calls[0].input[1].content[0].text = JSON.stringify(context);
+    }],
+    ["schema", calls => { calls[0].text.format.schema.additionalProperties = true; }],
+    ["model", calls => { calls[0].model = "changed-model"; }],
+    ["reasoning", calls => { calls[0].reasoning.effort = "medium"; }],
+    ["service tier", calls => { calls[0].service_tier = "priority"; }],
+    ["output limit", calls => { calls[0].max_output_tokens += 1; }],
+    ["store", calls => { calls[0].store = true; }],
+    ["extra provider call", calls => { calls.push(structuredClone(calls[0])); }],
+    ["missing provider call", calls => { calls.pop(); }],
+  ]) {
+    const changed = structuredClone(payloads);
+    mutate(changed);
+    assert.throws(() => assertBaselineRequests(changed, extractionNames), assert.AssertionError, name);
+  }
+});
