@@ -4,6 +4,46 @@ Status: CURRENT SOURCE/RUNTIME CONTRACT
 
 Purpose: describe the current repository/runtime contract. Deployment state is recorded only when independently verified; this document must not infer production state from repository contents alone.
 
+## B1.9-V3-C1 — Isolated Worker Preview preparation (2026-10-14)
+
+**PARTIAL — MISSING REQUIRED RESOURCE DATA.** `config/e2e-preview.preparation.json` is a non-deployable plan, not a Wrangler configuration. It selects Preview `apu-pr60-e2e` under parent Worker `apu-ms-site`; no remote name is reserved and no separate Worker exists. Dedicated KV ID, Preview Access values and secure secret-file location remain unknown. Do not pass the plan to Wrangler. No active `previews` block was added; production config, application and build/deploy scripts are unchanged.
+
+### Verified configuration contract
+
+- Reviewed official [Preview setup](https://developers.cloudflare.com/workers/previews/get-started/), [configuration](https://developers.cloudflare.com/workers/previews/configuration/), [resource isolation](https://developers.cloudflare.com/workers/previews/resources/), [workflow comparison](https://developers.cloudflare.com/workers/previews/compare-workflows/) and [Access protection](https://developers.cloudflare.com/workers/configuration/cloudflare-access/) documentation. Installed Wrangler **4.150.0** exceeds the documented **4.135.0** minimum; its schema and local `preview --help` support this workflow.
+- Keep parent `name`, standalone `main`, `no_bundle`, module discovery/rules, `base_dir`, `assets`/`ASSETS`, compatibility date **2026-08-21** and `nodejs_compat` top-level. Preview identity uses CLI `--name`, not `previews.name`. Future `previews.vars` must supply Preview values and `previews.kv_namespaces` must explicitly bind `DEV_LOG_STATE` by the verified dedicated namespace's `id`. Missing/placeholder IDs, production fallback and reuse of the unverified existing `preview_id` are forbidden. Installed Wrangler uses `id` for Preview bindings; `preview_id` concerns `wrangler dev`. Current top-level observability remains inherited, without an override.
+- Existing `preview_urls: true` and the Version URL alias do not prove resource isolation. The reported Workers Builds workflow (`npm run build`, then `npx wrangler versions upload`) was not changed or independently checked in the dashboard. Production `npm run deploy` remains unchanged. Any pipeline migration or push requires separate approval.
+
+### Required runtime inputs
+
+Use Preview-specific `CF_ACCESS_TEAM_DOMAIN` (HTTPS issuer), `CF_ACCESS_AUD` (Access application audience) and `APU_DEVELOPER_EMAILS` (developer allowlist). Other approved authenticated identities are testers; there is no tester-role environment variable. Set `APU_LOCAL_DEV_AUTH` to `"0"`; never enable development auth in hosted runtime. Provider work requires `OPENAI_API_KEY` and `APU_VECTOR_STORE_ID`, provisioned securely for an authorized non-production provider project and approved test knowledge store. Never copy production values. Optional `GOOGLE_DRIVE_CLIENT_ID` stays unset here. `secrets.required` declares tooling names, not proof that secrets exist. Existing app JWT/config checks fail closed; missing provider config returns 503 after valid authentication. Edge protection is a separate prerequisite.
+
+### Later operator procedure — not authorized by this batch
+
+1. Obtain integration/provisioning/deployment approval and coordinate the automatic Workers Builds trigger before any push. Confirm the account, parent Worker and Preview-name availability; do not migrate Builds automatically.
+2. Provision a dedicated E2E KV namespace. Record its actual ID/ownership and confirm it differs from production and all active environments. Neither repository KV ID is approved for reuse. Stop if evidence is absent; never add an identifierless binding that could provision implicitly.
+3. Configure Preview-only edge Access, leaving production policy intact. Use a scoped Worker Preview destination (`preview_worker`) or hostname application. Record its identity/audience, approved tester/developer identities and absence of bypass policies. Its scope must cover stable and unique deployment URLs.
+4. Assemble a separately reviewed actual `previews` block using the plan's settings, actual Access vars and a `DEV_LOG_STATE` KV entry with the verified `id`. Keep all top-level production settings. Prepare later provider secrets outside the checkout using restricted file permissions/secret management; never commit values or place them in CLI arguments/logs. Ignore shared Previews Base settings/secrets for this dedicated target.
+5. Run `npm run build` and `npm run validate:artifact`. Inspect effective `dist/server/wrangler.json`: Vinext's `.wrangler/deploy/config.json` redirects deployment commands there. Confirm the complete Preview KV/Access settings, standalone module graph and branch assets survived generation. If any setting is absent/changed, stop for review. Record approved source SHA and artifact checksums; a tag alone is not code provenance proof. Generated Preview configuration has not been validated in this batch.
+6. Only with deployment approval, bootstrap **without provider secrets** using `npx wrangler preview --config dist/server/wrangler.json --worker-name apu-ms-site --name apu-pr60-e2e --ignore-base-config --json`; add an approved source-SHA `--tag` and audit message. Capture actual deployment ID, stable Preview URL and unique deployment URL, not predicted hostnames. Verify anonymous/unauthorized denial at the edge on both URLs and valid tester/developer roles. Missing provider config should prevent model work; do not submit prompts.
+7. After edge proof and separate credential authorization, repeat the explicit Preview command with `--secrets-file` pointing at the protected file. Preview-scoped `wrangler preview secret put` is another secure option; it also creates deployments. Do not use production `wrangler secret put` or shared Base secrets. Record the final deployment IDs/URLs/tag again, verify dedicated bindings/Access/artifact provenance, inspect logs filtered by Preview/deployment identity and audit zero production changes. Live E2E/model calls require separate authorization.
+
+### Isolation matrix
+
+| Area | Preparation status | Required runtime proof |
+| --- | --- | --- |
+| Worker/code identity | CONFIGURED — proposed parent/name only | NOT VERIFIED — actual deployment, source/artifact identity and URLs |
+| KV / other persistent resources | REQUIRES OPERATOR ACTION — dedicated ID absent; no other persistent binding proposed | NOT VERIFIED — namespace ownership and actual binding |
+| Runtime variables | REQUIRES OPERATOR ACTION — Access inputs absent | NOT VERIFIED — effective values and roles |
+| Secrets | REQUIRES OPERATOR ACTION — names only | NOT VERIFIED — Preview credential ownership; no inherited Base secrets |
+| Cloudflare Access | REQUIRES OPERATOR ACTION — scoped policy required | NOT VERIFIED — edge denial on every deployed URL |
+| Static assets | CONFIGURED — top-level `dist/client` / `ASSETS` preserved | NOT VERIFIED — upload matches approved artifact |
+| Observability | CONFIGURED — existing top-level policy retained | NOT VERIFIED — Preview/deployment filters, access and retention |
+| Outgoing model calls | REQUIRES OPERATOR ACTION — credentials/testing unauthorized here | NOT VERIFIED — provider project, budget and later calls |
+| Production separation | CONFIGURED — config/scripts unchanged; no push/upload | NOT VERIFIED — future deployment/resource audit |
+
+Preparation verification PASS: typecheck, **26 provider-free schema/configuration/Access/rendered-HTML tests**, canonical Linux build, standalone ESM Worker artifact and diff check/review. Active config and the proposed field subset validate against the installed schema; the plan deliberately fails Wrangler schema validation. This does not validate a complete deployable Preview: resource inputs are missing. Only local `wrangler preview --help` ran; no Cloudflare resource/secret/Access/deployment changes, provider calls, commit, push, CI trigger or merge. KI-01 and B-05 remain open; Preview/edge/runtime isolation, hosted E2E and native Windows remain **NOT VERIFIED**.
+
 ## B1.9-R4 — Full provider-free regression gate (2026-10-14)
 
 - Rendered-HTML assertions now describe the authenticated initial workspace: verified account identity, developer telemetry/export/scenario controls, current Chat/Obsah workspace controls and development-preview metadata. They no longer require a GPT-5.6 Sol option or historical IN/OUT labels from a closed developer popover. Settings is verified for both authenticated tester and developer roles; tester HTML must exclude developer telemetry, Session JSON export, scenario controls and diagnostic surfaces. Production UI and Access policy are unchanged.

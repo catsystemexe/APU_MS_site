@@ -4,6 +4,13 @@ Status: CURRENT
 
 Records significant verified product/runtime/project changes. It is not a complete Git log. Historical Sites-era entries are retained where they remain useful; current deployment state must not be inferred from a changelog entry alone.
 
+## 2026-10-14 — B1.9-V3-C1 isolated Worker Preview preparation
+
+- Prepared a deliberately non-deployable plan for `apu-pr60-e2e` under `apu-ms-site`, with dedicated KV/Access/secret inputs left unknown and no production or existing `preview_id` fallback. No active Wrangler Preview block, fake namespace ID or secret values were added. Production config, standalone Vinext graph/assets, compatibility settings and deployment/build commands remain unchanged.
+- Documented current Worker Previews syntax from official Cloudflare docs and installed Wrangler **4.150.0**, name/secret/Base-isolation options, Preview KV `id` semantics, operator-only provisioning/Access/secret/deployment steps, generated-config checks, deployment evidence and an isolation matrix. Version URLs are not isolated Worker Previews. Future bootstrap omits provider secrets until edge Access is verified; no pipeline migration or deployment is authorized here.
+- Verification PASS: typecheck, **26 provider-free schema/configuration/Access/rendered-HTML tests**, canonical Linux build, standalone Worker artifact and diff review/check. Active config and supported proposed field placement validate against the installed schema; the plan is rejected as Wrangler config. Actual resource bindings, generated Preview settings and hosted/edge/runtime isolation are **NOT VERIFIED**. Classification: **PARTIAL — MISSING REQUIRED RESOURCE DATA**; dedicated namespace, Access values/policy and Preview credentials still require the operator.
+- Local patch only: no commit/push, CI trigger, resource/secret/Access provisioning, Preview/version upload, production deployment, provider call or PR merge. Backlog/Known Issues unchanged; KI-01 and B-05 remain open. No Preview existence, security or native Windows PASS is claimed.
+
 ## 2026-10-14 — B1.9-R4 full regression gate repair
 
 - Corrected obsolete initial HTML expectations: authenticated identity/current workspace/developer controls replace closed-popover model/IN/OUT expectations, and shared Settings is required for testers as well as developers. Negative tester assertions still exclude telemetry, diagnostic, scenario and Session JSON developer surfaces.

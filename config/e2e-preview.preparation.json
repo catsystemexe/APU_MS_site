@@ -1,0 +1,27 @@
+{
+  "kind": "apu-worker-preview-preparation",
+  "deployable": false,
+  "baseConfig": "wrangler.jsonc",
+  "workerName": "apu-ms-site",
+  "previewName": "apu-pr60-e2e",
+  "sourceBranch": "codex/f1-f3-mvp-stabilization",
+  "requiredOperatorInputs": {
+    "dedicatedKvNamespaceId": null,
+    "CF_ACCESS_TEAM_DOMAIN": null,
+    "CF_ACCESS_AUD": null,
+    "APU_DEVELOPER_EMAILS": null,
+    "previewSecretsFilePath": null
+  },
+  "kvRequirement": {
+    "binding": "DEV_LOG_STATE",
+    "dedicatedNamespaceRequired": true,
+    "allowProductionNamespace": false,
+    "allowExistingPreviewId": false
+  },
+  "proposedPreviewSettings": {
+    "vars": { "APU_LOCAL_DEV_AUTH": "0" },
+    "secrets": { "required": ["OPENAI_API_KEY", "APU_VECTOR_STORE_ID"] }
+  },
+  "ignorePreviewsBaseConfig": true,
+  "requiredDeploymentEvidence": ["sourceCommit", "workerIdentity", "previewName", "previewUrl", "uniqueDeploymentUrl", "deploymentId", "boundKvNamespaceId", "accessApplicationIdentity"]
+}
