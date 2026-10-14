@@ -20,6 +20,9 @@ import { renderWorkingAnalysis, f3MaterialToText } from '/workspace/APU_MS_site/
 import { fallbackQuestController } from '/workspace/APU_MS_site/app/dialog-action';
 const needText = 'Potřebuji pochopit podmínky zapojení.';
 const notebook = { manifestations: [{ id: 'fact1', text: 'Při dlouhém kruhu dítě vstává.', origin: 'extracted', source: { messageId: 'fixture-source', quote: 'Fixture input', start: 0, end: 13 } }], goals: [{ id: 'n1', text: needText, origin: 'extracted', source: { messageId: 'fixture-source', quote: 'Fixture input', start: 0, end: 13 }, needMapping: { f2Path: 'POCHOPIT', f3Target: null } }], context: [], course: [], helps: [] };
+if(new URLSearchParams(location.search).has('manual-notebook')) for(const category of ['manifestations','goals']) {
+  notebook[category][0].origin='manual'; delete notebook[category][0].source;
+}
 localStorage.setItem('apu-site:notepad-map:v2', JSON.stringify(notebook));
 const h = { id: 'h1', rank: 1, title: 'Testovací hypotéza', summary: 'Pracovní a nejisté vysvětlení.', relevantNeeds: ['n1'], question: null, supportingInformation: ['Kratší situace zvládá.'], limitations: ['Málo evidence.'], unknowns: ['Vliv únavy.'], questions: [] };
 const analysis = { hypotheses: [h], needs: [{ needId: 'n1', title: needText, sourceText: needText, relevantHypotheses: ['h1'], direction: 'Zvažovat možná vysvětlení.', question: null, distinctions: [], parameters: [], limitations: [], questions: [], intendedOutput: '' }], suggestedNeeds: [], mode: 'entry', mainUncertainty: 'Příčinu nelze zatím určit.', chatUpdate: { kind: 'entry', summary: 'Výchozí Rozbor.', notebookChanges: [], hypothesisChanges: [], remainingUncertainty: '', nextPrompt: null }, transitionReady: false };
@@ -54,6 +57,7 @@ window.calls = [];
 window.fixtureMountId = Math.random().toString(36);
 window.previewChats = [];
 window.previewActions = fallbackQuestController([{category:'manifestations',text:'Synthetic observation.'},{category:'goals',text:'Understand the situation.'}], 'intake').dialog_actions;
+window.fixtureFallbackQuestion = target => fallbackQuestController(target==='teacher_need'?[{category:'manifestations',text:'Synthetic observation.'}]:[], 'intake').dialog_actions[0].question;
 window.finishPreview = (kind='done', index=window.previewChats.length-1, text='Dokončená odpověď.') => {
   const c=window.previewChats[index];
   const send=event=>c.enqueue(new TextEncoder().encode(JSON.stringify(event)+'\\n'));
@@ -98,7 +102,9 @@ window.fetch = async (url, init) => {
     : url === '/api/f2' ? { components: body.request.components.map((s) => ({ ...s, content: longDocument ? longComponentText : 'Přijaté rozvinutí hypotézy.' })) }
     : url === '/api/f3' ? { result: { kind: 'material', title: 'Další podoba ' + window.calls.filter(c => c.url === '/api/f3').length, introduction: 'Podle přijatého zdroje.', sections: [{ heading: 'Vysvětlení', content: 'Nejistota zůstává. GENERATED_' + window.calls.filter(c => c.url === '/api/f3').length }], table: body.config.structureMode === 'table' ? { columns: ['Pozorování'], rows: [['Nejistota zůstává.']] } : null, cards: body.config.structureMode === 'cards' ? [{title:'Doložené podmínky',content:'Nejistota zůstává.'}] : [], usageNote: null } }
     : (() => { throw new Error('unexpected API request: ' + url); })();
-  if (url === '/api/analysis') { window.acceptedAnalysisResponseAt=Date.now(); if (window.changeNextAnalysis) { window.changeNextAnalysis=false; result.analysis={...analysis,mainUncertainty:'Upstream uncertainty outside explicit Build.'}; } }
+  if (url === '/api/analysis') { window.acceptedAnalysisResponseAt=Date.now(); if(new URLSearchParams(location.search).has('nav-readiness')) {
+    result.analysis={...analysis,hypotheses:[{...h,relevantNeeds:[body.canonicalNeed.needId]}],needs:[{...analysis.needs[0],needId:body.canonicalNeed.needId,sourceText:body.canonicalNeed.needText}]};
+  } if (window.changeNextAnalysis) { window.changeNextAnalysis=false; result.analysis={...analysis,mainUncertainty:'Upstream uncertainty outside explicit Build.'}; } }
   return Response.json(result);
 };
 const fixtureRoot=createRoot(document.getElementById('root')!);
@@ -157,7 +163,78 @@ try {
     await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
     await waitFor('!document.querySelector(".welcome-help")');
   };
-  if (process.argv.includes('--f1-preview-only')) {
+  if (process.argv.includes('--f1-nav-only')) {
+    const fresh = async (manual=false, developer=false, width=1600) => {
+      const mount = await evaluate('window.fixtureMountId');
+      await call('Emulation.setDeviceMetricsOverride',{width,height:width<800?844:1000,deviceScaleFactor:1,mobile:false});
+      await call('Page.navigate',{url:'http://127.0.0.1:4333/?nav-readiness=1'+(manual?'&manual-notebook=1':'')+(developer?'&developer=1':'')});
+      await waitFor(`window.fixtureMountId!==${JSON.stringify(mount)} && document.querySelector("#message") && !document.querySelector("#message").disabled && document.querySelector("#notepad-entry-fact1 textarea")`);
+      if(width<800 && await evaluate('document.querySelector(".notepad-panel").classList.contains("is-open")')) await click('.tool-rail-notepad');
+    };
+    const renderNav = async () => {
+      await evaluate('window.previewNextChat=true'); await typeInput('Testovací zpráva.'); await click('.send-button');
+      await waitFor('document.querySelector(".dialog-actions-preview")');
+      await evaluate('window.finishPreview()');
+      await waitFor('!document.querySelector("#message").disabled && document.querySelector(".dialog-action-nav-card:not(:disabled)")');
+    };
+    const setNote = async (selector, value) => evaluate(`(()=>{const el=document.querySelector(${JSON.stringify(selector)});el.focus();Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(el,${JSON.stringify(value)});el.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+    const deleteCategory = async category => {
+      const selector='.notepad-category[aria-labelledby="notepad-'+category+'"] textarea';
+      await setNote(selector,'');
+      await waitFor(`document.querySelector(${JSON.stringify(selector)}).value===""`);
+      await evaluate(`document.querySelector(${JSON.stringify(selector)}).blur()`);
+      await waitFor(`!document.querySelector(${JSON.stringify(selector)})`);
+    };
+    const restoreCategory = async category => {
+      const parent='.notepad-category[aria-labelledby="notepad-'+category+'"]';
+      await click(parent+' .add-notepad-item'); await waitFor(`document.querySelector(${JSON.stringify(parent+' textarea')})`);
+      await setNote(parent+' textarea',category==='goals'?'Potřebuji pochopit podmínky zapojení.':'Při dlouhém kruhu dítě vstává.');
+      await evaluate(`document.querySelector(${JSON.stringify(parent+' textarea')}).blur()`);
+    };
+    const validNav = async () => {
+      const before=await evaluate('window.calls.length');
+      await click('.dialog-action-nav-card:not(:disabled)');
+      await waitFor('window.calls.some(c=>c.url==="/api/analysis") && !document.querySelector("#message").disabled');
+      assert.deepEqual(await evaluate(`window.calls.slice(${before}).map(c=>c.url)`),['/api/need-route','/api/analysis'],'direct entry preserves one router + one analysis, no extraction/Controller/Main');
+      if(await evaluate('innerWidth<800')) await click('.f2-entry-callout');
+      await waitFor('document.querySelector(".document-creation")');
+    };
+    for(const manual of [false,true]) for(const developer of [false,true]) for(const width of [1600,390]) {
+      await fresh(manual,developer,width); await renderNav(); await validNav();
+    }
+    for(const manual of [false,true]) for(const missing of [['manifestations'],['goals'],['manifestations','goals']]) {
+      await fresh(manual); await renderNav();
+      for(const category of missing) await deleteCategory(category);
+      const before=await evaluate('window.calls.length');
+      await click('.dialog-action-nav-card:not(:disabled)');
+      await waitFor('!document.querySelector("#message").disabled && document.querySelector(".message:last-child .dialog-action--primary")');
+      assert.equal(await evaluate('window.calls.length'),before,'stale NAV makes zero API calls');
+      assert.equal(await evaluate('document.querySelector(".dialog-actions-preview, .document-creation, .document-update-overlay")'),null);
+      assert.equal(await evaluate('document.querySelectorAll(".dialog-action-nav-card:not(:disabled)").length'),0,'historical NAV becomes inactive');
+      const expected=missing.includes('manifestations')?'observed_phenomenon':'teacher_need';
+      assert.equal(await evaluate(`document.querySelector('.message:last-child .dialog-action--primary p').textContent`),await evaluate(`window.fixtureFallbackQuestion(${JSON.stringify(expected)})`));
+      assert.equal(await evaluate('Array.from(document.querySelectorAll(".message")).at(-1).querySelectorAll(".dialog-action").length'),2,'one canonical MAIN/SIDE set');
+      assert.equal(await evaluate('Boolean(document.querySelector(".processing-status, .typing"))'),false);
+      await capture('f1-stale-nav-'+missing.join('-')+'-'+(manual?'manual':'sourced'));
+      for(const category of missing) await restoreCategory(category);
+      await renderNav(); await validNav();
+    }
+    for(const missing of [['manifestations'],['goals'],['manifestations','goals']]) {
+      await fresh(true); for(const category of missing) await deleteCategory(category);
+      await typeInput('Přejít do fáze 2'); await click('.send-button');
+      await waitFor('window.calls.some(c=>c.url==="/api/chat") && !document.querySelector("#message").disabled');
+      assert.deepEqual(await evaluate('window.calls.map(c=>c.url)'),['/api/extract','/api/chat'],'not-ready text retains normal F1 handling');
+      assert.equal(await evaluate('window.calls.at(-1).body.phase'),'intake');
+      assert.equal(await evaluate('document.querySelector(".document-creation")'),null);
+    }
+    await fresh(); await renderNav(); await deleteCategory('manifestations'); await click('.dialog-action-nav-card:not(:disabled)');
+    await waitFor('!document.querySelector("#message").disabled && document.querySelector(".message:last-child .dialog-action--primary")');
+    await evaluate('window.confirm=()=>true'); await click('button[aria-label="Nový projekt"]');
+    await waitFor('!document.querySelector(".dialog-action, .dialog-actions-preview") && !document.querySelector("#message").disabled');
+    assert.equal(await evaluate('document.querySelector(".document-creation")'),null);
+    console.log('PASS: F1 NAV actual-client Chromium: sourced/manual valid direct entry, normal/developer desktop/mobile, deleted manifestation/goal/both deterministic fallback with zero calls and no active old NAV/preview/spinner, restored readiness, missing-field text retains F1, exactly router+analysis for ready NAV, accepted document and reset cleanup.');
+    console.log('Artifacts: '+artifactRoot);
+  } else if (process.argv.includes('--f1-preview-only')) {
     const fresh = async (developer=false, width=1600) => {
       const previousMount = await evaluate('window.fixtureMountId');
       await call('Emulation.setDeviceMetricsOverride',{width,height:width<800?844:1000,deviceScaleFactor:1,mobile:false});

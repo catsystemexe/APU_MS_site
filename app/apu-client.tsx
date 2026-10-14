@@ -65,7 +65,7 @@ import ApuLogo from "./apu-logo";
 import DialogActionCard from "./dialog-action-card";
 import { AnalysisQuestionRow } from "./analysis-question-row";
 import { F2EntrySummary } from "./f2-entry-summary";
-import { resolveF2OutputNavigation, resolveTextDialogEvent, type ConversationPhase, type DialogAction } from "./dialog-action";
+import { resolveDialogEvent, resolveF2OutputNavigation, resolveTextDialogEvent, type ConversationPhase, type DialogAction } from "./dialog-action";
 import {
   COLOR_THEMES,
   ColorThemeId,
@@ -1219,6 +1219,15 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
     if (!isCurrentRequest()) return;
     const textTransition = resolveTextDialogEvent(rawText, compactNotepad(notepadForChat), phase);
     if (phase === "intake" && (dialogEvent === "continue_to_solution" || textTransition === "continue_to_solution")) {
+      const navigation = resolveDialogEvent("continue_to_solution", compactNotepad(notepadForChat), phase);
+      if (navigation?.phase !== "development") {
+        clearF1ProcessingStatus();
+        clearDialogActionsPreview(requestId);
+        setMessages((current) => current.map((message) => message.id === assistantId ? {
+          ...message, content: "", dialogActions: navigation?.dialog_actions ?? [], phaseLabel: "[FÁZE 1]",
+        } : message));
+        return;
+      }
       setPhase("development");
       const result = await refreshStructuredAnalysis(notepadForChat, "", turnId, requestId, "F1");
       if (!result) { setMessages((current) => current.filter((message) => message.id !== assistantId)); return; }
@@ -2091,6 +2100,8 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
                           onOpenAnalysis={() => { if (isDesktop) selectRightView("document"); else setActivePanel("analysis"); }}
                           onOpenBuild={() => selectTool("build")}
                         />
+                      : message.dialogActions?.length
+                      ? null
                       : f1ProcessingStatus?.assistantId === message.id
                       ? <ProcessingStatus stage={f1ProcessingStatus.stage} />
                       : <span className="typing"><i /><i /><i /></span>}

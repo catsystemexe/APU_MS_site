@@ -4,6 +4,12 @@ Status: CURRENT
 
 Records significant verified product/runtime/project changes. It is not a complete Git log. Historical Sites-era entries are retained where they remain useful; current deployment state must not be inferred from a changelog entry alone.
 
+## 2026-10-14 — B1.9-R2 stale F1 NAV readiness guard
+
+- Fixed the client shortcut that trusted an explicit `continue_to_solution` event after required Notebook information was removed. It now reuses `resolveDialogEvent()` on the current compact Notebook before entering F2. Missing manifestation/goal returns the canonical intake MAIN/SIDE set in the pending assistant message, without a model/API request, phase change, router work, analysis or accepted source. Older NAV controls become inactive; action-only final messages no longer show a typing indicator. Ready navigation retains optimized direct F2 entry and unchanged provider operations; text-intent handling and KI-02's manual-record repair remain intact.
+- Verification PASS: typecheck, **120 focused provider-free/mocked regressions**, diff check/review, isolated actual-client Chromium NAV smoke and existing preview smoke. Tested sourced/manual records, deletion/empty records and both-missing priority, restored readiness, actual client shortcut and text navigation, zero stale-click calls, exactly router + analysis for ready clicks, accepted document creation, normal/developer desktop/mobile entry and existing preview failure/retry/reset/late-event/request isolation. Inspected desktop missing-manifestation and missing-goal fallback screenshots. Hosted authentication, native Windows/live-provider and production verification remain **NOT VERIFIED**; full suite not rerun and its three documented baseline failures are not repaired or claimed PASS.
+- Updated Runtime Technical Current only; Backlog and Known Issues unchanged. No shared validator/readiness-policy, extraction/grounding, prompt/model/cache, snapshot/fingerprint/F3 ownership or project-usage changes. No paid API calls, merge or deployment.
+
 ## 2026-10-14 — B1.9-R1 manual Notebook serialization repair
 
 - Resolved KI-02: the previous default filter compared two undefined source IDs and silently omitted source-less manual records. `compactNotepad()` now applies source exclusion only when an explicit exclusion ID exists. All nonempty manual/sourced records retain existing order, IDs, text trimming and need mapping; manual edits remain available. Main's current-turn source exclusion is preserved without extra provider calls.
