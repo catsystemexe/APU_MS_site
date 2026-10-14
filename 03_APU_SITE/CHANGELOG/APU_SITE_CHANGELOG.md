@@ -4,6 +4,13 @@ Status: CURRENT
 
 Records significant verified product/runtime/project changes. It is not a complete Git log. Historical Sites-era entries are retained where they remain useful; current deployment state must not be inferred from a changelog entry alone.
 
+## 2026-10-14 — B1.6-A grounding/Controller observability documentation completion
+
+- Documented the implementation already committed at `5e08e670bfb65fab58606e805d47cfed44fb3a87`: separate primary/rescue grounding handling status, call identity, duration, canonical provider/application status and per-attempt usage; safe failure/skip reasons; candidate counts and monotonic rescue outcome. The existing aggregate grounding stage and its legacy status/timing/usage semantics remain intact.
+- Documented developer-only `controller.rejection_reason` diagnostics alongside the retained coarse `fallback_reason`, plus optional additive grounding/rejection fields in backward-compatible Session JSON schema **1.0**. Diagnostic codes/counts do not expose prompts, question/generated text or raw exception/provider messages. Canonical usage/pricing records, F1 decisions/validation, provider-call counts, models, reasoning and service tiers are unchanged.
+- Verification distinction: prior implementation verification passed **178 tests**, **19 extraction baseline scenarios** and **1,056 Controller validation comparisons**. This documentation-only completion passed typecheck and the requested six-file test command; enumerated execution of those files confirmed **93 tests PASS**, with final diff review/check PASS. Tests used mocked provider/authentication boundaries and made no paid API calls. Native Windows runtime, live-provider integration and hosted/production runtime remain **NOT VERIFIED**; no Windows or production PASS is claimed.
+- Changed only Runtime Technical Current and Changelog. No source/test/dependency changes, new features, PR merge or deployment; Backlog and Known Issues are unchanged.
+
 ## 2026-10-14 — Cloudflare development toolchain compatibility repair
 
 - Removed the duplicate local `nodejs_compat` override from `vite.config.ts`; preserved `wrangler.jsonc` byte-for-byte, including compatibility date **2026-08-21**. Updated only the three requested direct development dependencies: Wrangler **4.150.0**, Cloudflare Vite plugin **1.63.2**, Workers types **5.20261006.1**; regenerated the npm lockfile and matching Cloudflare/native-tooling transitives without force or legacy peer overrides.
