@@ -6,6 +6,13 @@ import assert from "node:assert/strict";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+// Comparison only: native clipboard EOL conversion must not alter content checks.
+const normalizeClipboardEol = text => text.replace(/\r\n?/g, "\n");
+const clipboardEolFixture = "Heading\nParagraph.\n• Item.";
+assert.equal(normalizeClipboardEol(clipboardEolFixture), clipboardEolFixture);
+assert.equal(normalizeClipboardEol(clipboardEolFixture.replace(/\n/g, "\r\n")), clipboardEolFixture);
+assert.equal(normalizeClipboardEol(clipboardEolFixture.replace(/\n/g, "\r")), clipboardEolFixture);
+assert.notEqual(normalizeClipboardEol("Heading\r\nChanged paragraph.\r• Item."), clipboardEolFixture);
 // Run explicitly with Node; requires Chromium (or CHROMIUM_PATH).
 // Mounts the actual client with synthetic responses, without loading secrets,
 // accessing the authenticated server or bypassing Cloudflare Access.
@@ -1134,7 +1141,7 @@ try {
     await waitFor('document.querySelector(".document-export-feedback").textContent.includes("Text zkopírován")');
     const copied=await evaluate('navigator.clipboard.readText()');
     if (!copyA) copyA=copied; else assert.equal(copied,copyA,'copy text must be identical across A/B');
-    assert.equal(copied,await evaluate('window.fixtureTextForSnapshot(window.calls.at(-1).body.sourceSnapshot)'));
+    assert.equal(normalizeClipboardEol(copied),normalizeClipboardEol(await evaluate('window.fixtureTextForSnapshot(window.calls.at(-1).body.sourceSnapshot)')));
     assert.ok(!copied.includes('PROCESS_SUMMARY_EXCLUDED') && !copied.includes('GENERIC_OUTPUT_EXCLUDED'));
     assert.equal((copied.match(/Potřebuji pochopit podmínky zapojení\./g)||[]).length,1);
 
