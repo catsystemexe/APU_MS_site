@@ -435,13 +435,16 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
   const [needRouteError, setNeedRouteError] = useState<string | null>(null);
   const [needClarification, setNeedClarification] = useState("");
   const needRouterRef = useRef<ReturnType<typeof createNeedRouter> | null>(null);
-  if (!needRouterRef.current) needRouterRef.current = createNeedRouter(async (routingInput) => {
-    const response = await fetch("/api/need-route", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(routingInput) });
-    const payload = await response.json().catch(() => null) as ({ decision?: unknown; error?: string } & ModelUsageRecordsResponse) | null;
-    collectModelUsageRecords(payload);
-    if (!response.ok || !payload?.decision) throw new Error(payload?.error || "Cíl potřeby se nepodařilo určit.");
-    return payload.decision;
-  });
+  if (!needRouterRef.current) {
+    const routerProjectEpoch = projectEpochRef.current;
+    needRouterRef.current = createNeedRouter(async (routingInput) => {
+      const response = await fetch("/api/need-route", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(routingInput) });
+      const payload = await response.json().catch(() => null) as ({ decision?: unknown; error?: string } & ModelUsageRecordsResponse) | null;
+      collectModelUsageRecords(payload, routerProjectEpoch);
+      if (!response.ok || !payload?.decision) throw new Error(payload?.error || "Cíl potřeby se nepodařilo určit.");
+      return payload.decision;
+    });
+  }
   const canonicalF2Need = useMemo(() => sourceF2Need && needRoute?.key === sourceNeedKey
     ? bindNeedRoutingDecision(sourceF2Need, needRoute.decision) : null, [sourceF2Need, sourceNeedKey, needRoute]);
   // Hide a previous Build immediately, before synchronization effects run.
@@ -482,10 +485,12 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
       notebookContext: compactNotepad(notepadState).map(({ category, text }) => ({ category, text })) };
   }
 
-  function collectModelUsageRecords(response: unknown) {
+  function collectModelUsageRecords(response: unknown, projectEpoch: number) {
+    if (projectEpoch !== projectEpochRef.current) return;
     const records = readModelUsageRecords(response);
     if (!records.length) return;
-    setModelUsageSession((current) => appendModelUsageSessionRecords(current, records));
+    setModelUsageSession((current) => projectEpoch === projectEpochRef.current
+      ? appendModelUsageSessionRecords(current, records) : current);
   }
 
   async function resolveActiveNeed(need: NonNullable<typeof sourceF2Need>) {
@@ -950,12 +955,13 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
 
   async function executeF2Build() {
     if (!f2Build) return;
+    const projectEpoch = projectEpochRef.current;
     setF2BuildStatus("loading"); setF2BuildError(null);
     try {
       const buildRequest = createF2BuildRequest(f2Build, f2Situation(), selectedModel);
       const response = await fetch("/api/f2", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ operation: "build", model: selectedModel, build: buildRequest }) });
       const payload = await response.json().catch(() => null) as ({ result?: unknown; error?: string } & ModelUsageRecordsResponse) | null;
-      collectModelUsageRecords(payload);
+      collectModelUsageRecords(payload, projectEpoch);
       if (!response.ok || !payload?.result) throw new Error(payload?.error || "Build se nepodařilo rozpracovat.");
       const result = parseF2BuildResult(payload.result, buildRequest.activePath);
       setF2Build((current) => current ? applyF2BuildResult(current, result, buildRequest.activePath, buildRequest.buildRevision) : current);
@@ -994,7 +1000,7 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
     try {
       const response = await fetch("/api/f2", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ operation: "generate-rozbor-components", model: selectedModel, request }) });
       const payload = await response.json().catch(() => null) as ({ components?: unknown; error?: string; diagnostic?: string } & ModelUsageRecordsResponse) | null;
-      collectModelUsageRecords(payload);
+      collectModelUsageRecords(payload, projectEpoch);
       if (!response.ok || !payload?.components) throw new Error(isDeveloper && payload?.diagnostic ? `${payload.error ?? "Rozbor se nepodařilo vytvořit."} ${payload.diagnostic}` : payload?.error || "Rozbor se nepodařilo vytvořit.");
       const generated = parseGeneratedRozborComponents({ components: payload.components }, request.components);
       if (projectEpoch !== projectEpochRef.current) return;
@@ -1012,12 +1018,13 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
 
   async function renderF2Preview() {
     if (!f2Build) return;
+    const projectEpoch = projectEpochRef.current;
     setF2PreviewStatus("loading"); setF2PreviewError(null);
     try {
       const snapshot = createF2PreviewSnapshot(f2Build);
       const response = await fetch("/api/f2", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ operation: "preview", model: selectedModel, snapshot }) });
       const payload = await response.json().catch(() => null) as ({ result?: unknown; error?: string } & ModelUsageRecordsResponse) | null;
-      collectModelUsageRecords(payload);
+      collectModelUsageRecords(payload, projectEpoch);
       if (!response.ok || !payload?.result) throw new Error(payload?.error || "Preview se nepodařilo vytvořit.");
       setF2Preview(acceptRenderedPreview(snapshot, parseF2RenderedPreview(payload.result))); setF2PreviewStatus("idle"); setActivePanel("output");
     } catch (cause) { setF2PreviewError(cause instanceof Error ? cause.message : "Preview se nepodařilo vytvořit."); setF2PreviewStatus("error"); }
@@ -1046,7 +1053,7 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
       const renderRequest = createF3RenderRequest(f3State, selectedModel);
       const response = await fetch("/api/f3", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(renderRequest) });
       const payload = await response.json().catch(() => null) as ({ result?: unknown; error?: string; diagnostic?: string } & ModelUsageRecordsResponse) | null;
-      collectModelUsageRecords(payload);
+      collectModelUsageRecords(payload, projectEpoch);
       if (!response.ok || !payload?.result) throw new Error(isDeveloper && payload?.diagnostic ? `${payload.error ?? "Finální výstup se nepodařilo vytvořit."} ${payload.diagnostic}` : payload?.error || "Finální výstup se nepodařilo vytvořit.");
       if (projectEpoch !== projectEpochRef.current) return;
       const result = parseF3RenderResult(payload.result);
@@ -1082,7 +1089,7 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
         }),
       });
       const responseResult = await response.json().catch(() => null) as ({ analysis?: AnalysisState; diagnostics?: Diagnostics; telemetry?: Partial<SessionTelemetry>; error?: string } & ModelUsageRecordsResponse) | null;
-      collectModelUsageRecords(responseResult);
+      collectModelUsageRecords(responseResult, projectEpoch);
       if (!response.ok || !responseResult?.analysis) throw new Error(responseResult?.error || "Rozbor se nepodařilo aktualizovat.");
       if (projectEpoch !== projectEpochRef.current) return null;
       if (sourceNeed && latestSourceNeedKeyRef.current !== activeNeedRoutingKey(sourceNeed)) throw new Error("Pedagogická potřeba se mezitím změnila.");
@@ -1216,7 +1223,7 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
     const requestScope = assistantRequestRef.current;
     const isCurrentRequest = () => requestScope?.requestId === requestId && requestScope.assistantId === assistantId
       && assistantRequestRef.current === requestScope && projectEpochRef.current === requestScope.epoch;
-    if (!isCurrentRequest()) return;
+    if (!requestScope || !isCurrentRequest()) return;
     const textTransition = resolveTextDialogEvent(rawText, compactNotepad(notepadForChat), phase);
     if (phase === "intake" && (dialogEvent === "continue_to_solution" || textTransition === "continue_to_solution")) {
       const navigation = resolveDialogEvent("continue_to_solution", compactNotepad(notepadForChat), phase);
@@ -1320,7 +1327,7 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
     const processLine = (line: string) => {
       if (!line.trim() || !isCurrentRequest()) return;
       const event = JSON.parse(line);
-      collectModelUsageRecords(event);
+      collectModelUsageRecords(event, requestScope.epoch);
       if (event.type === "dialog_actions_preview" && phase === "intake" && requestScope?.previewAllowed
         && !receivedDone && Array.isArray(event.dialogActions) && event.dialogActions.length > 0) {
         setDialogActionsPreview({ requestId, assistantId, actions: event.dialogActions as DialogAction[] });
@@ -1508,6 +1515,7 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
 
         if (!extractionRequest.ok) {
           const detail = await extractionRequest.json().catch(() => null) as { error?: string } | null;
+          collectModelUsageRecords(detail, requestScope.epoch);
           throw new Error(detail?.error || "Zápisník se nepodařilo aktualizovat.");
         }
 
@@ -1516,8 +1524,8 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
           diagnostics?: Diagnostics;
           telemetry?: Partial<SessionTelemetry>;
         } & ModelUsageRecordsResponse;
+        collectModelUsageRecords(result, requestScope.epoch);
         if (!isCurrentRequest()) return;
-        collectModelUsageRecords(result);
         if (result.telemetry) setSessionTelemetry((current) => current.map((item) => item.request_id === requestId
           ? mergeSessionTelemetry(item, result.telemetry as Partial<SessionTelemetry>) : item));
         const boundaryRequiresDecision = result.extraction.situationRelation === "different" ||

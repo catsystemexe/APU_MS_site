@@ -6,7 +6,7 @@ const client = await readFile(new URL("../app/apu-client.tsx", import.meta.url),
 
 test("client collects canonical records from every non-streaming response path without a role gate", () => {
   assert.match(client, /setModelUsageSession/);
-  assert.equal((client.match(/collectModelUsageRecords\((?:payload|responseResult|result)\)/g) ?? []).length, 7);
+  assert.equal((client.match(/collectModelUsageRecords\((?:payload|responseResult|result|detail), (?:projectEpoch|routerProjectEpoch|requestScope\.epoch)\)/g) ?? []).length, 8);
   const collector = client.slice(client.indexOf("function collectModelUsageRecords"), client.indexOf("useEffect", client.indexOf("function collectModelUsageRecords")));
   assert.match(collector, /readModelUsageRecords/);
   assert.match(collector, /appendModelUsageSessionRecords/);
@@ -16,8 +16,8 @@ test("client collects canonical records from every non-streaming response path w
 test("chat sends the canonical request id and collects terminal stream records before errors", () => {
   assert.match(client, /controllerFastPathEligible[^]*requestId,\s*turnId,/);
   const processLine = client.slice(client.indexOf("const processLine = (line: string)"), client.indexOf("while (true)", client.indexOf("const processLine = (line: string)")));
-  assert.match(processLine, /collectModelUsageRecords\(event\)/);
-  assert.ok(processLine.indexOf("collectModelUsageRecords(event)") < processLine.indexOf('event.type === "error"'));
+  assert.match(processLine, /collectModelUsageRecords\(event, requestScope\.epoch\)/);
+  assert.ok(processLine.indexOf("collectModelUsageRecords(event, requestScope.epoch)") < processLine.indexOf('event.type === "error"'));
 });
 
 test("raw records and their derived summary are cleared with the client session and are not exported in schema 1.0", () => {

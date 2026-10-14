@@ -4,6 +4,25 @@ Status: CURRENT SOURCE/RUNTIME CONTRACT
 
 Purpose: describe the current repository/runtime contract. Deployment state is recorded only when independently verified; this document must not infer production state from repository contents alone.
 
+## B1.9-R3 — Project-scoped canonical usage ingestion (2026-10-14)
+
+- Model usage belongs to the project epoch captured before the request's asynchronous work. `collectModelUsageRecords(response, projectEpoch)` rejects mismatched ownership before parsing/scheduling ingestion and checks the epoch again inside the React state updater. Reset continues to increment the existing epoch and clear usage, Session telemetry, clocks and session identity; no new identifier or persistence is introduced. Queued old-project updaters and delayed responses cannot append to the new project's ledger or change its token/cost summary.
+- Every existing producer supplies ownership explicitly:
+
+| Producer | Captured ownership |
+| --- | --- |
+| F1 extraction, including canonical records in error responses | `sendMessage()` request scope epoch, captured before extraction |
+| Quest Controller / Main stream events | `requestAssistant()` captured request scope epoch, behind existing request/project event guards |
+| Need Router | Epoch captured when the project-scoped router instance is constructed, before its deferred Promise callback |
+| F2 analysis | Epoch captured at `refreshStructuredAnalysis()` entry, before routing |
+| Legacy F2 Build | Epoch captured at `executeF2Build()` entry |
+| F2 Rozbor component generation | Existing epoch captured before generation |
+| Legacy F2 Preview | Epoch captured at `renderF2Preview()` entry |
+| F3 materialization | Existing epoch captured before materialization |
+
+- Usage remains independent of application acceptance: valid current-project records are collected before output validation, error handling and source-currency rejection. Failed provider/error responses, invalid structured output and obsolete working-source responses remain accounted when canonical records exist. Terminal Main error records are ingested before the existing error is raised. Canonical validation, immutable identities, `call_id` upsert/deduplication, pricing snapshots and summary recomputation remain unchanged. Collection is role-independent; diagnostics visibility remains developer-only. Session JSON remains schema 1.0 with its existing export boundaries and request-bound telemetry.
+- Verification PASS in Codex Cloud/Linux: typecheck, **127 focused provider-free/mocked tests** including **20 actual-client-function ownership regressions**, diff check/review, deferred actual-client Chromium usage smoke, existing preview smoke and full workspace Chromium smoke. Covered old successful/failed F3 responses, new-project/old-response overlap, zero reset-project usage, current failed/invalid/source-obsolete usage, all legacy/current generation producers, analysis, router callbacks starting after reset, extraction, queued React updates, immutable identity/deduplication, terminal stream errors and unchanged Session JSON/usage contracts. Inspected the new-project-only developer summary screenshot (one call, 110 tokens); normal/developer responsive behavior and existing F1/F2/F3/export flows passed the full fixture. Hosted authentication, native Windows/live-provider and production verification remain **NOT VERIFIED**. The full Node suite was not rerun; its three documented baseline failures remain outside scope. No provider request-count, pricing/schema, NAV, extraction/grounding, model/cache or analytical contract change; no merge or deployment.
+
 ## B1.9-R2 — Current Notebook readiness before F1 NAV (2026-10-14)
 
 - Before the client accepts an intake `continue_to_solution` click or a ready text transition, `requestAssistant()` revalidates the current compact Notebook with the existing canonical `resolveDialogEvent()` policy. A previously rendered NAV card is not proof of present readiness. Nonempty manual manifestations and needs count through the unchanged B1.9-R1 compaction repair; deleted/empty records do not. Text-intent detection and missing-field text handling remain unchanged.

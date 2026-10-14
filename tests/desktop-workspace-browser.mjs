@@ -56,6 +56,15 @@ const nativeFetch = window.fetch.bind(window);
 window.calls = [];
 window.fixtureMountId = Math.random().toString(36);
 window.previewChats = [];
+window.usageRequests = [];
+window.finishUsageRequest = (index, record, failed=false) => {
+  const pending=window.usageRequests[index];
+  const result=pending.url==='/api/f3'?{result:{kind:'material',title:'Synthetic output',introduction:'Accepted source.',sections:[{heading:'Source context',content:'Accepted source content.'}],table:null,cards:[],usageNote:null}}
+    :pending.url==='/api/need-route'?{decision:{path:'POCHOPIT',clarification:null}}
+    :pending.url==='/api/extract'?{extraction:{situationRelation:'same',situationReason:null,candidates:[]}}
+    :{analysis};
+  pending.resolve(Response.json({...(failed?{error:'Synthetic failure.'}:result),model_usage_records:[record]},{status:failed?502:200}));
+};
 window.previewActions = fallbackQuestController([{category:'manifestations',text:'Synthetic observation.'},{category:'goals',text:'Understand the situation.'}], 'intake').dialog_actions;
 window.fixtureFallbackQuestion = target => fallbackQuestController(target==='teacher_need'?[{category:'manifestations',text:'Synthetic observation.'}]:[], 'intake').dialog_actions[0].question;
 window.finishPreview = (kind='done', index=window.previewChats.length-1, text='Dokončená odpověď.') => {
@@ -73,6 +82,10 @@ window.finishPreview = (kind='done', index=window.previewChats.length-1, text='D
 window.fetch = async (url, init) => {
   if (!String(url).startsWith('/api/')) return nativeFetch(url, init);
   const body = JSON.parse(String(init?.body || '{}')); window.calls.push({ url, body });
+  if(window.deferUsageUrl===url) {
+    window.deferUsageUrl=null;
+    return new Promise(resolve=>window.usageRequests.push({url,body,resolve}));
+  }
   if (url === '/api/chat') {
     if(window.previewNextChat) {
       window.previewNextChat=false;
@@ -163,7 +176,74 @@ try {
     await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
     await waitFor('!document.querySelector(".welcome-help")');
   };
-  if (process.argv.includes('--f1-nav-only')) {
+  if (process.argv.includes('--usage-isolation-only')) {
+    const {createModelUsageRecord,finalizeModelUsageRecord}=await import('../app/usage-ledger.ts');
+    const record=(id,phase='F3',operation='f3_render',failed=false)=>finalizeModelUsageRecord(createModelUsageRecord({
+      call_id:id,request_id:'request-'+id,turn_id:null,phase,operation,attempt_index:0,retry_of_call_id:null,fallback_for_call_id:null,
+      started_at:'2026-10-14T10:00:00.000Z',completed_at:null,requested_model:'gpt-5.6-terra',reported_model:null,reasoning_effort:'low',requested_service_tier:'default',reported_service_tier:null,
+      provider_request_id:null,provider_response_id:null,provider_status:'unknown',application_status:'not_applicable',error:null,
+    }),{completed_at:'2026-10-14T10:00:01.000Z',provider_status:failed?'failed':'completed',application_status:failed?'failed':'accepted',provider_usage:{input_tokens:100,output_tokens:10}});
+    const finish=async(index,id,phase='F3',operation='f3_render',failed=false)=>evaluate(`window.finishUsageRequest(${index},${JSON.stringify(record(id,phase,operation,failed))},${failed})`);
+    const fresh=async()=>{
+      const mount=await evaluate('window.fixtureMountId'); await call('Page.navigate',{url:'http://127.0.0.1:4333/?developer=1'});
+      await waitFor(`window.fixtureMountId!==${JSON.stringify(mount)} && document.querySelector("#message") && !document.querySelector("#message").disabled`);
+    };
+    const reset=async()=>{
+      await evaluate(`window.confirm=()=>true;(()=>{const b=document.querySelector('button[aria-label="Nový projekt"]');const k=Object.keys(b).find(k=>k.startsWith('__reactProps$'));b[k].onClick();})()`);
+      await waitFor('!document.querySelector("#message").disabled && !document.querySelector(".document-creation, .dialog-actions-preview")');
+    };
+    const summary=async()=>{
+      if(!await evaluate('Boolean(document.querySelector("#conversation-stats-popover"))')) await click('.conversation-diagnostics .stats-trigger');
+      return evaluate(`Object.fromEntries(Array.from(document.querySelectorAll('#conversation-stats-popover dl > div')).filter(el=>el.querySelector('dt')&&el.querySelector('dd')).map(el=>[el.querySelector('dt').textContent,el.querySelector('dd').textContent]))`);
+    };
+    const check=async(count,tokens)=>{
+      const s=await summary(); assert.equal(s['API volání'],String(count)); assert.equal(s['Celkem'],String(tokens));
+    };
+    const ready=async()=>{
+      await evaluate('window.previewNextChat=true'); await typeInput('Testovací zpráva.'); await click('.send-button');
+      await waitFor('document.querySelector(".dialog-actions-preview")'); await evaluate('window.finishPreview()');
+      await waitFor('document.querySelector(".dialog-action-nav-card:not(:disabled)") && !document.querySelector("#message").disabled');
+      await click('.dialog-action-nav-card:not(:disabled)'); await waitFor('document.querySelector(".document-creation") && !document.querySelector("#message").disabled');
+      await click('.desktop-tool-tabs button[aria-controls="desktop-tool-output"]');
+      await waitFor('document.querySelector(".f3-controls select")');
+      await evaluate(`(()=>{const el=document.querySelector('.f3-controls select');el.value='parent';el.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+      await waitFor('!document.querySelector(".f3-render-action button").disabled');
+    };
+    const beginF3=async()=>{const count=await evaluate('window.usageRequests.length');await evaluate('window.deferUsageUrl="/api/f3"');await click('.f3-render-action button');await waitFor(`window.usageRequests.length===${count+1}`);return count;};
+    const refill=async()=>{
+      for(const [category,text] of [['manifestations','Při dlouhém kruhu dítě vstává.'],['goals','Potřebuji pochopit podmínky zapojení.']]) {
+        const parent='.notepad-category[aria-labelledby="notepad-'+category+'"]';await click(parent+' .add-notepad-item');
+        await waitFor(`document.querySelector(${JSON.stringify(parent+' textarea')})`);
+        await evaluate(`(()=>{const el=document.querySelector(${JSON.stringify(parent+' textarea')});Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(el,${JSON.stringify(text)});el.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+      }
+    };
+    for(const failed of [false,true]) {
+      await fresh(); await ready(); const a=await beginF3(); await reset(); await finish(a,'old-f3','F3','f3_render',failed);
+      await new Promise(resolve=>setTimeout(resolve,80)); await check(0,0);
+      assert.equal(await evaluate('document.querySelector(".document-creation, .f3-material, .document-update-overlay")'),null);
+    }
+    await fresh(); await ready(); const a=await beginF3(); await reset(); await refill(); await ready(); const b=await beginF3();
+    await finish(b,'new-f3'); await waitFor('!document.querySelector(".document-update-overlay")'); await check(1,110);
+    assert.equal(await evaluate('document.body.textContent.includes("Model vrátil neúplný nebo neplatný F3 výsledek")'),false,'B accepts the valid generated representation');
+    await finish(a,'old-f3'); await new Promise(resolve=>setTimeout(resolve,80)); await check(1,110);
+    await capture('usage-new-project-only');
+    await fresh(); await ready(); const failure=await beginF3(); await finish(failure,'current-failed','F3','f3_render',true);
+    await waitFor('!document.querySelector(".document-update-overlay")'); await check(1,110);
+    for(const phase of ['extraction','router']) {
+      await fresh();
+      if(phase==='router') {
+        await evaluate('window.previewNextChat=true');await typeInput('Testovací zpráva.');await click('.send-button');await waitFor('document.querySelector(".dialog-actions-preview")');await evaluate('window.finishPreview()');await waitFor('!document.querySelector("#message").disabled');
+        await evaluate('window.deferUsageUrl="/api/need-route"');await click('.dialog-action-nav-card:not(:disabled)');
+      } else {await evaluate('window.deferUsageUrl="/api/extract"');await typeInput('Testovací zpráva.');await click('.send-button');}
+      await waitFor('window.usageRequests.length===1');await reset();const calls=await evaluate('window.calls.length');
+      await finish(0,'old-'+phase,phase==='router'?'F2':'F1',phase==='router'?'need_routing':'extraction');await new Promise(resolve=>setTimeout(resolve,80));await check(0,0);
+      assert.equal(await evaluate('window.calls.length'),calls,'old response does not continue the reset conversation');
+    }
+    await fresh();await evaluate('window.deferUsageUrl="/api/extract"');await typeInput('Testovací zpráva.');await click('.send-button');await waitFor('window.usageRequests.length===1');
+    await finish(0,'failed-extraction','F1','extraction',true);await waitFor('!document.querySelector("#message").disabled');await check(1,110);
+    console.log('PASS: Project usage actual-client Chromium: old successful/failed F3 ignored after reset, B request overlaps old A completion, current failed F3/extraction counted, old router/extraction excluded, new-project summary has only its actual call/tokens, no post-reset document revival.');
+    console.log('Artifacts: '+artifactRoot);
+  } else if (process.argv.includes('--f1-nav-only')) {
     const fresh = async (manual=false, developer=false, width=1600) => {
       const mount = await evaluate('window.fixtureMountId');
       await call('Emulation.setDeviceMetricsOverride',{width,height:width<800?844:1000,deviceScaleFactor:1,mobile:false});
