@@ -76,3 +76,49 @@ test("invalid timing values are exported as null and excluded from summary media
 test("session export filename is a JSON file", () => {
   assert.match(sessionExportFilename("2026-08-16T10:02:03.000Z"), /^apu-session-2026-08-16-\d{6}\.json$/);
 });
+
+test("legacy Session JSON stays schema 1.0 with unchanged stages/summary when optional observability is absent", () => {
+  const base = createSessionTelemetry({ requestId: "legacy", turnId: "turn", phase: "intake", startedAt: "2026-10-14T00:00:00Z" });
+  const telemetry = mergeSessionTelemetry(base, {
+    stages: [{ name: "extract", status: "completed", duration_ms: 20 }, { name: "grounding", status: "completed", duration_ms: 30 }],
+    controller: { mode: "llm_fallback", fallback_reason: "provider_failure" },
+  });
+  const data = buildSessionExport({
+    session: { id: "legacy", startedAt: base.started_at, phase: "intake", communicationProfile: "colleague", activePanel: null, appVersion: "test", coreVersion: "test", coreReleaseId: "test", runtimeWrapper: "test" },
+    messages: [], notepad: emptyNotepad, analysis: null, output: null, telemetry: [telemetry],
+  });
+  assert.equal(data.schema_version, "1.0");
+  assert.equal(data.telemetry[0].path, "extract-grounding");
+  assert.equal(Object.hasOwn(data.telemetry[0], "grounding"), false);
+  assert.equal(Object.hasOwn(data.telemetry[0].controller, "rejection_reason"), false);
+  assert.deepEqual(data.telemetry[0].stages, telemetry.stages);
+  assert.equal(data.summary_metrics.requests, 1);assert.equal(data.summary_metrics.f1_requests, 1);
+});
+
+test("optional primary/rescue and controller rejection details survive merge/export without changing legacy aggregation", () => {
+  const base = createSessionTelemetry({ requestId: "modern", turnId: "turn", phase: "intake", startedAt: "2026-10-14T00:00:00Z" });
+  const client = mergeSessionTelemetry(base, { latency_ms: { user_to_first_token: 800 } });
+  const usage = { input_tokens: 10, cached_input_tokens: null, cache_write_tokens: null, output_tokens: 2, reasoning_tokens: null, total_tokens: 12 };
+  const grounding = {
+    primary: { status: "completed", call_id: "primary", duration_ms: 20, model: "gpt-5.6-luna", provider_status: "completed", application_status: "accepted", failure_reason: null, skipped_reason: null, usage },
+    rescue: { status: "failed", call_id: "rescue", duration_ms: 30, model: "gpt-5.6-luna", provider_status: "completed", application_status: "rejected_invalid_output", failure_reason: "grounding_contract_validation_failure", skipped_reason: null, usage },
+    counts: { submitted: 2, primary_accepted: 1, primary_explicit_rejected: 1, primary_unresolved: 0, rescue_submitted: 1, rescue_accepted: 0, final_accepted: 1 },
+  };
+  const telemetry = mergeSessionTelemetry(client, {
+    stages: [{ name: "extract", status: "completed", duration_ms: 10 }, { name: "grounding", status: "completed", duration_ms: 50 }],
+    latency_ms: { user_to_first_token: null }, grounding,
+    controller: { mode: "llm_fallback", fallback_reason: "controller_contract_validation_failure", rejection_reason: "nav_option_mismatch" },
+  });
+  const data = buildSessionExport({
+    session: { id: "modern", startedAt: base.started_at, phase: "intake", communicationProfile: "colleague", activePanel: null, appVersion: "test", coreVersion: "test", coreReleaseId: "test", runtimeWrapper: "test" },
+    messages: [], notepad: emptyNotepad, analysis: null, output: null, telemetry: [telemetry],
+  });
+  const serialized = JSON.parse(JSON.stringify(data));
+  assert.equal(serialized.schema_version, "1.0");
+  assert.deepEqual(serialized.telemetry[0].grounding, grounding);
+  assert.deepEqual(serialized.telemetry[0].controller, telemetry.controller);
+  assert.equal(serialized.telemetry[0].path, "extract-grounding");
+  assert.equal(serialized.telemetry[0].latency_ms.user_to_first_token, 800);
+  assert.equal(serialized.summary_metrics.requests, 1);
+  assert.equal(serialized.summary_metrics.median_user_to_first_token_ms, 800);
+});

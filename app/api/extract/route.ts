@@ -2,6 +2,9 @@ import { estimateCostUsd } from "../../model-config";
 import { F2_PATHS, locateSourceQuote, type F2Path } from "../../notepad-model";
 import { getAccessIdentity } from "../../access-auth";
 import { callOpenAIResponses, createRequestUsageCollector, modelUsagePayload, usageErrorPayload, type RequestUsageCollector } from "../../openai-responses-instrumentation";
+import { InstrumentedModelCallError } from "../../model-call-instrumentation";
+import type { ModelUsageRecord } from "../../usage-ledger";
+import type { GroundingAttemptTelemetry, GroundingFailureReason, GroundingTelemetry } from "../../session-export";
 import {
   EXTRACTION_SCHEMA,
   GROUNDING_SCHEMA,
@@ -84,6 +87,41 @@ function jsonError(message: string, status = 500, collector?: RequestUsageCollec
   return Response.json(collector ? modelUsagePayload({ error: message }, collector) : { error: message }, { status });
 }
 
+class MissingGroundingOutputError extends Error {}
+
+function groundingFailureReason(error: unknown, record?: ModelUsageRecord): GroundingFailureReason {
+  if (record?.provider_status === "failed") return "provider_failure";
+  if (record?.provider_status === "incomplete") return "incomplete_provider_response";
+  if (record?.provider_status === "transport_error") return "transport_failure";
+  const cause = error instanceof InstrumentedModelCallError ? error.cause : error;
+  if (cause instanceof SyntaxError) return "json_parse_failure";
+  if (cause instanceof MissingGroundingOutputError) return "missing_structured_output";
+  if (record?.application_status === "rejected_invalid_output") return "grounding_contract_validation_failure";
+  return "unknown_failure";
+}
+
+function observeGrounding(
+  model: string,
+  status: GroundingAttemptTelemetry["status"],
+  started: number | null,
+  record?: ModelUsageRecord,
+  failureReason: GroundingFailureReason | null = null,
+  skippedReason: GroundingAttemptTelemetry["skipped_reason"] = null,
+): GroundingAttemptTelemetry {
+  return {
+    status, model, call_id: record?.call_id ?? null,
+    duration_ms: started === null ? null : Math.round(performance.now() - started),
+    provider_status: record?.provider_status ?? null,
+    application_status: record?.application_status ?? null,
+    failure_reason: failureReason, skipped_reason: skippedReason,
+    usage: record ? {
+      input_tokens: record.usage.input_tokens, cached_input_tokens: record.usage.cached_input_tokens,
+      cache_write_tokens: record.usage.cache_write_tokens, output_tokens: record.usage.output_tokens,
+      reasoning_tokens: record.usage.reasoning_tokens, total_tokens: record.usage.provider_total_tokens,
+    } : null,
+  };
+}
+
 async function verifyPrimaryGrounding(
   apiKey: string,
   requestId: string,
@@ -92,8 +130,9 @@ async function verifyPrimaryGrounding(
   candidates: RawCandidate[],
   collector: RequestUsageCollector,
 ) {
-  if (!candidates.length) return { verdicts: null };
+  if (!candidates.length) return { verdicts: null, observation: observeGrounding(EXTRACTION_MODEL, "skipped", null, undefined, null, "no_candidates") };
 
+  const started = performance.now();
   try {
     const { usage_record, application_result } = await callOpenAIResponses({
       api_key: apiKey, request_id: requestId, phase: "F1", operation: "grounding", requested_model: EXTRACTION_MODEL, reasoning_effort: PRODUCTION_EXTRACTION_REASONING, requested_service_tier: "default", collector,
@@ -120,14 +159,19 @@ async function verifyPrimaryGrounding(
       store: false,
       },
       validate_application_response: (providerResponse) => {
-        const text = extractResponseText(providerResponse); if (!text) throw new Error("missing structured output");
+        const text = extractResponseText(providerResponse); if (!text) throw new MissingGroundingOutputError("missing structured output");
         return JSON.parse(text) as { verdicts?: unknown };
       },
     });
-    if (usage_record.provider_status !== "completed" || !application_result || !Array.isArray(application_result.verdicts)) return { verdicts: null };
-    return { verdicts: application_result.verdicts };
-  } catch {
-    return { verdicts: null };
+    if (usage_record.provider_status !== "completed" || !application_result || !Array.isArray(application_result.verdicts)) {
+      const reason = usage_record.provider_status === "completed" ? "grounding_contract_validation_failure"
+        : groundingFailureReason(null, usage_record);
+      return { verdicts: null, observation: observeGrounding(EXTRACTION_MODEL, "failed", started, usage_record, reason) };
+    }
+    return { verdicts: application_result.verdicts, observation: observeGrounding(EXTRACTION_MODEL, "completed", started, usage_record) };
+  } catch (error) {
+    const record = error instanceof InstrumentedModelCallError ? error.usage_record : undefined;
+    return { verdicts: null, observation: observeGrounding(EXTRACTION_MODEL, "failed", started, record, groundingFailureReason(error, record)) };
   }
 }
 
@@ -139,42 +183,64 @@ async function verifyGrounding(
   candidates: RawCandidate[],
   collector: RequestUsageCollector,
 ) {
-  if (!candidates.length) return { acceptedIndexes: new Set<number>() };
   const primary = await verifyPrimaryGrounding(apiKey, requestId, message, notebook, candidates, collector);
+  let rescueObservation = observeGrounding(PRODUCTION_GROUNDING_RESCUE_MODEL, "skipped", null, undefined, null,
+    !candidates.length ? "no_candidates" : primary.observation.status === "failed" ? "primary_failed" : "no_explicit_rejections");
   const result = await applyMonotonicGroundingRescue(candidates, primary.verdicts, async (rescueCandidates) => {
-    const rescue = await callOpenAIResponses<{ verdicts: GroundingRescueVerdict[] }>({
-      api_key: apiKey, request_id: requestId, phase: "F1", operation: "grounding", requested_model: PRODUCTION_GROUNDING_RESCUE_MODEL, reasoning_effort: PRODUCTION_GROUNDING_RESCUE_REASONING, requested_service_tier: "default", collector,
-      payload: {
-        model: PRODUCTION_GROUNDING_RESCUE_MODEL,
-        reasoning: { effort: PRODUCTION_GROUNDING_RESCUE_REASONING },
-        instructions: GROUNDING_RESCUE_INSTRUCTIONS,
-        input: JSON.stringify({
-          currentNotebook: notebook,
-          newUserMessage: message,
-          candidates: rescueCandidates.map((candidate, index) => ({ index, ...candidate })),
-        }),
-        text: {
-          format: {
-            type: "json_schema",
-            name: "apu_notepad_grounding_rescue",
-            description: "Úzká monotónní záchrana explicitně zamítnutých grounding kandidátů.",
-            strict: true,
-            schema: GROUNDING_RESCUE_SCHEMA,
+    const started = performance.now();
+    let record: ModelUsageRecord | undefined;
+    try {
+      const rescue = await callOpenAIResponses<{ verdicts: GroundingRescueVerdict[] }>({
+        api_key: apiKey, request_id: requestId, phase: "F1", operation: "grounding", requested_model: PRODUCTION_GROUNDING_RESCUE_MODEL, reasoning_effort: PRODUCTION_GROUNDING_RESCUE_REASONING, requested_service_tier: "default", collector,
+        payload: {
+          model: PRODUCTION_GROUNDING_RESCUE_MODEL,
+          reasoning: { effort: PRODUCTION_GROUNDING_RESCUE_REASONING },
+          instructions: GROUNDING_RESCUE_INSTRUCTIONS,
+          input: JSON.stringify({
+            currentNotebook: notebook,
+            newUserMessage: message,
+            candidates: rescueCandidates.map((candidate, index) => ({ index, ...candidate })),
+          }),
+          text: {
+            format: {
+              type: "json_schema",
+              name: "apu_notepad_grounding_rescue",
+              description: "Úzká monotónní záchrana explicitně zamítnutých grounding kandidátů.",
+              strict: true,
+              schema: GROUNDING_RESCUE_SCHEMA,
+            },
           },
+          max_output_tokens: Math.min(4_000, Math.max(1_200, 500 + rescueCandidates.length * 180)),
+          service_tier: "default",
+          store: false,
         },
-        max_output_tokens: Math.min(4_000, Math.max(1_200, 500 + rescueCandidates.length * 180)),
-        service_tier: "default",
-        store: false,
-      },
-      validate_application_response: (providerResponse) => {
-        const text = extractResponseText(providerResponse); if (!text) throw new Error("missing structured output");
-        return validateGroundingRescueVerdicts(JSON.parse(text), rescueCandidates.length);
-      },
-    });
-    if (rescue.usage_record.provider_status !== "completed" || !rescue.application_result) throw new Error("grounding rescue failed");
-    return rescue.application_result;
+        validate_application_response: (providerResponse) => {
+          const text = extractResponseText(providerResponse); if (!text) throw new MissingGroundingOutputError("missing structured output");
+          return validateGroundingRescueVerdicts(JSON.parse(text), rescueCandidates.length);
+        },
+      });
+      record = rescue.usage_record;
+      if (rescue.usage_record.provider_status !== "completed" || !rescue.application_result) throw new Error("grounding rescue failed");
+      rescueObservation = observeGrounding(PRODUCTION_GROUNDING_RESCUE_MODEL, "completed", started, record);
+      return rescue.application_result;
+    } catch (error) {
+      record = error instanceof InstrumentedModelCallError ? error.usage_record : record;
+      rescueObservation = observeGrounding(PRODUCTION_GROUNDING_RESCUE_MODEL, "failed", started, record, groundingFailureReason(error, record));
+      throw error;
+    }
   });
-  return { acceptedIndexes: result.acceptedIndexes };
+  const primaryAccepted = result.primaryAcceptedIndexes.size;
+  const explicitRejected = result.rescueCandidateOriginalIndexes.length;
+  const observation: GroundingTelemetry = {
+    primary: primary.observation, rescue: rescueObservation,
+    counts: {
+      submitted: candidates.length, primary_accepted: primaryAccepted, primary_explicit_rejected: explicitRejected,
+      primary_unresolved: candidates.length - primaryAccepted - explicitRejected,
+      rescue_submitted: result.rescueAttempted ? explicitRejected : 0,
+      rescue_accepted: result.acceptedIndexes.size - primaryAccepted, final_accepted: result.acceptedIndexes.size,
+    },
+  };
+  return { acceptedIndexes: result.acceptedIndexes, observation };
 }
 
 export async function POST(request: Request) {
@@ -315,6 +381,7 @@ export async function POST(request: Request) {
     context_sizes: { unit: "chars", core: intakeCore.length, runtime_instructions: null, notebook: JSON.stringify(notebook).length, previous_analysis: null, user_message: body.message.length, previous_response_context: null },
     tools: { file_search: { available: false, invoked: false, calls: 0, duration_ms: null } },
     notebook_mutation: { added: candidates.filter((candidate) => candidate.action === "add").length, updated: 0, conflicts: candidates.filter((candidate) => candidate.action === "conflict").length, rejected_by_grounding: candidatesRequiringGrounding.length - candidates.filter((candidate) => candidate.action === "add" || candidate.action === "conflict").length },
+    grounding: grounding.observation,
     streaming: { model: false, backend: false, transport: false, ui: false },
   };
 

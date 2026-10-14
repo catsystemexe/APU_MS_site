@@ -7,6 +7,7 @@ import {
   type ConversationPhase,
   type IntakeRefinementContext,
   type IntakeNotebookItem,
+  type QuestControllerRejectionReason,
   validateQuestControllerResult,
 } from "./dialog-action.ts";
 import type { DebugMapping } from "./response-metadata.ts";
@@ -23,7 +24,13 @@ export type QuestControllerFallbackReason =
   | "controller_contract_validation_failure"
   | "unknown_failure";
 
-class ControllerContractValidationError extends Error {}
+class ControllerContractValidationError extends Error {
+  readonly reason: QuestControllerRejectionReason | null;
+  constructor(reason: QuestControllerRejectionReason | null) {
+    super("invalid controller response");
+    this.reason = reason;
+  }
+}
 
 function controllerFallbackReason(error: unknown): QuestControllerFallbackReason {
   if (error instanceof InstrumentedModelCallError) {
@@ -162,29 +169,35 @@ export async function runQuestController(args: {
       },
       validate_application_response: (providerResponse) => {
         const parsed = JSON.parse(responseText(providerResponse)) as { chat_navigation_event?: unknown };
+        let rejectionReason: QuestControllerRejectionReason | null = null;
         const result = validateQuestControllerResult(
           parsed,
           args.notebook,
           args.phase,
           args.refinement,
           args.applyIntakePolicy,
+          (reason) => { rejectionReason = reason; },
         );
         if (result && parsed.chat_navigation_event === "continue_to_solution" && args.applyIntakePolicy &&
           args.phase === "intake" && requiredIntakeTarget(args.notebook) === null) {
           const transitioned = resolveDialogEvent("continue_to_solution", args.notebook, args.phase);
           if (transitioned) return transitioned;
         }
-        if (!result) throw new ControllerContractValidationError("invalid controller response");
+        if (!result) throw new ControllerContractValidationError(rejectionReason);
         return result;
       },
     });
     if (usage_record.provider_status !== "completed" || !application_result) {
       const fallbackReason: QuestControllerFallbackReason = usage_record.provider_status === "failed" ? "provider_failure"
         : usage_record.provider_status === "incomplete" ? "incomplete_provider_response" : "unknown_failure";
-      return { result: fallback, response: null, usedFallback: true, fallbackReason };
+      return { result: fallback, response: null, usedFallback: true, fallbackReason, rejectionReason: null };
     }
-    return { result: application_result, response: response.body as ControllerResponse, usedFallback: false, fallbackReason: null };
+    return { result: application_result, response: response.body as ControllerResponse, usedFallback: false, fallbackReason: null, rejectionReason: null };
   } catch (error) {
-    return { result: fallback, response: null, usedFallback: true, fallbackReason: controllerFallbackReason(error) };
+    const cause = error instanceof InstrumentedModelCallError ? error.cause : null;
+    return {
+      result: fallback, response: null, usedFallback: true, fallbackReason: controllerFallbackReason(error),
+      rejectionReason: cause instanceof ControllerContractValidationError ? cause.reason : null,
+    };
   }
 }

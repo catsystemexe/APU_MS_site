@@ -317,9 +317,10 @@ test("chat route records deterministic Controller bypass without inventing an LL
   ]);
   assert.match(route, /canBypassQuestController/);
   assert.match(route, /mode: "deterministic_bypass"/);
-  assert.match(route, /controller: \{ mode: controllerMode, fallback_reason: controllerRun\.fallbackReason \}/);
+  assert.match(route, /controller: \{ mode: controllerMode, fallback_reason: controllerRun\.fallbackReason, rejection_reason: controllerRun\.rejectionReason \}/);
   const developerTelemetry = route.slice(route.indexOf("...(isDeveloper ? { telemetry:"), route.indexOf("model_usage_records: usageCollector.records()", route.indexOf("...(isDeveloper ? { telemetry:")));
   assert.match(developerTelemetry, /fallback_reason: controllerRun\.fallbackReason/);
+  assert.match(developerTelemetry, /rejection_reason: controllerRun\.rejectionReason/);
   assert.match(client, /controllerFastPathEligible/);
   assert.match(exportSource, /deterministic_bypass/);
 });
@@ -385,4 +386,66 @@ test("pending SIDE instructions explicitly exempt valid history matches and reta
   assert.match(source, /i když je target v askedRefinementTargets/);
   assert.match(source, /Target uvedený v askedRefinementTargets neopakuj, s jedinou výjimkou/);
   assert.match(source, /toto omezení platí i pro pendingSide/);
+});
+
+test("rejection diagnostics identify the first failed check without changing validation results", () => {
+  const valid = { phase: "intake", transition_ready: true, intake_question_policy_applies: true, dialog_actions: [side(), nav()] };
+  const mutate = update => { const value = structuredClone(valid); update(value); return value; };
+  const cases = [
+    [null, "invalid_result_shape_or_phase"],
+    [mutate(v => { v.phase = "invalid"; }), "invalid_result_shape_or_phase"],
+    [mutate(v => { v.transition_ready = "true"; }), "invalid_transition_ready"],
+    [mutate(v => { v.intake_question_policy_applies = null; }), "invalid_intake_policy"],
+    [mutate(v => { v.dialog_actions = {}; }), "invalid_actions_array"],
+    [mutate(v => { v.dialog_actions[0] = null; }), "invalid_action_shape"],
+    [mutate(v => { v.dialog_actions[0].type = "PRIVATE_INVALID_TYPE"; }), "invalid_action_type"],
+    [mutate(v => { v.dialog_actions[0].target = "PRIVATE_INVALID_TARGET"; }), "invalid_action_target"],
+    [mutate(v => { v.dialog_actions[0].question = ""; }), "invalid_action_question"],
+    [mutate(v => { v.dialog_actions[0].required = null; }), "invalid_action_required_or_options"],
+    [mutate(v => { v.dialog_actions[1].options[0].label = ""; }), "invalid_action_option"],
+    [mutate(v => { v.dialog_actions[1].options.push({ ...continueOption }); }), "duplicate_action_option_ids"],
+    [mutate(v => { v.dialog_actions[0].required = true; }), "invalid_side_contract"],
+    [mutate(v => { v.dialog_actions[1].required = true; }), "invalid_nav_contract"],
+    [mutate(v => { v.phase = "development"; }), "phase_mismatch"],
+    [mutate(v => { v.intake_question_policy_applies = false; }), "unexpected_actions"],
+    [mutate(v => { v.dialog_actions = []; }), "empty_actions"],
+    [mutate(v => { v.dialog_actions = [side(), side("course")]; }), "invalid_action_composition"],
+    [mutate(v => { v.dialog_actions.reverse(); }), "invalid_action_order"],
+    [mutate(v => { v.transition_ready = false; }), "transition_readiness_mismatch"],
+    [mutate(v => { v.dialog_actions[1].options[0].label = "PRIVATE_NAV_TEXT"; }), "nav_option_mismatch"],
+  ];
+  for (const [value, expected] of cases) {
+    const reasons = [];
+    assert.equal(validateQuestControllerResult(value, [manifestation, goal], "intake"), null);
+    assert.equal(validateQuestControllerResult(value, [manifestation, goal], "intake", { askedTargets: [] }, true, reason => reasons.push(reason)), null);
+    assert.deepEqual(reasons, [expected]);
+    assert.doesNotMatch(JSON.stringify(reasons), /PRIVATE_|Můžeme přejít k návrhům\?/);
+  }
+  const reasons = [];
+  assert.equal(validateQuestControllerResult(valid, [manifestation, goal], "intake", { askedTargets: [] }, true, reason => reasons.push(reason)), valid);
+  assert.deepEqual(reasons, []);
+  const multiple = mutate(v => { v.dialog_actions[0].type = "invalid"; v.dialog_actions[1].question = ""; });
+  validateQuestControllerResult(multiple, [manifestation, goal], "intake", { askedTargets: [] }, true, reason => reasons.push(reason));
+  assert.deepEqual(reasons, ["invalid_action_type"], "only the first error is reported");
+});
+
+test("target/policy rejection codes retain pending SIDE exemptions and phase/readiness guards", () => {
+  const check = (value, notebook, phase, refinement, policy, expected) => {
+    const reasons = [];
+    assert.equal(validateQuestControllerResult(value, notebook, phase, refinement, policy, reason => reasons.push(reason)), null);
+    assert.deepEqual(reasons, [expected]);
+  };
+  const ready = fallbackQuestController([manifestation, goal], "intake");
+  check(ready, [manifestation, goal], "intake", { askedTargets: ["context"] }, true, "repeated_side_target");
+  check(ready, [manifestation, goal, context], "intake", { askedTargets: [] }, true, "answered_side_target");
+  check({ ...ready, phase: "development" }, [manifestation, goal], "development", { askedTargets: [] }, false, "unexpected_intake_policy");
+  const missing = fallbackQuestController([manifestation], "intake");
+  missing.dialog_actions[0].target = "observed_phenomenon";
+  check(missing, [manifestation], "intake", { askedTargets: [] }, true, "wrong_main_target");
+  missing.dialog_actions[0].required = false;
+  check(missing, [manifestation], "intake", { askedTargets: [] }, true, "invalid_main_contract");
+  const pending = { askedTargets: ["context"], pendingSide: { target: "context", question: ready.dialog_actions[0].question } };
+  assert.equal(validateQuestControllerResult(ready, [manifestation, goal], "intake", pending, true, () => assert.fail("valid pending SIDE must not report rejection")), ready);
+  const offPolicy = { phase: "intake", transition_ready: true, intake_question_policy_applies: false, dialog_actions: [] };
+  assert.equal(validateQuestControllerResult(offPolicy, [manifestation, goal], "intake"), offPolicy, "legacy non-intake-policy behavior remains accepted");
 });

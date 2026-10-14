@@ -197,22 +197,50 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-function parseAction(value: unknown): DialogAction | null {
-  if (!isRecord(value)) return null;
-  if (!DIALOG_ACTION_TYPES.includes(value.type as DialogActionType)) return null;
-  if (!DIALOG_ACTION_TARGETS.includes(value.target as DialogActionTarget)) return null;
-  if (typeof value.question !== "string" || !value.question.trim() || value.question.length > 600) return null;
-  if (typeof value.required !== "boolean" || !Array.isArray(value.options)) return null;
+export type QuestControllerRejectionReason =
+  | "invalid_action_shape"
+  | "invalid_action_type"
+  | "invalid_action_target"
+  | "invalid_action_question"
+  | "invalid_action_required_or_options"
+  | "invalid_action_option"
+  | "duplicate_action_option_ids"
+  | "invalid_main_contract"
+  | "invalid_side_contract"
+  | "invalid_nav_contract"
+  | "invalid_result_shape_or_phase"
+  | "invalid_transition_ready"
+  | "invalid_intake_policy"
+  | "invalid_actions_array"
+  | "phase_mismatch"
+  | "unexpected_intake_policy"
+  | "unexpected_actions"
+  | "empty_actions"
+  | "invalid_action_composition"
+  | "invalid_action_order"
+  | "wrong_main_target"
+  | "missing_nav"
+  | "transition_readiness_mismatch"
+  | "nav_option_mismatch"
+  | "repeated_side_target"
+  | "answered_side_target";
+
+function parseAction(value: unknown, reject: (reason: QuestControllerRejectionReason) => null): DialogAction | null {
+  if (!isRecord(value)) return reject("invalid_action_shape");
+  if (!DIALOG_ACTION_TYPES.includes(value.type as DialogActionType)) return reject("invalid_action_type");
+  if (!DIALOG_ACTION_TARGETS.includes(value.target as DialogActionTarget)) return reject("invalid_action_target");
+  if (typeof value.question !== "string" || !value.question.trim() || value.question.length > 600) return reject("invalid_action_question");
+  if (typeof value.required !== "boolean" || !Array.isArray(value.options)) return reject("invalid_action_required_or_options");
   const options = value.options as unknown[];
   if (!options.every((option) => isRecord(option) &&
     typeof option.id === "string" && NAV_OPTION_IDS.has(option.id) &&
-    typeof option.label === "string" && option.label.trim().length > 0 && option.label.length <= 100)) return null;
+    typeof option.label === "string" && option.label.trim().length > 0 && option.label.length <= 100)) return reject("invalid_action_option");
   const optionIds = options.map((option) => (option as DialogActionOption).id);
-  if (new Set(optionIds).size !== optionIds.length) return null;
+  if (new Set(optionIds).size !== optionIds.length) return reject("duplicate_action_option_ids");
   const action = value as DialogAction;
-  if (action.type === "MAIN" && (!action.required || !["observed_phenomenon", "teacher_need"].includes(action.target) || options.length !== 0)) return null;
-  if (action.type === "SIDE" && (action.required || !["context", "course", "helps", "hypothesis"].includes(action.target) || options.length !== 0)) return null;
-  if (action.type === "NAV" && (action.required || !["phase", "output"].includes(action.target) || options.length < 1 || options.length > 3)) return null;
+  if (action.type === "MAIN" && (!action.required || !["observed_phenomenon", "teacher_need"].includes(action.target) || options.length !== 0)) return reject("invalid_main_contract");
+  if (action.type === "SIDE" && (action.required || !["context", "course", "helps", "hypothesis"].includes(action.target) || options.length !== 0)) return reject("invalid_side_contract");
+  if (action.type === "NAV" && (action.required || !["phase", "output"].includes(action.target) || options.length < 1 || options.length > 3)) return reject("invalid_nav_contract");
   return action;
 }
 
@@ -222,44 +250,50 @@ export function validateQuestControllerResult(
   currentPhase: ConversationPhase,
   refinement: IntakeRefinementContext = { askedTargets: [] },
   applyIntakePolicy = currentPhase === "intake",
+  onReject?: (reason: QuestControllerRejectionReason) => void,
 ): QuestControllerResult | null {
-  if (!isRecord(value) || !CONVERSATION_PHASES.includes(value.phase as ConversationPhase)) return null;
-  if (typeof value.transition_ready !== "boolean") return null;
-  if (typeof value.intake_question_policy_applies !== "boolean") return null;
-  if (!Array.isArray(value.dialog_actions) || value.dialog_actions.length > 2) return null;
-  const actions = value.dialog_actions.map(parseAction);
+  let reported = false;
+  const reject = (reason: QuestControllerRejectionReason): null => {
+    if (!reported) { reported = true; onReject?.(reason); }
+    return null;
+  };
+  if (!isRecord(value) || !CONVERSATION_PHASES.includes(value.phase as ConversationPhase)) return reject("invalid_result_shape_or_phase");
+  if (typeof value.transition_ready !== "boolean") return reject("invalid_transition_ready");
+  if (typeof value.intake_question_policy_applies !== "boolean") return reject("invalid_intake_policy");
+  if (!Array.isArray(value.dialog_actions) || value.dialog_actions.length > 2) return reject("invalid_actions_array");
+  const actions = value.dialog_actions.map((action) => parseAction(action, reject));
   if (actions.some((action) => action === null)) return null;
   const parsed = actions as DialogAction[];
 
-  if (value.phase !== currentPhase) return null;
+  if (value.phase !== currentPhase) return reject("phase_mismatch");
   if (!applyIntakePolicy || currentPhase !== "intake" || !value.intake_question_policy_applies) {
-    if (value.intake_question_policy_applies) return null;
-    if (parsed.length !== 0) return null;
-    if (currentPhase === "output" && value.phase !== "output") return null;
+    if (value.intake_question_policy_applies) return reject("unexpected_intake_policy");
+    if (parsed.length !== 0) return reject("unexpected_actions");
+    if (currentPhase === "output" && value.phase !== "output") return reject("phase_mismatch");
     return value as QuestControllerResult;
   }
 
-  if (parsed.length === 0) return null;
+  if (parsed.length === 0) return reject("empty_actions");
   const mains = parsed.filter((action) => action.type === "MAIN");
   const navs = parsed.filter((action) => action.type === "NAV");
   const sides = parsed.filter((action) => action.type === "SIDE");
-  if (mains.length + navs.length !== 1 || sides.length !== 1 || parsed.length !== 2) return null;
+  if (mains.length + navs.length !== 1 || sides.length !== 1 || parsed.length !== 2) return reject("invalid_action_composition");
   const missing = requiredIntakeTarget(notebook);
   const priority = missing ? parsed[0] : parsed[1];
-  if (missing && (parsed[0].type !== "MAIN" || parsed[1].type !== "SIDE")) return null;
-  if (!missing && (parsed[0].type !== "SIDE" || parsed[1].type !== "NAV")) return null;
-  if (missing && (priority.type !== "MAIN" || priority.target !== missing)) return null;
-  if (!missing && priority.type !== "NAV") return null;
-  if (value.transition_ready !== (missing === null)) return null;
+  if (missing && (parsed[0].type !== "MAIN" || parsed[1].type !== "SIDE")) return reject("invalid_action_order");
+  if (!missing && (parsed[0].type !== "SIDE" || parsed[1].type !== "NAV")) return reject("invalid_action_order");
+  if (missing && (priority.type !== "MAIN" || priority.target !== missing)) return reject("wrong_main_target");
+  if (!missing && priority.type !== "NAV") return reject("missing_nav");
+  if (value.transition_ready !== (missing === null)) return reject("transition_readiness_mismatch");
   if (priority.type === "NAV" &&
-    (priority.options.length !== 1 || priority.options[0].id !== CONTINUE_OPTION.id || priority.options[0].label !== CONTINUE_OPTION.label)) return null;
+    (priority.options.length !== 1 || priority.options[0].id !== CONTINUE_OPTION.id || priority.options[0].label !== CONTINUE_OPTION.label)) return reject("nav_option_mismatch");
 
   const askedTargets = [...new Set(refinement.askedTargets)];
   const pending = pendingSideAction(refinement.pendingSide, notebook);
   const preservesPending = pending !== null && sides[0].target === pending.target && sides[0].question === pending.question;
-  if (askedTargets.includes(sides[0].target) && !preservesPending) return null;
+  if (askedTargets.includes(sides[0].target) && !preservesPending) return reject("repeated_side_target");
   const sideCategory = sides[0] ? SIDE_NOTEBOOK_CATEGORY[sides[0].target] : undefined;
-  if (sideCategory && hasCategory(notebook, sideCategory)) return null;
+  if (sideCategory && hasCategory(notebook, sideCategory)) return reject("answered_side_target");
   return value as QuestControllerResult;
 }
 

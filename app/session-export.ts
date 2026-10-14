@@ -1,10 +1,11 @@
 import type { AnalysisState } from "./analysis-model";
 import type { CommunicationProfileId } from "./communication-profile";
 import type { Diagnostics } from "./conversation-diagnostics";
-import type { ConversationPhase } from "./dialog-action";
+import type { ConversationPhase, QuestControllerRejectionReason } from "./dialog-action";
 import type { WorkspacePanel } from "./notepad";
 import type { NotepadState } from "./notepad-model";
 import type { QuestControllerFallbackReason } from "./quest-controller";
+import type { ApplicationStatus, ProviderStatus } from "./usage-ledger";
 
 export const SESSION_EXPORT_SCHEMA_VERSION = "1.0" as const;
 
@@ -26,6 +27,36 @@ export type UsageSnapshot = {
   output_tokens: number | null;
   reasoning_tokens: number | null;
   total_tokens: number | null;
+};
+
+export type GroundingFailureReason =
+  | "provider_failure" | "incomplete_provider_response" | "transport_failure"
+  | "json_parse_failure" | "missing_structured_output" | "grounding_contract_validation_failure" | "unknown_failure";
+
+export type GroundingAttemptTelemetry = {
+  status: "completed" | "failed" | "skipped";
+  call_id: string | null;
+  duration_ms: number | null;
+  model: string;
+  provider_status: ProviderStatus | null;
+  application_status: ApplicationStatus | null;
+  failure_reason: GroundingFailureReason | null;
+  skipped_reason: "no_candidates" | "primary_failed" | "no_explicit_rejections" | null;
+  usage: UsageSnapshot | null;
+};
+
+export type GroundingTelemetry = {
+  primary: GroundingAttemptTelemetry;
+  rescue: GroundingAttemptTelemetry;
+  counts: {
+    submitted: number;
+    primary_accepted: number;
+    primary_explicit_rejected: number;
+    primary_unresolved: number;
+    rescue_submitted: number;
+    rescue_accepted: number;
+    final_accepted: number;
+  };
 };
 
 export type ContextSizes = {
@@ -58,7 +89,9 @@ export type SessionTelemetry = {
   controller?: {
     mode: "llm" | "llm_fallback" | "deterministic_bypass" | "controlled_navigation";
     fallback_reason?: QuestControllerFallbackReason | null;
+    rejection_reason?: QuestControllerRejectionReason | null;
   };
+  grounding?: GroundingTelemetry;
   stages: SessionStage[];
   context_sizes: ContextSizes;
   tools: { file_search: { available: boolean; invoked: boolean; calls: number; duration_ms: number | null } };

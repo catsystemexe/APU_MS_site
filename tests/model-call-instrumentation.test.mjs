@@ -222,6 +222,7 @@ for (const fixture of [
     }, fixture);
     assert.equal(run.usedFallback, true);
     assert.equal(run.fallbackReason, fixture.reason);
+    assert.equal(run.rejectionReason, fixture.reason === "controller_contract_validation_failure" ? "phase_mismatch" : null);
     assert.deepEqual(run.result, fallbackQuestController(controllerNotebook, "intake"));
     assert.equal(run.response, null);
     assert.equal(payloads.length, 1);
@@ -252,6 +253,7 @@ test("valid controller output uses canonical NAV instructions and retains answer
   }, { refinement });
   assert.equal(run.usedFallback, false);
   assert.equal(run.fallbackReason, null);
+  assert.equal(run.rejectionReason, null);
   assert.equal(run.result.dialog_actions[0].question, refinement.pendingSide.question);
   assert.equal(records[0].application_status, "accepted");
   assert.equal(payloads.length, 1);
@@ -267,4 +269,20 @@ test("unexpected controller setup error reports only unknown_failure without a p
   assert.equal(run.fallbackReason, "unknown_failure");
   assert.equal(run.usedFallback, true);
   assert.equal(payloads.length, 0);
+});
+
+test("invalid NAV/controller options expose a safe detailed reason while retaining canonical failure accounting", async t => {
+  const invalid = structuredClone(validController);
+  invalid.dialog_actions[1].options[0].label = "PRIVATE_GENERATED_TEXT";
+  const { run, records, payloads } = await controllerFixture(t, {
+    status: "completed", model: "gpt-5.6-luna", service_tier: "default", usage: controllerUsage, output_text: JSON.stringify(invalid),
+  });
+  assert.equal(run.fallbackReason, "controller_contract_validation_failure");
+  assert.equal(run.rejectionReason, "nav_option_mismatch");
+  assert.equal(payloads.length, 1);
+  assert.equal(records[0].provider_status, "completed");
+  assert.equal(records[0].application_status, "rejected_invalid_output");
+  assert.equal(records[0].usage.normalized_total_tokens, 120);
+  assert.equal(records[0].pricing_snapshot.status, "priced");
+  assert.doesNotMatch(JSON.stringify({ fallback_reason: run.fallbackReason, rejection_reason: run.rejectionReason }), /PRIVATE_/);
 });
