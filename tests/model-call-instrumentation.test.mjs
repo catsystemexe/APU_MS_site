@@ -258,6 +258,14 @@ test("valid controller output uses canonical NAV instructions and retains answer
   assert.equal(records[0].application_status, "accepted");
   assert.equal(payloads.length, 1);
   assert.ok(payloads[0].instructions.includes(`s labelem „${CONTINUE_TO_SOLUTION_LABEL}“`));
+  assert.match(payloads[0].instructions, /target musí být "phase" a required musí být false/);
+  assert.match(payloads[0].instructions, /options musí obsahovat přesně jednu položku/);
+  const canonical = payloads[0].instructions.match(/^- Kanonický objekt F1 NAV: (\{.*\})\.$/m);
+  assert.ok(canonical, "the provider receives an explicit complete canonical NAV object");
+  assert.deepEqual(JSON.parse(canonical[1]), {
+    type: "NAV", target: "phase", required: false, question: CONTINUE_TO_SOLUTION_LABEL,
+    options: [{ id: "continue_to_solution", label: CONTINUE_TO_SOLUTION_LABEL }],
+  });
   assert.equal(payloads[0].model, "gpt-5.6-luna");
   assert.deepEqual(payloads[0].reasoning, { effort: "low" });
   assert.equal(payloads[0].text.format.strict, true);
@@ -285,4 +293,37 @@ test("invalid NAV/controller options expose a safe detailed reason while retaini
   assert.equal(records[0].usage.normalized_total_tokens, 120);
   assert.equal(records[0].pricing_snapshot.status, "priced");
   assert.doesNotMatch(JSON.stringify({ fallback_reason: run.fallbackReason, rejection_reason: run.rejectionReason }), /PRIVATE_/);
+});
+
+test("invalid NAV structure preserves existing fallback/rejection telemetry and makes no retry call", async t => {
+  for (const [name, update] of [
+    ["required true", nav => { nav.required = true; }],
+    ["non-NAV target", nav => { nav.target = "context"; }],
+    ["missing option", nav => { nav.options = []; }],
+  ]) {
+    await t.test(name, async t => {
+      const invalid = structuredClone(validController);
+      update(invalid.dialog_actions[1]);
+      const { run, records, payloads } = await controllerFixture(t, {
+        status: "completed", model: "gpt-5.6-luna", service_tier: "default", usage: controllerUsage,
+        output_text: JSON.stringify(invalid),
+      });
+      assert.equal(run.usedFallback, true);
+      assert.deepEqual(run.result, fallbackQuestController(controllerNotebook, "intake"));
+      assert.equal(run.response, null);
+      assert.equal(run.fallbackReason, "controller_contract_validation_failure");
+      assert.equal(run.rejectionReason, "invalid_nav_contract");
+      assert.equal(payloads.length, 1);assert.equal(records.length, 1);
+      assert.equal(records[0].provider_status, "completed");
+      assert.equal(records[0].application_status, "rejected_invalid_output");
+      assert.equal(records[0].usage.normalized_total_tokens, 120);
+      assert.equal(records[0].pricing_snapshot.status, "priced");
+      const telemetry = mergeSessionTelemetry(createSessionTelemetry({
+        requestId: "nav-contract", turnId: "nav-turn", phase: "intake", startedAt: "2026-10-14T00:00:00Z",
+      }), { controller: { mode: "llm_fallback", fallback_reason: run.fallbackReason, rejection_reason: run.rejectionReason } });
+      assert.deepEqual(telemetry.controller, {
+        mode: "llm_fallback", fallback_reason: "controller_contract_validation_failure", rejection_reason: "invalid_nav_contract",
+      });
+    });
+  }
 });

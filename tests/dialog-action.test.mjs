@@ -329,6 +329,8 @@ test("NAV uses one canonical label in instructions, fallback and strict option v
   const source = await readFile(new URL("../app/quest-controller.ts", import.meta.url), "utf8");
   assert.match(source, /s labelem „\$\{CONTINUE_TO_SOLUTION_LABEL\}“; stejný text použij jako question/);
   assert.doesNotMatch(source, /Chcete přejít k návrhům podpory/);
+  assert.equal(source.includes(CONTINUE_TO_SOLUTION_LABEL), false, "the label text is imported rather than hardcoded in Controller instructions");
+  assert.match(source, /question: CONTINUE_TO_SOLUTION_LABEL, options: \[\{ id: "continue_to_solution", label: CONTINUE_TO_SOLUTION_LABEL \}\]/);
   const result = fallbackQuestController([manifestation, goal], "intake");
   const navigation = result.dialog_actions[1];
   assert.equal(navigation.question, CONTINUE_TO_SOLUTION_LABEL);
@@ -448,4 +450,31 @@ test("target/policy rejection codes retain pending SIDE exemptions and phase/rea
   assert.equal(validateQuestControllerResult(ready, [manifestation, goal], "intake", pending, true, () => assert.fail("valid pending SIDE must not report rejection")), ready);
   const offPolicy = { phase: "intake", transition_ready: true, intake_question_policy_applies: false, dialog_actions: [] };
   assert.equal(validateQuestControllerResult(offPolicy, [manifestation, goal], "intake"), offPolicy, "legacy non-intake-policy behavior remains accepted");
+});
+
+test("canonical F1 NAV remains accepted and invalid NAV field/cardinality variants remain rejected", () => {
+  const result = fallbackQuestController([manifestation, goal], "intake");
+  assert.deepEqual(result.dialog_actions[1], {
+    type: "NAV", target: "phase", required: false, question: CONTINUE_TO_SOLUTION_LABEL,
+    options: [{ id: "continue_to_solution", label: CONTINUE_TO_SOLUTION_LABEL }],
+  });
+  assert.equal(validateQuestControllerResult(result, [manifestation, goal], "intake"), result);
+  const existing = structuredClone(result);
+  existing.dialog_actions[1].target = "output";
+  existing.dialog_actions[1].question = "Existing valid NAV wording?";
+  assert.equal(validateQuestControllerResult(existing, [manifestation, goal], "intake"), existing, "prompt clarification does not tighten existing validator allowances");
+  for (const [update, expected] of [
+    [nav => { nav.required = true; }, "invalid_nav_contract"],
+    [nav => { nav.target = "context"; }, "invalid_nav_contract"],
+    [nav => { nav.options = []; }, "invalid_nav_contract"],
+    [nav => { nav.options = ["continue_to_solution", "continue_to_output", "add_context", "return_to_intake"].map(id => ({ id, label: CONTINUE_TO_SOLUTION_LABEL })); }, "invalid_nav_contract"],
+    [nav => { nav.options.push({ id: "add_context", label: "Existing extra option" }); }, "nav_option_mismatch"],
+    [nav => { nav.options[0].id = "continue_to_output"; }, "nav_option_mismatch"],
+    [nav => { nav.options[0].label = "Incorrect label"; }, "nav_option_mismatch"],
+  ]) {
+    const invalid = structuredClone(result);update(invalid.dialog_actions[1]);
+    const reasons = [];
+    assert.equal(validateQuestControllerResult(invalid, [manifestation, goal], "intake", { askedTargets: [] }, true, reason => reasons.push(reason)), null);
+    assert.deepEqual(reasons, [expected]);
+  }
 });

@@ -4,6 +4,12 @@ Status: CURRENT
 
 Records significant verified product/runtime/project changes. It is not a complete Git log. Historical Sites-era entries are retained where they remain useful; current deployment state must not be inferred from a changelog entry alone.
 
+## 2026-10-14 — B1.6-B1 explicit Quest Controller F1 NAV instructions
+
+- Clarified the existing F1 NAV instruction with the complete canonical object: `type: NAV`, `target: phase`, `required: false`, canonical question, and exactly one `continue_to_solution` option with the canonical label. Both text fields reuse the imported `CONTINUE_TO_SOLUTION_LABEL`; no hardcoded label copy was added. The reported live `invalid_nav_contract` field remains unknown.
+- Added focused assertions for actual provider instructions, canonical-label reuse, valid existing NAV acceptance and invalid target/required/cardinality/option rejection, including unchanged fallback/rejection telemetry and usage accounting. Validator, fallback, MAIN/SIDE ordering, intake readiness, pending SIDE exception, explicit transitions, Core boundaries, grounding and Controller execution are unchanged; no normalization, retries, extra model calls or model/reasoning/service-tier changes.
+- Verification PASS: typecheck, **129 focused NAV/Controller and existing F1/dialog/grounding/usage/Session JSON regressions**, diff check/review and byte comparisons confirming only Controller instructions changed in production code. Provider responses were mocked; no paid API calls. Live-provider effectiveness, latency changes and Windows/production runtime after this clarification are **NOT VERIFIED**. No merge or deployment; Backlog and Known Issues are unchanged.
+
 ## 2026-10-14 — B1.6-A grounding/Controller observability documentation completion
 
 - Documented the implementation already committed at `5e08e670bfb65fab58606e805d47cfed44fb3a87`: separate primary/rescue grounding handling status, call identity, duration, canonical provider/application status and per-attempt usage; safe failure/skip reasons; candidate counts and monotonic rescue outcome. The existing aggregate grounding stage and its legacy status/timing/usage semantics remain intact.
