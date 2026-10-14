@@ -28,6 +28,7 @@ import {
   type RawExtraction,
 } from "../../f1-extraction-contract";
 import intakeCore from "../../../apu-core/v1.6/02_OBSERVATION_AND_INTAKE.md?raw";
+import { cacheableF1Input } from "../../f1-request-cache";
 
 export const runtime = "edge";
 
@@ -139,12 +140,11 @@ async function verifyPrimaryGrounding(
       payload: {
       model: EXTRACTION_MODEL,
       reasoning: { effort: PRODUCTION_EXTRACTION_REASONING },
-      instructions: GROUNDING_INSTRUCTIONS,
-      input: JSON.stringify({
+      ...cacheableF1Input(GROUNDING_INSTRUCTIONS, JSON.stringify({
         currentNotebook: notebook,
         newUserMessage: message,
         candidates: candidates.map((candidate, index) => ({ index, ...candidate })),
-      }),
+      })),
       text: {
         format: {
           type: "json_schema",
@@ -195,12 +195,11 @@ async function verifyGrounding(
         payload: {
           model: PRODUCTION_GROUNDING_RESCUE_MODEL,
           reasoning: { effort: PRODUCTION_GROUNDING_RESCUE_REASONING },
-          instructions: GROUNDING_RESCUE_INSTRUCTIONS,
-          input: JSON.stringify({
+          ...cacheableF1Input(GROUNDING_RESCUE_INSTRUCTIONS, JSON.stringify({
             currentNotebook: notebook,
             newUserMessage: message,
             candidates: rescueCandidates.map((candidate, index) => ({ index, ...candidate })),
-          }),
+          })),
           text: {
             format: {
               type: "json_schema",
@@ -304,11 +303,10 @@ export async function POST(request: Request) {
       payload: {
       model: EXTRACTION_MODEL,
       reasoning: { effort: PRODUCTION_EXTRACTION_REASONING },
-      instructions: EXTRACTION_INSTRUCTIONS,
-      input: JSON.stringify({
+      ...cacheableF1Input(EXTRACTION_INSTRUCTIONS, JSON.stringify({
         currentNotebook: notebook,
         newUserMessage: body.message,
-      }),
+      })),
       text: {
         format: {
           type: "json_schema",

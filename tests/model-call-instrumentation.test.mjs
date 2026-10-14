@@ -257,10 +257,11 @@ test("valid controller output uses canonical NAV instructions and retains answer
   assert.equal(run.result.dialog_actions[0].question, refinement.pendingSide.question);
   assert.equal(records[0].application_status, "accepted");
   assert.equal(payloads.length, 1);
-  assert.ok(payloads[0].instructions.includes(`s labelem „${CONTINUE_TO_SOLUTION_LABEL}“`));
-  assert.match(payloads[0].instructions, /target musí být "phase" a required musí být false/);
-  assert.match(payloads[0].instructions, /options musí obsahovat přesně jednu položku/);
-  const canonical = payloads[0].instructions.match(/^- Kanonický objekt F1 NAV: (\{.*\})\.$/m);
+  const instructions = payloads[0].input[0].content[0].text;
+  assert.ok(instructions.includes(`s labelem „${CONTINUE_TO_SOLUTION_LABEL}“`));
+  assert.match(instructions, /target musí být "phase" a required musí být false/);
+  assert.match(instructions, /options musí obsahovat přesně jednu položku/);
+  const canonical = instructions.match(/^- Kanonický objekt F1 NAV: (\{.*\})\.$/m);
   assert.ok(canonical, "the provider receives an explicit complete canonical NAV object");
   assert.deepEqual(JSON.parse(canonical[1]), {
     type: "NAV", target: "phase", required: false, question: CONTINUE_TO_SOLUTION_LABEL,

@@ -52,7 +52,7 @@ test("extract route requests strict structured output and revalidates quotes", a
   assert.match(source, /„unavený“, „apatický“, „málo komunikuje“, „odmítá úkoly“ a „špatně se soustředí“ jsou odlišné projevy/);
   assert.match(source, /skutečnou parafrázi téhož projevu vrať jen jednou/);
   assert.match(source, /z explicitního „žák je apatický“ smíš přijmout pouze manifestations/);
-  assert.match(route, /model: EXTRACTION_MODEL,\s+reasoning: \{ effort: PRODUCTION_EXTRACTION_REASONING \},\s+instructions: EXTRACTION_INSTRUCTIONS/);
+  assert.match(route, /model: EXTRACTION_MODEL,\s+reasoning: \{ effort: PRODUCTION_EXTRACTION_REASONING \},\s+\.\.\.cacheableF1Input\(EXTRACTION_INSTRUCTIONS, JSON\.stringify/);
   assert.match(route, /name: "extract"[\s\S]{0,250}?reasoning: PRODUCTION_EXTRACTION_REASONING/);
   assert.match(route, /name: "grounding"[\s\S]{0,250}?reasoning: PRODUCTION_EXTRACTION_REASONING/);
   assert.doesNotMatch(route, /terra-extract|terra-both|terra-medium|coverage check/i);

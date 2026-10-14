@@ -4,6 +4,12 @@ Status: CURRENT
 
 Records significant verified product/runtime/project changes. It is not a complete Git log. Historical Sites-era entries are retained where they remain useful; current deployment state must not be inferred from a changelog entry alone.
 
+## 2026-10-14 — B1.7-A cache-aware F1 request envelopes
+
+- Added GPT-5.6 explicit-only cache boundaries after the complete unchanged developer instructions for extraction, primary grounding, rescue grounding and Quest Controller. Dynamic user/Notebook/candidate/Controller context follows outside the boundary; models, reasoning, service tiers, schemas, token limits, store settings, validation, routing, provider-call counts and canonical usage/latency telemetry remain unchanged. No cache key, prewarming or retention override was added.
+- F1 Main remains unchanged for semantic safety: top-level per-response instructions mixed with dynamic context and `previous_response_id` cannot be moved into persistent input messages without changing conversation semantics.
+- Verification PASS: typecheck, **169 provider-free/mocked regressions**, complete baseline effective-request signatures for all five operations (Main first/follow-up included), changed-context cache isolation, existing extraction/grounding/Controller/F1/usage/Session JSON contracts, and diff check/review. Live cache hits, prefix token counts, latency/net-cost benefit, Windows and hosted/production runtime are **NOT VERIFIED**. No paid API calls, PR merge or deployment; Backlog and Known Issues unchanged.
+
 ## 2026-10-14 — B1.6-B1 explicit Quest Controller F1 NAV instructions
 
 - Clarified the existing F1 NAV instruction with the complete canonical object: `type: NAV`, `target: phase`, `required: false`, canonical question, and exactly one `continue_to_solution` option with the canonical label. Both text fields reuse the imported `CONTINUE_TO_SOLUTION_LABEL`; no hardcoded label copy was added. The reported live `invalid_nav_contract` field remains unknown.

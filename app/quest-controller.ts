@@ -1,3 +1,4 @@
+import { cacheableF1Input } from "./f1-request-cache.ts";
 import {
   CONTINUE_TO_SOLUTION_LABEL,
   fallbackQuestController,
@@ -156,8 +157,7 @@ export async function runQuestController(args: {
         model: QUEST_CONTROLLER_MODEL,
         reasoning: { effort: "low" },
         service_tier: "default",
-        instructions: `${args.coreInstructions}\n\n${CONTROLLER_INSTRUCTIONS}\n\n${FUNCTIONAL_ROUTING_HINTS}`,
-        input: JSON.stringify({
+        ...cacheableF1Input(`${args.coreInstructions}\n\n${CONTROLLER_INSTRUCTIONS}\n\n${FUNCTIONAL_ROUTING_HINTS}`, JSON.stringify({
           phase: args.phase,
           currentMessage: args.message,
           currentNotebook: args.notebook,
@@ -165,7 +165,7 @@ export async function runQuestController(args: {
           pendingSide: args.refinement.pendingSide ?? null,
           applyIntakePolicy: args.applyIntakePolicy,
           lastFunctionalMapping: args.functionalMapping ?? null,
-        }),
+        })),
         text: { format: { type: "json_schema", name: "apu_quest_controller", strict: true, schema: QUEST_CONTROLLER_SCHEMA } },
         max_output_tokens: 1_000, store: false,
       },

@@ -50,7 +50,7 @@ async function runExtraction(t, { primary = { verdicts: primaryAccept }, rescue 
       result = { situationRelation: "same", situationReason: null, categoryReview: { manifestations: "found", goals: "none", context: "none", course: "none", helps: "none" }, candidates: extractionCandidates };
     } else if (name === "apu_notepad_grounding_verification") result = primary;
     else if (name === "apu_notepad_grounding_rescue") {
-      const submitted = JSON.parse(payload.input).candidates;
+      const submitted = JSON.parse(payload.input[1].content[0].text).candidates;
       assert.equal(submitted.length, 1, "only the explicit rejection enters rescue");
       assert.equal(submitted[0].sourceQuote, candidates[1].sourceQuote);
       result = rescue;
