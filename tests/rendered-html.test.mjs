@@ -13,14 +13,44 @@ const keys = await crypto.subtle.generateKey(
   ["sign", "verify"],
 );
 const publicJwk = { ...(await crypto.subtle.exportKey("jwk", keys.publicKey)), kid: keyId, alg: "RS256", use: "sig" };
-const originalFetch = globalThis.fetch;
-globalThis.fetch = async (input, init) => {
-  if (String(input) === `${issuer}/cdn-cgi/access/certs`) return Response.json({ keys: [publicJwk] });
-  return originalFetch(input, init);
-};
-process.env.CF_ACCESS_TEAM_DOMAIN = issuer;
-process.env.CF_ACCESS_AUD = audience;
-process.env.APU_DEVELOPER_EMAILS = "developer@example.com";
+
+async function loadWorker(t, { jwks = "available" } = {}) {
+  const environmentKeys = ["CF_ACCESS_TEAM_DOMAIN", "CF_ACCESS_AUD", "APU_DEVELOPER_EMAILS", "NODE_ENV", "APU_LOCAL_DEV_AUTH", "OPENAI_API_KEY", "APU_VECTOR_STORE_ID"];
+  const environment = new Map(environmentKeys.map(key => [key, process.env[key]]));
+  // Vinext captures this shared fetch when the bundle loads and installs a wrapper
+  // during requests. Own both entry points for this test, restoring their descriptors.
+  const originalFetchKey = Symbol.for("vinext.fetchCache.originalFetch");
+  const patchInstalledKey = Symbol.for("vinext.fetchCache.patchInstalled");
+  const globals = new Map(["fetch", originalFetchKey, patchInstalledKey].map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  t.after(() => {
+    for (const [key, descriptor] of globals) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else delete globalThis[key];
+    }
+    for (const [key, value] of environment) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  });
+  const fixtureFetch = async input => {
+    assert.equal(String(input), `${issuer}/cdn-cgi/access/certs`, "fixture forbids external/provider requests");
+    return jwks === "unavailable" ? new Response(null, { status: 503 }) : Response.json({ keys: jwks === "missing" ? [] : [publicJwk] });
+  };
+  globalThis.fetch = fixtureFetch;
+  globalThis[originalFetchKey] = fixtureFetch;
+  delete globalThis[patchInstalledKey];
+  process.env.CF_ACCESS_TEAM_DOMAIN = issuer;
+  process.env.CF_ACCESS_AUD = audience;
+  process.env.APU_DEVELOPER_EMAILS = "developer@example.com";
+  process.env.NODE_ENV = "test";
+  delete process.env.APU_LOCAL_DEV_AUTH;
+  // Valid auth must stop at missing provider configuration, even on credentialed hosts.
+  delete process.env.OPENAI_API_KEY;
+  delete process.env.APU_VECTOR_STORE_ID;
+  const workerUrl = new URL("../dist/server/index.js", import.meta.url);
+  workerUrl.searchParams.set("fixture", crypto.randomUUID());
+  return (await import(workerUrl.href)).default;
+}
 
 function base64url(value) {
   const bytes = typeof value === "string" ? new TextEncoder().encode(value) : new Uint8Array(value);
@@ -42,10 +72,8 @@ async function identityHeaders(email) {
   return { accept: "text/html", "cf-access-jwt-assertion": await accessToken(email) };
 }
 
-test("renders development preview metadata", async () => {
-  const workerUrl = new URL("../dist/server/index.js", import.meta.url);
-  workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}`);
-  const { default: worker } = await import(workerUrl.href);
+test("renders development preview metadata", async t => {
+  const worker = await loadWorker(t);
 
   const response = await worker.fetch(
     new Request("http://localhost/", {
@@ -69,13 +97,15 @@ test("renders development preview metadata", async () => {
   );
   const html = await response.text();
   assert.match(html, developmentPreviewMeta);
-  assert.match(html, /GPT-5\.6 Sol/);
+  assert.match(html, /developer@example\.com/);
+  assert.match(html, /DEV ON/);
+  assert.match(html, /Telemetrie a náklady konverzace/);
   assert.match(html, /Konverzace/);
-  assert.match(html, /IN/);
-  assert.match(html, /OUT/);
+  assert.match(html, /desktop-tool-chat/);
+  assert.match(html, /desktop-tool-build/);
   assert.match(html, /Nový projekt/);
   assert.match(html, /Zápisník/);
-  assert.match(html, /Rozbor/);
+  assert.match(html, /Obsah/);
   assert.match(html, /Výstup/);
   assert.match(html, /lucide-scan-search/);
   assert.match(html, /lucide-notebook-pen/);
@@ -89,10 +119,8 @@ test("renders development preview metadata", async () => {
   assert.match(html, /apu-flower\.svg/);
 });
 
-test("fails closed without a valid Access identity", async () => {
-  const workerUrl = new URL("../dist/server/index.js", import.meta.url);
-  workerUrl.searchParams.set("anonymous", `${process.pid}-${Date.now()}`);
-  const { default: worker } = await import(workerUrl.href);
+test("fails closed without a valid Access identity", async t => {
+  const worker = await loadWorker(t);
   const env = {
     ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) },
   };
@@ -124,10 +152,8 @@ test("fails closed without a valid Access identity", async () => {
   assert.doesNotMatch(invalidHtml, /Pracovní hypotézy se zobrazí/);
 });
 
-test("shows developer surfaces only to developers", async () => {
-  const workerUrl = new URL("../dist/server/index.js", import.meta.url);
-  workerUrl.searchParams.set("roles", `${process.pid}-${Date.now()}`);
-  const { default: worker } = await import(workerUrl.href);
+test("shows developer surfaces only to developers", async t => {
+  const worker = await loadWorker(t);
   const env = { ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) } };
   const ctx = { waitUntil() {}, passThroughOnException() {} };
   const developer = await worker.fetch(new Request("http://localhost/", { headers: await identityHeaders("developer@example.com") }), env, ctx);
@@ -136,16 +162,19 @@ test("shows developer surfaces only to developers", async () => {
   const testerHtml = await tester.text();
   assert.match(developerHtml, /Otevřít nastavení/);
   assert.match(developerHtml, /conversation-diagnostics/);
-  assert.doesNotMatch(testerHtml, /Otevřít nastavení/);
+  assert.match(testerHtml, /Otevřít nastavení/);
   assert.doesNotMatch(testerHtml, /conversation-diagnostics/);
+  assert.match(developerHtml, /Stáhnout APU Session JSON/);
+  assert.match(developerHtml, /developer-log-toggle/);
+  assert.match(developerHtml, /DEV ON/);
+  assert.match(testerHtml, /tester@example\.com/);
+  assert.doesNotMatch(testerHtml, /Stáhnout APU Session JSON|session-export-trigger|developer-log-toggle|DEV ON|Telemetrie a náklady konverzace|diagnostic-debug/);
   assert.match(testerHtml, /Popište mi situaci, se kterou chcete dnes pracovat\./);
   assert.match(testerHtml, /Zobrazit příklad situace/);
 });
 
-test("model API rejects invalid auth and accepts tester and developer identities", async () => {
-  const workerUrl = new URL("../dist/server/index.js", import.meta.url);
-  workerUrl.searchParams.set("api-auth", `${process.pid}-${Date.now()}`);
-  const { default: worker } = await import(workerUrl.href);
+test("model API rejects invalid auth and accepts tester and developer identities", async t => {
+  const worker = await loadWorker(t);
   const env = {
     ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) },
   };
@@ -184,6 +213,78 @@ test("model API rejects invalid auth and accepts tester and developer identities
         body: JSON.stringify({ message: "test", notebook: [] }),
       }), env, ctx);
       assert.equal(accepted.status, 503);
+    }
+  }
+});
+
+test("model APIs reject invalid signatures, issuer, audience and expiration", async t => {
+  const worker = await loadWorker(t);
+  const env = { ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) } };
+  const ctx = { waitUntil() {}, passThroughOnException() {} };
+  const valid = await accessToken("tester@example.com");
+  const tokens = [
+    valid.slice(0, valid.lastIndexOf(".") + 1) + base64url("invalid-signature"),
+    await accessToken("tester@example.com", { iss: "https://other.example.invalid" }),
+    await accessToken("tester@example.com", { aud: "different-audience" }),
+    await accessToken("tester@example.com", { exp: Math.floor(Date.now() / 1000) - 1 }),
+  ];
+  for (const route of ["/api/chat", "/api/extract"]) for (const token of tokens) {
+    const response = await worker.fetch(new Request(`http://localhost${route}`, {
+      method: "POST", headers: { "content-type": "application/json", "cf-access-jwt-assertion": token },
+      body: JSON.stringify({ message: "synthetic", notebook: [] }),
+    }), env, ctx);
+    assert.equal(response.status, 401);
+  }
+});
+
+for (const jwks of ["missing", "unavailable"]) test(`model APIs fail closed with ${jwks} JWKS`, async t => {
+  const worker = await loadWorker(t, { jwks });
+  const env = { ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) } };
+  const ctx = { waitUntil() {}, passThroughOnException() {} };
+  for (const route of ["/api/chat", "/api/extract"]) {
+    const response = await worker.fetch(new Request(`http://localhost${route}`, {
+      method: "POST", headers: { "content-type": "application/json", "cf-access-jwt-assertion": await accessToken("developer@example.com") },
+      body: JSON.stringify({ message: "synthetic", notebook: [] }),
+    }), env, ctx);
+    assert.equal(response.status, 401);
+  }
+});
+
+test("render fixtures own preloaded Vinext fetch state and restore globals/environment", async t => {
+  const globalKeys = ["fetch", Symbol.for("vinext.fetchCache.originalFetch"), Symbol.for("vinext.fetchCache.patchInstalled")];
+  const globals = new Map(globalKeys.map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  const environmentKeys = ["CF_ACCESS_TEAM_DOMAIN", "CF_ACCESS_AUD", "APU_DEVELOPER_EMAILS", "NODE_ENV", "APU_LOCAL_DEV_AUTH", "OPENAI_API_KEY", "APU_VECTOR_STORE_ID"];
+  const environment = new Map(environmentKeys.map(key => [key, process.env[key]]));
+  let staleFetchCalls = 0;
+  const staleFetch = async () => { staleFetchCalls++; throw new Error("Synthetic stale fetch must not run"); };
+  try {
+    globalThis.fetch = staleFetch;
+    globalThis[globalKeys[1]] = staleFetch;
+    globalThis[globalKeys[2]] = true;
+    process.env.OPENAI_API_KEY = "synthetic-never-call";
+    process.env.APU_VECTOR_STORE_ID = "synthetic-never-call";
+    const expectedEnvironment = new Map(environmentKeys.map(key => [key, process.env[key]]));
+    await t.test("a valid signed tester JWT still stops before any provider call", async child => {
+      const worker = await loadWorker(child);
+      const response = await worker.fetch(new Request("http://localhost/api/chat", {
+        method: "POST", headers: { "content-type": "application/json", "cf-access-jwt-assertion": await accessToken("tester@example.com") },
+        body: JSON.stringify({ message: "synthetic", notebook: [] }),
+      }), { ASSETS: { fetch: async () => new Response(null, { status: 404 }) } }, { waitUntil() {}, passThroughOnException() {} });
+      assert.equal(response.status, 503);
+    });
+    assert.equal(staleFetchCalls, 0);
+    assert.equal(globalThis.fetch === staleFetch, true);
+    assert.equal(globalThis[globalKeys[1]] === staleFetch, true);
+    assert.equal(globalThis[globalKeys[2]], true);
+    for (const [key, value] of expectedEnvironment) assert.equal(process.env[key] === value, true, `${key} restored`);
+  } finally {
+    for (const [key, descriptor] of globals) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else delete globalThis[key];
+    }
+    for (const [key, value] of environment) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
     }
   }
 });
