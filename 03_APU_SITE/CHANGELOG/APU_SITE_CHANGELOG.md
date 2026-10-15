@@ -4,6 +4,14 @@ Status: CURRENT
 
 Records significant verified product/runtime/project changes. It is not a complete Git log. Historical Sites-era entries are retained where they remain useful; current deployment state must not be inferred from a changelog entry alone.
 
+## 2026-10-15 — ENV-S2 user-owned Notebook and safe logout
+
+- Ordinary Notebook persistence now uses owner-validated tab sessionStorage; DEV local persistence is partitioned by verified identity. Existing NotepadState parsing remains authoritative. Shared unowned v1/v2 data is neither imported nor deleted; recovery/cleanup needs separate approval. Keys do not protect browser data from a person controlling that browser profile.
+- Activated accessible **Odhlásit se** with a working-data warning/cancel path, immediate sensitive-workspace lock, central project reset, current-owner storage cleanup/revocation and same-origin Access logout navigation. Preferences and other owners' DEV copies are preserved. No Google logout, custom token issuance/revocation, downloaded-file or clipboard deletion.
+- Added BroadcastChannel/storage-event invalidation and authenticated no-store, event-driven session revalidation. Identity/role mismatch and confirmed logout end the old workspace; transient/verification infrastructure failures hide recoverable work and offer retry. Existing epoch guards now cover queued routing and late F2/preview/analysis continuations; DEV diagnostics/export and ordinary F1–F3 remain functional.
+- Verification PASS: typecheck, canonical build, artifact validation, **778/778 provider-free Node tests**, full actual-client Chromium workspace plus session/header-role/DEV usage modes, diff check and screenshot review. Browser checks cover two tabs, account changes, legacy exclusion, delayed results, transient/dictation recovery, owner-bound DEV retention, logout/cancel/New Project and desktop/narrow keyboard/accessibility layouts. Updated directly affected storage/icon/SSR test contracts and kept strict content/source/export checks.
+- Hosted Access/Google-cookie logout, actual DEV/STABLE isolation and native Windows remain NOT VERIFIED; fixtures use synthetic identities/transport/logout. No live provider calls, infrastructure/Access/KV changes, production/Preview deployment, release branch/tag or PR merge. This completes the source-level Notebook/logout gate; controlled release and hosted acceptance remain separate.
+
 ## 2026-10-15 — ENV-S1 server-side developer capability boundary
 
 - Ordinary authenticated chat/F2/F3 requests cannot select a supported manual model: the server returns 403 without invoking a provider. Missing/auto selection and existing automatic/default policy remain; DEV manual selections, validation and source/materialization guards are preserved. Identity comes only from existing server-verified Access authentication.

@@ -114,7 +114,7 @@ test("renders development preview metadata", async t => {
   assert.match(html, /lucide-download/);
   assert.doesNotMatch(html, /Kopírovat text/);
   assert.doesNotMatch(html, /Uložit na Google Drive/);
-  assert.match(html, /lucide-user-round/);
+  assert.match(html, /lucide-log-out/);
   assert.match(html, /apu-logo-horizontal\.png/);
   assert.match(html, /apu-flower\.svg/);
 });

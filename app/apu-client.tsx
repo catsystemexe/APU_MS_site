@@ -6,6 +6,7 @@ import {
   KeyboardEvent as ReactKeyboardEvent,
   ReactNode,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -29,10 +30,12 @@ import {
   Save,
   Square,
   DollarSign,
-  UserRound,
+  LogOut,
   X,
   FileText,
 } from "lucide-react";
+import { AccessSessionBoundary } from "./access-session-boundary";
+import { notebookOwnerId } from "./notebook-storage";
 import { Diagnostics } from "./conversation-diagnostics";
 import { ACTIVE_APU_CORE_RELEASE_ID, ACTIVE_APU_CORE_VERSION, APU_SITE_RUNTIME_RELEASE } from "./core-config";
 import { buildSessionExport, createSessionTelemetry, downloadSessionExport, mergeSessionTelemetry, type SessionTelemetry } from "./session-export";
@@ -346,7 +349,16 @@ function DeveloperHeaderControls({
   );
 }
 
-export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
+export default function ApuClient(props: ApuClientProps) {
+  return <AccessSessionBoundary key={`${notebookOwnerId(props)}:${props.isDeveloper}`} identity={props}>
+    {controls => <ApuWorkspace {...props} {...controls} />}
+  </AccessSessionBoundary>;
+}
+
+function ApuWorkspace({ email, isDeveloper, onLogout, registerInvalidation }: ApuClientProps & {
+  onLogout: (hasWork: boolean) => void;
+  registerInvalidation: (callback: (logout?: boolean) => void) => () => void;
+}) {
   const [messages, setMessages] = useState<Message[]>([WELCOME]);
   const [input, setInput] = useState("");
   const [responseId, setResponseId] = useState<string | null>(null);
@@ -411,7 +423,7 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
   const [isDictationSupported, setIsDictationSupported] = useState(false);
   const [dictationNotice, setDictationNotice] = useState<string | null>(null);
   const design = useDesignPreferences();
-  const { entries: notepad, setEntries: setNotepad, hydrated: isNotepadHydrated } = usePersistentNotepad();
+  const { entries: notepad, setEntries: setNotepad, hydrated: isNotepadHydrated, invalidate: invalidateNotebook } = usePersistentNotepad({ email, isDeveloper });
   const bottomRef = useRef<HTMLDivElement>(null);
   const chatScrollRef = useRef<HTMLDivElement>(null);
   const chatContentRef = useRef<HTMLDivElement>(null);
@@ -438,6 +450,7 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
   if (!needRouterRef.current) {
     const routerProjectEpoch = projectEpochRef.current;
     needRouterRef.current = createNeedRouter(async (routingInput) => {
+      if (routerProjectEpoch !== projectEpochRef.current) throw new Error("Projekt byl ukončen.");
       const response = await fetch("/api/need-route", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(routingInput) });
       const payload = await response.json().catch(() => null) as ({ decision?: unknown; error?: string } & ModelUsageRecordsResponse) | null;
       collectModelUsageRecords(payload, routerProjectEpoch);
@@ -494,8 +507,10 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
   }
 
   async function resolveActiveNeed(need: NonNullable<typeof sourceF2Need>) {
+    const projectEpoch = projectEpochRef.current;
     const key = activeNeedRoutingKey(need);
     const decision = await needRouterRef.current!(need);
+    if (projectEpoch !== projectEpochRef.current) throw new Error("Projekt byl ukončen.");
     if (latestSourceNeedKeyRef.current !== key) throw new Error("Pedagogická potřeba se mezitím změnila.");
     setNeedRoute({ key, decision });
     setNeedRouteError(null);
@@ -505,12 +520,13 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
   useEffect(() => {
     if (phase === "intake" || !sourceF2Need) return;
     let cancelled = false;
+    const projectEpoch = projectEpochRef.current;
     setNeedRouteError(null);
     setNeedClarification("");
     void needRouterRef.current!(sourceF2Need).then((decision) => {
-      if (!cancelled && latestSourceNeedKeyRef.current === sourceNeedKey) setNeedRoute({ key: sourceNeedKey!, decision });
+      if (!cancelled && projectEpoch === projectEpochRef.current && latestSourceNeedKeyRef.current === sourceNeedKey) setNeedRoute({ key: sourceNeedKey!, decision });
     }).catch((cause) => {
-      if (!cancelled) setNeedRouteError(cause instanceof Error ? cause.message : "Cíl potřeby se nepodařilo určit.");
+      if (!cancelled && projectEpoch === projectEpochRef.current) setNeedRouteError(cause instanceof Error ? cause.message : "Cíl potřeby se nepodařilo určit.");
     });
     return () => { cancelled = true; };
     // Only authoritative active need changes request routing; never Build edits or developer mode.
@@ -963,10 +979,11 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
       const payload = await response.json().catch(() => null) as ({ result?: unknown; error?: string } & ModelUsageRecordsResponse) | null;
       collectModelUsageRecords(payload, projectEpoch);
       if (!response.ok || !payload?.result) throw new Error(payload?.error || "Build se nepodařilo rozpracovat.");
+      if (projectEpoch !== projectEpochRef.current) return;
       const result = parseF2BuildResult(payload.result, buildRequest.activePath);
       setF2Build((current) => current ? applyF2BuildResult(current, result, buildRequest.activePath, buildRequest.buildRevision) : current);
       setF2BuildStatus("idle");
-    } catch (cause) { setF2BuildError(cause instanceof Error ? cause.message : "Build se nepodařilo rozpracovat."); setF2BuildStatus("error"); }
+    } catch (cause) { if (projectEpoch !== projectEpochRef.current) return; setF2BuildError(cause instanceof Error ? cause.message : "Build se nepodařilo rozpracovat."); setF2BuildStatus("error"); }
   }
 
   // Both asynchronous generation and synchronous removal commit through this path.
@@ -1026,8 +1043,9 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
       const payload = await response.json().catch(() => null) as ({ result?: unknown; error?: string } & ModelUsageRecordsResponse) | null;
       collectModelUsageRecords(payload, projectEpoch);
       if (!response.ok || !payload?.result) throw new Error(payload?.error || "Preview se nepodařilo vytvořit.");
+      if (projectEpoch !== projectEpochRef.current) return;
       setF2Preview(acceptRenderedPreview(snapshot, parseF2RenderedPreview(payload.result))); setF2PreviewStatus("idle"); setActivePanel("output");
-    } catch (cause) { setF2PreviewError(cause instanceof Error ? cause.message : "Preview se nepodařilo vytvořit."); setF2PreviewStatus("error"); }
+    } catch (cause) { if (projectEpoch !== projectEpochRef.current) return; setF2PreviewError(cause instanceof Error ? cause.message : "Preview se nepodařilo vytvořit."); setF2PreviewStatus("error"); }
   }
 
   function enterF3() {
@@ -1070,6 +1088,7 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
     try {
       const sourceNeed = getF1ToF2NeedContract(notepadState, activeNeedId);
       const resolvedNeed = sourceNeed ? await resolveActiveNeed(sourceNeed) : null;
+      if (projectEpoch !== projectEpochRef.current) return null;
       if (sourceNeed && !resolvedNeed) { setAnalysisStatus("idle"); return null; }
       // Derived request mapping only; canonical F1 text and extraction remain unchanged.
       const notebook = compactNotepad(notepadState).map((item) => item.id === resolvedNeed?.needId && item.category === "goals"
@@ -1119,6 +1138,7 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
       setAnalysisStatus("ready");
       if (turnId && requestId) {
         requestAnimationFrame(() => requestAnimationFrame(() => {
+          if (projectEpoch !== projectEpochRef.current) return;
           const startedAt = telemetryClockRef.current.get(requestId)?.actionStartedAt;
           const userVisible = startedAt === undefined ? null : Math.round(performance.now() - startedAt);
           setSessionTelemetry((current) => current.map((item) => item.request_id === requestId
@@ -1237,6 +1257,7 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
       }
       setPhase("development");
       const result = await refreshStructuredAnalysis(notepadForChat, "", turnId, requestId, "F1");
+      if (!isCurrentRequest()) return;
       if (!result) { setMessages((current) => current.filter((message) => message.id !== assistantId)); return; }
       if (usesDesktopWorkspaceLayout()) {
         setActivePanel("analysis");
@@ -1250,6 +1271,7 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
     }
     if (phase === "development" && !dialogEvent) {
       const result = await refreshStructuredAnalysis(notepadForChat, rawText, turnId, requestId);
+      if (!isCurrentRequest()) return;
       if (!result) { setMessages((current) => current.filter((message) => message.id !== assistantId)); return; }
       setMessages((current) => current.map((message) => message.id === assistantId ? {
         ...withCompletedLifecycleRecord(message, {
@@ -1409,6 +1431,7 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
     if (!completeText || !receivedDone) throw new Error("Model nevrátil dokončenou odpověď s usage daty.");
     if (phase === "intake" && completedPhase === "development") {
       const result = await refreshStructuredAnalysis(notepadForChat, "", turnId, requestId, "F1");
+      if (!isCurrentRequest()) return;
       if (!result) { setMessages((current) => current.filter((message) => message.id !== assistantId)); return; }
       if (usesDesktopWorkspaceLayout()) {
         setActivePanel("analysis");
@@ -1574,6 +1597,7 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
         return;
       }
       await requestAssistant(rawText, assistantId, notepadForChat, userMessage.id, turnId, requestId, undefined, controllerFastPathEligible);
+      if (!isCurrentRequest()) return;
       if (phase === "development") {
         setAnalysisFocus({ text: rawText, nonce: Date.now() });
       }
@@ -1672,6 +1696,44 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
     telemetryClockRef.current.clear();
     sessionRef.current = { id: createMessageId(), startedAt: new Date().toISOString() };
   }
+
+  useLayoutEffect(() => registerInvalidation((logout) => {
+    if (logout === undefined) {
+      // Pause asynchronous continuations while Access identity is uncertain,
+      // retaining accepted work for a successful revalidation/retry.
+      if (isDictating || hasDictationDraft) {
+        mergeDictationTranscript(currentDictationTranscript());
+        setComposerInput([dictationPrefixRef.current.trimEnd(), dictationTranscriptRef.current.trim()].filter(Boolean).join(" "));
+      }
+      cancelDictation();
+      const pending = assistantRequestRef.current || isLoading || analysisStatus === "loading" || f2BuildStatus === "loading"
+        || f2PreviewStatus === "loading" || rozborGenerationStatus === "loading" || f3Status === "loading"
+        || (phase !== "intake" && sourceF2Need && !canonicalF2Need);
+      if (!pending) return; // Idle checks retain the accepted Need Router cache.
+      projectEpochRef.current += 1;
+      assistantRequestRef.current = null;
+      needRouterRef.current = null;
+      setDialogActionsPreview(null);
+      clearF1ProcessingStatus();
+      if (isLoading) {
+        setFailedInput(messages.filter(message => message.role === "user").at(-1)?.content ?? null);
+        setError("Ověření přihlášení přerušilo požadavek. Po ověření ho můžete zopakovat.");
+      }
+      setIsLoading(false);
+      const interrupted = "Po ověření přihlášení aktualizaci zopakujte.";
+      if (analysisStatus === "loading") { setAnalysisStatus("error"); setAnalysisError(interrupted); }
+      if (f2BuildStatus === "loading") { setF2BuildStatus("error"); setF2BuildError(interrupted); }
+      if (f2PreviewStatus === "loading") { setF2PreviewStatus("error"); setF2PreviewError(interrupted); }
+      if (rozborGenerationStatus === "loading") { setRozborGenerationStatus("error"); setRozborGenerationError(interrupted); }
+      if (f3Status === "loading") { setF3Status("error"); setF3Error(interrupted); }
+      f3GenerationEpochRef.current = null;
+      return;
+    }
+    invalidateNotebook(logout);
+    resetCurrentProject();
+    setIsDiagnosticsDrawerOpen(false);
+    usageShadowComparisonRef.current = null;
+  }));
 
   function selectDialogAction(id: string, label: string) {
     const controlledText = id === "continue_to_solution" ? "Přejít do Rozboru" : label;
@@ -1997,8 +2059,8 @@ export default function ApuClient({ email, isDeveloper }: ApuClientProps) {
             <button type="button" disabled aria-label="Otevřít projekt – připravuje se" title="Otevírání projektů připravujeme">
               <FolderOpen aria-hidden="true" />
             </button>
-            <button type="button" disabled aria-label="Přihlášení – připravuje se" title="Přihlášení připravujeme">
-              <UserRound aria-hidden="true" />
+            <button type="button" onClick={() => onLogout(messages.some(message => message.id !== WELCOME.id) || Boolean(input.trim()) || hasDictationDraft || Object.values(notepad).some(items => items.length > 0) || Boolean(acceptedF2Source || f3State) || isLoading)} aria-label="Odhlásit se" title="Odhlásit se">
+              <LogOut aria-hidden="true" />
             </button>
           </nav>
           <aside

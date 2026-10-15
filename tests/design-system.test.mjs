@@ -55,7 +55,7 @@ test("user settings retain appearance and communication; model and usage stay in
   assert.match(client, /id="font-size-select"/);
   assert.doesNotMatch(client, /id="design-settings"/);
   assert.match(client, /<Settings aria-hidden="true" \/>/);
-  assert.match(client, /<UserRound aria-hidden="true" \/>/);
+  assert.match(client, /<LogOut aria-hidden="true" \/>/);
 });
 
 test("mobile notebook editing prevents iOS focus zoom", () => {

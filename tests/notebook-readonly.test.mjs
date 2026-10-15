@@ -7,7 +7,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import ts from "typescript";
 import { EMPTY_NOTEPAD } from "../app/notepad-model.ts";
 const require = createRequire(import.meta.url);
-const hooks = `data:text/javascript;base64,${Buffer.from('export function useState(value){return [typeof value === "function" ? value() : value,()=>{}]};export function useEffect(){};export function useRef(value){return {current:value}}').toString('base64')}`;
+const hooks = `data:text/javascript;base64,${Buffer.from('export function useState(value){return [typeof value === "function" ? value() : value,()=>{}]};export function useEffect(){};export function useCallback(value){return value};export function useRef(value){return {current:value}}').toString('base64')}`;
 const source = (await readFile(new URL("../app/notepad.tsx", import.meta.url), "utf8")) + '\nexport { NotepadPanel };';
 const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText
   .replace(/import \{ F3Finalization \} from "\.\/f3-finalization";/, 'const F3Finalization=()=>null;')

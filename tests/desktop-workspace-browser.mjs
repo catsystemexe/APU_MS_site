@@ -22,6 +22,16 @@ const require = createRequire(new URL("../package.json", import.meta.url));
 const fixture = `import React from 'react';
 import { createRoot } from 'react-dom/client';
 import ApuClient from '/workspace/APU_MS_site/app/apu-client';
+import { createNotebookStorage, notebookStorageKey } from '/workspace/APU_MS_site/app/notebook-storage';
+const fixtureIdentity={email:new URLSearchParams(location.search).get('email') || 'test@example.invalid',isDeveloper:new URLSearchParams(location.search).has('developer')};
+window.fixtureIdentity=fixtureIdentity;
+if(new URLSearchParams(location.search).has('no-broadcast')) window.BroadcastChannel=undefined;
+window.sessionRevalidation={...fixtureIdentity};
+window.fixtureStorageKey=notebookStorageKey(fixtureIdentity);
+window.fixtureStorage=fixtureIdentity.isDeveloper?localStorage:sessionStorage;
+window.fixtureReadNotebook=()=>JSON.parse(window.fixtureStorage.getItem(window.fixtureStorageKey) || 'null')?.entries;
+window.fixtureSeedNotebook=()=>createNotebookStorage(fixtureIdentity,{local:localStorage,session:sessionStorage}).write(notebook);
+
 import { longHypotheses, longContext, longComponentText } from '/workspace/APU_MS_site/tests/document-style-fixture.mjs';
 import { renderWorkingAnalysis, f3MaterialToText } from '/workspace/APU_MS_site/app/f3-working-analysis';
 import { fallbackQuestController } from '/workspace/APU_MS_site/app/dialog-action';
@@ -30,7 +40,7 @@ const notebook = { manifestations: [{ id: 'fact1', text: 'Při dlouhém kruhu d�
 if(new URLSearchParams(location.search).has('manual-notebook')) for(const category of ['manifestations','goals']) {
   notebook[category][0].origin='manual'; delete notebook[category][0].source;
 }
-localStorage.setItem('apu-site:notepad-map:v2', JSON.stringify(notebook));
+if(!new URLSearchParams(location.search).has('session-test')) createNotebookStorage(fixtureIdentity,{local:localStorage,session:sessionStorage}).write(notebook);
 const h = { id: 'h1', rank: 1, title: 'Testovací hypotéza', summary: 'Pracovní a nejisté vysvětlení.', relevantNeeds: ['n1'], question: null, supportingInformation: ['Kratší situace zvládá.'], limitations: ['Málo evidence.'], unknowns: ['Vliv únavy.'], questions: [] };
 const analysis = { hypotheses: [h], needs: [{ needId: 'n1', title: needText, sourceText: needText, relevantHypotheses: ['h1'], direction: 'Zvažovat možná vysvětlení.', question: null, distinctions: [], parameters: [], limitations: [], questions: [], intendedOutput: '' }], suggestedNeeds: [], mode: 'entry', mainUncertainty: 'Příčinu nelze zatím určit.', chatUpdate: { kind: 'entry', summary: 'Výchozí Rozbor.', notebookChanges: [], hypothesisChanges: [], remainingUncertainty: '', nextPrompt: null }, transitionReady: false };
 const longDocument = new URLSearchParams(location.search).has('document-styles');
@@ -49,7 +59,7 @@ if (longDocument) {
   notebook.goals.push({id:'need-repeat',text:'  Potřebuji  pochopit\\npodmínky zapojení. ',origin:'extracted',source:notebook.manifestations[0].source,needMapping:notebook.goals[0].needMapping});
   notebook.goals.push({id:'need-noise',text:'Lépe rozlišit vliv hluku.',origin:'extracted',source:notebook.manifestations[0].source,needMapping:notebook.goals[0].needMapping});
   notebook.goals.push({id:'need-help',text:'Porozumět potřebě podpory při přechodu.',origin:'extracted',source:notebook.manifestations[0].source,needMapping:notebook.goals[0].needMapping});
-  localStorage.setItem('apu-site:notepad-map:v2', JSON.stringify(notebook));
+  if(!new URLSearchParams(location.search).has('session-test')) createNotebookStorage(fixtureIdentity,{local:localStorage,session:sessionStorage}).write(notebook);
 }
 window.fixtureMaterialForSnapshot = renderWorkingAnalysis;
 window.fixtureTextForSnapshot = (snapshot) => f3MaterialToText(renderWorkingAnalysis(snapshot));
@@ -87,6 +97,13 @@ window.finishPreview = (kind='done', index=window.previewChats.length-1, text='D
   c.close();
 };
 window.fetch = async (url, init) => {
+  if(url==='/api/session') {
+    window.revalidationCalls=(window.revalidationCalls||0)+1;
+    if(window.sessionRevalidation==='offline') throw Error('Synthetic connectivity failure');
+    if(window.sessionRevalidation==='unauthorized') return Response.json({error:'Expired'},{status:401});
+    if(window.deferSessionCheck) await new Promise(r=>window.finishSessionCheck=r);
+    return Response.json(window.sessionRevalidation);
+  }
   if (!String(url).startsWith('/api/')) return nativeFetch(url, init);
   const body = JSON.parse(String(init?.body || '{}')); window.calls.push({ url, body });
   if(window.deferUsageUrl===url) {
@@ -129,25 +146,26 @@ window.fetch = async (url, init) => {
 };
 const fixtureRoot=createRoot(document.getElementById('root')!);
 window.unmountFixture=()=>fixtureRoot.unmount();
-fixtureRoot.render(<ApuClient email='test@example.invalid' isDeveloper={new URLSearchParams(location.search).has('developer')} />);
+window.rerenderFixture=identity=>fixtureRoot.render(<ApuClient {...identity} />);
+fixtureRoot.render(<ApuClient {...fixtureIdentity} />);
 `;
 await writeFile(join(artifactRoot, "fixture.tsx"), fixture.replaceAll("/workspace/APU_MS_site/", projectRoot.replaceAll("\\", "/") + "/"));
 const esbuild = require("esbuild");
 await esbuild.build({ entryPoints: [join(artifactRoot, "fixture.tsx")], bundle: true, outfile: join(artifactRoot, "app.js"), jsx: "automatic", nodePaths: [join(projectRoot, "node_modules")], define: { "process.env.NODE_ENV": '"production"' } });
 const [js, css] = await Promise.all([readFile(join(artifactRoot, "app.js")), readFile(join(projectRoot, "app/globals.css"))]);
-const server = createServer(async (req, res) => { if (req.url === '/apu-logo-horizontal.png' || req.url === '/apu-flower.svg') { res.setHeader('Content-Type', req.url.endsWith('.svg') ? 'image/svg+xml' : 'image/png'); res.end(await readFile(join(projectRoot, 'public', req.url.slice(1)))); return; } res.setHeader("Content-Type", req.url === "/app.js" ? "application/javascript" : req.url === "/style.css" ? "text/css" : "text/html"); res.end(req.url === "/app.js" ? js : req.url === "/style.css" ? Buffer.concat([css, Buffer.from("\n:root{--font-manrope:Arial;--font-source-sans:Arial;--font-dm-sans:Arial;--font-inter:Arial}")]) : '<!doctype html><html lang="cs"><meta charset="utf-8"><link rel="stylesheet" href="/style.css"><div id="root"></div><script src="/app.js"></script></html>'); });
+const server = createServer(async (req, res) => { if(req.url==='/cdn-cgi/access/logout'){res.setHeader('Content-Type','text/html');res.end('<html lang=cs><p id=mock-logout>Mock Access logout</p></html>');return;} if (req.url === '/apu-logo-horizontal.png' || req.url === '/apu-flower.svg') { res.setHeader('Content-Type', req.url.endsWith('.svg') ? 'image/svg+xml' : 'image/png'); res.end(await readFile(join(projectRoot, 'public', req.url.slice(1)))); return; } res.setHeader("Content-Type", req.url === "/app.js" ? "application/javascript" : req.url === "/style.css" ? "text/css" : "text/html"); res.end(req.url === "/app.js" ? js : req.url === "/style.css" ? Buffer.concat([css, Buffer.from("\n:root{--font-manrope:Arial;--font-source-sans:Arial;--font-dm-sans:Arial;--font-inter:Arial}")]) : '<!doctype html><html lang="cs"><meta charset="utf-8"><link rel="stylesheet" href="/style.css"><div id="root"></div><script src="/app.js"></script></html>'); });
 await new Promise((resolve) => server.listen(4333, "127.0.0.1", resolve));
 const chrome = spawn(process.env.CHROMIUM_PATH ?? "chromium", ["--headless", "--no-sandbox", "--disable-dev-shm-usage", "--remote-debugging-port=9228", "--user-data-dir="+join(artifactRoot, "profile"), "about:blank"], { stdio: "ignore" });
 let socket;
 try {
   let tabs;
-  for (let i = 0; i < 100; i++) { try { tabs = await (await fetch("http://127.0.0.1:9228/json/list")).json(); break; } catch { await new Promise((r) => setTimeout(r, 50)); } }
+  for (let i = 0; i < 100; i++) { try { tabs = (await (await fetch("http://127.0.0.1:9228/json/list")).json()).filter(tab => tab.type === "page" && tab.url === "about:blank"); if (tabs.length) break; } catch { await new Promise((r) => setTimeout(r, 50)); } }
   assert.ok(tabs?.[0]);
   socket = new WebSocket(tabs[0].webSocketDebuggerUrl);
   await new Promise((resolve) => socket.addEventListener("open", resolve, { once: true }));
   let id = 0; const pending = new Map();
   socket.addEventListener("message", (event) => { const message = JSON.parse(event.data); if (message.id && pending.has(message.id)) { const { resolve, reject } = pending.get(message.id); pending.delete(message.id); message.error ? reject(new Error(JSON.stringify(message.error))) : resolve(message.result); } });
-  const call = (method, params = {}) => new Promise((resolve, reject) => { const key = ++id; pending.set(key, { resolve, reject }); socket.send(JSON.stringify({ id: key, method, params })); });
+  const call = (method, params = {}) => new Promise((resolve, reject) => { const key = ++id; pending.set(key, { resolve, reject }); if(process.argv.includes("--session-only")) { const timer=setTimeout(()=>{if(pending.delete(key))reject(Error("Session CDP timeout: "+method+" "+JSON.stringify(params)));},15000); timer.unref(); } socket.send(JSON.stringify({ id: key, method, params })); });
   const evaluate = async (expression) => { const response = await call("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true }); if (response.exceptionDetails) throw new Error(JSON.stringify(response.exceptionDetails)); return response.result.value; };
   await call("Page.enable");
   await call("Page.bringToFront");
@@ -157,8 +175,11 @@ try {
   const waitFor = async (expression) => { for (let i = 0; i < 150; i++) { if (await evaluate(`Boolean(${expression})`)) return; await new Promise((r) => setTimeout(r, 30)); } throw new Error('Timed out: ' + expression + '\n' + await evaluate('JSON.stringify({calls:window.calls.map(c=>c.url),text:document.body.innerText})')); };
   const click = async (selector) => evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`);
   await call("Emulation.setDeviceMetricsOverride", { width: 1600, height: 1000, deviceScaleFactor: 1, mobile: false });
-  await waitFor('document.querySelector(".workspace-chat #message") && document.querySelector(".notepad-panel textarea")');
-  const ratio = await evaluate('document.querySelector(".desktop-tools").getBoundingClientRect().width / document.querySelector(".chat-card").getBoundingClientRect().width');
+  await waitFor('document.querySelector(".workspace-chat #message") && !document.querySelector("#message").disabled && document.querySelector(".notepad-panel textarea") && document.querySelector(".chat-card").getBoundingClientRect().width>0');
+  // Revalidation may briefly hide an already hydrated tree. Measure an active
+  // layout, rather than asserting a 0/0 ratio during the session lock.
+  await waitFor('(() => { const card=document.querySelector(".chat-card").getBoundingClientRect(); if(!card.width)return false; window.fixtureInitialRatio=document.querySelector(".desktop-tools").getBoundingClientRect().width/card.width; return Math.abs(window.fixtureInitialRatio-.30)<.005; })()');
+  const ratio = await evaluate('window.fixtureInitialRatio');
   assert.ok(Math.abs(ratio - 0.30) < .005, 'fresh split ' + ratio);
   assert.equal(await evaluate('getComputedStyle(document.querySelector(".notepad-panel")).display'), 'block');
   const capture = async (name) => { const image = await call("Page.captureScreenshot", { format: "png", captureBeyondViewport: true }); await writeFile(join(artifactRoot, name + '.png'), Buffer.from(image.data, 'base64')); };
@@ -183,7 +204,10 @@ try {
     await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
     await waitFor('!document.querySelector(".welcome-help")');
   };
-  if (process.argv.includes('--header-roles-only')) {
+  if (process.argv.includes('--session-only')) {
+    const { runSessionScenarios } = await import('./session-browser-scenarios.mjs');
+    await runSessionScenarios({call,evaluate,waitFor,capture,artifactRoot});
+  } else if (process.argv.includes('--header-roles-only')) {
     const developerSurfaces = '.developer-controls, .developer-indicator, .dev-scenario-picker, #dev-scenario-menu, .conversation-diagnostics, #conversation-stats-popover, .header-session-export, .response-diagnostics, .diagnostic-debug';
     const developerNames = /DEV ON|DEV LOG|Testovací scénáře|Telemetrie a náklady konverzace|Stáhnout APU Session JSON/;
     const key = async (name, code) => {
@@ -195,12 +219,12 @@ try {
       const mount=await evaluate('window.fixtureMountId');
       await call('Emulation.setDeviceMetricsOverride',{width,height:1000,deviceScaleFactor:1,mobile:false});
       await call('Page.navigate',{url:'http://127.0.0.1:4333/'+(developer?'?developer=1':'')});
-      await waitFor(`window.fixtureMountId!==${JSON.stringify(mount)} && document.querySelector('#message') && document.querySelector('.app-header') && localStorage.getItem('apu-site:notepad-map:v2')`);
+      await waitFor(`window.fixtureMountId!==${JSON.stringify(mount)} && document.querySelector('#message') && document.querySelector('.app-header') && document.querySelector('.app-shell').getBoundingClientRect().width>0 && window.fixtureReadNotebook()`);
       assert.equal(await evaluate('document.querySelectorAll(".app-header").length'),1);
       assert.equal(await evaluate('document.querySelector(".account-email").textContent'),'test@example.invalid');
       assert.ok(await evaluate('Boolean(document.querySelector(".app-header .brand-mark img"))'));
       assert.equal(await evaluate('document.querySelector("#dev-log-panel, .dev-log-overlay, button[aria-controls=dev-log-panel]")'),null,'no active DEV LOG, including responsive variants');
-      const expected = [...(developer?['Testovací scénáře','Telemetrie a náklady konverzace','Stáhnout APU Session JSON']:[]),'Otevřít nastavení','Nový projekt'];
+      const expected = [...(developer?['Testovací scénáře','Telemetrie a náklady konverzace','Stáhnout APU Session JSON']:[]),'Otevřít nastavení','Nový projekt','Odhlásit se'];
       const buttons='.app-header .brand button, .project-actions button:not(:disabled)';
       assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll(${JSON.stringify(buttons)})).map(b=>b.getAttribute('aria-label'))`),expected,'one of each header action');
       assert.equal(await evaluate(`(() => {const rs=Array.from(document.querySelectorAll(${JSON.stringify(buttons)})).map(b=>b.getBoundingClientRect());return rs.every(r=>r.width>0 && r.height>0 && r.left>=0 && r.right<=innerWidth && r.top>=0) && rs.every((a,i)=>rs.slice(i+1).every(b=>a.right<=b.left || b.right<=a.left || a.bottom<=b.top || b.bottom<=a.top));})()`),true,'visible actions fit without collision');
@@ -242,7 +266,7 @@ try {
       }
       await evaluate('window.confirm=()=>true');
       await activate('button[aria-label="Nový projekt"]');
-      await waitFor('document.querySelector("#message").value==="" && Object.values(JSON.parse(localStorage.getItem("apu-site:notepad-map:v2"))).every(items=>items.length===0)');
+      await waitFor('document.querySelector("#message").value==="" && Object.values(window.fixtureReadNotebook()).every(items=>items.length===0)');
       assert.equal(await evaluate('document.querySelectorAll(".desktop-tool-tabs button").length'),3);
       assert.equal(await evaluate('window.calls.length'),0,'header interactions do not invoke APIs');
     }
@@ -644,7 +668,7 @@ try {
   await evaluate('void(window.documentWorkspaceNode=document.querySelector("#workspace-document"))');
   assert.equal(await evaluate('document.querySelectorAll("#workspace-document .f3-material").length'),1);
   const beforeRightSwitch=await evaluate('window.calls.length');
-  const notebookBefore=await evaluate('localStorage.getItem("apu-site:notepad-map:v2")');
+  const notebookBefore=await evaluate('JSON.stringify(window.fixtureReadNotebook())');
   await click('.workspace-view-tabs button:first-child');
   assert.equal(await evaluate('document.querySelector("#workspace-document").parentElement.hidden'),true);
   assert.equal(await evaluate('document.querySelector(".document-actions")'),null);
@@ -665,7 +689,7 @@ try {
   assert.ok(await evaluate('Boolean(document.querySelector(".workspace-output-tools .f3-tools"))'),'left Output controls remain available while notebook is shown');
   await click('.desktop-tool-tabs button[aria-controls="desktop-tool-build"]');
   assert.equal(await evaluate('document.querySelector(".workspace-view-tabs button[aria-pressed=true]").textContent'),'Zápisník');
-  assert.equal(await evaluate('localStorage.getItem("apu-site:notepad-map:v2")'),notebookBefore);
+  assert.equal(await evaluate('JSON.stringify(window.fixtureReadNotebook())'),notebookBefore);
   await capture('retrospective-notebook');
   await click('.workspace-view-tabs button:nth-child(2)');
   assert.equal(await evaluate('document.querySelector("#workspace-document").innerHTML'),defaultDocument);

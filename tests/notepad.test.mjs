@@ -9,9 +9,10 @@ const [component, categories, page, styles] = await Promise.all([
   readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
 ]);
 
-test("notepad uses local persistence and floating Lucide tool buttons", () => {
-  assert.match(component, /localStorage\.getItem\(NOTEPAD_STORAGE_KEY\)/);
-  assert.match(component, /localStorage\.setItem\(NOTEPAD_STORAGE_KEY, JSON\.stringify\(entries\)\)/);
+test("notepad uses owner-bound persistence and floating Lucide tool buttons", () => {
+  assert.match(component, /usePersistentNotepad\(owner: NotebookOwner\)/);
+  assert.match(component, /createNotebookStorage\(owner/);
+  assert.doesNotMatch(component, /LEGACY_NOTEPAD_STORAGE_KEY|migrateLegacyNotepad|NOTEPAD_STORAGE_KEY/);
   assert.match(component, /NotebookPen/);
   assert.match(page, /className="tool-rail"/);
   assert.match(page, /\bSettings\b/);

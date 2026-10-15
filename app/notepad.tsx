@@ -1,19 +1,16 @@
 "use client";
 
 import { FileText, Info, NotebookPen, Plus, ScanSearch, type LucideIcon } from "lucide-react";
-import { ChangeEvent, KeyboardEvent, type RefObject, useEffect, useRef, useState } from "react";
+import { ChangeEvent, KeyboardEvent, type RefObject, useCallback, useEffect, useRef, useState } from "react";
 import {
   CategoryId,
   createLocalId,
   EMPTY_NOTEPAD,
-  LEGACY_NOTEPAD_STORAGE_KEY,
-  migrateLegacyNotepad,
   mapPedagogicalNeed,
   NotepadEntry,
-  NOTEPAD_STORAGE_KEY,
   NotepadState,
-  parseNotepadState,
 } from "./notepad-model";
+import { createNotebookStorage, notebookOwnerId, type NotebookOwner } from "./notebook-storage";
 import { NOTEPAD_CATEGORIES } from "./notepad-categories";
 import type { AnalysisState, SuggestedNeed } from "./analysis-model";
 import type { ConversationPhase } from "./dialog-action";
@@ -119,39 +116,39 @@ const WORKSPACE_PANELS: Record<OpenWorkspacePanel, {
   },
 };
 
-export function usePersistentNotepad() {
-  const [entries, setEntries] = useState<NotepadState>(EMPTY_NOTEPAD);
-  const [hydrated, setHydrated] = useState(false);
-
+export function usePersistentNotepad(owner: NotebookOwner) {
+  const binding = `${notebookOwnerId(owner)}:${owner.isDeveloper}`;
+  const active = useRef<{ binding: string; entries: NotepadState; storage: ReturnType<typeof createNotebookStorage> | null; closed: boolean } | null>(null);
+  const [state, setState] = useState<{ binding: string; entries: NotepadState } | null>(null);
   useEffect(() => {
-    const hydrate = window.setTimeout(() => {
-      try {
-        const current = window.localStorage.getItem(NOTEPAD_STORAGE_KEY);
-        if (current) {
-          setEntries(parseNotepadState(JSON.parse(current)) ?? EMPTY_NOTEPAD);
-        } else {
-          const legacy = window.localStorage.getItem(LEGACY_NOTEPAD_STORAGE_KEY);
-          setEntries(legacy ? migrateLegacyNotepad(JSON.parse(legacy)) ?? EMPTY_NOTEPAD : EMPTY_NOTEPAD);
-        }
-      } catch {
-        setEntries(EMPTY_NOTEPAD);
-      } finally {
-        setHydrated(true);
-      }
-    }, 0);
-    return () => window.clearTimeout(hydrate);
-  }, []);
-
-  useEffect(() => {
-    if (!hydrated) return;
-    try {
-      window.localStorage.setItem(NOTEPAD_STORAGE_KEY, JSON.stringify(entries));
-    } catch {
-      // Keep the current in-memory map when storage is unavailable.
-    }
-  }, [entries, hydrated]);
-
-  return { entries, setEntries, hydrated };
+    let storage: ReturnType<typeof createNotebookStorage> | null = null;
+    try { storage = createNotebookStorage(owner, { local: window.localStorage, session: window.sessionStorage }); }
+    catch { /* Storage-disabled browsers can work in memory. */ }
+    const current = { binding, entries: storage?.read() ?? structuredClone(EMPTY_NOTEPAD), storage, closed: false };
+    active.current = current;
+    setState({ binding, entries: current.entries });
+    return () => { current.closed = true; current.storage?.close(); if (active.current === current) active.current = null; };
+    // Binding consists solely of the normalized server identity and policy.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [binding]);
+  const setEntries = useCallback((update: NotepadState | ((current: NotepadState) => NotepadState)) => {
+    const current = active.current;
+    if (!current || current.closed || current.binding !== binding) return;
+    current.entries = typeof update === "function" ? update(current.entries) : update;
+    // Synchronous persistence makes an immediate refresh after New Project safe.
+    current.storage?.write(current.entries);
+    setState({ binding, entries: current.entries });
+  }, [binding]);
+  const invalidate = useCallback((logout: boolean) => {
+    const current = active.current;
+    if (!current || current.binding !== binding) return;
+    current.closed = true;
+    current.storage?.invalidate(logout);
+    current.entries = structuredClone(EMPTY_NOTEPAD);
+    setState({ binding, entries: current.entries });
+  }, [binding]);
+  return { entries: state?.binding === binding ? state.entries : EMPTY_NOTEPAD, setEntries,
+    hydrated: state?.binding === binding, invalidate };
 }
 
 function ItemEditor({

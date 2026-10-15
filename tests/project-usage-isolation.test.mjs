@@ -81,7 +81,9 @@ assert.ok(functions.has("generateCurrentRozbor"));
 for (const operation of operations) for (const failed of [false, true]) test(`${operation}: delayed ${failed ? "failed" : "successful"} response cannot append to a reset project`, async () => {
   const f = fixture(), pending = f.run(operation);
   assert.equal(f.requests.length, 1);
-  f.reset(); answer(f.requests[0], usage("old", { ...operationIdentity(operation), failed }), { failed }); await pending;
+  f.reset(); f.effects.length = 0;
+  answer(f.requests[0], usage("old", { ...operationIdentity(operation), failed }), { failed }); await pending;
+  assert.deepEqual(f.effects, [], "invalidated operations cannot restore content, errors, navigation or loading state");
   assert.equal(f.session().records.length, 0);
   assert.equal(f.session().summary.normalized_total_tokens, 0);
   assert.equal(f.session().summary.known_cost_subtotal_usd, 0);
@@ -143,14 +145,15 @@ test("actual analysis captures ownership before routing and retains same-project
   }
 });
 
-test("Need Router ownership belongs to its original instance even if its callback starts after reset", async () => {
+test("queued Need Router work cannot send old context after invalidation; new project routing remains functional", async () => {
   const f = fixture(), routeA = f.router();
   const pendingA = routeA({ needId: "n", needText: "Need." });
-  f.reset(); await Promise.resolve();
-  answer(f.requests[0], usage("router-A", { phase: "F2", operation: "need_routing" })); await pendingA;
+  f.reset();
+  await assert.rejects(pendingA, /Projekt byl ukončen/);
+  assert.equal(f.requests.length, 0, "no old-owner request may start after invalidation");
   assert.equal(f.session().records.length, 0);
   const routeB = f.router(), pendingB = routeB({ needId: "n", needText: "Need." }); await Promise.resolve();
-  answer(f.requests[1], usage("router-B", { phase: "F2", operation: "need_routing" })); await pendingB;
+  answer(f.requests[0], usage("router-B", { phase: "F2", operation: "need_routing" })); await pendingB;
   assert.deepEqual(f.session().records.map(record => record.call_id), ["router-B"]);
 });
 

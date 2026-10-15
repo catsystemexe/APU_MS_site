@@ -1838,6 +1838,8 @@ button:disabled { cursor: default; opacity: 0.52; }
 }
 
 .access-card h1 { margin: 0; font-size: 24px; line-height: 1.2; }
+.access-card button { min-height: 40px; margin: 4px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface-hover); color: var(--text-primary); font: inherit; cursor: pointer; }
+.access-card button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .access-card p { margin: 13px 0 24px; color: var(--text-secondary); font-size: 14px; line-height: 1.55; }
 .access-card strong { color: var(--text-primary); overflow-wrap: anywhere; }
 .access-button {
@@ -2091,6 +2093,7 @@ button:disabled { cursor: default; opacity: 0.52; }
   .document-actions button { min-height: 36px; }
 }
 @media (max-width: 360px) {
+  .app-header { column-gap: 6px; padding-inline: 10px; }
   .developer-indicator { display: none; }
 }
 

@@ -34,6 +34,23 @@ async function signedJwt(claims, kid = "test-key") {
   };
 }
 
+test("session revalidation can distinguish unavailable JWKS without relaxing Access validation", async t => {
+  const { getAccessIdentity } = await loadAccessAuth();
+  const vars = { NODE_ENV: "production", CF_ACCESS_AUD: "session-audience", CF_ACCESS_TEAM_DOMAIN: "session-unavailable.example.com" };
+  const original = Object.fromEntries(Object.keys(vars).map(key => [key, process.env[key]]));
+  Object.assign(process.env, vars);
+  t.after(() => { for (const [key, value] of Object.entries(original)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; } });
+  t.mock.method(console, "warn", () => {});
+  t.mock.method(globalThis, "fetch", async () => { throw Error("Synthetic JWKS outage"); });
+  const { token } = await signedJwt({ iss: "https://session-unavailable.example.com", aud: "session-audience", email: "teacher@example.com", exp: Math.floor(Date.now()/1000)+300 });
+  let unavailable = 0;
+  assert.equal(await getAccessIdentity(new Headers({ "cf-access-jwt-assertion": token }), () => unavailable++), null);
+  assert.equal(unavailable, 1);
+  unavailable = 0;
+  assert.equal(await getAccessIdentity(new Headers(), () => unavailable++), null);
+  assert.equal(unavailable, 0, "missing credentials remain a confirmed authentication failure");
+});
+
 test("all model-backed API routes enforce the shared Access identity", async () => {
   for (const relativePath of ["../app/api/chat/route.ts", "../app/api/extract/route.ts", "../app/api/analysis/route.ts"]) {
     const source = await readFile(new URL(relativePath, import.meta.url), "utf8");

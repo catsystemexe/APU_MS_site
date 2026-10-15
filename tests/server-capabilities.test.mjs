@@ -16,7 +16,7 @@ const root = fileURLToPath(new URL("..", import.meta.url));
 const artifacts = await mkdtemp(join(tmpdir(), "apu-server-capabilities-"));
 after(() => rm(artifacts, { recursive: true, force: true }));
 const handlers = {};
-for (const name of ["chat", "extract", "analysis", "need-route", "f2", "f3"]) {
+for (const name of ["chat", "extract", "analysis", "need-route", "f2", "f3", "session"]) {
   const outfile = join(artifacts, name + ".mjs");
   await build({ entryPoints: [join(root, `app/api/${name}/route.ts`)], outfile, bundle: true, platform: "node", format: "esm", logLevel: "silent",
     plugins: [{ name: "provider-free-server-boundaries", setup(plugin) {
@@ -190,4 +190,30 @@ test("malformed JSON/body and invalid chat model retain input errors without pro
     for(const text of ['{broken','null','[]']){const response=await handlers[name].POST(new Request(`https://apu.invalid/api/${name}`,{method:"POST",headers:{"cf-access-jwt-assertion":await token("teacher@example.com")},body:text}));assert.equal(response.status,400);assertPublic(await response.json());}
   }
   const{response}=await f.invoke(cases[0],{model:{invalid:true}});assert.equal(response.status,400);assert.equal(f.calls.length,0);
+});
+
+for (const emptyAllowlist of [false, true]) test(`session revalidation is authenticated, minimal and no-store (empty=${emptyAllowlist})`, async t => {
+  const f = fixture(t, { emptyAllowlist });
+  for (const email of [null, "teacher@example.com", "developer@example.com"]) {
+    const response = await handlers.session.GET(new Request("https://apu.invalid/api/session", { headers: {
+      ...(email ? {"cf-access-jwt-assertion": await token(email)} : {}), "x-role": "developer",
+    } }));
+    assert.equal(response.status, email ? 200 : 401);
+    assert.match(response.headers.get("cache-control"), /no-store/);
+    const payload = await response.json();
+    assert.deepEqual(payload, email ? { email, isDeveloper: !emptyAllowlist && email === "developer@example.com" } : { error: "Přihlášení není platné." });
+  }
+  assert.equal(f.calls.length, 0); assert.equal(f.collectors.length, 0);
+});
+
+test("session verification configuration outage returns recoverable 503 rather than confirmed logout", async t => {
+  const f = fixture(t);
+  const previous = process.env.CF_ACCESS_AUD;
+  delete process.env.CF_ACCESS_AUD;
+  t.after(() => { process.env.CF_ACCESS_AUD = previous; });
+  const response = await handlers.session.GET(new Request("https://apu.invalid/api/session"));
+  assert.equal(response.status, 503);
+  assert.match(response.headers.get("cache-control"), /no-store/);
+  assert.deepEqual(await response.json(), { error: "Přihlášení nyní nelze ověřit." });
+  assert.equal(f.calls.length, 0);
 });
