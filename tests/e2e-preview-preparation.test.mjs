@@ -45,7 +45,7 @@ test("verified dedicated KV replaces unknown preparation data without production
   assert.equal(plan.verifiedResources.accountId, "4638092f63fa7fe58bcb9d2d041b7855");
   assert.deepEqual(plan.verifiedResources.dedicatedKv, {
     binding: "DEV_LOG_STATE", namespaceName: "apu-pr60-e2e-devlog-state", namespaceId: dedicatedId,
-    provisioningStatus: "PROVISIONED", initiallyEmpty: true, boundToWorkerAtCreation: false, previewBindingDeployed: false,
+    provisioningStatus: "PROVISIONED", initiallyEmpty: true, boundToWorkerAtCreation: false, previewBindingDeployed: true,
   });
   assert.equal(Object.hasOwn(plan.requiredOperatorInputs, "dedicatedKvNamespaceId"), false);
   assert.match(plan.verifiedResources.evidence, /operator report/);
@@ -56,14 +56,14 @@ test("verified dedicated KV replaces unknown preparation data without production
   }
 });
 
-test("operator-verified Access vars are Preview-only; deployment and tester remain pending without provider credentials", () => {
+test("operator-verified bootstrap is recorded separately; further deployment and tester remain unauthorized", () => {
   assert.equal(plan.kind, "apu-worker-preview-preparation");
-  assert.equal(plan.deployable, false); assert.equal(plan.readiness, "NOT READY FOR DEPLOYMENT");
+  assert.equal(plan.deployable, false); assert.equal(plan.readiness, "PROVIDER-FREE BOOTSTRAP COMPLETED — FURTHER DEPLOYMENT NOT AUTHORIZED");
   assert.deepEqual(plan.deploymentAuthorization, {
     authorized: false, deployableFlagIsTechnicalLock: false,
     enforcedBy: "Execution authorization boundary; Wrangler does not read this preparation manifest",
   });
-  assert.equal(plan.classification, "STATIC CONFIGURATION COMPLETE — DEPLOYMENT PENDING AUTHORIZATION");
+  assert.equal(plan.classification, "OPERATOR-VERIFIED ISOLATED DEV PREVIEW BASELINE — ENV-D3");
   assert.equal(validate(plan), false, "preparation manifest must never be passed to Wrangler");
   assert.equal(plan.baseConfig, "wrangler.jsonc");
   assert.equal(plan.workerName, production.name); assert.equal(plan.previewName, "apu-pr60-e2e");
@@ -76,7 +76,7 @@ test("operator-verified Access vars are Preview-only; deployment and tester rema
   assert.equal(Object.hasOwn(plan.requiredOperatorInputs, "CF_ACCESS_AUD"), false);
   assert.equal(plan.requiredOperatorInputs.approvedTesterIdentities, null);
   assert.equal(plan.verifiedAccess.accessConfigurationComplete, true);
-  assert.equal(plan.verifiedAccess.hostedAccessEffectivenessVerified, false);
+  assert.equal(plan.verifiedAccess.hostedAccessEffectivenessVerified, true);
   assert.equal(plan.verifiedAccess.exactApplicationAudienceVerified, true);
   assert.equal(plan.verifiedAccess.separateTesterApproved, false);
   assert.equal(plan.verifiedAccess.separateTesterRoleVerified, false);
@@ -130,7 +130,8 @@ test("canonical Vinext effective configuration preserves the full isolated Previ
   assert.equal(validatePreview(effective.previews), true, JSON.stringify(validatePreview.errors));
   assert.deepEqual(effective.previews, production.previews, "STOP on any missing or changed Preview setting");
   assert.equal(plan.generatedConfiguration.previewIsolationVerified, true);
-  assert.match(plan.generatedConfiguration.verificationScope, /STATIC GENERATED CONFIG ONLY.*not verified/);
+  assert.match(plan.generatedConfiguration.verificationScope, /STATIC GENERATED CONFIG;.*completedDeployment/);
+  assert.match(plan.historicalPreparationStatus.generatedConfigurationVerificationScope, /STATIC GENERATED CONFIG ONLY.*not verified/);
   assertPreviewIsolation(effective);
   assert.equal(effective.name, production.name);
   assert.equal(effective.no_bundle, true);
@@ -212,4 +213,36 @@ test("actual built API enforces verified Preview Access vars with synthetic JWTs
   await t.test("valid synthetic JWT reaches missing-provider 503 without a provider call", async () => {
     assert.equal((await request(await token())).status, 503);
   });
+});
+
+test("ENV-D3 deployment evidence preserves exact identities, operator provenance and unverified gates", () => {
+  const d = plan.completedDeployment;
+  assert.match(d.evidenceClassification, /OPERATOR-CONFIRMED.*not independently inspected/);
+  assert.equal(d.sourceCommit, "83d9cb4ee673f65a12d7d2a49fda31fed3bafa2c");
+  assert.equal(d.accountId, plan.verifiedResources.accountId);
+  assert.equal(d.parentWorker, plan.workerName); assert.equal(d.previewName, plan.previewName);
+  assert.equal(d.previewId, "79968345270d4008954af42b360775d2");
+  assert.equal(d.previewUrl, "https://apu-pr60-e2e-apu-ms-site.catsystem-exe.workers.dev");
+  assert.equal(d.deploymentId, "ee7c9e97-f7cf-420f-ba55-e23d50688cbd");
+  assert.equal(d.uniqueDeploymentUrl, "https://ee7c9e97-apu-ms-site.catsystem-exe.workers.dev");
+  assert.equal(d.previewCreatedAt, "2026-10-15T20:24:49.668028Z");
+  assert.equal(d.deploymentCreatedAt, "2026-10-15T20:24:56.167650Z");
+  assert.deepEqual(d.kvBinding, { binding: "DEV_LOG_STATE", namespaceId: dedicatedId, productionNamespaceUsed: false, legacyPreviewIdUsed: false });
+  assert.equal(d.access.audience, verifiedAudience);
+  assert.equal(d.access.approvedDeveloperEmail, plan.verifiedAccess.approvedDeveloperEmails[0]);
+  assert.equal(d.access.localDevAuth, "0");
+  assert.equal(d.access.anonymousProtectionOnBothUrls, "PASS");
+  assert.equal(d.access.googleCloudflareDeveloperLogin, "PASS");
+  assert.equal(d.access.authenticatedInterface, "PASS"); assert.equal(d.access.developerHeader, "PASS");
+  assert.equal(d.access.sessionEndpointDeveloperRole, "PASS — operator-reported");
+  assert.ok(Object.values(d.verification).every(value => value === "PASS"));
+  assert.equal(d.providerCredentials, "NOT PROVISIONED");
+  assert.deepEqual(d.productionAfterBootstrap, { versionId: "2a28cdf6-5a61-4f6c-be55-382e5bfa28cd", trafficPercent: 100, rolloutPerformed: false, evidence: "Operator Wrangler report after Preview creation" });
+  assert.deepEqual(d.notVerified, ["Live OpenAI provider execution", "Complete hosted F1/F2/F3 model E2E", "Separate pilot-teacher Access role", "Automated DEV updates"]);
+  assert.equal(d.automaticDevUpdatesConfigured, false); assert.equal(d.productionBranch, "next");
+  assert.equal(d.furtherDeploymentAuthorized, false);
+  assert.equal(plan.historicalPreparationStatus.previewBindingDeployed, false);
+  assert.equal(plan.historicalPreparationStatus.hostedAccessEffectivenessVerified, false);
+  assert.equal(plan.historicalPreparationStatus.readiness, "NOT READY FOR DEPLOYMENT");
+  assert.equal(plan.historicalPreparationStatus.classification, "STATIC CONFIGURATION COMPLETE — DEPLOYMENT PENDING AUTHORIZATION");
 });

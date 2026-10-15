@@ -39,13 +39,13 @@
     "boundKvNamespaceId",
     "accessApplicationIdentity"
   ],
-  "readiness": "NOT READY FOR DEPLOYMENT",
+  "readiness": "PROVIDER-FREE BOOTSTRAP COMPLETED — FURTHER DEPLOYMENT NOT AUTHORIZED",
   "deploymentAuthorization": {
     "authorized": false,
     "deployableFlagIsTechnicalLock": false,
     "enforcedBy": "Execution authorization boundary; Wrangler does not read this preparation manifest"
   },
-  "classification": "STATIC CONFIGURATION COMPLETE — DEPLOYMENT PENDING AUTHORIZATION",
+  "classification": "OPERATOR-VERIFIED ISOLATED DEV PREVIEW BASELINE — ENV-D3",
   "verifiedResources": {
     "accountId": "4638092f63fa7fe58bcb9d2d041b7855",
     "dedicatedKv": {
@@ -55,9 +55,9 @@
       "provisioningStatus": "PROVISIONED",
       "initiallyEmpty": true,
       "boundToWorkerAtCreation": false,
-      "previewBindingDeployed": false
+      "previewBindingDeployed": true
     },
-    "evidence": "C2-B1 verified operator report supplied with the task; not a Cloudflare API inspection by Codex"
+    "evidence": "C2-B1 verified operator report supplied with the task; not a Cloudflare API inspection by Codex; ENV-D3 operator report confirms the deployed dedicated binding in completedDeployment"
   },
   "verifiedAccess": {
     "teamDomainOrigin": "https://catsystem-ai.cloudflareaccess.com",
@@ -67,12 +67,12 @@
     "policyAction": "Allow",
     "evidence": "C2-B1 verified operator report supplied with the task; selectors do not establish approved identities",
     "accessConfigurationComplete": true,
-    "hostedAccessEffectivenessVerified": false,
+    "hostedAccessEffectivenessVerified": true,
     "exactApplicationAudienceVerified": true,
     "approvedDeveloperEmails": [
       "catsystem.exe@gmail.com"
     ],
-    "developerApprovalEvidence": "Explicit C2-C1-A user approval for this single isolated Preview developer identity; hosted role verification remains pending",
+    "developerApprovalEvidence": "Original single-identity C2-C1-A approval retained; ENV-D3 operator confirmed Google/Cloudflare login, visible developer header and /api/session developer role on the deployed Preview. See completedDeployment; no independent Cloudflare inspection by Codex.",
     "separateTesterApproved": false,
     "separateTesterRoleVerified": false,
     "audienceVerification": {
@@ -82,7 +82,8 @@
       "exactCopiedTag": "1e1680481c99464a844a6ef0e502cf49fae89fc91c8cf3806ba48026b0088610",
       "exactComparisonConfirmed": true,
       "status": "OPERATOR-VERIFIED — C2-C1-B operator copied the existing Access application's AUD tag and confirmed this exact value; not independently inspected through Cloudflare by Codex"
-    }
+    },
+    "hostedVerificationScope": "ENV-D3 named Preview and unique deployment URLs only; operator-confirmed developer login/role and anonymous protection, not production or pilot-teacher Access verification"
   },
   "providerBootstrap": {
     "providerFree": true,
@@ -98,17 +99,87 @@
     "path": "dist/server/wrangler.json",
     "redirectPath": ".wrangler/deploy/config.json",
     "previewIsolationVerified": true,
-    "verificationScope": "STATIC GENERATED CONFIG ONLY; deployed binding isolation is not verified"
+    "verificationScope": "STATIC GENERATED CONFIG; operator-confirmed deployed binding evidence is recorded separately in completedDeployment"
   },
   "remainingBlockers": [
     "Obtain a separately approved tester identity and verify its hosted role; no separate tester is approved or verified. The sole approved developer is catsystem.exe@gmail.com; no identities may be inferred from policy names or selectors.",
     "Reconcile the two unpublished Windows C2-B1 documentation edits before any merge or integration; Codex has not inspected them.",
-    "Obtain separate commit/push and Preview creation/deployment authorization; select verified account 4638092f63fa7fe58bcb9d2d041b7855 and parent apu-ms-site explicitly. A branch push may trigger Workers Builds version upload.",
-    "After an authorized provider-free bootstrap, verify actual dedicated KV binding, Access denial on stable/unique URLs, approved roles and deployment/artifact identity; none is runtime-verified here."
+    "Automatic DEV updates are not configured or verified. The production branch remains next; development pushes or PR merges into next must not be treated as safe automatic DEV promotion.",
+    "Live provider execution and complete hosted F1/F2/F3 model E2E remain unverified; Preview provider credentials are not provisioned and require separate authorization.",
+    "Any Preview update or further deployment requires separate explicit authorization. deployable=false is review metadata, not a technical lock or permission to deploy again."
   ],
   "documentationReconciliation": {
     "unpublishedWindowsC2B1Edits": 2,
     "inspectedByCodex": false,
     "requiredBeforeMerge": true
+  },
+  "historicalPreparationStatus": {
+    "scope": "C2-C1 preparation review before the separately authorized ENV-D3 bootstrap; retained as historical evidence, not current live status",
+    "readiness": "NOT READY FOR DEPLOYMENT",
+    "classification": "STATIC CONFIGURATION COMPLETE — DEPLOYMENT PENDING AUTHORIZATION",
+    "previewBindingDeployed": false,
+    "hostedAccessEffectivenessVerified": false,
+    "developerApprovalEvidence": "Explicit C2-C1-A user approval for this single isolated Preview developer identity; hosted role verification remains pending",
+    "remainingBlockers": [
+      "Obtain a separately approved tester identity and verify its hosted role; no separate tester is approved or verified. The sole approved developer is catsystem.exe@gmail.com; no identities may be inferred from policy names or selectors.",
+      "Reconcile the two unpublished Windows C2-B1 documentation edits before any merge or integration; Codex has not inspected them.",
+      "Obtain separate commit/push and Preview creation/deployment authorization; select verified account 4638092f63fa7fe58bcb9d2d041b7855 and parent apu-ms-site explicitly. A branch push may trigger Workers Builds version upload.",
+      "After an authorized provider-free bootstrap, verify actual dedicated KV binding, Access denial on stable/unique URLs, approved roles and deployment/artifact identity; none is runtime-verified here."
+    ],
+    "generatedConfigurationVerificationScope": "STATIC GENERATED CONFIG ONLY; deployed binding isolation is not verified"
+  },
+  "completedDeployment": {
+    "batch": "ENV-D3",
+    "evidenceClassification": "OPERATOR-CONFIRMED PROVIDER-FREE DEPLOYMENT AND HOSTED VERIFICATION; supplied with ENV-D3-DOC, not independently inspected through Cloudflare by Codex",
+    "sourceCommit": "83d9cb4ee673f65a12d7d2a49fda31fed3bafa2c",
+    "accountId": "4638092f63fa7fe58bcb9d2d041b7855",
+    "parentWorker": "apu-ms-site",
+    "previewName": "apu-pr60-e2e",
+    "previewId": "79968345270d4008954af42b360775d2",
+    "previewUrl": "https://apu-pr60-e2e-apu-ms-site.catsystem-exe.workers.dev",
+    "previewCreatedAt": "2026-10-15T20:24:49.668028Z",
+    "deploymentId": "ee7c9e97-f7cf-420f-ba55-e23d50688cbd",
+    "uniqueDeploymentUrl": "https://ee7c9e97-apu-ms-site.catsystem-exe.workers.dev",
+    "deploymentCreatedAt": "2026-10-15T20:24:56.167650Z",
+    "kvBinding": {
+      "binding": "DEV_LOG_STATE",
+      "namespaceId": "1729ce8a6acd4cdcbed8248ac543677b",
+      "productionNamespaceUsed": false,
+      "legacyPreviewIdUsed": false
+    },
+    "access": {
+      "audience": "1e1680481c99464a844a6ef0e502cf49fae89fc91c8cf3806ba48026b0088610",
+      "approvedDeveloperEmail": "catsystem.exe@gmail.com",
+      "localDevAuth": "0",
+      "anonymousProtectionOnBothUrls": "PASS",
+      "googleCloudflareDeveloperLogin": "PASS",
+      "authenticatedInterface": "PASS",
+      "developerHeader": "PASS",
+      "sessionEndpointDeveloperRole": "PASS — operator-reported"
+    },
+    "providerCredentials": "NOT PROVISIONED",
+    "verification": {
+      "cleanExactSource": "PASS",
+      "typecheck": "PASS",
+      "canonicalBuild": "PASS",
+      "artifactValidation": "PASS",
+      "previewCreatedOnce": "PASS",
+      "dedicatedRuntimeKv": "PASS"
+    },
+    "productionAfterBootstrap": {
+      "versionId": "2a28cdf6-5a61-4f6c-be55-382e5bfa28cd",
+      "trafficPercent": 100,
+      "rolloutPerformed": false,
+      "evidence": "Operator Wrangler report after Preview creation"
+    },
+    "notVerified": [
+      "Live OpenAI provider execution",
+      "Complete hosted F1/F2/F3 model E2E",
+      "Separate pilot-teacher Access role",
+      "Automated DEV updates"
+    ],
+    "automaticDevUpdatesConfigured": false,
+    "productionBranch": "next",
+    "furtherDeploymentAuthorized": false
   }
 }

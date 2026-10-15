@@ -4,6 +4,31 @@ Status: CURRENT SOURCE/RUNTIME CONTRACT
 
 Purpose: describe the current repository/runtime contract. Deployment state is recorded only when independently verified; this document must not infer production state from repository contents alone.
 
+## ENV-D3 — Verified isolated DEV Preview baseline (2026-10-15)
+
+**OPERATOR-CONFIRMED — deployed, isolated, provider-free DEV baseline.** ENV-D3-DOC records the operator's completed ENV-D3 deployment and verification; Codex did not independently inspect Cloudflare or perform any deployment in this documentation batch. This section supersedes earlier preparation-time statements below that the Preview/deployed binding does not exist or DEV hosted Access/developer-role verification is pending. Earlier dated records retain their historical verification/authorization scope; this is not authorization to update or recreate the Preview.
+
+| Deployment evidence | Operator-confirmed value |
+| --- | --- |
+| Deployed source SHA | `83d9cb4ee673f65a12d7d2a49fda31fed3bafa2c` |
+| Cloudflare account / parent Worker | `4638092f63fa7fe58bcb9d2d041b7855` / `apu-ms-site` |
+| Preview name / ID | `apu-pr60-e2e` / `79968345270d4008954af42b360775d2` |
+| Preview URL | https://apu-pr60-e2e-apu-ms-site.catsystem-exe.workers.dev |
+| Preview created (UTC) | `2026-10-15T20:24:49.668028Z` |
+| Preview deployment ID | `ee7c9e97-f7cf-420f-ba55-e23d50688cbd` |
+| Unique deployment URL | https://ee7c9e97-apu-ms-site.catsystem-exe.workers.dev |
+| Deployment created (UTC) | `2026-10-15T20:24:56.167650Z` |
+| Deployed dedicated `DEV_LOG_STATE` KV | `1729ce8a6acd4cdcbed8248ac543677b` |
+| Production KV, excluded from DEV | `4a24c791d31a4c0983170c921cb744aa` |
+| Access AUD | `1e1680481c99464a844a6ef0e502cf49fae89fc91c8cf3806ba48026b0088610` |
+| Sole approved DEV identity / local auth bypass | `catsystem.exe@gmail.com` / `APU_LOCAL_DEV_AUTH="0"` |
+
+- **Operator verification PASS:** exact clean source checkout, typecheck, canonical build, Worker artifact validation, one Preview creation, actual dedicated KV binding, no production KV or legacy `preview_id` reuse, and no OpenAI provider credentials supplied. Anonymous Access protection passed on both URLs; Google/Cloudflare developer login, authenticated APU rendering and visible developer header controls passed. `/api/session` confirms the developer role **as reported by the operator**. No provider credentials are provisioned on this Preview.
+- **Production preserved:** the operator's post-creation Wrangler report verified active production Version **`2a28cdf6-5a61-4f6c-be55-382e5bfa28cd`** at **100% traffic**, with no production rollout. Production source SHA is not inferred from a branch head. The existing production branch remains **`next`**; it must not be treated as a safe DEV integration target while ordinary pushes/merges can trigger production deployment. **Automatic DEV updates are not configured and remain NOT VERIFIED**; no automatic DEV→STABLE promotion is established.
+- **Manifest reconciliation:** `config/e2e-preview.preparation.json` now has a separate `completedDeployment` record and a preserved `historicalPreparationStatus` snapshot. Current binding/hosted-Access flags refer to the supplied operator evidence; provisioning-time facts such as initially empty/unbound KV remain historical. `deployable=false` and `deploymentAuthorization.authorized=false` remain: the manifest is not Wrangler configuration, the flag is not a technical lock, and the completed bootstrap gives no permission to deploy again. Two unavailable, unpublished Windows C2-B1 documentation edits remain uninspected and require separate reconciliation before merge; this task did not touch them.
+- **NOT VERIFIED / remaining gates:** live OpenAI provider execution, complete hosted F1/F2/F3 model E2E, a separate approved pilot-teacher Access role and automated DEV updates. Developer login/role proof does not establish teacher access, full hosted logout/account-switch acceptance or native Windows lifecycle PASS. Provider setup, DEV automation, DEV/STABLE release/Access separation, controlled release/rollback and broader hosted acceptance require their own authorization and verification.
+- **ENV-D3-DOC verification:** exact-identifier/JSON/diff consistency checks and **13/13 focused Preview preparation tests PASS**, including retained production/legacy-KV exclusions, installed Wrangler schema/generated configuration checks and provider-free synthetic authentication assertions. No full application regression or new build was required or run for this documentation/metadata-only batch. No runtime, Wrangler, deployment-script, dependency, Access or KV changes; no Cloudflare/provider calls, Preview creation/update, production deployment, release branch/tag or PR merge performed by ENV-D3-DOC.
+
 ## ENV-S2 — User-owned Notebook and Access logout (2026-10-15)
 
 - Implemented on **`fccaf6da0ff3d1b03ebb092883d2bed9222466d0`**, PR #60 into `next`. Ownership/policy come only from the existing server-verified `email`/`isDeveloper` props. The workspace is keyed by normalized identity and role; browser storage and notification data can invalidate a session but cannot authenticate or grant a role.
