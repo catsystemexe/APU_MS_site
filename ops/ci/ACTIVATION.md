@@ -1,0 +1,54 @@
+# ENV-D4-ACTIVATE handoff — inactive preparation
+
+`dev-preview.workflow.yml.template` is outside `.github/workflows` and cannot be discovered by GitHub Actions. No activation, credential provisioning, Cloudflare mutation or deployment is authorized by this preparation. Existing Workers Builds behavior remains unchanged; a branch push may still cause its existing version upload. That is separate from activating this template.
+
+The sole intended source is `catsystemexe/APU_MS_site`, push events on `codex/f1-f3-mvp-stabilization`. No PR, fork, dispatch or `next` trigger is provided. The fixed destination is account `4638092f63fa7fe58bcb9d2d041b7855`, parent `apu-ms-site`, existing Preview `apu-pr60-e2e` / `79968345270d4008954af42b360775d2`. Production branch remains `next`; do not switch this automation to `next` until production branch separation is verified and approved.
+
+## Controls prepared
+
+- Clean `ubuntu-24.04` runner; pipeline Node **24.19.0**, pinned in `.node-version` (compatible with the project's `>=22.13.0` requirement). Checkout/setup actions are commit-pinned; checkout disables persisted credentials. `npm ci`, typecheck, canonical build, artifact validation, focused provider-free regressions and generated-config validation precede the token-bearing step. No build is replaced or simplified. Node dependencies are installed with no deployment/provider credentials in step environment.
+- Fixed concurrency group, `cancel-in-progress: false`: running updates serialize; newer pending GitHub runs may replace older pending runs. Do not cancel a running upload casually; cancellation/runner loss can prevent postflight, requiring operator inspection. Other tools/operators are outside this concurrency lock and must not update/delete this Preview or production during the authorized run.
+- `dev-preview-guard.mjs --check-config` is offline. Generated `previews` must contain exactly the dedicated `DEV_LOG_STATE` ID and four approved Access vars; unknown bindings, provider/other secrets, missing vars, bypass and unknown configuration fail. The unchanged top-level production KV remains in the generated artifact **only as production configuration**; it is never copied into effective Preview bindings. The shared ASSETS binding is deployment-local static assets, not persistent production state. Effective remote `env` must exactly match these bindings, with no `secret_text`/`inherit`/unknown entries. Existing Preview secrets are checked before update because Wrangler can retain secrets from its latest deployment even with `--ignore-base-config`.
+- Token-bearing execution checks repo/ref/event/SHA, fixed account, credentials, clean tracked sources, Wrangler **4.150.0**, current GitHub branch head, exact existing Preview ID/name/URL, latest remote bindings and actual production deployment metadata. It repeats target/config/source checks immediately before the single fixed command:
+
+  ```sh
+  npx --no-install wrangler preview \
+    --config dist/server/wrangler.json \
+    --worker-name apu-ms-site \
+    --name apu-pr60-e2e \
+    --ignore-base-config --json
+  ```
+
+- There is no fallback command, create/delete helper, automatic rollback or token-bearing artifact upload. Wrangler stdout/stderr and raw API responses are not printed or saved. Only a safe deployment/source/URL summary is printed; errors use fixed categories. The CLI receives a narrow environment without API-base, secret-file, output-file or legacy credential overrides. Token values are never put in files or arguments.
+- After the update, read back the named Preview/latest deployment: exact ID/name, source annotation `workers/commit_sha` from `GITHUB_SHA`, new deployment ID/URL, exact KV/vars/assets and no secret/inherit bindings are mandatory. Anonymous requests to both returned URLs must redirect to the expected Access issuer's login endpoint; this proves protection only, **not authenticated application correctness**. Recheck the branch head. Production latest deployment ID, active Version IDs and percentages are read before/after and must match; no historical Version is hard-coded. Upload or postflight errors still attempt the production comparison. Any changed/unavailable postflight production state is CRITICAL; stop and inspect manually, never automatically roll back.
+
+## Supported read-only evidence contract
+
+Cloudflare GETs use `https://api.cloudflare.com/client/v4/accounts/<fixed-account>`:
+
+- `/workers/workers/apu-ms-site/previews/apu-pr60-e2e` → `result.id`, `name`, `urls`.
+- The same path plus `/deployments/latest` → deployment `id`, `preview_id`, `preview_name`, `urls`, `env`, `annotations`.
+- `/workers/scripts/apu-ms-site/deployments` → `result.deployments[0]`, the current latest production deployment, with `versions[].version_id` and `percentage`.
+
+These paths/response fields and the command flags were inspected in installed Wrangler **4.150.0** (`deploy-helpers/src/preview/api.ts`, Preview command, production `fetchLatestDeployment`). The Preview type contract is also published in [Cloudflare workers-sdk preview API source](https://github.com/cloudflare/workers-sdk/blob/main/packages/deploy-helpers/src/preview/api.ts); the production endpoint is used by Wrangler's existing deployment commands. Missing/changed schema fails closed; do not invent a CLI list/status command. No live API contract was exercised by ENV-D4-PREP.
+
+## Credentials and limits — operator security review required
+
+Use a dedicated GitHub environment **`apu-dev-preview`**. After separate approval, store `CLOUDFLARE_API_TOKEN` as an **environment secret**, and exact `CLOUDFLARE_ACCOUNT_ID` as an environment variable. The repository activation variable `APU_DEV_PREVIEW_CI_ENABLED` must remain unset until activation approval; the job requires the exact value `approved`. The automatic `GITHUB_TOKEN` needs only `contents: read` for source currency. Never copy local Wrangler OAuth credentials or add provider keys.
+
+Cloudflare documents [scoping CI API tokens](https://developers.cloudflare.com/workers/ci-cd/external-cicd/github-actions/) to the minimum account/resources. Review a custom token with the minimum sufficient **Account / Workers Scripts / Edit** permission for Preview/assets upload and the supported read operations above, on the one account only. Do not blindly copy the broader Edit Cloudflare Workers preset; no KV data writes, Access editing, zone routes or account administration are performed by this workflow. Verify the actual beta Preview/read/asset permissions with the operator before enabling; add only a demonstrated required permission. No actual token/permission grant has been created or tested here.
+
+**Account scoping is not Preview-only authorization.** A Workers Scripts edit token on this account can affect production Workers within its effective scope; this preparation does not establish a Cloudflare-enforced per-Preview deny on production. GitHub review/environment restrictions and the script are controls, not an IAM sandbox. The operator must explicitly review and accept this scope or establish a narrower enforceable boundary before activation. Approved-branch code runs in the token-bearing step; branch protection/reviewer controls must prevent unreviewed code from reaching it.
+
+GitHub/Cloudflare checks are observations, not an atomic transaction. A push or external target/production mutation after the final preflight can race an upload; postflight fails if detected. Wrangler's Preview command can create a same-name Preview if it vanishes between checks; the guard rejects an absent/mismatched target before launch and rejects a replacement ID afterward, but cannot make Wrangler update-only atomically. Freeze external changes for the first controlled run; review this limitation and any stronger update-only/branch-lock requirement before enabling ongoing automation. Do not claim the template removes this race or provides production credential isolation.
+
+## Ordered activation checklist — separate authorization required
+
+1. Review the exact prepared commit, pinned actions/Node/Wrangler, API schema assumptions and residual races/token scope. Verify the existing Preview ID, latest bindings/no secrets, current Access and current production allocation read-only; do not create another Preview. Review intended source branch and protect it against unreviewed changes. Leave `next` untouched.
+2. Verify existing Cloudflare Workers Builds triggers for both source and production branches, including any version upload on branch push. Resolve competing deployment automation before enabling this pipeline. DEV updates must not promote to STABLE.
+3. Configure and verify `apu-dev-preview` required reviewers, prevent self-review where supported, and allow only the exact authorized development branch. Confirm the GitHub plan supports these restrictions. Provision/review the narrowly scoped Cloudflare token and environment configuration **only after approval**, with no repository-wide deployment secret or local OAuth copy.
+4. Obtain explicit ENV-D4-ACTIVATE / first-update authorization. Install an identical copy of the reviewed template as `.github/workflows/dev-preview.yml`, retaining the preparation copy for the configuration contract test; set the repository activation variable to `approved` only after environment protections and credentials are verified. Installing the file alone with the flag unset must leave deployment skipped. Review this sequence because installing a push-triggered workflow can immediately create a run. The location test requires no active file during PREP; only the exact intended GitHub workflow/ref context accepts an installed copy, and then requires byte-for-byte template equality.
+5. Conduct one authorized push/CI update with no competing Preview/production changes. Verify build gates, preflight identity, resulting source/deployment/KV/secret evidence, both anonymous Access redirects and identical production allocation. Authenticate separately to test ordinary app behavior when authorized; no paid model E2E is included.
+6. Review the safe run summary and manually confirm production preservation; record the new deployment evidence. Confirm subsequent approved pushes update only the same Preview, stale queued runs fail/skip safely and no overlapping upload occurs. Authorize ongoing automation explicitly; do not infer it from this checklist or first-run success. On CRITICAL/unknown state, leave the flag disabled and investigate without automatic rollback.
+
+Verification in PREP is YAML/guard testing with synthetic API and command doubles plus installed Wrangler help/config checks. Real credentials, GitHub hosted execution, effective environment protections, live API compatibility/redirects, first CI update and production preservation during that update remain **NOT VERIFIED**. The existing operator-confirmed ENV-D3 deployment is unchanged by this work.
