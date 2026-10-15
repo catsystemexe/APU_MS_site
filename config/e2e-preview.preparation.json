@@ -6,11 +6,7 @@
   "previewName": "apu-pr60-e2e",
   "sourceBranch": "codex/f1-f3-mvp-stabilization",
   "requiredOperatorInputs": {
-    "dedicatedKvNamespaceId": null,
-    "CF_ACCESS_TEAM_DOMAIN": null,
-    "CF_ACCESS_AUD": null,
-    "APU_DEVELOPER_EMAILS": null,
-    "previewSecretsFilePath": null
+    "approvedTesterIdentities": null
   },
   "kvRequirement": {
     "binding": "DEV_LOG_STATE",
@@ -19,9 +15,100 @@
     "allowExistingPreviewId": false
   },
   "proposedPreviewSettings": {
-    "vars": { "APU_LOCAL_DEV_AUTH": "0" },
-    "secrets": { "required": ["OPENAI_API_KEY", "APU_VECTOR_STORE_ID"] }
+    "vars": {
+      "APU_LOCAL_DEV_AUTH": "0",
+      "CF_ACCESS_TEAM_DOMAIN": "https://catsystem-ai.cloudflareaccess.com",
+      "CF_ACCESS_AUD": "1e1680481c99464a844a6ef0e502cf49fae89fc91c8cf3806ba48026b0088610",
+      "APU_DEVELOPER_EMAILS": "catsystem.exe@gmail.com"
+    },
+    "kv_namespaces": [
+      {
+        "binding": "DEV_LOG_STATE",
+        "id": "1729ce8a6acd4cdcbed8248ac543677b"
+      }
+    ]
   },
   "ignorePreviewsBaseConfig": true,
-  "requiredDeploymentEvidence": ["sourceCommit", "workerIdentity", "previewName", "previewUrl", "uniqueDeploymentUrl", "deploymentId", "boundKvNamespaceId", "accessApplicationIdentity"]
+  "requiredDeploymentEvidence": [
+    "sourceCommit",
+    "workerIdentity",
+    "previewName",
+    "previewUrl",
+    "uniqueDeploymentUrl",
+    "deploymentId",
+    "boundKvNamespaceId",
+    "accessApplicationIdentity"
+  ],
+  "readiness": "NOT READY FOR DEPLOYMENT",
+  "deploymentAuthorization": {
+    "authorized": false,
+    "deployableFlagIsTechnicalLock": false,
+    "enforcedBy": "Execution authorization boundary; Wrangler does not read this preparation manifest"
+  },
+  "classification": "STATIC CONFIGURATION COMPLETE — DEPLOYMENT PENDING AUTHORIZATION",
+  "verifiedResources": {
+    "accountId": "4638092f63fa7fe58bcb9d2d041b7855",
+    "dedicatedKv": {
+      "binding": "DEV_LOG_STATE",
+      "namespaceName": "apu-pr60-e2e-devlog-state",
+      "namespaceId": "1729ce8a6acd4cdcbed8248ac543677b",
+      "provisioningStatus": "PROVISIONED",
+      "initiallyEmpty": true,
+      "boundToWorkerAtCreation": false,
+      "previewBindingDeployed": false
+    },
+    "evidence": "C2-B1 verified operator report supplied with the task; not a Cloudflare API inspection by Codex"
+  },
+  "verifiedAccess": {
+    "teamDomainOrigin": "https://catsystem-ai.cloudflareaccess.com",
+    "workerAccessScope": "All traffic — production and previews; require login on every URL",
+    "policyName": "APU Developers",
+    "policyId": "0370da35-f13c-4f72-8ced-9468bf1ca025",
+    "policyAction": "Allow",
+    "evidence": "C2-B1 verified operator report supplied with the task; selectors do not establish approved identities",
+    "accessConfigurationComplete": true,
+    "hostedAccessEffectivenessVerified": false,
+    "exactApplicationAudienceVerified": true,
+    "approvedDeveloperEmails": [
+      "catsystem.exe@gmail.com"
+    ],
+    "developerApprovalEvidence": "Explicit C2-C1-A user approval for this single isolated Preview developer identity; hosted role verification remains pending",
+    "separateTesterApproved": false,
+    "separateTesterRoleVerified": false,
+    "audienceVerification": {
+      "applicationName": "apu-ms-site - Cloudflare Workers",
+      "applicationId": "67a86152-2917-40c8-8e5f-6dce0beeaca8",
+      "visuallyTranscribedCandidate": "1e1680481c99464a844a6ef0e502cf49fae89fc91c8cf3806ba48026b0088610",
+      "exactCopiedTag": "1e1680481c99464a844a6ef0e502cf49fae89fc91c8cf3806ba48026b0088610",
+      "exactComparisonConfirmed": true,
+      "status": "OPERATOR-VERIFIED — C2-C1-B operator copied the existing Access application's AUD tag and confirmed this exact value; not independently inspected through Cloudflare by Codex"
+    }
+  },
+  "providerBootstrap": {
+    "providerFree": true,
+    "providerSecretsPresent": false,
+    "providerRequestsAuthorized": false,
+    "requiredSecrets": [],
+    "deferredUntilSeparateAuthorization": [
+      "OPENAI_API_KEY",
+      "APU_VECTOR_STORE_ID"
+    ]
+  },
+  "generatedConfiguration": {
+    "path": "dist/server/wrangler.json",
+    "redirectPath": ".wrangler/deploy/config.json",
+    "previewIsolationVerified": true,
+    "verificationScope": "STATIC GENERATED CONFIG ONLY; deployed binding isolation is not verified"
+  },
+  "remainingBlockers": [
+    "Obtain a separately approved tester identity and verify its hosted role; no separate tester is approved or verified. The sole approved developer is catsystem.exe@gmail.com; no identities may be inferred from policy names or selectors.",
+    "Reconcile the two unpublished Windows C2-B1 documentation edits before any merge or integration; Codex has not inspected them.",
+    "Obtain separate commit/push and Preview creation/deployment authorization; select verified account 4638092f63fa7fe58bcb9d2d041b7855 and parent apu-ms-site explicitly. A branch push may trigger Workers Builds version upload.",
+    "After an authorized provider-free bootstrap, verify actual dedicated KV binding, Access denial on stable/unique URLs, approved roles and deployment/artifact identity; none is runtime-verified here."
+  ],
+  "documentationReconciliation": {
+    "unpublishedWindowsC2B1Edits": 2,
+    "inspectedByCodex": false,
+    "requiredBeforeMerge": true
+  }
 }
