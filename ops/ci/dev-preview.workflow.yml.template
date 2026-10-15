@@ -15,7 +15,10 @@ jobs:
       github.repository == 'catsystemexe/APU_MS_site' &&
       github.event_name == 'push' && github.event.deleted == false &&
       github.ref == 'refs/heads/codex/f1-f3-mvp-stabilization' &&
-      vars.APU_DEV_PREVIEW_CI_ENABLED == 'approved'
+      vars.APU_DEV_PREVIEW_CI_ENABLED == 'approved' &&
+      (vars.APU_DEV_PREVIEW_CI_MODE == 'auto' ||
+       (vars.APU_DEV_PREVIEW_CI_MODE == 'once' &&
+        vars.APU_DEV_PREVIEW_CI_APPROVED_SHA == github.sha))
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     environment: apu-dev-preview
@@ -58,4 +61,6 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
           GITHUB_TOKEN: ${{ github.token }}
           APU_DEV_PREVIEW_CI_ENABLED: ${{ vars.APU_DEV_PREVIEW_CI_ENABLED }}
+          APU_DEV_PREVIEW_CI_MODE: ${{ vars.APU_DEV_PREVIEW_CI_MODE }}
+          APU_DEV_PREVIEW_CI_APPROVED_SHA: ${{ vars.APU_DEV_PREVIEW_CI_APPROVED_SHA }}
         run: node ops/ci/dev-preview-guard.mjs --deploy-approved

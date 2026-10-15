@@ -14,13 +14,14 @@ const workflow = yaml.load(template, { json: false });
 const generated = JSON.parse(await read("../dist/server/wrangler.json"));
 const sha = "1234567890abcdef1234567890abcdef12345678";
 const env = () => ({ GITHUB_REPOSITORY: TARGET.repository, GITHUB_REF: `refs/heads/${TARGET.branch}`, GITHUB_EVENT_NAME: "push",
-  GITHUB_SHA: sha, APU_DEV_PREVIEW_CI_ENABLED: "approved", CLOUDFLARE_ACCOUNT_ID: TARGET.account,
+  GITHUB_SHA: sha, APU_DEV_PREVIEW_CI_ENABLED: "approved", APU_DEV_PREVIEW_CI_MODE: "once",
+  APU_DEV_PREVIEW_CI_APPROVED_SHA: sha, CLOUDFLARE_ACCOUNT_ID: TARGET.account,
   CLOUDFLARE_API_TOKEN: "synthetic-cf-only", GITHUB_TOKEN: "synthetic-github-only" });
 const bindings = () => ({ ...Object.fromEntries(Object.entries(ACCESS_VARS).map(([name,text]) => [name,{type:"plain_text",text}])),
   DEV_LOG_STATE:{type:"kv_namespace",namespace_id:TARGET.kv}, ASSETS:{type:"assets"} });
 const preview = () => ({ id:TARGET.previewId, name:TARGET.preview, urls:[TARGET.url] });
 const deployment = (fresh = false) => ({ id:fresh?"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee":"11111111-2222-3333-4444-555555555555",
-  preview_id:TARGET.previewId, preview_name:TARGET.preview, env:bindings(), annotations:{"workers/commit_sha":sha},
+  preview_id:TARGET.previewId, preview_name:TARGET.preview, env:bindings(), annotations:{"workers/commit_sha":fresh?sha:'0'.repeat(40)},
   urls:[`https://${fresh?"aaaaaaaa":"11111111"}-apu-ms-site.catsystem-exe.workers.dev`] });
 const production = () => ({ deployments:[{id:"99999999-8888-7777-6666-555555555555", versions:[
   {version_id:"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",percentage:70},
@@ -71,10 +72,77 @@ test("canonical build/security/config gates precede the single credential-bearin
   assert.equal(commands[5],'node ops/ci/dev-preview-guard.mjs --check-config');
   assert.equal(commands[6],'node ops/ci/dev-preview-guard.mjs --deploy-approved');
   assert.equal(commands.length,7);
-  assert.deepEqual(steps.at(-1).env, {CLOUDFLARE_API_TOKEN:'${{ secrets.CLOUDFLARE_API_TOKEN }}',CLOUDFLARE_ACCOUNT_ID:'${{ vars.CLOUDFLARE_ACCOUNT_ID }}',GITHUB_TOKEN:'${{ github.token }}',APU_DEV_PREVIEW_CI_ENABLED:'${{ vars.APU_DEV_PREVIEW_CI_ENABLED }}'});
+  assert.deepEqual(steps.at(-1).env, {CLOUDFLARE_API_TOKEN:'${{ secrets.CLOUDFLARE_API_TOKEN }}',CLOUDFLARE_ACCOUNT_ID:'${{ vars.CLOUDFLARE_ACCOUNT_ID }}',GITHUB_TOKEN:'${{ github.token }}',APU_DEV_PREVIEW_CI_ENABLED:'${{ vars.APU_DEV_PREVIEW_CI_ENABLED }}',APU_DEV_PREVIEW_CI_MODE:'${{ vars.APU_DEV_PREVIEW_CI_MODE }}',APU_DEV_PREVIEW_CI_APPROVED_SHA:'${{ vars.APU_DEV_PREVIEW_CI_APPROVED_SHA }}'});
   assert.ok(steps.slice(0,-1).every(s=>!s.env));
   assert.equal(workflow.jobs.preview.env.CLOUDFLARE_API_TOKEN,undefined);
   assert.doesNotMatch(template,/pull_request|workflow_dispatch|wrangler\s+(deploy|versions)|upload-artifact|download-artifact/);
+});
+test("job authorization skips missing/unknown modes and unapproved once SHAs",()=>{
+  // Evaluate this bounded GitHub condition, including its native case-insensitive
+  // string equality. Runtime authorization independently requires exact values.
+  const condition=workflow.jobs.preview.if.trim();
+  const expression=condition.replace(/\b([a-zA-Z_][\w.]*)\s*==\s*('[^']*'|[a-zA-Z_][\w.]*)/g,'eq($1,$2)');
+  assert.doesNotMatch(expression,/==|\$\{/);
+  const evaluate=new Function('github','vars','eq',`return (${expression});`);
+  const eq=(a,b)=>typeof a==='string'&&typeof b==='string'?a.toLowerCase()===b.toLowerCase():a===b;
+  const github={repository:TARGET.repository,event_name:'push',event:{deleted:false},ref:`refs/heads/${TARGET.branch}`,sha};
+  const vars={APU_DEV_PREVIEW_CI_ENABLED:'approved',APU_DEV_PREVIEW_CI_MODE:'once',APU_DEV_PREVIEW_CI_APPROVED_SHA:sha};
+  assert.equal(evaluate(github,vars,eq),true);
+  for(const patch of [{APU_DEV_PREVIEW_CI_MODE:undefined},{APU_DEV_PREVIEW_CI_MODE:'unknown'},
+    {APU_DEV_PREVIEW_CI_APPROVED_SHA:undefined},{APU_DEV_PREVIEW_CI_APPROVED_SHA:'f'.repeat(40)},
+    {APU_DEV_PREVIEW_CI_APPROVED_SHA:'1234'},{APU_DEV_PREVIEW_CI_APPROVED_SHA:'g'.repeat(40)},
+    {APU_DEV_PREVIEW_CI_ENABLED:undefined},{APU_DEV_PREVIEW_CI_ENABLED:'disabled'}])assert.equal(evaluate(github,{...vars,...patch},eq),false);
+  assert.equal(evaluate(github,{...vars,APU_DEV_PREVIEW_CI_MODE:'auto',APU_DEV_PREVIEW_CI_APPROVED_SHA:undefined},eq),true);
+  for(const patch of [{repository:'fork/APU_MS_site'},{ref:'refs/heads/next'},{event_name:'pull_request'},{event:{deleted:true}}]){
+    for(const mode of ['once','auto'])assert.equal(evaluate({...github,...patch},{...vars,APU_DEV_PREVIEW_CI_MODE:mode},eq),false);
+  }
+});
+for(const [label,patch,reason] of [
+  ['wrong approved SHA',{APU_DEV_PREVIEW_CI_APPROVED_SHA:'f'.repeat(40)},'source_sha_not_approved'],
+  ['missing approved SHA',{APU_DEV_PREVIEW_CI_APPROVED_SHA:undefined},'invalid_approved_sha'],
+  ['short approved SHA',{APU_DEV_PREVIEW_CI_APPROVED_SHA:'1234'},'invalid_approved_sha'],
+  ['long approved SHA',{APU_DEV_PREVIEW_CI_APPROVED_SHA:sha+'0'},'invalid_approved_sha'],
+  ['trailing newline in approved SHA',{APU_DEV_PREVIEW_CI_APPROVED_SHA:sha+'\n'},'invalid_approved_sha'],
+  ['leading space in approved SHA',{APU_DEV_PREVIEW_CI_APPROVED_SHA:' '+sha},'invalid_approved_sha'],
+  ['trailing newline in source SHA',{GITHUB_SHA:sha+'\n'},'invalid_source_sha'],
+  ['non-hex approved SHA',{APU_DEV_PREVIEW_CI_APPROVED_SHA:'g'.repeat(40)},'invalid_approved_sha'],
+  ['uppercase approved SHA',{APU_DEV_PREVIEW_CI_APPROVED_SHA:sha.toUpperCase()},'invalid_approved_sha'],
+  ['missing mode',{APU_DEV_PREVIEW_CI_MODE:undefined},'invalid_ci_mode'],
+  ['unknown mode',{APU_DEV_PREVIEW_CI_MODE:'unknown'},'invalid_ci_mode'],
+  ['uppercase mode',{APU_DEV_PREVIEW_CI_MODE:'ONCE'},'invalid_ci_mode'],
+  ['disabled gate',{APU_DEV_PREVIEW_CI_ENABLED:'disabled'},'ci_not_activated'],
+])test(`runtime authorization rejects before upload: ${label}`,async()=>{
+  const f=fixture();Object.assign(f.io.env,patch);const before=structuredClone(f.io.env);
+  await assert.rejects(updateExistingPreview(f.io),{message:reason});
+  assert.equal(f.args.length,0);assert.deepEqual(f.calls,[]);assert.deepEqual(f.io.env,before);
+});
+test("auto needs no approved SHA and retains production checks without changing its mode",async()=>{
+  const f=fixture();f.io.env.APU_DEV_PREVIEW_CI_MODE='auto';delete f.io.env.APU_DEV_PREVIEW_CI_APPROVED_SHA;
+  const before=structuredClone(f.io.env);await updateExistingPreview(f.io);
+  assert.equal(f.args.length,1);assert.equal(f.calls.filter(x=>x==='production').length,2);assert.deepEqual(f.io.env,before);
+});
+test("auto still enforces activation, branch, target, source, isolation and production preflight",async()=>{
+  for(const change of [f=>delete f.io.env.APU_DEV_PREVIEW_CI_ENABLED,f=>f.io.env.GITHUB_REF='refs/heads/next',
+    f=>f.io.preview=async()=>null,f=>f.io.branchHead=async()=>'f'.repeat(40),
+    f=>f.io.deployment=async()=>({...deployment(),env:{...bindings(),EXTRA:{type:'inherit'}}}),
+    f=>f.io.production=async()=>({deployments:[]})]){
+    const f=fixture();f.io.env.APU_DEV_PREVIEW_CI_MODE='auto';change(f);
+    await assert.rejects(updateExistingPreview(f.io));assert.equal(f.args.length,0);
+  }
+});
+test("once rejects a matching verified latest source at either preflight read",async()=>{
+  for(const matchingRead of [1,2]){
+    const f=fixture();let reads=0;
+    f.io.deployment=async()=>{const d=deployment();if(++reads===matchingRead)d.annotations['workers/commit_sha']=sha;return d;};
+    await assert.rejects(updateExistingPreview(f.io),{message:'approved_sha_already_deployed'});
+    assert.equal(f.args.length,0);assert.equal(f.io.env.APU_DEV_PREVIEW_CI_MODE,'once');
+  }
+});
+test("successful once remains SHA-bound and rejects a rerun against the updated Preview",async()=>{
+  const f=fixture(),before=structuredClone(f.io.env);await updateExistingPreview(f.io);
+  assert.deepEqual(f.io.env,before);assert.equal(f.args.length,1);
+  await assert.rejects(updateExistingPreview(f.io),{message:'approved_sha_already_deployed'});
+  assert.equal(f.args.length,1);assert.deepEqual(f.io.env,before);
 });
 test("only fixed Preview arguments are accepted; every requested option is supported by installed Wrangler",()=>{
   const help=execFileSync(process.execPath,[fileURLToPath(new URL('../node_modules/wrangler/bin/wrangler.js',import.meta.url)),'preview','--help'],{

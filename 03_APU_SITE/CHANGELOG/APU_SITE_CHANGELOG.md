@@ -4,6 +4,13 @@ Status: CURRENT
 
 Records significant verified product/runtime/project changes. It is not a complete Git log. Historical Sites-era entries are retained where they remain useful; current deployment state must not be inferred from a changelog entry alone.
 
+## 2026-10-15 — ENV-D4 SHA-bound first-run authorization (prepared/inactive)
+
+- Added `once`/`auto` job and independent runtime authorization while preserving the global gate. `once` requires an exact lowercase 40-hex approved source SHA and rejects the same source already identified by verified latest deployment metadata at either preflight read. `auto` retains existing fixed branch/source/isolation/production controls without requiring an approved SHA. Authorization remains confined to the final deployment step; no automatic mode transition or variable update.
+- Updated activation handoff/runtime contract: configure exact-SHA `once` with the gate disabled, separately authorize the first update, independently verify Preview/production, disable the gate after evaluation and require a later explicit decision for `auto`. Documented native case-insensitive GitHub conditions versus strict runtime authorization, and SHA-bound duplicate protection rather than an exactly-once guarantee. Existing credential scope/race/runner-loss limitations remain.
+- Verification PASS: **214/214 provider-free tests** in six focused CI/Preview/configuration/Access/capability/F1-contract files, JavaScript syntax, YAML parsing/condition behavior, generated configuration and pinned Wrangler validation, diff and secret/scope review. Upload/API operations are mocked. No live CI, Cloudflare/provider request, fresh application build or hosted acceptance claimed.
+- Publication BLOCKED by this batch's safety rule: baseline GitHub check `116675613067` confirms Workers Builds created Version `e7254579-ff43-4f58-9592-1f3fc3518623` on the previous branch publication; it does not establish a production rollout. Changes are retained locally without push. No CI activation, infrastructure/secrets/variables/Access/KV/runtime changes, DEV Preview update, production deployment or PR merge performed.
+
 ## 2026-10-15 — ENV-D4-PREP inactive DEV Preview automation
 
 - Added **inactive** `ops/ci/dev-preview.workflow.yml.template`, pipeline Node pin, `dev-preview-guard.mjs`, activation/security handoff and provider-free guard tests. Nothing was installed under `.github/workflows`; DEV automation remains inactive. Intended source is only `catsystemexe/APU_MS_site` push on `codex/f1-f3-mvp-stabilization`; `next`/Workers Builds/production control remain unchanged.

@@ -51,12 +51,20 @@ export function validateConfig(config) {
   equal(config.keep_vars, true, "production_config_changed");
   equal(config.preview_urls, true, "preview_urls_disabled"); equal(config.workers_dev, true, "workers_dev_changed");
 }
+export function validateAuthorization(env) {
+  equal(env.APU_DEV_PREVIEW_CI_ENABLED, "approved", "ci_not_activated");
+  requireThat(env.GITHUB_SHA?.length === 40 && /^[0-9a-f]{40}$/.test(env.GITHUB_SHA), "invalid_source_sha");
+  requireThat(env.APU_DEV_PREVIEW_CI_MODE === "once" || env.APU_DEV_PREVIEW_CI_MODE === "auto", "invalid_ci_mode");
+  if (env.APU_DEV_PREVIEW_CI_MODE === "once") {
+    requireThat(env.APU_DEV_PREVIEW_CI_APPROVED_SHA?.length === 40 && /^[0-9a-f]{40}$/.test(env.APU_DEV_PREVIEW_CI_APPROVED_SHA), "invalid_approved_sha");
+    equal(env.APU_DEV_PREVIEW_CI_APPROVED_SHA, env.GITHUB_SHA, "source_sha_not_approved");
+  }
+}
 export function validateContext(env, head) {
   equal(env.GITHUB_REPOSITORY, TARGET.repository, "unauthorized_repository");
   equal(env.GITHUB_REF, `refs/heads/${TARGET.branch}`, "unauthorized_branch");
   equal(env.GITHUB_EVENT_NAME, "push", "unauthorized_event");
-  equal(env.APU_DEV_PREVIEW_CI_ENABLED, "approved", "ci_not_activated");
-  requireThat(/^[0-9a-f]{40}$/.test(env.GITHUB_SHA ?? ""), "invalid_source_sha");
+  validateAuthorization(env);
   equal(head, env.GITHUB_SHA, "checkout_sha_mismatch");
   equal(env.CLOUDFLARE_ACCOUNT_ID, TARGET.account, "wrong_account");
   requireThat(Boolean(env.CLOUDFLARE_API_TOKEN?.trim() && env.GITHUB_TOKEN?.trim()), "missing_credentials");
@@ -96,6 +104,13 @@ export function productionState(result) {
   return { deploymentId: active.id, versions };
 }
 
+function validatePendingDeployment(deployment, env) {
+  validateDeployment(deployment);
+  if (env.APU_DEV_PREVIEW_CI_MODE === "once") {
+    requireThat(deployment.annotations?.["workers/commit_sha"] !== env.GITHUB_SHA, "approved_sha_already_deployed");
+  }
+}
+
 // Dependency injection is for provider-free tests. Production uses only GETs
 // for evidence; the fixed Wrangler Preview command is the sole mutation path.
 export async function updateExistingPreview(io) {
@@ -104,11 +119,11 @@ export async function updateExistingPreview(io) {
   const sourceCurrent = async () => equal(await io.branchHead(), io.env.GITHUB_SHA, "source_branch_advanced");
   await sourceCurrent();
   validatePreview(await io.preview());
-  const previous = await io.deployment(); validateDeployment(previous);
+  const previous = await io.deployment(); validatePendingDeployment(previous, io.env);
   const before = productionState(await io.production());
   // Re-read target/settings after preflight and immediately before upload.
   validatePreview(await io.preview()); validateConfig(await io.config());
-  validateDeployment(await io.deployment()); await sourceCurrent();
+  validatePendingDeployment(await io.deployment(), io.env); await sourceCurrent();
   equal(await io.head(), io.env.GITHUB_SHA, "checkout_sha_mismatch"); await io.clean();
   let result;
   try {
