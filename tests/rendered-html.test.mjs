@@ -14,7 +14,7 @@ const keys = await crypto.subtle.generateKey(
 );
 const publicJwk = { ...(await crypto.subtle.exportKey("jwk", keys.publicKey)), kid: keyId, alg: "RS256", use: "sig" };
 
-async function loadWorker(t, { jwks = "available" } = {}) {
+async function loadWorker(t, { jwks = "available", developerEmails = "developer@example.com", nodeEnv = "test" } = {}) {
   const environmentKeys = ["CF_ACCESS_TEAM_DOMAIN", "CF_ACCESS_AUD", "APU_DEVELOPER_EMAILS", "NODE_ENV", "APU_LOCAL_DEV_AUTH", "OPENAI_API_KEY", "APU_VECTOR_STORE_ID"];
   const environment = new Map(environmentKeys.map(key => [key, process.env[key]]));
   // Vinext captures this shared fetch when the bundle loads and installs a wrapper
@@ -41,9 +41,9 @@ async function loadWorker(t, { jwks = "available" } = {}) {
   delete globalThis[patchInstalledKey];
   process.env.CF_ACCESS_TEAM_DOMAIN = issuer;
   process.env.CF_ACCESS_AUD = audience;
-  process.env.APU_DEVELOPER_EMAILS = "developer@example.com";
-  process.env.NODE_ENV = "test";
-  delete process.env.APU_LOCAL_DEV_AUTH;
+  process.env.APU_DEVELOPER_EMAILS = developerEmails;
+  process.env.NODE_ENV = nodeEnv;
+  process.env.APU_LOCAL_DEV_AUTH = "0";
   // Valid auth must stop at missing provider configuration, even on credentialed hosts.
   delete process.env.OPENAI_API_KEY;
   delete process.env.APU_VECTOR_STORE_ID;
@@ -167,10 +167,35 @@ test("shows developer surfaces only to developers", async t => {
   assert.match(developerHtml, /Stáhnout APU Session JSON/);
   assert.match(developerHtml, /developer-log-toggle/);
   assert.match(developerHtml, /DEV ON/);
+  const developerHeader = developerHtml.match(/<header\b[^>]*class="app-header"[\s\S]*?<\/header>/)?.[0];
+  assert.ok(developerHeader);
+  for (const label of ["Testovací scénáře", "Telemetrie a náklady konverzace", "Stáhnout APU Session JSON"]) {
+    assert.equal(developerHeader.split(`aria-label="${label}"`).length - 1, 1, `${label} is one distinct control`);
+  }
+  assert.doesNotMatch(developerHeader, /DEV LOG|dev-log-panel|dev-log-overlay/);
   assert.match(testerHtml, /tester@example\.com/);
   assert.doesNotMatch(testerHtml, /Stáhnout APU Session JSON|session-export-trigger|developer-log-toggle|DEV ON|Telemetrie a náklady konverzace|diagnostic-debug/);
   assert.match(testerHtml, /Popište mi situaci, se kterou chcete dnes pracovat\./);
   assert.match(testerHtml, /Zobrazit příklad situace/);
+});
+
+test("STABLE empty developer allowlist omits developer surfaces even for the DEV developer email", async t => {
+  const worker = await loadWorker(t, { developerEmails: "", nodeEnv: "production" });
+  const env = { ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) } };
+  const ctx = { waitUntil() {}, passThroughOnException() {} };
+  for (const email of ["teacher@example.com", "developer@example.com"]) {
+    await t.test(email, async () => {
+      const response = await worker.fetch(new Request("http://localhost/", { headers: await identityHeaders(email) }), env, ctx);
+      assert.equal(response.status, 200);
+      const html = await response.text();
+      assert.doesNotMatch(html, /DEV ON|DEV LOG|developer-controls|developer-indicator|developer-log-toggle|dev-scenario|conversation-diagnostics|conversation-stats-popover|session-export-trigger|header-session-export|diagnostic-debug|response-diagnostics/);
+      assert.doesNotMatch(html, /Testovací scénáře|Telemetrie a náklady konverzace|Stáhnout APU Session JSON/);
+      assert.ok(html.includes(email));
+      for (const label of ["Otevřít nastavení", "Nový projekt", "Zápisník", "Obsah", "Výstup", "apu-logo-horizontal.png"]) assert.ok(html.includes(label), label);
+    });
+  }
+  const anonymous = await worker.fetch(new Request("http://localhost/", { headers: { accept: "text/html" } }), env, ctx);
+  assert.match(await anonymous.text(), /Ověřená identita Cloudflare Access není dostupná/);
 });
 
 test("model API rejects invalid auth and accepts tester and developer identities", async t => {

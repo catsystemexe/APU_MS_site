@@ -4,6 +4,12 @@ Status: CURRENT
 
 Records significant verified product/runtime/project changes. It is not a complete Git log. Historical Sites-era entries are retained where they remain useful; current deployment state must not be inferred from a changelog entry alone.
 
+## 2026-10-15 — ENV-S0 STABLE header preparation
+
+- Confirmed that the existing server-derived role boundary already omits all developer header surfaces for ordinary users. No application/CSS change was needed. Current DEV has one scenario popup, one telemetry/model popup and one Session JSON action; no active DEV LOG header menu or responsive duplicate was found. The reported two DEV LOG instances remain unidentified in the operator's hosted context; DEV functionality and the DEV LOG subsystem are preserved.
+- Added built-Worker checks for STABLE's intended empty developer allowlist and bypass `"0"`, including an email privileged in DEV, and unique DEV header actions. Added provider-free Chromium `--header-roles-only` coverage for DOM/accessibility absence, keyboard operation, Settings/New project, DEV scenarios/telemetry/export and control bounds at 1600/800/390/320 px. Header interactions make zero API calls.
+- Verification PASS: typecheck, canonical Linux build, artifact validation, **130 focused regressions**, focused and existing full workspace Chromium smoke, six representative screenshot reviews and diff check. Hosted/Cloudflare/native Windows verification remains **NOT VERIFIED**. API hardening and Notebook ownership/logout remain separate release gates. No runtime/configuration/dependency changes, provider calls, commit/push, Access/branch changes, merge or deployment; patch remains local for review.
+
 ## 2026-10-15 — B1.9-V3-C2-C1-C final Preview integration review
 
 - **PASS — READY FOR PUBLICATION REVIEW**, with preparation **NOT READY FOR DEPLOYMENT / deployable=false**. Local/remote branch and PR #60 head remain `2ced3eaee65fccbaf27f706c5baee6e08786186e`. C1 was originally local, subsequently published as this commit; the reviewed C2-C1/A/B/C diff remains uncommitted and unstaged. The flag is review metadata, not a Wrangler deployment lock; authorization still prohibits publication/deployment.

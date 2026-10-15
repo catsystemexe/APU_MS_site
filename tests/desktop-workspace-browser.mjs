@@ -183,7 +183,72 @@ try {
     await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
     await waitFor('!document.querySelector(".welcome-help")');
   };
-  if (process.argv.includes('--usage-isolation-only')) {
+  if (process.argv.includes('--header-roles-only')) {
+    const developerSurfaces = '.developer-controls, .developer-indicator, .dev-scenario-picker, #dev-scenario-menu, .conversation-diagnostics, #conversation-stats-popover, .header-session-export, .response-diagnostics, .diagnostic-debug';
+    const developerNames = /DEV ON|DEV LOG|Testovací scénáře|Telemetrie a náklady konverzace|Stáhnout APU Session JSON/;
+    const key = async (name, code) => {
+      await call('Input.dispatchKeyEvent',{type:'keyDown',key:name,code:name,windowsVirtualKeyCode:code,...(name==='Enter'?{text:'\r'}:{})});
+      await call('Input.dispatchKeyEvent',{type:'keyUp',key:name,code:name,windowsVirtualKeyCode:code});
+    };
+    const activate = async selector => { await evaluate(`document.querySelector(${JSON.stringify(selector)}).focus()`); await key('Enter',13); };
+    for (const developer of [false,true]) for (const width of [1600,800,390,320]) {
+      const mount=await evaluate('window.fixtureMountId');
+      await call('Emulation.setDeviceMetricsOverride',{width,height:1000,deviceScaleFactor:1,mobile:false});
+      await call('Page.navigate',{url:'http://127.0.0.1:4333/'+(developer?'?developer=1':'')});
+      await waitFor(`window.fixtureMountId!==${JSON.stringify(mount)} && document.querySelector('#message') && document.querySelector('.app-header') && localStorage.getItem('apu-site:notepad-map:v2')`);
+      assert.equal(await evaluate('document.querySelectorAll(".app-header").length'),1);
+      assert.equal(await evaluate('document.querySelector(".account-email").textContent'),'test@example.invalid');
+      assert.ok(await evaluate('Boolean(document.querySelector(".app-header .brand-mark img"))'));
+      assert.equal(await evaluate('document.querySelector("#dev-log-panel, .dev-log-overlay, button[aria-controls=dev-log-panel]")'),null,'no active DEV LOG, including responsive variants');
+      const expected = [...(developer?['Testovací scénáře','Telemetrie a náklady konverzace','Stáhnout APU Session JSON']:[]),'Otevřít nastavení','Nový projekt'];
+      const buttons='.app-header .brand button, .project-actions button:not(:disabled)';
+      assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll(${JSON.stringify(buttons)})).map(b=>b.getAttribute('aria-label'))`),expected,'one of each header action');
+      assert.equal(await evaluate(`(() => {const rs=Array.from(document.querySelectorAll(${JSON.stringify(buttons)})).map(b=>b.getBoundingClientRect());return rs.every(r=>r.width>0 && r.height>0 && r.left>=0 && r.right<=innerWidth && r.top>=0) && rs.every((a,i)=>rs.slice(i+1).every(b=>a.right<=b.left || b.right<=a.left || a.bottom<=b.top || b.bottom<=a.top));})()`),true,'visible actions fit without collision');
+      if (!developer) {
+        assert.equal(await evaluate(`document.querySelector(${JSON.stringify(developerSurfaces)})`),null,'ordinary controls are absent, not CSS-hidden');
+        const tree=await call('Accessibility.getFullAXTree');
+        assert.deepEqual(tree.nodes.filter(n=>!n.ignored && developerNames.test(n.name?.value ?? '')).map(n=>n.name.value),[],'no developer surface in accessibility tree');
+      } else assert.equal(await evaluate('document.querySelectorAll(".developer-indicator").length'),1);
+      await evaluate(`document.querySelector(${JSON.stringify(buttons)}).focus()`);
+      for (const label of expected) {
+        assert.equal(await evaluate('document.activeElement.getAttribute("aria-label")'),label,'native header Tab order');
+        await key('Tab',9);
+      }
+      await capture(`header-${developer?'dev':'ordinary'}-${width}`);
+      await activate('.project-actions button[aria-controls="diagnostics-drawer"]');
+      await waitFor('document.activeElement.id==="drawer-profile-select"');
+      assert.deepEqual(await evaluate('Array.from(document.querySelectorAll("#diagnostics-drawer h2")).map(el=>el.textContent)'),['Komunikační profil','Vzhled']);
+      assert.equal(await evaluate('document.querySelector("#diagnostics-drawer #model-select, #diagnostics-drawer .dev-scenario-picker")'),null);
+      await key('Escape',27);
+      await waitFor('document.querySelector("#diagnostics-drawer").inert');
+      if (developer) {
+        await activate('.dev-scenario-picker > button');
+        await waitFor('document.querySelectorAll("#dev-scenario-menu button").length===9');
+        await capture(`header-scenarios-${width}`);
+        await key('Tab',9);
+        assert.equal(await evaluate('document.activeElement.getAttribute("role")'),'menuitem');
+        await key('Enter',13);
+        await waitFor('!document.querySelector("#dev-scenario-menu") && document.querySelector("#message").value.length>0 && document.activeElement.id==="message"');
+        await activate('.conversation-diagnostics .stats-trigger');
+        await waitFor('document.querySelector("#model-select")');
+        const tree=await call('Accessibility.getFullAXTree');
+        assert.equal(tree.nodes.filter(n=>!n.ignored && n.role?.value==='combobox' && /^model$/i.test(n.name?.value ?? '')).length,1,'one accessible DEV model chooser');
+        await capture(`header-telemetry-${width}`);
+        await key('Escape',27);
+        await waitFor('!document.querySelector("#conversation-stats-popover")');
+        await evaluate(`URL.createObjectURL=blob=>{blob.text().then(text=>window.headerExport=JSON.parse(text));return 'blob:header-fixture';};URL.revokeObjectURL=()=>{};HTMLAnchorElement.prototype.click=function(){};`);
+        await activate('.session-export-trigger');
+        await waitFor('window.headerExport?.export?.format==="APU Session JSON"');
+      }
+      await evaluate('window.confirm=()=>true');
+      await activate('button[aria-label="Nový projekt"]');
+      await waitFor('document.querySelector("#message").value==="" && Object.values(JSON.parse(localStorage.getItem("apu-site:notepad-map:v2"))).every(items=>items.length===0)');
+      assert.equal(await evaluate('document.querySelectorAll(".desktop-tool-tabs button").length'),3);
+      assert.equal(await evaluate('window.calls.length'),0,'header interactions do not invoke APIs');
+    }
+    console.log('PASS: header roles, ordinary/developer at 1600/800/390/320px: no DEV LOG, no ordinary developer DOM/AX controls, unique actions, native keyboard traversal, Settings, new project, DEV scenarios/telemetry/Session JSON and zero API calls.');
+    console.log('Artifacts: '+artifactRoot);
+  } else if (process.argv.includes('--usage-isolation-only')) {
     const {createModelUsageRecord,finalizeModelUsageRecord}=await import('../app/usage-ledger.ts');
     const record=(id,phase='F3',operation='f3_render',failed=false)=>finalizeModelUsageRecord(createModelUsageRecord({
       call_id:id,request_id:'request-'+id,turn_id:null,phase,operation,attempt_index:0,retry_of_call_id:null,fallback_for_call_id:null,
