@@ -1,4 +1,5 @@
 import { getAccessIdentity } from "../../access-auth";
+import { manualModelOverrideDenied, type ServerIdentity } from "../../server-capabilities";
 import { assertF2SnapshotSupportsMaterialization, isF2ToF3Snapshot } from "../../f2-build-model";
 import { isSupportedModel } from "../../model-config";
 import { F2_PATHS, type F2Path } from "../../notepad-model";
@@ -14,15 +15,17 @@ const PATH: Record<F2Path, string> = {
   POZOROVAT: "Materializuj pouze existující pozorovací specifikaci; tabulka smí obsahovat jen dodané indikátory, situace, kontrasty, priority a vazby na hypotézy.",
   VYTVOŘIT: "Napiš skutečný materiál podle již zvoleného cíle, pracovního přístupu, podmínek a ověřování. Pokud pracovní přístup chybí, vrať boundary_issue.",
 };
-function error(message: string, status = 500, collector?: RequestUsageCollector) { return Response.json(collector ? modelUsagePayload({ error: message }, collector) : { error: message }, { status }); }
+function error(message: string, status = 500, collector?: RequestUsageCollector, identity?: ServerIdentity) { return Response.json(collector ? modelUsagePayload({ error: message }, collector, identity) : { error: message }, { status }); }
 function valid(value: unknown): value is F3RenderRequest { if (!value || typeof value !== "object") return false; const item = value as Partial<F3RenderRequest>; const snapshot = item.sourceSnapshot; return item.kind === "f3-render" && typeof item.sourceSnapshotId === "string" && typeof item.sourceFingerprint === "string" && typeof item.f3Target === "string" && typeof item.f3ConfigRevision === "number" && Boolean(snapshot && isF2ToF3Snapshot(snapshot) && item.sourceSnapshotId === snapshot.snapshotId && item.sourceFingerprint === snapshot.sourceFingerprint && F2_PATHS.includes(snapshot.activePath)) && Boolean(item.config && ["teacher", "parent", "student", "internal"].includes(item.config.audience) && ["concise", "plain", "professional", "accessible"].includes(item.config.languageStyle) && ["brief", "standard", "detailed"].includes(item.config.lengthDetail) && ["auto", "text", "table", "cards"].includes(item.config.structureMode)); }
 function outputText(response: Record<string, unknown>) { if (typeof response.output_text === "string") return response.output_text; for (const item of Array.isArray(response.output) ? response.output : []) for (const part of Array.isArray((item as { content?: unknown[] }).content) ? (item as { content: unknown[] }).content : []) if (part && typeof part === "object" && typeof (part as { text?: unknown }).text === "string") return (part as { text: string }).text; return null; }
 export async function POST(request: Request) {
   const identity = await getAccessIdentity(request.headers);
   if (!identity) return error("Chybí platná identita Cloudflare Access.", 401);
-  const apiKey = process.env.OPENAI_API_KEY; if (!apiKey) return error("APU není dokončeno: chybí serverová konfigurace.", 503);
+  const apiKey = process.env.OPENAI_API_KEY;
   let body: unknown; try { body = await request.json(); } catch { return error("Neplatný formát požadavku.", 400); }
   if (!valid(body)) return error("Neplatný F3 finalizační požadavek.", 400);
+  if (manualModelOverrideDenied(identity, body.model)) return error("Ruční volba modelu je dostupná pouze developerům.", 403);
+  if (!apiKey) return error("APU není dokončeno: chybí serverová konfigurace.", 503);
   try { assertF2SnapshotSupportsMaterialization(body.sourceSnapshot); }
   catch (cause) { return Response.json({ result: { kind: "boundary_issue", reason: cause instanceof Error ? cause.message : "Chybí věcný podklad.", affectedArea: "Specializovaný výstup", suggestedReturnToF2: "Doplňte potřebný podklad v Rozboru; pracovní analýzu lze exportovat ihned." } }); }
   const model = isSupportedModel(body.model) ? body.model : "gpt-5.6-terra"; const path = body.sourceSnapshot.activePath;
@@ -43,11 +46,11 @@ export async function POST(request: Request) {
       return Response.json(modelUsagePayload({
         error: "Finální výstup se nepodařilo vytvořit.",
         ...(identity.role === "developer" ? { diagnostic: `F3 provider request failed: status=${usage_record.provider_status}; category=${usage_record.error?.category ?? "unknown"}; code=${safeCode}` } : {}),
-      }, collector), { status: 502 });
+      }, collector, identity), { status: 502 });
     }
-    return Response.json(modelUsagePayload({ result: application_result, meta: { action: `F3 final render — ${path}`, model: typeof response.body.model === "string" ? response.body.model : model } }, collector));
+    return Response.json(modelUsagePayload({ result: application_result, meta: { action: `F3 final render — ${path}`, model: typeof response.body.model === "string" ? response.body.model : model } }, collector, identity));
   } catch (cause) {
-    const payload = usageErrorPayload(cause, collector);
-    return Response.json(payload ?? modelUsagePayload({ error: "Model vrátil neplatný strukturovaný F3 výsledek." }, collector), { status: 502 });
+    const payload = usageErrorPayload(cause, collector, identity, "Model vrátil neplatný strukturovaný F3 výsledek.");
+    return Response.json(payload ?? modelUsagePayload({ error: "Model vrátil neplatný strukturovaný F3 výsledek." }, collector, identity), { status: 502 });
   }
 }

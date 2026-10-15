@@ -31,9 +31,9 @@ export async function POST(request: Request) {
         return parseNeedRoutingDecision(JSON.parse(output));
       },
     });
-    if (usage_record.provider_status !== "completed" || !application_result) return Response.json(modelUsagePayload({ error: "Cíl potřeby se nepodařilo určit. Zkuste to znovu." }, collector), { status: 502 });
-    return Response.json(modelUsagePayload({ decision: application_result }, collector));
+    if (usage_record.provider_status !== "completed" || !application_result) return Response.json(modelUsagePayload({ error: "Cíl potřeby se nepodařilo určit. Zkuste to znovu." }, collector, identity), { status: 502 });
+    return Response.json(modelUsagePayload({ decision: application_result }, collector, identity));
   } catch (cause) {
-    return Response.json(usageErrorPayload(cause, collector) ?? modelUsagePayload({ error: "Cíl potřeby se nepodařilo určit. Zkuste to znovu." }, collector), { status: 502 });
+    return Response.json(usageErrorPayload(cause, collector, identity, "Cíl potřeby se nepodařilo určit. Zkuste to znovu.") ?? modelUsagePayload({ error: "Cíl potřeby se nepodařilo určit. Zkuste to znovu." }, collector, identity), { status: 502 });
   }
 }

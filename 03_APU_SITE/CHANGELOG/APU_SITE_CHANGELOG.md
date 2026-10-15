@@ -4,6 +4,13 @@ Status: CURRENT
 
 Records significant verified product/runtime/project changes. It is not a complete Git log. Historical Sites-era entries are retained where they remain useful; current deployment state must not be inferred from a changelog entry alone.
 
+## 2026-10-15 — ENV-S1 server-side developer capability boundary
+
+- Ordinary authenticated chat/F2/F3 requests cannot select a supported manual model: the server returns 403 without invoking a provider. Missing/auto selection and existing automatic/default policy remain; DEV manual selections, validation and source/materialization guards are preserved. Identity comes only from existing server-verified Access authentication.
+- Added shared, default-closed diagnostic envelope filtering across extraction, analysis, need-routing, F2/F3 JSON and every chat stream event. Ordinary success/error/interrupt paths omit usage/diagnostic/telemetry fields; provider-specific stream errors use public messages. DEV diagnostics and internal collectors/call IDs/lifecycle/status/pricing remain. Pedagogical content, functional metadata, optional-field consumers, prompts and provider-call policy are unchanged.
+- Verification PASS: typecheck, canonical build/artifact, **767/767 tests in both standard and combined Node runners**, zero failures/skips; **112 new security tests** with real JWT validation/routes/instrumentation and mocked transport; full provider-free Chromium workspace and DEV usage-isolation smoke; diff check/review. Updated only directly affected old ordinary-usage assertions while retaining content and call-count checks. No paid/live provider calls.
+- Hosted/native Windows and actual STABLE deployment/configuration remain NOT VERIFIED. Notebook ownership/logout and release/Access/resource separation remain separate gates. No active Cloudflare, KV, Access, release branch/tag, Preview/production deployment or PR merge changes; verified publication to the existing development branch is authorized separately from deployment.
+
 ## 2026-10-15 — ENV-S0 STABLE header preparation
 
 - Confirmed that the existing server-derived role boundary already omits all developer header surfaces for ordinary users. No application/CSS change was needed. Current DEV has one scenario popup, one telemetry/model popup and one Session JSON action; no active DEV LOG header menu or responsive duplicate was found. The reported two DEV LOG instances remain unidentified in the operator's hosted context; DEV functionality and the DEV LOG subsystem are preserved.

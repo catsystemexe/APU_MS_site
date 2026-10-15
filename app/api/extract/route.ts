@@ -1,3 +1,4 @@
+import type { ServerIdentity } from "../../server-capabilities";
 import { estimateCostUsd } from "../../model-config";
 import { F2_PATHS, locateSourceQuote, type F2Path } from "../../notepad-model";
 import { getAccessIdentity } from "../../access-auth";
@@ -84,8 +85,8 @@ function aggregateRecordedUsage(records: ReturnType<RequestUsageCollector["recor
   })));
 }
 
-function jsonError(message: string, status = 500, collector?: RequestUsageCollector) {
-  return Response.json(collector ? modelUsagePayload({ error: message }, collector) : { error: message }, { status });
+function jsonError(message: string, status = 500, collector?: RequestUsageCollector, identity?: ServerIdentity) {
+  return Response.json(collector ? modelUsagePayload({ error: message }, collector, identity) : { error: message }, { status });
 }
 
 class MissingGroundingOutputError extends Error {}
@@ -325,12 +326,12 @@ export async function POST(request: Request) {
         return JSON.parse(text) as RawExtraction;
       },
     });
-    if (result.usage_record.provider_status !== "completed" || !result.application_result) return jsonError("Extrakce do Zápisníku selhala.", 502, collector);
+    if (result.usage_record.provider_status !== "completed" || !result.application_result) return jsonError("Extrakce do Zápisníku selhala.", 502, collector, identity);
     response = result.response.body;
     extraction = result.application_result;
   } catch (cause) {
-    const payload = usageErrorPayload(cause, collector);
-    return Response.json(payload ?? modelUsagePayload({ error: "Výstup extraktoru nebyl platný JSON." }, collector), { status: 502 });
+    const payload = usageErrorPayload(cause, collector, identity, "Výstup extraktoru nebyl platný JSON.");
+    return Response.json(payload ?? modelUsagePayload({ error: "Výstup extraktoru nebyl platný JSON." }, collector, identity), { status: 502 });
   }
   const extractDuration = Math.round(performance.now() - extractStarted);
 
@@ -409,5 +410,5 @@ export async function POST(request: Request) {
         outputTokens,
       }),
     }, telemetry } : {}),
-  }, collector), { headers: { "Cache-Control": "no-store" } });
+  }, collector, identity), { headers: { "Cache-Control": "no-store" } });
 }

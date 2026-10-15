@@ -11,7 +11,7 @@ let providerCalls = [];
 globalThis.__needRouteTest = {
   getAccessIdentity: async () => identity,
   createRequestUsageCollector: () => ({}),
-  modelUsagePayload: (value) => ({ ...value, model_usage_records: [{ operation: "need_routing" }] }),
+  modelUsagePayload: (value, _collector, identity) => identity.role === "developer" ? ({ ...value, model_usage_records: [{ operation: "need_routing" }] }) : value,
   usageErrorPayload: () => null,
   callOpenAIResponses: async (request) => {
     providerCalls.push(request);
@@ -34,14 +34,15 @@ test("unauthenticated and invalid routing requests cannot reach the provider", a
   for (const value of [{}, { needText: " " }, { needText: "a".repeat(2001) }, { needText: 7 }]) assert.equal((await POST(request(value))).status, 400);
   assert.equal(providerCalls.length, 0);
 });
-test("provider routing is bounded, validates all three strategies, ignores overrides, and accounts usage equally in both modes", async () => {
+test("provider routing is bounded, validates all three strategies, ignores routing hints, and exposes usage only to developers", async () => {
   for (const role of ["teacher", "developer"]) for (const path of ["POCHOPIT", "POZOROVAT", "VYTVOŘIT"]) {
     identity = { role }; output = { path, clarification: null };
     const response = await POST(request({ needText: "Aktivní kanonická potřeba", path: "OTHER", scenarioPath: "OTHER", needMapping: { f2Path: "OTHER" } }));
     assert.equal(response.status, 200);
     const payload = await response.json();
     assert.deepEqual(payload.decision, output);
-    assert.equal(payload.model_usage_records[0].operation, "need_routing");
+    if (role === "developer") assert.equal(payload.model_usage_records[0].operation, "need_routing");
+    else assert.equal(payload.model_usage_records, undefined);
     const call = providerCalls.at(-1);
     assert.equal(call.operation, "need_routing");
     assert.equal(call.phase, "F2");

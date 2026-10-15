@@ -166,11 +166,11 @@ test("partial/contradictory primary verdicts retain the existing permissive mono
   assert.equal(detail.counts.primary_unresolved, 1);assert.equal(detail.counts.rescue_submitted, 0);
 });
 
-test("normal users receive unchanged extraction/usage contracts without developer grounding details", async t => {
+test("normal users receive unchanged extraction content without developer usage or grounding details", async t => {
   const { body, calls } = await runExtraction(t, { role: "tester" });
   assert.equal(calls.length, 2);assert.equal(body.extraction.candidates.length, 2);
   assert.equal(body.telemetry, undefined);assert.equal(body.diagnostics, undefined);
-  assert.equal(body.model_usage_records.length, 2);
+  assert.equal(body.model_usage_records, undefined);
 });
 
 test("explicit teacher-need fast path remains provider-free and does not invent telemetry", async t => {

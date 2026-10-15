@@ -12,7 +12,7 @@ test("chat shares one request collector across controller and main streaming cal
   assert.match(route, /\.\.\.mainLifecycle\.headers/);
 });
 
-test("all main-stream terminal outcomes finalize and return canonical usage records", () => {
+test("all main-stream terminal outcomes finalize usage and authorize every event before encoding", () => {
   for (const eventType of ["response.completed", "response.incomplete", "response.failed", "error"]) {
     assert.match(route, new RegExp(`event\\.type === "${eventType.replace(".", "\\.")}"`));
   }
@@ -21,6 +21,7 @@ test("all main-stream terminal outcomes finalize and return canonical usage reco
   assert.match(route, /finish_transport\("stream_ended_without_terminal_event"\)/);
   assert.match(route, /finish_transport\("stream_interrupted"\)/);
   assert.ok((route.match(/model_usage_records: usageCollector\.records\(\)/g) ?? []).length >= 6);
+  assert.match(route, /JSON\.stringify\(authorizedModelPayload\(event, authorization\)\)/);
 });
 
 test("controller uses the shared non-streaming wrapper and has no direct provider fetch", () => {

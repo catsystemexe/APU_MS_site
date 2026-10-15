@@ -90,7 +90,8 @@ for (const options of [{}, { invalidController: true }, { bypass: true }, { role
     assert.deepEqual(done.dialogActions, f.events[1].dialogActions);
     assert.equal(done.controllerFallback, options.invalidController === true);
     assert.equal(f.events.filter(event => event.type === "dialog_actions_preview").length, 1);
-    assert.equal(done.model_usage_records.length, f.calls.length);
+    if (options.role === "user") assert.equal(done.model_usage_records, undefined);
+    else assert.equal(done.model_usage_records.length, f.calls.length);
     assert.equal(Boolean(done.telemetry), options.role !== "user");
     assert.equal(f.calls.length, options.bypass ? 1 : 2, "no extra provider calls");
   });
