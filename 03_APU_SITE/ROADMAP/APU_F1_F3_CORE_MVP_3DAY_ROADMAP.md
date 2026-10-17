@@ -4,6 +4,97 @@
 **Primární cíl:** na konci sprintu existuje stabilní funkční core pipeline F1 → F2 → F3 se třemi F2 cestami POCHOPIT / POZOROVAT / VYTVOŘIT a jedním minimálním F3 strukturovaným textovým Výstupem.
 **Stretch cíl:** stylizovaný DOCX export až po úplném CORE PASS a pouze pokud zbývá čas.
 
+## Aktuální schválený design — doplnění 2026-10-12
+
+Tento doplněk nahrazuje původní sprintové předpoklady uvedené níže pouze v otázce minimálního Build, připravenosti F3 a exportu. Původní roadmapa zůstává zachována jako historický sprintový plán. Implementace je na větvi `codex/f1-f3-mvp-stabilization`, PR #60; ověření kódu neznamená nasazení do produkce.
+
+- Úspěšný vstupní F2 Rozbor s neprázdnými pracovními hypotézami je platný minimální Build: `expansionDepth = 0`, všechny volitelné operace vypnuté, bez automatického generování komponent. Prázdná nebo neúspěšná analýza nestačí.
+- Výchozí F3 podoba je ihned dostupná pracovní pedagogická analýza, deterministicky prezentovaná z přijatého F2 snapshotu bez dalšího LLM volání. Zachovává hypotézy, existující podpůrné informace, kontext Zápisníku, neznámé a omezení. Připravenost sama nepřepíná uživatele z F2 do F3.
+- Neměnný snapshot přijatého Rozboru je jediným autoritativním věcným zdrojem F3. Každá další podporovaná podoba vzniká nezávisle přímo z něj; žádná podoba F3 se nestává zdrojem jiné podoby.
+- Baseline všech tří interních strategií je exportovatelný jako pracovní analýza. Původní požadavek na pozorovací specifikaci či zvolený pracovní přístup se nadále vztahuje na specializovanou materializaci: baseline POZOROVAT není hotový pozorovací plán a baseline VYTVOŘIT není hotová intervence. F3 nesmí chybějící rozhodnutí doplnit.
+- Nepoužité volby Build nejsou přijatý analytický obsah. Během čekání nebo selhání volitelného Build zůstává poslední validní přijatý zdroj. Úspěšná obsahová změna vytvoří novou revizi; F3 zachovává předchozí obsah jako stale a vyžaduje explicitní přijetí nového zdroje a regeneraci další podoby.
+- Tisk, PDF přes tiskový mechanismus prohlížeče a kopírování čitelného textu jsou lokální exportní formáty, oddělené od podoby Výstupu. Export nevolá model a nemění zdroj. Původní odklad PDF/Word exportu se tím pro browserový tisk/PDF ruší; DOCX, externí PDF služba a rich editor zůstávají mimo scope.
+- B-01 Session JSON export zůstává samostatnou otevřenou prací; tento doplněk jej neuzavírá.
+
+## Aktuální desktopový UX — doplnění 2026-10-12
+
+Tento doplněk nahrazuje původní sprintové předpoklady o rozmístění pracovních panelů, nikoli analytické kontrakty. Historický obsah roadmapy níže zůstává zachován.
+
+- **Prostor A — F1:** vlevo existující Chat s composerem, vpravo současně Zápisník; vazby zpráv a zápisů zůstávají zachovány.
+- **Prostor B — F2/F3:** vlevo společný nástrojový panel s volbami **Build / Výstup / Chat**, vpravo jediný dokument Rozboru nebo Výstupu. Build je výchozí při vstupu do F2, Výstup při explicitním přechodu do F3. Reprezentace, nastavení, materializace a exportní akce F3 jsou vlevo; čitelný dokument je vpravo.
+- Oba prostory používají stejný splitter. Čerstvá preference je 30 % vlevo / 70 % vpravo, bezpečně omezená minimálními čitelnými šířkami 420/300 px. Explicitně uložené preference včetně původních 60 % se zachovávají. Úzké a portrétní obrazovky nadále používají stávající mobilní/overlay režim.
+- Otevření Chatu mění jen levý nástroj, nikoli pravý dokument, analytický obsah, přijatý snapshot nebo reprezentaci F3; přepnutí samo nevolá model. Volby Build a Výstup používají explicitní existující přechody F2/F3. Přijetí nového zdroje F3 zůstává explicitní.
+- F2 Chat zachovává podporovaný rozhovor a aktualizace Rozboru. F3 Chat nyní zpřístupňuje pouze stejnou historii s jasným omezením, bez aktivního composeru nebo akcí zpráv měnících zdroj.
+- **Contextual Document Chat není implementován.** Budoucí výběr pasáže, kontextové vysvětlení a příklady musí oddělovat diskusi od změny dokumentu a nesmějí automaticky měnit kanonické údaje ani přijaté snapshoty. Samostatná budoucí práce je vedena jako B-06.
+
+Implementováno a technicky ověřeno na vývojové větvi/PR #60; nejde o tvrzení o produkčním nasazení.
+
+## Sjednocený dokument F2/F3 — aktuální design, doplnění 2026-10-12
+
+Tento doplněk nahrazuje rozdílnou výchozí prezentaci Rozboru a pracovní analýzy F3. Historické sprintové předpoklady níže i předchozí doplňky zůstávají zachovány; analytické odpovědnosti F2/F3 a validace snapshotu se neslučují.
+
+- F2/F3 sdílí jeden pravý dokumentový prostor. Levé nástroje jsou **Chat | Build | Výstup**; F1 nadále používá Chat / Zápisník. Splitter a jeho preference zůstávají zachovány.
+- Jediná kanonická výchozí pracovní pedagogická analýza vzniká deterministicky z přijatého neměnného F2 snapshotu. Build a výchozí Výstup používají stejný obsah, pořadí sekcí, styl a export; nevzniká další analýza ani modelové volání.
+- Build nezávisle řídí analytické operace; Výstup řídí podporovanou prezentaci. Návrat do Build ukáže přijatou pracovní analýzu a zachová konfiguraci i dosavadní generovaný F3 dokument. Samotná navigace nevytváří revizi zdroje.
+- Změna volby Build je pouze pending konfigurace. Přijatý dokument se změní až po validním úspěšném zpracování; selhání nebo zastaralá odpověď jej nepřepíše. Beze změny přijaté substance zůstává existující snapshot.
+- F3 má jako jediný věcný zdroj svůj explicitně přijatý F2 snapshot. Novější přijatý Rozbor označí starý generovaný dokument jako stale, ale zachová jej pro referenci spolu s nastavením. Přijetí nového zdroje a regenerace zůstávají explicitní; každá podoba vzniká přímo ze snapshotu, nikdy z jiné podoby F3.
+- Build umožňuje okamžitý tisk/PDF a kopírování pracovní analýzy; Výstup exportuje právě zvolenou podobu se zachováním stale upozornění. Export nevolá model ani nemění zdroj. Specializované podoby stále vyžadují příslušná přijatá rozhodnutí F2.
+- Chat mění pouze levý nástroj a zachovává pravý dokument. Podporovaný F2 rozhovor zůstává interaktivní; F3 zpřístupňuje historii pouze pro čtení. Contextual Document Chat zůstává mimo implementaci.
+
+Implementováno a ověřeno ve vývojové větvi/PR #60: typecheck, 160 cílených testů a syntetický browser smoke A–L. Ověření autentizovaného živého UI je **NOT VERIFIED — access blocked**. Nejde o produkční nasazení; B-01/B-06 a KI-01/KI-02 se nemění.
+
+## Výchozí styly dokumentu A / B — aktuální design, doplnění 2026-10-13
+
+Tento doplněk upravuje pouze vizuální prezentaci deterministické pracovní analýzy. Předchozí doplňky a historická sprintová roadmapa níže zůstávají zachovány; ověření implementace v PR #60 neznamená nasazení.
+
+- **VAR A — Čistý dokument** je výchozí podoba v nové klientské relaci: bílá centrovaná stránka, jedna čtecí kolona, střídmé postupné číslování sekcí, jemné oddělovače a čitelná typografie.
+- **VAR B — Strukturovaný dokument** je alternativní podoba se stejnou šířkou, obsahem a pořadím; malé jednobarevné dekorativní ikony pomáhají orientaci bez karet, barevných výplní nebo nových významových tvrzení. Neznámé nadpisy zůstávají bez zavádějící ikony.
+- Obě podoby používají tentýž přijatý F2 snapshot, `renderWorkingAnalysis()` a nezměněný `F3Material`. Zachovávají všechny hypotézy, oporu, omezení, nejistoty, otázky, přijatá rozvinutí a podmínky použití.
+- Kompaktní volba v levém nástroji Výstup okamžitě mění pouze klientský vzhled výchozího dokumentu v Build i Výstupu. Navigace Build / Výstup / Chat volbu zachová; změna stylu nevolá model, nepřijímá zdroj, nevytváří stale stav ani revizi F2/F3 konfigurace. Generované podoby text/tabulka/karty zůstávají samostatné.
+- Dokument má čitelné stránkové proporce, plynulé přizpůsobení malé šířce a A4 tisk s rozumnými okraji a více stránkami. Nadpisy a krátké seznamové bloky se drží s navazujícím obsahem. Kopírovaný původní text je v A/B totožný, bez dekorativních čísel a ikon.
+- Sémantické nadpisy, odstavce a přesně rozpoznané seznamy připravují strukturu pro budoucí export; **DOCX zůstává budoucí schopností a v této dávce není implementován**. Nevzniká nový obsahový zdroj, editor ani úložiště šablon.
+
+Ověření: typecheck, 138 cílených testů a existující izolovaný Chromium fixture s realistickým dlouhým přijatým dokumentem prošly. Obě podoby vytvořily sedmistránkové A4 PDF se shodným úplným věcným textem, okraji 18 mm a zachovanými otázkami/nejistotou. Screenshoty desktopu, úzkého desktopu a portrétu/mobilu byly zkontrolovány. Autentizované hostované UI zůstává **NOT VERIFIED — access blocked**; žádný auth bypass, providerový benchmark, merge ani produkční nasazení nebyl proveden.
+
+## Hierarchie výchozího dokumentu — aktuální design, doplnění 2026-10-13
+
+Tento doplněk nahrazuje předchozí pravidlo globálního číslování a plochého členění výchozího dokumentu. Předchozí doplňky a historický sprintový plán zůstávají zachovány.
+
+- Výchozí pracovní analýza má společnou hierarchii **Informace ze Zápisníku → Pracovní hypotézy → Rozšíření analýzy**. Poslední skupina vzniká pouze z přijatých neprázdných komponent; pending volby Build nejsou dokumentový obsah.
+- Zápisník používá původní strukturované záznamy: Pedagogická potřeba, Projevy, Kontext, Průběh, Co pomáhá a případné Další pedagogické potřeby. Neprázdné kategorie jsou seznamy v původním pořadí položek. Aktivní potřeba se zobrazí jednou; z dalších potřeb se vynechá pouze její přesná opakovaná hodnota po normalizaci whitespace. Kanonické záznamy se nemění.
+- Zaměření ověřování patří pod Pracovní hypotézy. Hypotézy zachovávají skutečný zdrojový rank, titul, souhrn, oporu, omezení, neznámé a otázky; obecná nejistota následuje za nimi. Přijatá rozšíření zachovávají dosavadní obsah všech podporovaných komponent.
+- `analysisContext.summary` a `needAnalysis.intendedOutput` jsou výslovně vynechány pouze z výchozí projekce a jejích exportů: procesní souhrn a obecný záměr výstupu nejsou standardní sekce dokumentu. Hodnoty zůstávají v přijatém snapshotu pro ostatní oprávněná použití; nevzniká klasifikátor ani náhradní generovaný souhrn.
+- **VAR A** zůstává výchozí čistou nečíslovanou typografií; **VAR B** používá malé dekorativní ikony jen u hlavních skupin a obecné nejistoty. Obě podoby, DOM i Copy Text používají stejnou lokální strukturovanou projekci přijatého zdroje. Číslování se vztahuje pouze na skutečný rank hypotéz.
+- Volba stylu ani nové členění nemění analytický stav, přijetí zdroje, revize, stale pravidla či modelovou materializaci. Čitelné stránkové proporce a více stránkový A4 tisk zůstávají; DOCX je budoucí schopnost.
+
+Ověření: typecheck, 148 cílených testů a existující izolovaný Chromium fixture prošly. A/B mají shodný úplný text projekce v DOM/Copy a šestistránkových A4 PDF, včetně uživatelské podmínky a zdrojové revize. Ověřeny byly kategorie, konzervativní deduplikace, ranky 1/4/8, rozšíření všech tří strategií, navigace, izolace stavu a exportní regrese. Screenshoty desktopu, úzkých a portrétních/mobilních pohledů a tiskové stránky byly zkontrolovány. Autentizované hostované UI, přesné hostované fonty a lidský tiskový dialog zůstávají **NOT VERIFIED**; žádný bypass, providerový benchmark, merge ani nasazení nebyl proveden.
+
+## Hlavička dokumentu a aktualizace — aktuální design, doplnění 2026-10-13
+
+Tento doplněk nahrazuje starší předpoklad povinného explicitního přijetí každé úspěšné změny Build do F3. Historické doplňky a sprintový obsah níže zůstávají zachovány; analytické odpovědnosti a validace se nemění.
+
+- První úspěšně přijatý validní F2 baseline zachytí skutečný ISO čas vzniku pracovního dokumentu v klientském session stavu. A/B a Build/výchozí Výstup zobrazují vpravo nahoře **Vytvořeno v APU** s českým datem; revize, navigace a materializace jej nemění. Nový projekt metadata resetuje. Neznámé datum se vynechá; čas není součástí snapshotu, fingerprintu, providerového kontraktu ani nového úložiště.
+- Titul a původní metodologický podtitul tvoří kompaktní hlavičku bez čáry mezi nimi. Jeden oddělovač následuje pod hlavičkou a další pouze mezi hlavními skupinami. Jednotlivé hypotézy a kategorie odlišuje typografie a spacing; závěrečná podmínka použití je střídmá poznámka. Šířka, A4 proporce, obsah, ranky a sémantické seznamy zůstávají zachovány.
+- Skutečná explicitní generace Build/F3 zobrazuje v pravém dokumentu jediný lehký overlay **AKTUALIZUJI DOKUMENT**. Poslední validní obsah a čtecí pozice zůstávají; navigace funguje. Stav se ukončí úspěchem, chybou nebo odmítnutím zastaralé odpovědi. Samotné volby/navigace/styl/export/přijetí zdroje jej nespouštějí; synchronní změna nemá umělé čekání.
+- Úspěšná validovaná explicitní aktualizace Build, včetně lokálního odstranění přijaté komponenty, společně přijme změněný F2 snapshot a převezme jej do F3. Aktivuje výchozí dokument bez potvrzení a bez F3 modelového volání. Stejný fingerprint nevytváří revizi ani další přijetí. F3 nastavení zůstává a dřívější generované podoby se zachovají jako stale.
+- Stale upozornění na zachovanou generovanou podobu se ukáže při jejím skutečném zobrazení, ne při čtení aktuální výchozí analýzy. Regenerace zůstává explicitní a čte nový přijatý snapshot přímo. Neúspěšné/obsolete Build a nesouvisející upstream změny nejsou automatické přijetí; upstream změny zachovávají dosavadní ochranu a explicitní adoption.
+- Běžný Výstup nemá redundantní **Vrátit se do Rozboru**; navigací je tab Build. Kontextová recovery **Přejít do Buildu** zůstává. Header Copy/Print/Share je zachován; během generace nelze exportovat pending obsah. Print/PDF obsahuje skutečná metadata, Copy zachovává původní čitelný text projekce bez přidaných lifecycle metadat.
+
+Ověření: typecheck a 155 cílených testů prošly; existující actual-client Chromium fixture ověřil scénáře A–L včetně automatického přijetí, zachování starých karet/nastavení, explicitní ochrany upstream, chyb/obsolete, lokálního odebrání, resetu během pending požadavku, reduced-motion, navigace a A/B. Obě podoby mají šestistránkové A4 PDF s jedním skutečným datem a úplným zdrojovým textem; screenshoty hlavičky/overlay/mobile a tiskových stránek byly prohlédnuty. Autentizované hosted UI, přesné hosted fonty, lidský tiskový dialog a fyzický tisk jsou **NOT VERIFIED**. Žádný auth bypass, providerový benchmark, nové úložiště, DOCX, merge, release tag ani nasazení nebyl proveden.
+
+## Trvalá navigace pracovních panelů — Batch 1, doplnění 2026-10-13
+
+Tento doplněk nahrazuje dřívější podmíněnou navigaci panelů a uživatelské označení Build. Historické doplňky a sprintový obsah níže zůstávají zachovány; analytická vrstva je interně nadále Rozbor/Build.
+
+- Desktop od začátku případu trvale ukazuje vlevo **Chat | Obsah | Výstup** a vpravo **Zápisník | Dokument**. V nové F1 je vybrán Chat/Zápisník; Obsah, Výstup a Dokument jsou viditelné, ale nativně disabled. Klik, klávesnice ani interní handlery neobejdou dostupnost.
+- Obsah zpřístupňuje podporovanou F2 práci a upřesnění potřeby až po vstupu do F2. Výstup vyžaduje aktuální přijatý zdroj nebo zachovaný F3 stav; Dokument se zpřístupní po první validní přijaté analýze a zůstává dostupný pro uchovaný obsah při pozdější stale situaci. Tato dostupnost nikdy nenahrazuje validační podmínky materializace.
+- Samostatná klientská volba pravého pohledu dovolí prohlížet Zápisník bez změny levého nástroje, fáze, snapshotu či F3 konfigurace. Chat a ruční volba Obsah/Výstup zachovají záměrný pohled do Zápisníku; úspěšný první vstup do F2 a explicitní workflow přechod mohou vybrat Dokument. Obnovení dokumentu nic negeneruje ani nepřijímá nový zdroj.
+- Po přijatém F2 je Zápisník retrospektivně pouze pro čtení: původní položky, kategorie, výběr textu a odkazy do Chatu zůstávají; add/edit/delete jsou zakázány také v callbackách. Před přijetím baseline zůstává F1 editovatelná. Podporované Chat/extraction aktualizace a source-currency ochrany se nemění.
+- Sdílená hlavička používá pravé navigační záložky bez dalšího duplicitního titulku. Reset/Copy/Print/Share se ukazují pouze při Dokumentu; kontextová nápověda zůstává. Disabled F3 update používá `cursor: default`, skutečné čekání nadále hlásí existující overlay/spinner.
+- Interní `build` identifikátory, API a analytické kontrakty se nepřejmenovávají. Dokumentové styly, obsah, metadata, přijetí úspěšného Build, stale podoby, F3 eligibility/Reset, A4 export a split preference zůstávají. Mobil/portrét používá stávající overlay navigaci.
+
+Batch 1 ověřen v PR #60: typecheck, 187 cílených testů a existující actual-client Chromium fixture A–P plus předchozí regrese. Screenshoty F1, read-only Zápisníku, úzkého desktopu a portrétu/mobilu byly prohlédnuty; A/B více stránkový A4 export a generované podoby prošly. Hosted autentizované vykreslení je **NOT VERIFIED — access blocked**. **Řízené úpravy Zápisníku, draft/save/reanalysis a oprava KI-02 zůstávají pozastaveny; nejsou součástí této dávky.** Žádný merge, deployment, release tag, auth bypass ani providerový F1 benchmark nebyl proveden.
+
 ## 1. Definice MVP PASS
 MVP je považováno za hotové pouze tehdy, když reálný uživatelský průchod splní celý následující kontrakt bez porušení source-of-truth hranic:
 - F1 přijme reálnou situaci a vytvoří použitelný Zápisník a pedagogickou potřebu.

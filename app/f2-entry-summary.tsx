@@ -14,8 +14,8 @@ export function F2EntrySummary({ onOpenAnalysis, onOpenBuild }: F2EntrySummaryPr
     <p>V kartě Rozbor máte připravené pracovní situační hypotézy.</p>
     <p className="f2-entry-build-guidance">
       Jednotlivé směry můžete dál rozpracovat v kartě{" "}
-      <button type="button" onClick={onOpenBuild}>Build</button>
-      <span>Build</span>.
+      <button type="button" onClick={onOpenBuild}>Obsah</button>
+      <span>Obsah</span>.
     </p>
   </section>;
 }

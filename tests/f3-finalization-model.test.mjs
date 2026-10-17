@@ -55,7 +55,7 @@ test("source change preserves output, requires explicit adoption, then permits r
   assert.equal(state.finalRender.content.title, "Nový");
 });
 
-test("failed or malformed regeneration preserves the previous successful render", () => {
+test("failed or malformed regeneration preserves the previous successful render and permits retry", () => {
   let state = createF3State(snapshot());
   const request = createF3RenderRequest(state);
   state = acceptF3Render(state, material, request);
@@ -65,6 +65,9 @@ test("failed or malformed regeneration preserves the previous successful render"
     assert.equal(state, previous);
     assert.equal(state.finalRender.content.title, "Výstup");
   }
+  state = acceptF3Render(state, { ...material, title: "Výstup po retry" }, createF3RenderRequest(state));
+  assert.equal(state.finalRender.status, "current");
+  assert.equal(state.finalRender.content.title, "Výstup po retry");
 });
 
 test("stale in-flight response is ignored after source or configuration changes", () => {

@@ -1,3 +1,4 @@
+import { assertF2SnapshotSupportsMaterialization, isF2ToF3Snapshot } from "./f2-build-model.ts";
 import type { F2ToF3Snapshot } from "./f2-build-model";
 
 export type F3Audience = "teacher" | "parent" | "student" | "internal";
@@ -14,8 +15,10 @@ export type F3Material = {
 };
 export type F3BoundaryIssue = { kind: "boundary_issue"; reason: string; affectedArea: string; suggestedReturnToF2: string };
 export type F3RenderResult = F3Material | F3BoundaryIssue;
-export type F3FinalRender = { sourceSnapshotId: string; f3ConfigRevision: number; content: F3RenderResult; status: "current" | "stale"; staleReason: "configuration" | "source" | null };
+export type F3FinalRender = { sourceSnapshotId: string; sourceFingerprint: string; config: F3Config; f3ConfigRevision: number; content: F3RenderResult; status: "current" | "stale"; staleReason: "configuration" | "source" | null };
+export type F3Representation = "analysis" | "material";
 export type F3State = {
+  representation: F3Representation;
   sourceSnapshotId: string;
   sourceSnapshotRevision: number;
   sourceSnapshot: F2ToF3Snapshot;
@@ -38,8 +41,24 @@ export type F3RenderRequest = {
 };
 
 export const DEFAULT_F3_CONFIG: F3Config = { audience: "teacher", languageStyle: "plain", lengthDetail: "standard", structureMode: "auto" };
+export function sameF3Config(a: F3Config, b: F3Config) {
+  return a.audience === b.audience && a.languageStyle === b.languageStyle && a.lengthDetail === b.lengthDetail && a.structureMode === b.structureMode;
+}
+export function f3GenerationEligibility(state: F3State | null, loading = false): { enabled: boolean; reason: "unavailable" | "loading" | "adoption" | "prerequisites" | "default" | "current" | "configuration" | "source" } {
+  if (!state) return { enabled: false, reason: "unavailable" };
+  if (loading) return { enabled: false, reason: "loading" };
+  if (state.sourceStatus !== "current") return { enabled: false, reason: "adoption" };
+  try { assertF2SnapshotSupportsMaterialization(state.sourceSnapshot); }
+  catch { return { enabled: false, reason: "prerequisites" }; }
+  const render = state.finalRender;
+  if (!render || render.content.kind !== "material") return sameF3Config(state.config, DEFAULT_F3_CONFIG)
+    ? { enabled: false, reason: "default" } : { enabled: true, reason: "configuration" };
+  if (render.sourceSnapshotId !== state.sourceSnapshotId || render.sourceFingerprint !== state.sourceSnapshot.sourceFingerprint) return { enabled: true, reason: "source" };
+  return sameF3Config(state.config, render.config) ? { enabled: false, reason: "current" } : { enabled: true, reason: "configuration" };
+}
 export function f2SnapshotId(snapshot: F2ToF3Snapshot) { return snapshot.snapshotId; }
 function immutableSnapshot(snapshot: F2ToF3Snapshot) {
+  if (!isF2ToF3Snapshot(snapshot)) throw new Error("Neplatný zdrojový snapshot Rozboru.");
   const freeze = (value: unknown): void => {
     if (!value || typeof value !== "object" || Object.isFrozen(value)) return;
     Object.values(value).forEach(freeze);
@@ -52,6 +71,7 @@ function immutableSnapshot(snapshot: F2ToF3Snapshot) {
 export function createF3State(snapshot: F2ToF3Snapshot): F3State {
   const sourceSnapshot = immutableSnapshot(snapshot);
   return {
+    representation: "analysis",
     sourceSnapshotId: f2SnapshotId(snapshot),
     sourceSnapshotRevision: snapshot.sourceRevision,
     sourceSnapshot,
@@ -65,17 +85,28 @@ export function createF3State(snapshot: F2ToF3Snapshot): F3State {
 }
 export function updateF3Config(state: F3State, change: Partial<F3Config>): F3State {
   const config = { ...state.config, ...change };
-  if (JSON.stringify(config) === JSON.stringify(state.config)) return state;
+  if (sameF3Config(config, state.config)) return state;
+  const render = state.finalRender;
+  const sourceChanged = state.sourceStatus === "stale" || (render && (render.sourceSnapshotId !== state.sourceSnapshotId || render.sourceFingerprint !== state.sourceSnapshot.sourceFingerprint));
+  const configMatches = render && sameF3Config(config, render.config);
   return {
     ...state,
     config,
     configRevision: state.configRevision + 1,
-    finalRender: state.finalRender ? {
-      ...state.finalRender,
-      status: "stale",
-      staleReason: state.finalRender.staleReason === "source" ? "source" : "configuration",
+    finalRender: render ? {
+      ...render,
+      status: !sourceChanged && configMatches ? "current" : "stale",
+      staleReason: sourceChanged ? "source" : configMatches ? null : "configuration",
     } : null,
   };
+}
+export function isDefaultF3Presentation(state: F3State) {
+  return state.representation === "analysis" && sameF3Config(state.config, DEFAULT_F3_CONFIG);
+}
+export function resetF3Presentation(state: F3State): F3State {
+  if (isDefaultF3Presentation(state)) return state;
+  const updated = updateF3Config(state, DEFAULT_F3_CONFIG);
+  return updated.representation === "analysis" ? updated : { ...updated, representation: "analysis" };
 }
 export function markF3SourceStale(state: F3State, currentSourceFingerprint: string): F3State {
   if (currentSourceFingerprint === state.observedSourceFingerprint) return state;
@@ -93,6 +124,7 @@ export function adoptF2Snapshot(state: F3State, snapshot: F2ToF3Snapshot): F3Sta
   if (snapshot.sourceFingerprint === state.sourceSnapshot.sourceFingerprint && state.sourceStatus === "current") return state;
   return {
     ...state,
+    representation: "analysis",
     sourceSnapshotId: f2SnapshotId(snapshot),
     sourceSnapshotRevision: snapshot.sourceRevision,
     sourceSnapshot: immutableSnapshot(snapshot),
@@ -104,6 +136,7 @@ export function adoptF2Snapshot(state: F3State, snapshot: F2ToF3Snapshot): F3Sta
 }
 export function createF3RenderRequest(state: F3State, model?: string): F3RenderRequest {
   if (state.sourceStatus === "stale") throw new Error("Nejprve přijměte aktuální Rozbor jako nový zdroj Výstupu.");
+  assertF2SnapshotSupportsMaterialization(state.sourceSnapshot);
   return structuredClone({
     kind: "f3-render",
     sourceSnapshot: state.sourceSnapshot,
@@ -135,5 +168,5 @@ export function parseF3RenderResult(value: unknown): F3RenderResult {
 export function acceptF3Render(state: F3State, result: F3RenderResult, request: F3RenderRequest): F3State {
   if (state.sourceStatus !== "current" || request.sourceSnapshotId !== state.sourceSnapshotId || request.sourceFingerprint !== state.sourceSnapshot.sourceFingerprint || request.f3ConfigRevision !== state.configRevision) return state;
   const content = parseF3RenderResult(result);
-  return { ...state, finalRender: { sourceSnapshotId: request.sourceSnapshotId, f3ConfigRevision: request.f3ConfigRevision, content, status: "current", staleReason: null } };
+  return { ...state, representation: "material", finalRender: { sourceSnapshotId: request.sourceSnapshotId, sourceFingerprint: request.sourceFingerprint, config: structuredClone(request.config), f3ConfigRevision: request.f3ConfigRevision, content, status: "current", staleReason: null } };
 }

@@ -9,25 +9,27 @@ const [component, categories, page, styles] = await Promise.all([
   readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
 ]);
 
-test("notepad uses local persistence and floating Lucide tool buttons", () => {
-  assert.match(component, /localStorage\.getItem\(NOTEPAD_STORAGE_KEY\)/);
-  assert.match(component, /localStorage\.setItem\(NOTEPAD_STORAGE_KEY, JSON\.stringify\(entries\)\)/);
+test("notepad uses owner-bound persistence and floating Lucide tool buttons", () => {
+  assert.match(component, /usePersistentNotepad\(owner: NotebookOwner\)/);
+  assert.match(component, /createNotebookStorage\(owner/);
+  assert.doesNotMatch(component, /LEGACY_NOTEPAD_STORAGE_KEY|migrateLegacyNotepad|NOTEPAD_STORAGE_KEY/);
   assert.match(component, /NotebookPen/);
   assert.match(page, /className="tool-rail"/);
   assert.match(page, /\bSettings\b/);
-  assert.match(page, /tool-rail-diagnostics/);
+  assert.match(page, /ref=\{settingsButtonRef\}/);
+  assert.doesNotMatch(page, /tool-rail-diagnostics|tool-rail-copy/);
   assert.match(page, /tool-rail-\$\{id\}/);
-  assert.match(component, /className="notepad-scroll f2-baseline"/);
-  assert.match(component, /<GeneratedMarkdown content=\{expansion\.content\}/);
+  assert.match(component, /id="workspace-document"/);
+  assert.match(component, /documentMode=\{workingAnalysis \? "analysis" : "output"\}/);
   assert.doesNotMatch(component, /<F2BuildEditor|Směr rozboru|PREVIEW/);
   assert.doesNotMatch(component, /workspace-tabs/);
   assert.doesNotMatch(component, /workspace-tab/);
   assert.match(component, /ScanSearch/);
   assert.match(component, /FileText/);
   assert.match(component, /type WorkspacePanel = "notepad" \| "analysis" \| "output" \| null/);
-  assert.match(component, /function AnalysisPanel/);
-  assert.match(component, /function OutputPanel/);
-  assert.match(component, /<F3Finalization snapshot=/);
+  assert.match(component, /function DocumentPanel/);
+  assert.doesNotMatch(component, /function AnalysisPanel|function OutputPanel/);
+  assert.match(component, /<F3Finalization[^>]*snapshot=/);
   assert.doesNotMatch(component, /Nejprve v Rozboru vytvořte explicitní PREVIEW/);
   assert.match(page, /createF2ToF3Snapshot/);
   assert.match(page, /markF3SourceStale/);
@@ -74,21 +76,21 @@ test("notepad uses local persistence and floating Lucide tool buttons", () => {
   assert.match(component, /IntersectionObserver/);
   assert.match(page, /\/api\/extract/);
   assert.match(page, /excludeSourceMessageId: sourceMessageId/);
-  assert.match(page, /const INPUT_PLACEHOLDER = "Napište APU…"/);
+  assert.match(page, /const INPUT_PLACEHOLDER = "Napište APU..."/);
   assert.doesNotMatch(page, /Doplňte Zápisník|Upřesněte Rozbor|Upravte Výstup|Popište situaci/);
   assert.match(page, /placeholder=\{INPUT_PLACEHOLDER\}/);
-  assert.match(page, /\{!isComposerExpanded && <span>\{INPUT_PLACEHOLDER\}<\/span>\}/);
+  assert.doesNotMatch(page, /composer-entry-trigger/);
   assert.doesNotMatch(page, /Aktivní kontext:/);
   assert.doesNotMatch(page, /Aktivní vrstva:/);
   assert.doesNotMatch(styles, /\.composer-workspace-indicator/);
   assert.match(styles, /\.composer textarea::placeholder[\s\S]*white-space:\s*nowrap/);
-  assert.match(styles, /\.composer-entry-trigger span[\s\S]*text-overflow:\s*ellipsis/);
+  assert.match(styles, /\.composer textarea[\s\S]*cursor:\s*text/);
 });
 
-test("responsive layout has 60\/40 split and content-only overlay", () => {
+test("responsive layout has 30\/70 split and content-only overlay", () => {
   assert.match(styles, /@media \(min-width: 1024px\), \(min-width: 768px\) and \(orientation: landscape\)[\s\S]*\.app-shell \{ padding: 10px; \}/);
   assert.match(styles, /@media \(min-width: 1024px\), \(min-width: 768px\) and \(orientation: landscape\)[\s\S]*\.chat-card \{[\s\S]*width: 100%;[\s\S]*height: calc\(100dvh - 20px\);[\s\S]*min-height: 0;/);
-  assert.match(styles, /grid-template-columns:\s*var\(--desktop-chat-split, 60%\) minmax\(0, 1fr\)/);
+  assert.match(styles, /grid-template-columns:\s*var\(--desktop-chat-split, 30%\) minmax\(0, 1fr\)/);
   assert.match(styles, /min-width:\s*768px\) and \(orientation:\s*landscape\)/);
   assert.match(styles, /\.tool-rail[\s\S]*grid-row:\s*2/);
   assert.match(styles, /\.tool-rail[\s\S]*justify-self:\s*end/);
@@ -98,11 +100,11 @@ test("responsive layout has 60\/40 split and content-only overlay", () => {
   assert.match(styles, /\.notepad-panel[\s\S]*transform:\s*translateX\(calc\(100% \+ 48px\)\)/);
   assert.match(styles, /\.notepad-panel\.is-open\s*\{\s*transform:\s*translateX\(0\)/);
   assert.match(styles, /prefers-reduced-motion:\s*reduce/);
-  assert.match(styles, /\.tool-rail-diagnostics\s*\{\s*top:\s*6px/);
+  assert.match(styles, /\.app-header > \.diagnostics-drawer/);
   assert.match(styles, /\.tool-rail-notepad\s*\{\s*top:\s*calc\(50% - 50px\)/);
   assert.match(styles, /\.tool-rail-analysis\s*\{\s*top:\s*50%/);
   assert.match(styles, /\.tool-rail-output\s*\{\s*top:\s*calc\(50% \+ 50px\)/);
-  assert.match(styles, /\.chat-card:has\(\.notepad-panel\.is-open\)[\s\S]*grid-template-columns:\s*var\(--desktop-chat-split, 60%\) minmax\(0, 1fr\)/);
+  assert.match(styles, /\.chat-card:has\(\.notepad-panel\.is-open\)[\s\S]*grid-template-columns:\s*var\(--desktop-chat-split, 30%\) minmax\(0, 1fr\)/);
   assert.doesNotMatch(styles, /\.chat-card:has\(\.notepad-panel\.is-open\) \.tool-rail-workspace/);
   assert.match(styles, /@media \(max-width: 640px\)[\s\S]*\.project-actions button:disabled \{ display: none; \}/);
   assert.match(styles, /@media \(max-width: 640px\)[\s\S]*\.project-actions button:not\(:disabled\)/);
@@ -113,7 +115,7 @@ test("responsive layout has 60\/40 split and content-only overlay", () => {
 
 test("desktop starts with the notepad open and keeps the universal composer", () => {
   assert.match(page, /useState<WorkspacePanelId>\("notepad"\)/);
-  assert.match(page, /const INPUT_PLACEHOLDER = "Napište APU…"/);
+  assert.match(page, /const INPUT_PLACEHOLDER = "Napište APU..."/);
   assert.match(page, /activePanel === id \? " is-active"/);
   assert.match(page, /setActivePanel\(\(current\) => current === panel \? null : panel\)/);
 });

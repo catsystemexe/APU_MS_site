@@ -162,7 +162,8 @@ export function compactNotepad(
 ) {
   return CATEGORY_IDS.flatMap((category) =>
     state[category]
-      .filter((entry) => entry.text.trim() && entry.source?.messageId !== options.excludeSourceMessageId)
+      .filter((entry) => entry.text.trim() &&
+        (options.excludeSourceMessageId === undefined || entry.source?.messageId !== options.excludeSourceMessageId))
       .map((entry) => ({
         category,
         id: entry.id,

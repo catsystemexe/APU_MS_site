@@ -17,15 +17,29 @@ test("primary F2 to F3 navigation uses current Rozbor and never requires legacy 
   assert.match(intent, /Boolean\(currentF2ToF3Source\.snapshot\)/);
   assert.doesNotMatch(intent, /f2Preview|PREVIEW/);
   assert.match(dialog, /valid current-Rozbor snapshot/);
+  assert.match(intent, /Pracovní analýza je připravena k tisku/);
+  assert.match(intent, /Další podobu Výstupu můžete vytvořit podle potřeby/);
+  assert.doesNotMatch(client, /Samotný výstup vznikne až|Přejít k vytvoření výstupu/);
 });
 
-test("Output workspace keeps explicit return, adoption and regeneration transitions", () => {
-  assert.match(output, /Vrátit se do Rozboru/);
+test("Output keeps contextual recovery, protected upstream adoption and explicit regeneration", () => {
+  assert.match(output, /Přejít do Obsahu/);
+  assert.doesNotMatch(output, /Vrátit se do Rozboru/);
   assert.match(output, /Přijmout aktuální Rozbor/);
   assert.match(output, /state\.sourceStatus === "stale"/);
-  assert.match(output, /REGENEROVAT VÝSTUP/);
+  assert.match(output, /AKTUALIZOVAT DOKUMENT/);
   assert.match(output, /[Dd]osavadní výstup zůst/);
   assert.doesNotMatch(output, /PREVIEW|preview/);
+});
+
+test("returning from Output preserves current Rozbor and the last valid Output", () => {
+  const returnHandlerStart = client.indexOf("onF3Return=");
+  assert.notEqual(returnHandlerStart, -1);
+  assert.match(client.slice(returnHandlerStart, returnHandlerStart + 80), /returnToF2/);
+  const returnHandler = client.slice(client.indexOf("function returnToF2"), client.indexOf("function togglePanel"));
+  assert.match(returnHandler, /setPhase\("development"\)/);
+  assert.match(returnHandler, /setActivePanel\("analysis"\)/);
+  assert.doesNotMatch(returnHandler, /setF3State|setCurrentRozbor|setF2Build/);
 });
 
 test("legacy Preview remains isolated instead of authoritative for F3 adoption", () => {

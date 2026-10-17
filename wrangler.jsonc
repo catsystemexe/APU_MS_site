@@ -31,6 +31,25 @@
       "preview_id": "8dd4e8a10dc74086bbd746e733b3d8d8"
     }
   ],
+  // Isolated, provider-free apu-pr60-e2e preparation under this parent Worker.
+  // Access inputs are operator-verified; NOT READY for unauthorized deployment
+  // or unverified hosted Access/KV isolation. No separate tester is approved.
+  // Previews do not inherit production vars/bindings. Any later authorized
+  // bootstrap must also use --ignore-base-config to exclude shared Base secrets.
+  "previews": {
+    "vars": {
+      "APU_LOCAL_DEV_AUTH": "0",
+      "CF_ACCESS_TEAM_DOMAIN": "https://catsystem-ai.cloudflareaccess.com",
+      "CF_ACCESS_AUD": "1e1680481c99464a844a6ef0e502cf49fae89fc91c8cf3806ba48026b0088610",
+      "APU_DEVELOPER_EMAILS": "catsystem.exe@gmail.com"
+    },
+    "kv_namespaces": [
+      {
+        "binding": "DEV_LOG_STATE",
+        "id": "1729ce8a6acd4cdcbed8248ac543677b"
+      }
+    ]
+  },
   "observability": {
     "enabled": true,
     "head_sampling_rate": 1,

@@ -23,7 +23,9 @@ test("records a completed OpenAI Responses call and forwards its correlation hea
   assert.equal(collector.records().length, 1);
   assert.equal(collector.records()[0].provider_request_id, "provider-request-1");
   assert.equal(collector.records()[0].usage.normalized_total_tokens, 13);
-  assert.equal(modelUsagePayload({ ok: true }, collector).model_usage_records[0].call_id, collector.records()[0].call_id);
+  assert.equal(modelUsagePayload({ ok: true }, collector, { role: "developer" }).model_usage_records[0].call_id, collector.records()[0].call_id);
+  assert.deepEqual(modelUsagePayload({ ok: true }, collector, { role: "tester" }), { ok: true });
+  assert.equal(collector.records().length, 1, "serialization never erases internal usage");
 });
 
 test("preserves provider failure usage when the HTTP status is non-success", async () => {

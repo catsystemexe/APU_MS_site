@@ -21,6 +21,7 @@ import type { DebugMapping } from "../../response-metadata";
 import { composeApuSiteInstructions } from "../../runtime-instructions";
 import { createInstrumentedModelCallLifecycle, type ProviderResponseBody } from "../../model-call-instrumentation";
 import { createRequestUsageCollector } from "../../openai-responses-instrumentation";
+import { authorizedModelPayload, manualModelOverrideDenied } from "../../server-capabilities";
 import {
   ACTIVE_APU_CORE_MANIFEST_PATH,
   ACTIVE_APU_CORE_RELEASE_ID,
@@ -174,10 +175,6 @@ export async function POST(request: Request) {
   const apiKey = process.env.OPENAI_API_KEY;
   const vectorStoreId = process.env.APU_VECTOR_STORE_ID;
 
-  if (!apiKey || !vectorStoreId) {
-    return jsonError("APU není dokončeno: chybí serverová konfigurace.", 503);
-  }
-
   let body: {
     message?: unknown;
     previousResponseId?: unknown;
@@ -202,6 +199,7 @@ export async function POST(request: Request) {
   } catch {
     return jsonError("Neplatný formát požadavku.", 400);
   }
+  if (!body || typeof body !== "object" || Array.isArray(body)) return jsonError("Neplatný formát požadavku.", 400);
 
   if (typeof body.message !== "string" || !body.message.trim()) {
     return jsonError("Zpráva je prázdná.", 400);
@@ -242,6 +240,8 @@ export async function POST(request: Request) {
   if (!isModelSelection(selectedModel)) {
     return jsonError("Zvolený model backend nepodporuje.", 400);
   }
+  if (manualModelOverrideDenied(authorization, selectedModel)) return jsonError("Ruční volba modelu je dostupná pouze developerům.", 403);
+  if (!apiKey || !vectorStoreId) return jsonError("APU není dokončeno: chybí serverová konfigurace.", 503);
 
   const requestId = typeof body.requestId === "string" ? body.requestId : crypto.randomUUID();
   const turnId = typeof body.turnId === "string" ? body.turnId : null;
@@ -277,9 +277,9 @@ export async function POST(request: Request) {
   });
   const controllerStarted = performance.now();
   const controllerRun = controlledResult
-    ? { result: controlledResult, response: null, usedFallback: false, mode: "controlled_navigation" as const }
+    ? { result: controlledResult, response: null, usedFallback: false, fallbackReason: null, rejectionReason: null, mode: "controlled_navigation" as const }
     : controllerBypass
-      ? { result: fallbackQuestController(intakeNotebook, phase as ConversationPhase, refinement, applyIntakePolicy), response: null, usedFallback: false, mode: "deterministic_bypass" as const }
+      ? { result: fallbackQuestController(intakeNotebook, phase as ConversationPhase, refinement, applyIntakePolicy), response: null, usedFallback: false, fallbackReason: null, rejectionReason: null, mode: "deterministic_bypass" as const }
     : await runQuestController({
       apiKey,
       requestId,
@@ -369,8 +369,11 @@ export async function POST(request: Request) {
       let firstDeltaAt: number | null = null;
       let terminalEvent = false;
 
-      const emit = (event: unknown) => controller.enqueue(encoder.encode(JSON.stringify(event) + "\n"));
+      const emit = (event: Record<string, unknown>) => controller.enqueue(encoder.encode(JSON.stringify(authorizedModelPayload(event, authorization)) + "\n"));
       if (executionPhase === "intake") emit({ type: "status", status: "preparing_response" });
+      if (executionPhase === "intake" && bufferStructuredF1Prose) {
+        emit({ type: "dialog_actions_preview", dialogActions: controllerResult.dialog_actions });
+      }
       const mainStarted = performance.now();
       let upstream: Response;
       try {
@@ -395,7 +398,7 @@ export async function POST(request: Request) {
         const detail = await upstream.json().catch(() => null) as (ProviderResponseBody & { error?: { message?: string; code?: unknown } | null }) | null;
         if (!upstream.ok) await mainLifecycle.finish_provider({ body: detail ?? {}, headers: upstream.headers, status_code: upstream.status });
         else await mainLifecycle.finish_transport("missing_stream_body");
-        emit({ type: "error", message: detail?.error?.message || "OpenAI API request selhal.", model_usage_records: usageCollector.records() });
+        emit({ type: "error", message: isDeveloper && detail?.error?.message || "OpenAI API request selhal.", model_usage_records: usageCollector.records() });
         controller.close();
         return;
       }
@@ -454,7 +457,7 @@ export async function POST(request: Request) {
               ],
               context_sizes: { unit: "chars", core: instructions.length, runtime_instructions: Math.max(0, composedInstructions.length - instructions.length), notebook: JSON.stringify(notebook).length, previous_analysis: body.analysisContext ? JSON.stringify(body.analysisContext).length : 0, user_message: (body.message as string).length, previous_response_context: typeof body.previousResponseId === "string" ? null : 0 },
               tools: { file_search: { available: execution.useKnowledgeBase, invoked: fileSearchCalls > 0, calls: fileSearchCalls, duration_ms: null } },
-              controller: { mode: controllerMode },
+              controller: { mode: controllerMode, fallback_reason: controllerRun.fallbackReason, rejection_reason: controllerRun.rejectionReason },
               streaming: { model: true, backend: true, transport: true, ui: true },
             } } : {}),
             model_usage_records: usageCollector.records(),
@@ -468,7 +471,7 @@ export async function POST(request: Request) {
         if (event.type === "error") {
           await mainLifecycle.finish_provider({ body: { status: "failed", error: { code: typeof event.code === "string" ? event.code : null } }, headers: upstream.headers, status_code: upstream.status });
           terminalEvent = true;
-          emit({ type: "error", message: event.message || "Streaming selhal.", model_usage_records: usageCollector.records() });
+          emit({ type: "error", message: isDeveloper && event.message || "Streaming selhal.", model_usage_records: usageCollector.records() });
         }
       };
 

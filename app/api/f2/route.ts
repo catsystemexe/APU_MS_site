@@ -1,4 +1,5 @@
 import { getAccessIdentity } from "../../access-auth";
+import { manualModelOverrideDenied, type ServerIdentity } from "../../server-capabilities";
 import { parseProviderRozborComponents, rozborComponentProviderSchema } from "../../f2-component-provider-contract";
 import { isSupportedModel } from "../../model-config";
 import { F2_PATHS, type F2Path } from "../../notepad-model";
@@ -30,7 +31,7 @@ function validConfig(path: F2Path, value: unknown) {
 export function validRozborGeneration(value: unknown): value is RozborComponentGenerationRequest {
   if (!value || typeof value !== "object") return false;
   const body = value as Partial<RozborComponentGenerationRequest>;
-  if (!isPath(body.activePath) || !body.canonicalNeed || typeof body.canonicalNeed.needText !== "string" || !Array.isArray(body.hypotheses) || body.hypotheses.length > 8 || !validConfig(body.activePath, body.config) || !Array.isArray(body.components) || !body.components.length || body.components.length > 12) return false;
+  if (!isPath(body.activePath) || !body.canonicalNeed || body.activePath !== body.canonicalNeed.initialF2Path || typeof body.canonicalNeed.needText !== "string" || !Array.isArray(body.hypotheses) || body.hypotheses.length > 8 || !validConfig(body.activePath, body.config) || !Array.isArray(body.components) || !body.components.length || body.components.length > 12) return false;
   const requiredById = new Map(deriveRequiredCurrentRozborComponents(body.activePath, body.canonicalNeed, body.hypotheses, body.config!).map((spec) => [spec.id, spec]));
   const ids = new Set<string>();
   return body.components.every((spec) => {
@@ -75,17 +76,18 @@ const PATH_PROMPTS: Record<F2Path, string> = {
 };
 const SHARED_PROMPT = "Jednotkou práce je jedna situace jako celek. Fakta Zápisníku a kanonická pedagogická potřeba jsou zdroj pravdy; F2 interpretace jsou odvozené a nesmějí je přepsat. Aktivní cesta v požadavku je autoritativní a nesmí se odvozovat z textu, dovedností, F3 targetu ani předchozího výsledku. Sdílené hypotézy zůstávají dynamické a mohou při analytické oporě zesílit, zeslábnout, sloučit se, rozdělit, zmizet či vzniknout, ale nikdy se tiše nestávají faktem. Zachovej ID významově stejné hypotézy. Aktivní dovednosti jsou kompozice požadovaných operací, nikoli povinné pořadí; vyplňuj pole pouze podle nich. Nejistotu transparentně lokalizuj jako popis, relevanci, omezení a související rozhodnutí. Nejistota nikdy automaticky neblokuje pokračování. F3 target je oddělený časný kontrakt: F2 nesmí plně materializovat finální artefakt.";
 
-function error(message: string, status = 500, collector?: RequestUsageCollector) { return Response.json(collector ? modelUsagePayload({ error: message }, collector) : { error: message }, { status }); }
+function error(message: string, status = 500, collector?: RequestUsageCollector, identity?: ServerIdentity) { return Response.json(collector ? modelUsagePayload({ error: message }, collector, identity) : { error: message }, { status }); }
 function outputText(response: Record<string, unknown>) { if (typeof response.output_text === "string") return response.output_text; const output = Array.isArray(response.output) ? response.output : []; for (const item of output) for (const part of Array.isArray((item as { content?: unknown[] }).content) ? (item as { content: unknown[] }).content : []) if (part && typeof part === "object" && typeof (part as { text?: unknown }).text === "string") return (part as { text: string }).text; return null; }
 function isPath(value: unknown): value is F2Path { return typeof value === "string" && F2_PATHS.includes(value as F2Path); }
-export function validBuild(value: unknown): value is F2BuildRequest { if (!value || typeof value !== "object") return false; const body = value as Partial<F2BuildRequest>; return body.kind === "f2-build" && isPath(body.activePath) && body.canonicalNeed?.initialF2Path !== undefined && Array.isArray(body.canonicalNotebookContext) && body.canonicalNotebookContext.length <= 80 && Array.isArray(body.workingHypotheses) && Array.isArray(body.activeSkills) && body.activeSkills.every((skill) => skill.id.startsWith(`${body.activePath!.toLowerCase()}-`) && skill.id in F2_SKILL_SEMANTICS) && typeof body.buildRevision === "number" && Number.isInteger(body.buildRevision) && body.buildRevision >= 0; }
-function validSnapshot(value: unknown): value is F2PreviewSnapshot { if (!value || typeof value !== "object") return false; const snapshot = value as Partial<F2PreviewSnapshot>; return typeof snapshot.snapshotId === "string" && snapshot.snapshotId.length > 0 && isPath(snapshot.activePath) && snapshot.canonicalNeed?.needText !== undefined && Number.isInteger(snapshot.buildRevision) && snapshot.processedRevision === snapshot.buildRevision && snapshot.processedBuild?.path === snapshot.activePath && typeof snapshot.processedBuild.processedResultId === "string" && snapshot.processedBuild.processedResultId.length > 0 && snapshot.processedBuild.processedRevision === snapshot.processedRevision && Array.isArray(snapshot.hypotheses) && Array.isArray(snapshot.activeSkills); }
+export function validBuild(value: unknown): value is F2BuildRequest { if (!value || typeof value !== "object") return false; const body = value as Partial<F2BuildRequest>; return body.kind === "f2-build" && isPath(body.activePath) && body.canonicalNeed?.initialF2Path === body.activePath && body.initialPath === body.activePath && Array.isArray(body.canonicalNotebookContext) && body.canonicalNotebookContext.length <= 80 && Array.isArray(body.workingHypotheses) && Array.isArray(body.activeSkills) && body.activeSkills.every((skill) => skill.id.startsWith(`${body.activePath!.toLowerCase()}-`) && skill.id in F2_SKILL_SEMANTICS) && typeof body.buildRevision === "number" && Number.isInteger(body.buildRevision) && body.buildRevision >= 0; }
+function validSnapshot(value: unknown): value is F2PreviewSnapshot { if (!value || typeof value !== "object") return false; const snapshot = value as Partial<F2PreviewSnapshot>; return typeof snapshot.snapshotId === "string" && snapshot.snapshotId.length > 0 && isPath(snapshot.activePath) && snapshot.canonicalNeed?.needText !== undefined && snapshot.canonicalNeed.initialF2Path === snapshot.activePath && Number.isInteger(snapshot.buildRevision) && snapshot.processedRevision === snapshot.buildRevision && snapshot.processedBuild?.path === snapshot.activePath && typeof snapshot.processedBuild.processedResultId === "string" && snapshot.processedBuild.processedResultId.length > 0 && snapshot.processedBuild.processedRevision === snapshot.processedRevision && Array.isArray(snapshot.hypotheses) && Array.isArray(snapshot.activeSkills); }
 
 export async function POST(request: Request) {
   const identity = await getAccessIdentity(request.headers);
   if (!identity) return error("Chybí platná identita Cloudflare Access.", 401);
-  const apiKey = process.env.OPENAI_API_KEY; if (!apiKey) return error("APU není dokončeno: chybí serverová konfigurace.", 503);
+  const apiKey = process.env.OPENAI_API_KEY;
   let body: Record<string, unknown>; try { body = await request.json(); } catch { return error("Neplatný formát požadavku.", 400); }
+  if (!body || typeof body !== "object" || Array.isArray(body)) return error("Neplatný formát požadavku.", 400);
   const operation = body.operation; const model = isSupportedModel(body.model) ? body.model : "gpt-5.6-terra";
   let schema: object; let name: string; let instructions: string; let input: unknown; let activePath: F2Path | undefined; let componentRequest: RozborComponentGenerationRequest | undefined;
   if (operation === "build" && validBuild(body.build)) {
@@ -100,6 +102,8 @@ export async function POST(request: Request) {
     instructions = `${rozborComponentInstructions(componentRequest)}\n\nVe výstupním objektu components použij každý přesný požadovaný component ID právě jednou jako klíč a pod něj vlož pouze jeho obsah.`;
     input = { activePath: componentRequest.activePath, canonicalNeed: componentRequest.canonicalNeed, hypotheses: componentRequest.hypotheses, config: componentRequest.config, components: componentRequest.components.map(({ id, kind, hypothesisId }) => ({ id, kind, ...(hypothesisId ? { hypothesisId } : {}) })) };
   } else return error("Neplatný nebo nepodporovaný F2 požadavek.", 400);
+  if (manualModelOverrideDenied(identity, body.model)) return error("Ruční volba modelu je dostupná pouze developerům.", 403);
+  if (!apiKey) return error("APU není dokončeno: chybí serverová konfigurace.", 503);
   const collector = createRequestUsageCollector();
   const requestId = crypto.randomUUID();
   try {
@@ -118,13 +122,13 @@ export async function POST(request: Request) {
     if (usage_record.provider_status !== "completed" || !application_result) return Response.json(modelUsagePayload({
       error: "Modelové zpracování F2 se nezdařilo.",
       ...(componentRequest && identity.role === "developer" ? { diagnostic: `F2 component provider request failed: ${providerResponseDiagnostic(usage_record, response)}` } : {}),
-    }, collector), { status: 502 });
+    }, collector, identity), { status: 502 });
     const reportedModel = typeof response.body.model === "string" ? response.body.model : model;
-    if ("components" in application_result) return Response.json(modelUsagePayload({ components: application_result.components, meta: { action: `F2 ${componentRequest!.activePath} component generation`, model: reportedModel } }, collector));
-    return Response.json(modelUsagePayload({ result: application_result.result, meta: { action: operation === "build" ? `F2 build execution — ${activePath}` : `F2 preview — ${activePath}`, model: reportedModel } }, collector));
+    if ("components" in application_result) return Response.json(modelUsagePayload({ components: application_result.components, meta: { action: `F2 ${componentRequest!.activePath} component generation`, model: reportedModel } }, collector, identity));
+    return Response.json(modelUsagePayload({ result: application_result.result, meta: { action: operation === "build" ? `F2 build execution — ${activePath}` : `F2 preview — ${activePath}`, model: reportedModel } }, collector, identity));
   } catch (cause) {
-    const payload = usageErrorPayload(cause, collector);
+    const payload = usageErrorPayload(cause, collector, identity, "Model vrátil neplatný strukturovaný F2 výsledek.");
     const diagnostic = componentRequest && identity.role === "developer" ? { diagnostic: `F2 component provider request failed: ${providerResponseDiagnostic(collector.records().at(-1))}` } : {};
-    return Response.json(payload ? { ...payload, ...diagnostic } : modelUsagePayload({ error: "Model vrátil neplatný strukturovaný F2 výsledek.", ...diagnostic }, collector), { status: 502 });
+    return Response.json(payload ? { ...payload, ...diagnostic } : modelUsagePayload({ error: "Model vrátil neplatný strukturovaný F2 výsledek.", ...diagnostic }, collector, identity), { status: 502 });
   }
 }

@@ -69,9 +69,11 @@ test("primary F3 workspace is decoupled from rendered PREVIEW and exposes explic
     readFile(new URL("../app/apu-client.tsx", import.meta.url), "utf8"),
   ]);
   assert.doesNotMatch(workspace, /F2Preview|explicitní PREVIEW|aktuální preview/);
-  assert.match(workspace, /Aktuální Rozbor · předávací snapshot/);
+  assert.match(workspace, /const source = documentMode === "analysis" \? snapshot : state\?\.sourceSnapshot/);
+  assert.match(workspace, /renderWorkingAnalysis\(source\)/);
   assert.match(workspace, /Přijmout aktuální Rozbor/);
   assert.match(client, /createF2ToF3Snapshot/);
   assert.match(client, /markF3SourceStale/);
-  assert.match(await readFile(new URL("../app/notepad.tsx", import.meta.url), "utf8"), /PŘEJÍT K VÝSTUPU/);
+  assert.match(client, /function enterF3/);
+  assert.match(client, /onContinueToOutput=\{\(\) => void sendMessage/);
 });

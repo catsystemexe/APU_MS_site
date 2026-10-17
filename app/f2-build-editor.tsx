@@ -3,8 +3,7 @@
 import { useState } from "react";
 import { ChevronDown, TriangleAlert } from "lucide-react";
 import { toggleExpandedHypothesis } from "./analysis-accordion";
-import { F2_PATHS } from "./notepad-model";
-import { currentF2ProcessedBuild, F2_PATH_META, type F2BuildState, type F2PathResult, type F2PreviewState } from "./f2-build-model";
+import { currentF2ProcessedBuild, type F2BuildState, type F2PathResult, type F2PreviewState } from "./f2-build-model";
 
 function PathResult({ result }: { result: F2PathResult }) {
   if (result.kind === "understanding") return <>{result.synthesis && <p>{result.synthesis}</p>}{result.comparisons.length > 0 && <><h4>Porovnání</h4><ul>{result.comparisons.map((item) => <li key={item}>{item}</li>)}</ul></>}{result.relationships.length > 0 && <><h4>Souvislosti</h4><ul>{result.relationships.map((item) => <li key={item}>{item}</li>)}</ul></>}{result.expertFrame.length > 0 && <><h4>Odborný rámec</h4><ul>{result.expertFrame.map((item) => <li key={item}>{item}</li>)}</ul></>}</>;
@@ -12,9 +11,9 @@ function PathResult({ result }: { result: F2PathResult }) {
   return <>{result.pedagogicalObjective && <p><b>Pedagogický cíl:</b> {result.pedagogicalObjective}</p>}{result.candidateApproaches.length > 0 && <><h4>Možné přístupy</h4><ul>{result.candidateApproaches.map((item) => <li key={item}>{item}</li>)}</ul></>}{result.variantComparison.length > 0 && <><h4>Porovnání variant</h4><ul>{result.variantComparison.map((item) => <li key={item}>{item}</li>)}</ul></>}{result.workingApproach && <p><b>Pracovní přístup:</b> {result.workingApproach}</p>}{result.conditions.length > 0 && <><h4>Podmínky</h4><ul>{result.conditions.map((item) => <li key={item}>{item}</li>)}</ul></>}{result.whatToVerify.length > 0 && <><h4>Co ověřovat</h4><ul>{result.whatToVerify.map((item) => <li key={item}>{item}</li>)}</ul></>}</>;
 }
 
-export function F2BuildEditor({ build, preview, buildStatus, buildError, previewStatus: renderStatus, previewError, onPathChange, onSkillToggle, onParameterChange, onContextAdd, onContextRemove, onExecute, onPreview }: {
+export function F2BuildEditor({ build, preview, buildStatus, buildError, previewStatus: renderStatus, previewError, onSkillToggle, onParameterChange, onContextAdd, onContextRemove, onExecute, onPreview }: {
   build: F2BuildState; preview: F2PreviewState; buildStatus: "idle" | "loading" | "error"; buildError: string | null; previewStatus: "idle" | "loading" | "error"; previewError: string | null;
-  onPathChange: (path: F2BuildState["activePath"]) => void; onSkillToggle: (id: string) => void;
+  onSkillToggle: (id: string) => void;
   onParameterChange: (id: string, value: string) => void; onContextAdd: (text: string) => void; onContextRemove: (id: string) => void; onExecute: () => void; onPreview: () => void;
 }) {
   const [contextDraft, setContextDraft] = useState("");
@@ -39,9 +38,6 @@ export function F2BuildEditor({ build, preview, buildStatus, buildError, preview
         </article>;
       })}</div>
     </section>}
-    <section><h3>Směr rozboru</h3><div className="f2-paths" role="radiogroup" aria-label="Směr rozboru">
-      {F2_PATHS.map((path) => <button key={path} type="button" role="radio" aria-checked={path === build.activePath} className={path === build.activePath ? "is-active" : ""} onClick={() => onPathChange(path)}><strong>{path}</strong><small>{F2_PATH_META[path].description}</small></button>)}
-    </div></section>
     <section><div className="f2-section-heading"><div><h3>Vrstvy buildu</h3><p>Zapněte libovolnou kombinaci. Pořadí nevyjadřuje povinný postup.</p></div></div>
       <div className="f2-skill-track">{visibleSkills.map((skill, index) => <div className="f2-skill-wrap" key={skill.id}>
         <button type="button" aria-pressed={skill.active} className={`f2-skill${skill.active ? " is-active" : ""}${skill.parameterText.trim() ? " is-parameterized" : ""}`} onClick={() => onSkillToggle(skill.id)}><span>{skill.label}</span><small>{skill.active ? "Aktivní" : "Volitelná vrstva"}</small></button>

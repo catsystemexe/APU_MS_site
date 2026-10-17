@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
-  cleanDialogActionQuestion, cleanStructuredQuestionText, fallbackQuestController, requiredIntakeTarget, resolveDialogEvent, resolveF2OutputNavigation, resolveTextDialogEvent, validateQuestControllerResult,
+  cleanDialogActionQuestion, cleanStructuredQuestionText, CONTINUE_TO_SOLUTION_LABEL, fallbackQuestController, requiredIntakeTarget, resolveDialogEvent, resolveF2OutputNavigation, resolveTextDialogEvent, validateQuestControllerResult,
 } from "../app/dialog-action.ts";
 import { canBypassQuestController, QUEST_CONTROLLER_SCHEMA } from "../app/quest-controller.ts";
 
@@ -317,7 +317,164 @@ test("chat route records deterministic Controller bypass without inventing an LL
   ]);
   assert.match(route, /canBypassQuestController/);
   assert.match(route, /mode: "deterministic_bypass"/);
-  assert.match(route, /controller: \{ mode: controllerMode \}/);
+  assert.match(route, /controller: \{ mode: controllerMode, fallback_reason: controllerRun\.fallbackReason, rejection_reason: controllerRun\.rejectionReason \}/);
+  const developerTelemetry = route.slice(route.indexOf("...(isDeveloper ? { telemetry:"), route.indexOf("model_usage_records: usageCollector.records()", route.indexOf("...(isDeveloper ? { telemetry:")));
+  assert.match(developerTelemetry, /fallback_reason: controllerRun\.fallbackReason/);
+  assert.match(developerTelemetry, /rejection_reason: controllerRun\.rejectionReason/);
   assert.match(client, /controllerFastPathEligible/);
   assert.match(exportSource, /deterministic_bypass/);
+});
+
+test("NAV uses one canonical label in instructions, fallback and strict option validation", async () => {
+  const source = await readFile(new URL("../app/quest-controller.ts", import.meta.url), "utf8");
+  assert.match(source, /s labelem „\$\{CONTINUE_TO_SOLUTION_LABEL\}“; stejný text použij jako question/);
+  assert.doesNotMatch(source, /Chcete přejít k návrhům podpory/);
+  assert.equal(source.includes(CONTINUE_TO_SOLUTION_LABEL), false, "the label text is imported rather than hardcoded in Controller instructions");
+  assert.match(source, /question: CONTINUE_TO_SOLUTION_LABEL, options: \[\{ id: "continue_to_solution", label: CONTINUE_TO_SOLUTION_LABEL \}\]/);
+  const result = fallbackQuestController([manifestation, goal], "intake");
+  const navigation = result.dialog_actions[1];
+  assert.equal(navigation.question, CONTINUE_TO_SOLUTION_LABEL);
+  assert.equal(navigation.options[0].label, CONTINUE_TO_SOLUTION_LABEL);
+  assert.ok(validateQuestControllerResult(result, [manifestation, goal], "intake"));
+  for (const invalidOption of [
+    { id: "continue_to_solution", label: "Chcete přejít k návrhům podpory?" },
+    { id: "continue_to_output", label: CONTINUE_TO_SOLUTION_LABEL },
+  ]) {
+    const invalid = structuredClone(result);
+    invalid.dialog_actions[1].options = [invalidOption];
+    assert.equal(validateQuestControllerResult(invalid, [manifestation, goal], "intake"), null);
+  }
+});
+
+for (const target of ["context", "course", "helps", "hypothesis"]) {
+  test(`exact unanswered pending SIDE ${target} survives asked-target history`, () => {
+    const refinement = { askedTargets: [target], pendingSide: { target, question: "Stále nezodpovězená otázka?" } };
+    for (const notebook of [[manifestation], [manifestation, goal]]) {
+      const result = fallbackQuestController(notebook, "intake", refinement);
+      assert.ok(validateQuestControllerResult(result, notebook, "intake", refinement));
+      const pending = result.dialog_actions.find(action => action.type === "SIDE");
+      assert.equal(pending.target, target);
+      assert.equal(pending.question, refinement.pendingSide.question);
+      for (const question of ["Jiná otázka?", "Stále nezodpovězená otázka? "]) {
+        const duplicate = structuredClone(result);
+        duplicate.dialog_actions.find(action => action.type === "SIDE").question = question;
+        assert.equal(validateQuestControllerResult(duplicate, notebook, "intake", refinement), null);
+      }
+      assert.equal(validateQuestControllerResult(result, notebook, "intake", { askedTargets: [target] }), null);
+    }
+  });
+}
+
+test("pending SIDE exemption never reopens answered canonical categories or unrelated targets", () => {
+  for (const item of [context, course, helps]) {
+    const refinement = { askedTargets: [item.category], pendingSide: { target: item.category, question: "Otázka?" } };
+    const result = fallbackQuestController([manifestation, goal], "intake", refinement);
+    assert.equal(validateQuestControllerResult(result, [manifestation, goal, item], "intake", refinement), null);
+    assert.ok(validateQuestControllerResult(result, [manifestation, goal, { ...item, text: "  " }], "intake", refinement));
+    const next = fallbackQuestController([manifestation, goal, item], "intake", refinement);
+    assert.notEqual(next.dialog_actions[0].target, item.category);
+    assert.ok(validateQuestControllerResult(next, [manifestation, goal, item], "intake", refinement));
+  }
+  const result = { phase: "intake", transition_ready: true, intake_question_policy_applies: true, dialog_actions: [side("helps"), nav()] };
+  assert.equal(validateQuestControllerResult(result, [manifestation, goal], "intake", {
+    askedTargets: ["helps"], pendingSide: { target: "context", question: result.dialog_actions[0].question },
+  }), null);
+});
+
+test("pending SIDE instructions explicitly exempt valid history matches and retain Notebook answer/relevance checks", async () => {
+  const source = await readFile(new URL("../app/quest-controller.ts", import.meta.url), "utf8");
+  assert.match(source, /stále relevantní/);
+  assert.match(source, /přesně stejný target a question beze změny/);
+  assert.match(source, /i když je target v askedRefinementTargets/);
+  assert.match(source, /Target uvedený v askedRefinementTargets neopakuj, s jedinou výjimkou/);
+  assert.match(source, /toto omezení platí i pro pendingSide/);
+});
+
+test("rejection diagnostics identify the first failed check without changing validation results", () => {
+  const valid = { phase: "intake", transition_ready: true, intake_question_policy_applies: true, dialog_actions: [side(), nav()] };
+  const mutate = update => { const value = structuredClone(valid); update(value); return value; };
+  const cases = [
+    [null, "invalid_result_shape_or_phase"],
+    [mutate(v => { v.phase = "invalid"; }), "invalid_result_shape_or_phase"],
+    [mutate(v => { v.transition_ready = "true"; }), "invalid_transition_ready"],
+    [mutate(v => { v.intake_question_policy_applies = null; }), "invalid_intake_policy"],
+    [mutate(v => { v.dialog_actions = {}; }), "invalid_actions_array"],
+    [mutate(v => { v.dialog_actions[0] = null; }), "invalid_action_shape"],
+    [mutate(v => { v.dialog_actions[0].type = "PRIVATE_INVALID_TYPE"; }), "invalid_action_type"],
+    [mutate(v => { v.dialog_actions[0].target = "PRIVATE_INVALID_TARGET"; }), "invalid_action_target"],
+    [mutate(v => { v.dialog_actions[0].question = ""; }), "invalid_action_question"],
+    [mutate(v => { v.dialog_actions[0].required = null; }), "invalid_action_required_or_options"],
+    [mutate(v => { v.dialog_actions[1].options[0].label = ""; }), "invalid_action_option"],
+    [mutate(v => { v.dialog_actions[1].options.push({ ...continueOption }); }), "duplicate_action_option_ids"],
+    [mutate(v => { v.dialog_actions[0].required = true; }), "invalid_side_contract"],
+    [mutate(v => { v.dialog_actions[1].required = true; }), "invalid_nav_contract"],
+    [mutate(v => { v.phase = "development"; }), "phase_mismatch"],
+    [mutate(v => { v.intake_question_policy_applies = false; }), "unexpected_actions"],
+    [mutate(v => { v.dialog_actions = []; }), "empty_actions"],
+    [mutate(v => { v.dialog_actions = [side(), side("course")]; }), "invalid_action_composition"],
+    [mutate(v => { v.dialog_actions.reverse(); }), "invalid_action_order"],
+    [mutate(v => { v.transition_ready = false; }), "transition_readiness_mismatch"],
+    [mutate(v => { v.dialog_actions[1].options[0].label = "PRIVATE_NAV_TEXT"; }), "nav_option_mismatch"],
+  ];
+  for (const [value, expected] of cases) {
+    const reasons = [];
+    assert.equal(validateQuestControllerResult(value, [manifestation, goal], "intake"), null);
+    assert.equal(validateQuestControllerResult(value, [manifestation, goal], "intake", { askedTargets: [] }, true, reason => reasons.push(reason)), null);
+    assert.deepEqual(reasons, [expected]);
+    assert.doesNotMatch(JSON.stringify(reasons), /PRIVATE_|Můžeme přejít k návrhům\?/);
+  }
+  const reasons = [];
+  assert.equal(validateQuestControllerResult(valid, [manifestation, goal], "intake", { askedTargets: [] }, true, reason => reasons.push(reason)), valid);
+  assert.deepEqual(reasons, []);
+  const multiple = mutate(v => { v.dialog_actions[0].type = "invalid"; v.dialog_actions[1].question = ""; });
+  validateQuestControllerResult(multiple, [manifestation, goal], "intake", { askedTargets: [] }, true, reason => reasons.push(reason));
+  assert.deepEqual(reasons, ["invalid_action_type"], "only the first error is reported");
+});
+
+test("target/policy rejection codes retain pending SIDE exemptions and phase/readiness guards", () => {
+  const check = (value, notebook, phase, refinement, policy, expected) => {
+    const reasons = [];
+    assert.equal(validateQuestControllerResult(value, notebook, phase, refinement, policy, reason => reasons.push(reason)), null);
+    assert.deepEqual(reasons, [expected]);
+  };
+  const ready = fallbackQuestController([manifestation, goal], "intake");
+  check(ready, [manifestation, goal], "intake", { askedTargets: ["context"] }, true, "repeated_side_target");
+  check(ready, [manifestation, goal, context], "intake", { askedTargets: [] }, true, "answered_side_target");
+  check({ ...ready, phase: "development" }, [manifestation, goal], "development", { askedTargets: [] }, false, "unexpected_intake_policy");
+  const missing = fallbackQuestController([manifestation], "intake");
+  missing.dialog_actions[0].target = "observed_phenomenon";
+  check(missing, [manifestation], "intake", { askedTargets: [] }, true, "wrong_main_target");
+  missing.dialog_actions[0].required = false;
+  check(missing, [manifestation], "intake", { askedTargets: [] }, true, "invalid_main_contract");
+  const pending = { askedTargets: ["context"], pendingSide: { target: "context", question: ready.dialog_actions[0].question } };
+  assert.equal(validateQuestControllerResult(ready, [manifestation, goal], "intake", pending, true, () => assert.fail("valid pending SIDE must not report rejection")), ready);
+  const offPolicy = { phase: "intake", transition_ready: true, intake_question_policy_applies: false, dialog_actions: [] };
+  assert.equal(validateQuestControllerResult(offPolicy, [manifestation, goal], "intake"), offPolicy, "legacy non-intake-policy behavior remains accepted");
+});
+
+test("canonical F1 NAV remains accepted and invalid NAV field/cardinality variants remain rejected", () => {
+  const result = fallbackQuestController([manifestation, goal], "intake");
+  assert.deepEqual(result.dialog_actions[1], {
+    type: "NAV", target: "phase", required: false, question: CONTINUE_TO_SOLUTION_LABEL,
+    options: [{ id: "continue_to_solution", label: CONTINUE_TO_SOLUTION_LABEL }],
+  });
+  assert.equal(validateQuestControllerResult(result, [manifestation, goal], "intake"), result);
+  const existing = structuredClone(result);
+  existing.dialog_actions[1].target = "output";
+  existing.dialog_actions[1].question = "Existing valid NAV wording?";
+  assert.equal(validateQuestControllerResult(existing, [manifestation, goal], "intake"), existing, "prompt clarification does not tighten existing validator allowances");
+  for (const [update, expected] of [
+    [nav => { nav.required = true; }, "invalid_nav_contract"],
+    [nav => { nav.target = "context"; }, "invalid_nav_contract"],
+    [nav => { nav.options = []; }, "invalid_nav_contract"],
+    [nav => { nav.options = ["continue_to_solution", "continue_to_output", "add_context", "return_to_intake"].map(id => ({ id, label: CONTINUE_TO_SOLUTION_LABEL })); }, "invalid_nav_contract"],
+    [nav => { nav.options.push({ id: "add_context", label: "Existing extra option" }); }, "nav_option_mismatch"],
+    [nav => { nav.options[0].id = "continue_to_output"; }, "nav_option_mismatch"],
+    [nav => { nav.options[0].label = "Incorrect label"; }, "nav_option_mismatch"],
+  ]) {
+    const invalid = structuredClone(result);update(invalid.dialog_actions[1]);
+    const reasons = [];
+    assert.equal(validateQuestControllerResult(invalid, [manifestation, goal], "intake", { askedTargets: [] }, true, reason => reasons.push(reason)), null);
+    assert.deepEqual(reasons, [expected]);
+  }
 });

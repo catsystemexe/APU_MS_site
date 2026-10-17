@@ -5,19 +5,15 @@ import test from "node:test";
 const panel = await readFile(new URL("../app/notepad.tsx", import.meta.url), "utf8");
 const client = await readFile(new URL("../app/apu-client.tsx", import.meta.url), "utf8");
 
-test("local expansion is rendered inside its matching hypothesis before cross-cutting blocks", () => {
-  const hypothesisLoop = panel.indexOf("workingHypotheses.map");
-  const expansion = panel.indexOf("f2-generated-expansion", hypothesisLoop);
-  const crossCuttingRender = panel.indexOf("<CurrentRozborComponents", expansion);
-  const componentRenderer = panel.indexOf("function CurrentRozborComponents");
-  const comparison = panel.indexOf("Porovnání a souvislosti", componentRenderer);
-  const expert = panel.indexOf("Odborný rámec", comparison);
-  assert.ok(hypothesisLoop >= 0 && expansion > hypothesisLoop && crossCuttingRender > expansion && comparison > componentRenderer && expert > comparison);
-  assert.match(panel, /component\.hypothesisId === hypothesis\.id/);
+test("F2 uses the shared accepted-snapshot document instead of another live component mapping", () => {
+  assert.match(panel, /function DocumentPanel/);
+  assert.match(panel, /documentMode=\{workingAnalysis \? "analysis" : "output"\}/);
+  assert.match(panel, /snapshot=\{props.f2ToF3Snapshot\}/);
+  assert.doesNotMatch(panel, /function AnalysisPanel|function OutputPanel|CurrentRozborComponents|workingHypotheses.map|currentRozbor\[/);
 });
 
-test("first success changes CTA label and the new flow never invokes Preview", () => {
-  assert.match(client, /AKTUALIZOVAT ROZBOR/);
+test("primary CTA uses document terminology and the flow never invokes Preview", () => {
+  assert.match(client, /AKTUALIZOVAT DOKUMENT/);
   assert.match(client, /operation: "generate-rozbor-components"/);
   const generation = client.slice(client.indexOf("async function generateCurrentRozbor"), client.indexOf("async function renderF2Preview"));
   assert.equal(generation.includes('operation: "build"'), false);
@@ -34,19 +30,19 @@ test("client checks current deterministic fingerprints before applying an in-fli
 test("incremental CTA is reconciliation-derived and removals are deferred to explicit update", () => {
   assert.match(client, /isCurrentRozborUpdatePending/);
   assert.match(client, /!currentRozborReconciliation\.isRozborCurrent/);
-  assert.match(client, /applyCurrentRozborComponentUpdate\(current, path, required, \[\]\)/);
+  assert.match(client, /applyCurrentRozborComponentUpdate\(currentRozbor, path, required, \[\]\)/);
   assert.doesNotMatch(client, /removedIds = new Set/);
 });
 
-test("all three current paths are selectable without using legacy processed build execution", () => {
-  for (const path of ["POCHOPIT", "POZOROVAT", "VYTVOŘIT"]) assert.ok(client.includes(path), path);
-  assert.match(client, /F2_PATHS\.map/);
-  assert.match(client, /switchF2Path\(current, path\)/);
+test("one assigned path uses component generation without a route selector", () => {
+  assert.match(client, /<F2BuildOperations/);
+  assert.doesNotMatch(client, /F2_PATHS\.map|switchF2Path|Směr rozboru|onF2PathChange/);
   const generation = client.slice(client.indexOf("async function generateCurrentRozbor"), client.indexOf("async function renderF2Preview"));
   assert.equal(generation.includes('operation: "build"'), false);
 });
 
-test("POZOROVAT and VYTVOŘIT current components expose their required semantic sections", () => {
-  for (const heading of ["Kontrasty podmínek", "Klíčové pozorovatelné indikátory", "Priority pozorování", "Pracovní / doporučený přístup", "Praktický / pedagogický cíl", "Podmínky úspěchu", "Co následně ověřovat"]) assert.ok(panel.includes(heading), heading);
-  for (const relation of ["Podporuje:", "Oslabuje:", "Nerozliší, pokud:", "Limity / nejistota:"]) assert.ok(panel.includes(relation), relation);
+test("POZOROVAT and VYTVOŘIT substantive sections remain in the canonical deterministic renderer", async () => {
+  const renderer = await readFile(new URL("../app/f3-working-analysis.ts", import.meta.url), "utf8");
+  for (const heading of ["Kontrasty podmínek", "Pozorovatelné indikátory", "Priority pozorování", "Pracovní přístup", "Pedagogický cíl", "Podmínky úspěchu", "Následné ověřování"]) assert.ok(renderer.includes(heading), heading);
+  for (const relation of ["Podporuje:", "Oslabuje:", "Nerozliší, pokud:", "Omezení"]) assert.ok(renderer.includes(relation), relation);
 });
