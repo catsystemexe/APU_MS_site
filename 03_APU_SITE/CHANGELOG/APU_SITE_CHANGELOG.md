@@ -4,6 +4,13 @@ Status: CURRENT
 
 Records significant verified product/runtime/project changes. It is not a complete Git log. Historical Sites-era entries are retained where they remain useful; current deployment state must not be inferred from a changelog entry alone.
 
+## 2026-10-17 — ENV-D4-REPAIR publication and post-push preservation
+
+- GitHub API independently verified successful publication of `53a686142fa7cc123ac6657cecd9c0bea30248b7` (`53a6861`), parent `594ce99a`, with the approved six-file repair diff. PR #60 remains open/unmerged; the new GitHub Actions pipeline remains **PREPARED / INACTIVE**, with no active `.github/workflows/dev-preview.yml`. This supersedes the historical publication blocker below without changing earlier records.
+- Cloudflare Dashboard evidence is **operator-confirmed**: operator-authorized disabling of non-production/Preview branch Workers Builds persisted after reload; Production Builds remain enabled on `next` for `catsystemexe/APU_MS_site`. Existing commands were preserved; no Worker Previews migration.
+- Read-only P2 preservation is **Wrangler V3 operator-reported**: no newer Worker Version after `e7254579-ff43-4f58-9592-1f3fc3518623`; production Deployment `08a0cd96-fb57-4f2f-9a6b-14950420b89e` and Version `2a28cdf6-5a61-4f6c-be55-382e5bfa28cd` at 100% unchanged; DEV Preview deployment `7ed83603-ffb0-43ae-be75-ac66f65fac85` and Version `ee7c9e97-f7cf-420f-ba55-e23d50688cbd` unchanged. Prevention is verified for the observed publication, not all future pushes.
+- Runtime/security readiness remains **PARTIAL**: dedicated KV `1729ce8a6acd4cdcbed8248ac543677b` is prior baseline evidence, with current binding not independently reverified in P2 or this batch. No complete CI activation or full Cloudflare IAM isolation is claimed. Next: **ENV-D4-A security preflight**, including environment protections, token permissions, fresh binding/Access checks, live CI compatibility and explicit first-run authorization. This two-document reconciliation changes no application, workflow or infrastructure; no deployment, activation, merge or STABLE release. Unpublished Windows edits remain untouched.
+
 ## 2026-10-15 — ENV-D4 SHA-bound first-run authorization (prepared/inactive)
 
 - Added `once`/`auto` job and independent runtime authorization while preserving the global gate. `once` requires an exact lowercase 40-hex approved source SHA and rejects the same source already identified by verified latest deployment metadata at either preflight read. `auto` retains existing fixed branch/source/isolation/production controls without requiring an approved SHA. Authorization remains confined to the final deployment step; no automatic mode transition or variable update.
