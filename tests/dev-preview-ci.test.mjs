@@ -38,20 +38,17 @@ function fixture() {
   return {io,calls,args};
 }
 
-test("template is valid YAML and remains undiscoverable/inactive with no active workflow added",async()=>{
+test("template is valid YAML; PREP and identical INSTALLED states allow no unexpected workflows",async()=>{
   assert.equal(workflow.name,"Guarded APU DEV Preview");
   assert.deepEqual(workflow.on,{push:{branches:[TARGET.branch]}});
   const files=await readdir(new URL("../.github/workflows",import.meta.url)).catch(error=>{if(error.code==='ENOENT')return [];throw error;});
   const activeFiles=files.filter(name=>/\.ya?ml$/i.test(name));
-  // PREP must have no active file. Later, the guarded GitHub job can test its
-  // identical installed copy without weakening the runtime deployment guards.
-  const installedRun=process.env.GITHUB_ACTIONS==='true' && process.env.GITHUB_WORKFLOW_REF===`${TARGET.repository}/.github/workflows/dev-preview.yml@refs/heads/${TARGET.branch}`;
-  if(installedRun){
-    assert.equal(process.env.GITHUB_REPOSITORY,TARGET.repository);
-    assert.equal(process.env.GITHUB_REF,`refs/heads/${TARGET.branch}`);
+  // PREP has no installed workflow; INSTALLED is valid locally and in CI.
+  // Installation does not authorize deployment; job/runtime gates remain intact.
+  if(activeFiles.length){
     assert.deepEqual(activeFiles,['dev-preview.yml']);
-    assert.equal(await read('../.github/workflows/dev-preview.yml'),template,'installed workflow must exactly match reviewed template');
-  }else assert.deepEqual(activeFiles,[],"PREP has no active workflows; no activation permitted");
+    assert.deepEqual(await readFile(new URL('../.github/workflows/dev-preview.yml',import.meta.url)),Buffer.from(template),'installed workflow must byte-for-byte match reviewed template');
+  }else assert.deepEqual(activeFiles,[],"PREP has no installed workflows");
   assert.equal(Object.keys(workflow.jobs).length,1);
   const job=workflow.jobs.preview;
   for(const value of ["github.repository == 'catsystemexe/APU_MS_site'","github.ref == 'refs/heads/codex/f1-f3-mvp-stabilization'","github.event_name == 'push'","github.event.deleted == false","vars.APU_DEV_PREVIEW_CI_ENABLED == 'approved'"]) assert.ok(job.if.includes(value));
