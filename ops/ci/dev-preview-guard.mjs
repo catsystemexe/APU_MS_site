@@ -100,6 +100,7 @@ function expectedBindings() {
     DEV_LOG_STATE: { type: "kv_namespace", namespace_id: TARGET.kv }, ASSETS: { type: "assets" } };
 }
 export function validateDeployment(deployment, sha) {
+  // Pinned SDK upload resource only. NOT the observed Preview-scoped latest GET.
   requireThat(record(deployment), "unsupported_deployment_metadata");
   const fields = ["id", "preview_id", "preview_name", "migration_tag", "urls", "compatibility_date", "compatibility_flags", "limits", "placement", "cache", "annotations", "env", "created_on"];
   requireThat(Object.keys(deployment).every(key => fields.includes(key)), "unsupported_deployment_metadata");
@@ -109,8 +110,38 @@ export function validateDeployment(deployment, sha) {
   requireThat(typeof deployment.preview_name === "string" && deployment.preview_name.length > 0, "missing_deployment_preview_name");
   equal(deployment.preview_name, TARGET.preview, "wrong_deployment_preview_name");
   equal(deployment.env, expectedBindings(), "remote_bindings_or_secrets_mismatch");
-  if (sha) equal(deployment.annotations?.["workers/commit_sha"], sha, "deployment_source_mismatch");
+  if (sha) {
+    requireThat(record(deployment.annotations) && Object.hasOwn(deployment.annotations, "workers/commit_sha"), "deployment_source_mismatch");
+    equal(deployment.annotations["workers/commit_sha"], sha, "deployment_source_mismatch");
+  }
   return deploymentUrl(deployment.urls);
+}
+const VERSION_FIELDS = Object.freeze({
+  annotations: "object", assets: "object", author_email: "string", author_id: "string",
+  compatibility_date: "string", compatibility_flags: "array", created_on: "string", env: "object",
+  id: "string", main_module: "string", number: "number", source: "string", startup_time_ms: "number",
+  urls: "array", usage_model: "string",
+});
+export function validatePreviewVersion(version, sha) {
+  // Key/type contract observed in authenticated run 39494160174. Inner env/URL
+  // values were NOT captured: retain the exact existing isolation/URL validators.
+  requireThat(record(version), "unsupported_version_metadata");
+  requireThat(Object.keys(version).every(key => Object.hasOwn(VERSION_FIELDS, key) || key === "preview_id" || key === "preview_name"), "unsupported_version_metadata");
+  for (const [key, type] of Object.entries(VERSION_FIELDS)) {
+    const value = version[key];
+    requireThat(Object.hasOwn(version, key) && (type === "object" ? record(value) : type === "array" ? Array.isArray(value) :
+      type === "number" ? typeof value === "number" && Number.isFinite(value) : typeof value === type), "invalid_version_field_type");
+  }
+  requireThat(UUID.test(version.id), "invalid_version_identity");
+  requireThat(version.compatibility_flags.every(flag => typeof flag === "string"), "invalid_version_field_type");
+  if (Object.hasOwn(version, "preview_id")) equal(version.preview_id, TARGET.previewId, "wrong_version_preview_id");
+  if (Object.hasOwn(version, "preview_name")) equal(version.preview_name, TARGET.preview, "wrong_version_preview_name");
+  equal(version.env, expectedBindings(), "remote_bindings_or_secrets_mismatch");
+  const hasCommit = Object.hasOwn(version.annotations, "workers/commit_sha");
+  const commit = hasCommit ? version.annotations["workers/commit_sha"] : undefined;
+  if (hasCommit) requireThat(typeof commit === "string" && /^[0-9a-f]{40}$/.test(commit), "invalid_version_commit_sha");
+  if (sha) equal(commit, sha, "version_source_mismatch");
+  return deploymentUrl(version.urls);
 }
 function deploymentUrl(urls) {
   // urls is authoritative metadata. The version-style URL prefix is NOT derived
@@ -130,9 +161,10 @@ export function normalizeUploadResponse(raw, sha) {
     equal(Object.keys(value).sort(), ["deployment", "preview"], "unsupported_upload_metadata");
     validatePreview(value.preview);
     requireThat(typeof value.preview.slug === "string" && value.preview.slug.length > 0, "invalid_upload_preview_slug");
-    const url = validateDeployment(value.deployment, sha);
+    const versionShape = record(value.deployment) && ["assets", "number", "main_module"].some(key => Object.hasOwn(value.deployment, key));
+    const url = versionShape ? validatePreviewVersion(value.deployment, sha) : validateDeployment(value.deployment, sha);
     return { previewId: value.preview.id, previewName: value.preview.name,
-      previewSlug: value.preview.slug, deploymentId: value.deployment.id, deploymentUrl: url };
+      previewSlug: value.preview.slug, uploadResourceId: value.deployment.id, uploadUrl: url };
   }
   // Pinned previewHandler writeOutput record, NOT its stdout format. No synthetic
   // DeploymentResource/bindings/source: these must come from authoritative GETs.
@@ -148,7 +180,7 @@ export function normalizeUploadResponse(raw, sha) {
   if (Object.hasOwn(value, "timestamp")) requireThat(typeof value.timestamp === "string" &&
     /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value.timestamp) && Number.isFinite(Date.parse(value.timestamp)), "invalid_upload_timestamp");
   return { previewId: value.preview_id, previewName: value.preview_name, previewSlug: value.preview_slug,
-    deploymentId: value.deployment_id, deploymentUrl: deploymentUrl(value.deployment_urls) };
+    uploadResourceId: value.deployment_id, uploadUrl: deploymentUrl(value.deployment_urls) };
 }
 export function productionState(result) {
   const active = result?.deployments?.[0];
@@ -161,11 +193,19 @@ export function productionState(result) {
   return { deploymentId: active.id, versions };
 }
 
-function validatePendingDeployment(deployment, env) {
-  validateDeployment(deployment);
-  if (env.APU_DEV_PREVIEW_CI_MODE === "once") {
-    requireThat(deployment.annotations?.["workers/commit_sha"] !== env.GITHUB_SHA, "approved_sha_already_deployed");
+function validatePendingVersion(version, env) {
+  if (env.APU_DEV_PREVIEW_CI_MODE === "once" && Object.hasOwn(version.annotations, "workers/commit_sha")) {
+    requireThat(version.annotations["workers/commit_sha"] !== env.GITHUB_SHA, "approved_sha_already_deployed");
   }
+}
+async function readScopedVersion(io, sha) {
+  // Association boundary: authenticated fixed Preview resource GET must validate
+  // before liveIO's fixed Preview-scoped latest GET. The object alone is NOT a
+  // target proof; no rollout inventory, caller-selected URL or fabricated IDs.
+  const preview = await io.preview(); validatePreview(preview);
+  const version = await io.latestVersion();
+  const url = validatePreviewVersion(version, sha);
+  return { preview, version, url };
 }
 
 // Dependency injection is for provider-free tests. Production uses only GETs
@@ -176,30 +216,30 @@ export async function updateExistingPreview(io) {
   try {
     validateContext(io.env, await io.head()); validateConfig(await io.config());
     await io.clean(); await io.wranglerContract(); await sourceCurrent();
-    validatePreview(await io.preview());
-    const previous = await io.deployment(); validatePendingDeployment(previous, io.env);
+    const previous = await readScopedVersion(io); validatePendingVersion(previous.version, io.env);
     before = productionState(await io.production());
     stage = "pre_upload_recheck";
-    validatePreview(await io.preview()); validateConfig(await io.config());
-    validatePendingDeployment(await io.deployment(), io.env); await sourceCurrent();
+    const rechecked = await readScopedVersion(io); validateConfig(await io.config());
+    validatePendingVersion(rechecked.version, io.env); await sourceCurrent();
     equal(await io.head(), io.env.GITHUB_SHA, "checkout_sha_mismatch"); await io.clean();
     const args = previewArgs(); validateCommand(args);
     stage = "wrangler_execution"; upload = "invoked";
     const raw = await io.upload(args);
     upload = "returned"; stage = "upload_response_normalization";
     const uploaded = normalizeUploadResponse(raw, io.env.GITHUB_SHA);
-    requireThat(uploaded.deploymentId !== previous.id, "deployment_not_updated");
     stage = "post_upload_readback";
-    const currentPreview = await io.preview(); validatePreview(currentPreview);
-    if (uploaded.previewSlug !== undefined) equal(currentPreview.slug, uploaded.previewSlug, "upload_preview_slug_mismatch");
-    const latest = await io.deployment(); validateDeployment(latest, io.env.GITHUB_SHA);
-    equal(latest.id, uploaded.deploymentId, "preview_changed_after_upload");
-    const url = deploymentUrl(latest.urls);
-    equal(url, uploaded.deploymentUrl, "upload_deployment_url_mismatch");
+    const latest = await readScopedVersion(io, io.env.GITHUB_SHA);
+    if (uploaded.previewSlug !== undefined) equal(latest.preview.slug, uploaded.previewSlug, "upload_preview_slug_mismatch");
+    requireThat(latest.version.id !== previous.version.id && latest.version.id !== rechecked.version.id, "version_not_updated");
+    // POST/CLI IDs are opaque upload-resource IDs. No verified cross-model ID
+    // equality exists. Correlate exact API-provided unique URL + approved source
+    // on the authoritative scoped Version instead; fail closed on disagreement.
+    const url = latest.url;
+    equal(url, uploaded.uploadUrl, "upload_version_url_mismatch");
     await io.anonymous(TARGET.url); await io.anonymous(url);
     await sourceCurrent();
     result = { source: io.env.GITHUB_SHA, preview: TARGET.preview, previewId: TARGET.previewId,
-      deploymentId: latest.id, previewUrl: TARGET.url, deploymentUrl: url, upload };
+      versionId: latest.version.id, uploadResourceId: uploaded.uploadResourceId, previewUrl: TARGET.url, versionUrl: url, upload };
   } catch (error) {
     failure = classified(stage, error, upload);
   } finally {
@@ -245,7 +285,7 @@ export function liveIO(env, { execute = exec } = {}) {
     head: () => git("rev-parse", "HEAD"),
     clean: async () => equal(await git("status", "--porcelain", "--untracked-files=no"), "", "tracked_source_changed"),
     branchHead: async () => (await get(`https://api.github.com/repos/${TARGET.repository}/git/ref/heads/${TARGET.branch}`, env.GITHUB_TOKEN))?.object?.sha,
-    preview: () => cf(previewPath), deployment: () => cf(previewPath + "/deployments/latest"),
+    preview: () => cf(previewPath), latestVersion: () => cf(previewPath + "/deployments/latest"),
     production: () => cf(`/workers/scripts/${TARGET.worker}/deployments`),
     upload: async args => {
       validateCommand(args);

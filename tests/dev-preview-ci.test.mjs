@@ -4,8 +4,9 @@ import { readFile, readdir } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
+import { createHash } from "node:crypto";
 import { TARGET, ACCESS_VARS, validateConfig, validateContext, validateCommand, validatePreview, validateDeployment,
-  productionState, previewArgs, updateExistingPreview, liveIO, normalizeUploadResponse, failureSummary } from "../ops/ci/dev-preview-guard.mjs";
+  productionState, previewArgs, updateExistingPreview, liveIO, normalizeUploadResponse, failureSummary, validatePreviewVersion } from "../ops/ci/dev-preview-guard.mjs";
 const require = createRequire(import.meta.url);
 const yaml = require("js-yaml"); // Existing locked tooling dependency; no dependency upgrade.
 const read = path => readFile(new URL(path, import.meta.url), "utf8");
@@ -20,11 +21,21 @@ const env = () => ({ GITHUB_REPOSITORY: TARGET.repository, GITHUB_REF: `refs/hea
 const bindings = () => ({ ...Object.fromEntries(Object.entries(ACCESS_VARS).map(([name,text]) => [name,{type:"plain_text",text}])),
   DEV_LOG_STATE:{type:"kv_namespace",namespace_id:TARGET.kv}, ASSETS:{type:"assets"} });
 const preview = () => ({ id:TARGET.previewId, name:TARGET.preview, slug:'apu-pr60-e2e', urls:[TARGET.url] });
-// Synthetic fixtures grounded in the pinned types/output constructors, NOT live
-// Cloudflare observations. URL prefix intentionally differs from deployment ID.
+// Version keys/types follow diagnostic 39494160174. Binding contents, URL values
+// and future upload responses below are SYNTHETIC, not captured live evidence.
+const version = (fresh = false) => ({
+  annotations:fresh?{'workers/commit_sha':sha}:{'workers/triggered_by':'synthetic-manual'},
+  assets:{}, author_email:'synthetic@example.invalid', author_id:'synthetic-author',
+  compatibility_date:'2026-08-21', compatibility_flags:['nodejs_compat'], created_on:'2026-10-20T17:00:00Z',
+  env:bindings(), id:fresh?'c0ffee12-1111-2222-3333-444455556666':'ee7c9e97-f7cf-420f-ba55-e23d50688cbd',
+  main_module:'index.js', number:fresh?2:1, source:'synthetic', startup_time_ms:1,
+  urls:[`https://${fresh?'c0ffee12':'ee7c9e97'}-apu-ms-site.catsystem-exe.workers.dev`], usage_model:'synthetic',
+});
+// Pinned SDK upload resource; its ID is opaque, distinct from latest Version ID
+// and from the rollout inventory ID. Only URL + approved source correlate it.
 const deployment = (fresh = false) => ({ id:fresh?"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee":"11111111-2222-3333-4444-555555555555",
   preview_id:TARGET.previewId, preview_name:TARGET.preview, env:bindings(), annotations:{"workers/commit_sha":fresh?sha:'0'.repeat(40)},
-  urls:[`https://${fresh?"ee7c9e97":"deadbeef"}-apu-ms-site.catsystem-exe.workers.dev`] });
+  urls:version(fresh).urls });
 const flatUpload = () => ({ type:'preview', version:1, worker_name:TARGET.worker,
   preview_id:TARGET.previewId, preview_name:TARGET.preview, preview_slug:preview().slug,
   preview_urls:[TARGET.url], deployment_id:deployment(true).id, deployment_urls:deployment(true).urls,
@@ -37,7 +48,7 @@ function fixture() {
   const calls=[], args=[]; let uploaded=false;
   const io={ env:env(), head:async()=>sha, config:async()=>structuredClone(generated), clean:async()=>calls.push("clean"), wranglerContract:async()=>calls.push("contract"),
     branchHead:async()=>{calls.push("branch");return sha;}, preview:async()=>{calls.push("preview");return preview();},
-    deployment:async()=>{calls.push("deployment");return deployment(uploaded);}, production:async()=>{calls.push("production");return production();},
+    latestVersion:async()=>{calls.push("version");return version(uploaded);}, production:async()=>{calls.push("production");return production();},
     upload:async command=>{calls.push("upload");args.push(command);uploaded=true;return {preview:preview(),deployment:deployment(true)};},
     anonymous:async url=>{calls.push("anonymous");assert.ok([TARGET.url,deployment(true).urls[0]].includes(url));},
   };
@@ -52,7 +63,12 @@ test("template is valid YAML; PREP and identical INSTALLED states allow no unexp
   // PREP has no installed workflow; INSTALLED is valid locally and in CI.
   // Installation does not authorize deployment; job/runtime gates remain intact.
   if(activeFiles.length){
-    assert.deepEqual(activeFiles,['dev-preview.yml']);
+    const capture='apu-preview-metadata-capture.yml';
+    assert.deepEqual(activeFiles.sort(),activeFiles.includes(capture)?[capture,'dev-preview.yml']:['dev-preview.yml']);
+    // Temporary diagnostic workflow was approved in baseline 6d3ebf5. Permit
+    // exactly that file, unchanged; retain strict rejection of other workflows.
+    if(activeFiles.includes(capture)) assert.equal(createHash('sha256').update(await readFile(new URL('../.github/workflows/'+capture,import.meta.url))).digest('hex'),
+      'f1af8a90a8c1eba6976d23e86e1eae447b5cb4a488728c0ab0595ef017f16118');
     assert.deepEqual(await readFile(new URL('../.github/workflows/dev-preview.yml',import.meta.url)),Buffer.from(template),'installed workflow must byte-for-byte match reviewed template');
   }else assert.deepEqual(activeFiles,[],"PREP has no installed workflows");
   assert.equal(Object.keys(workflow.jobs).length,1);
@@ -127,7 +143,7 @@ test("auto needs no approved SHA and retains production checks without changing 
 test("auto still enforces activation, branch, target, source, isolation and production preflight",async()=>{
   for(const change of [f=>delete f.io.env.APU_DEV_PREVIEW_CI_ENABLED,f=>f.io.env.GITHUB_REF='refs/heads/next',
     f=>f.io.preview=async()=>null,f=>f.io.branchHead=async()=>'f'.repeat(40),
-    f=>f.io.deployment=async()=>({...deployment(),env:{...bindings(),EXTRA:{type:'inherit'}}}),
+    f=>f.io.latestVersion=async()=>({...version(),env:{...bindings(),EXTRA:{type:'inherit'}}}),
     f=>f.io.production=async()=>({deployments:[]})]){
     const f=fixture();f.io.env.APU_DEV_PREVIEW_CI_MODE='auto';change(f);
     await assert.rejects(updateExistingPreview(f.io));assert.equal(f.args.length,0);
@@ -136,7 +152,7 @@ test("auto still enforces activation, branch, target, source, isolation and prod
 test("once rejects a matching verified latest source at either preflight read",async()=>{
   for(const matchingRead of [1,2]){
     const f=fixture();let reads=0;
-    f.io.deployment=async()=>{const d=deployment();if(++reads===matchingRead)d.annotations['workers/commit_sha']=sha;return d;};
+    f.io.latestVersion=async()=>{const d=version();if(++reads===matchingRead)d.annotations['workers/commit_sha']=sha;return d;};
     await assert.rejects(updateExistingPreview(f.io),{message:'approved_sha_already_deployed'});
     assert.equal(f.args.length,0);assert.equal(f.io.env.APU_DEV_PREVIEW_CI_MODE,'once');
   }
@@ -171,9 +187,9 @@ const changes = [
   ['dirty source',f=>f.io.clean=async()=>{throw Error('dirty');}], ['unsupported Wrangler',f=>f.io.wranglerContract=async()=>{throw Error('version');}],
   ['missing Preview',f=>f.io.preview=async()=>null], ['wrong Preview ID',f=>f.io.preview=async()=>({...preview(),id:'replacement'})],
   ['wrong Preview name',f=>f.io.preview=async()=>({...preview(),name:'other'})], ['wrong Preview URL',f=>f.io.preview=async()=>({...preview(),urls:['https://production.invalid']})],
-  ['missing latest bindings',f=>f.io.deployment=async()=>({...deployment(),env:undefined})],
-  ['inherited remote binding',f=>f.io.deployment=async()=>({...deployment(),env:{...bindings(),EXTRA:{type:'inherit'}}})],
-  ['remote provider secret',f=>f.io.deployment=async()=>({...deployment(),env:{...bindings(),OPENAI_API_KEY:{type:'secret_text'}}})],
+  ['missing latest bindings',f=>f.io.latestVersion=async()=>({...version(),env:undefined})],
+  ['inherited remote binding',f=>f.io.latestVersion=async()=>({...version(),env:{...bindings(),EXTRA:{type:'inherit'}}})],
+  ['remote provider secret',f=>f.io.latestVersion=async()=>({...version(),env:{...bindings(),OPENAI_API_KEY:{type:'secret_text'}}})],
   ['missing production',f=>f.io.production=async()=>({deployments:[]})], ['unavailable production',f=>f.io.production=async()=>{throw Error('unavailable');}],
 ];
 for(const [label,change]of changes)test(`fails before upload: ${label}`,async()=>{
@@ -202,7 +218,7 @@ test("Wrangler adapter strips credential/base/output overrides and suppresses ra
   const calls=[],input={...env(),PATH:'/synthetic/bin',CLOUDFLARE_API_BASE_URL:'https://forbidden.invalid',WRANGLER_OUTPUT_FILE_PATH:'/forbidden',OPENAI_API_KEY:'synthetic-forbidden'};
   const io=liveIO(input,{execute:async(command,args,options)=>{calls.push({command,args,options});return {stdout:JSON.stringify({preview:preview(),deployment:deployment(true)})};}});
   assert.deepEqual(normalizeUploadResponse(await io.upload(previewArgs()),sha),{
-    previewId:TARGET.previewId,previewName:TARGET.preview,previewSlug:preview().slug,deploymentId:deployment(true).id,deploymentUrl:deployment(true).urls[0]});
+    previewId:TARGET.previewId,previewName:TARGET.preview,previewSlug:preview().slug,uploadResourceId:deployment(true).id,uploadUrl:deployment(true).urls[0]});
   assert.equal(calls.length,1);assert.equal(calls[0].command,'npx');assert.deepEqual(calls[0].args,previewArgs());
   const passed=calls[0].options.env;
   assert.deepEqual(Object.keys(passed).sort(),['PATH','GITHUB_SHA','GITHUB_REPOSITORY','CLOUDFLARE_ACCOUNT_ID','CLOUDFLARE_API_TOKEN','CI','GITHUB_SERVER_URL','WRANGLER_SEND_METRICS','WRANGLER_WRITE_LOGS'].sort());
@@ -225,7 +241,7 @@ for(const cause of ['upload','postflight binding','postflight SHA','anonymous Ac
   const f=fixture();
   if(cause==='upload')f.io.upload=async()=>{f.calls.push('upload');throw Error('synthetic');};
   if(cause==='postflight binding'||cause==='postflight SHA'){
-    const original=f.io.deployment;f.io.deployment=async()=>{const d=await original();if(f.calls.includes('upload')){if(cause==='postflight binding')d.env.EXTRA={type:'secret_text'};else d.annotations['workers/commit_sha']='f'.repeat(40);}return d;};
+    const original=f.io.latestVersion;f.io.latestVersion=async()=>{const d=await original();if(f.calls.includes('upload')){if(cause==='postflight binding')d.env.EXTRA={type:'secret_text'};else d.annotations['workers/commit_sha']='f'.repeat(40);}return d;};
   }
   if(cause==='anonymous Access')f.io.anonymous=async()=>{throw Error('unprotected');};
   if(cause==='postflight source'){let count=0;f.io.branchHead=async()=>++count===3?'f'.repeat(40):sha;}
@@ -244,9 +260,9 @@ test("read-only transports use supported fixed API paths; anonymous checks never
     requests.push({url,init});
     if(url.startsWith('https://api.github.com/'))return Response.json({object:{sha}});
     if(url===TARGET.url)return new Response(null,{status:302,headers:{Location:TARGET.issuer+'/cdn-cgi/access/login/fixture'}});
-    return Response.json({success:true,result:url.endsWith('/deployments/latest')?deployment():url.endsWith('/deployments')?production():preview()});
+    return Response.json({success:true,result:url.endsWith('/deployments/latest')?version():url.endsWith('/deployments')?production():preview()});
   });
-  const io=liveIO(env());await io.branchHead();await io.preview();await io.deployment();await io.production();await io.anonymous(TARGET.url);
+  const io=liveIO(env());await io.branchHead();await io.preview();await io.latestVersion();await io.production();await io.anonymous(TARGET.url);
   assert.deepEqual(requests.slice(1,4).map(x=>x.url),[
     `https://api.cloudflare.com/client/v4/accounts/${TARGET.account}/workers/workers/${TARGET.worker}/previews/${TARGET.preview}`,
     `https://api.cloudflare.com/client/v4/accounts/${TARGET.account}/workers/workers/${TARGET.worker}/previews/${TARGET.preview}/deployments/latest`,
@@ -275,25 +291,23 @@ test("authoritative deployment identity and URL are accepted without equating de
   assert.throws(()=>validateDeployment({...d,annotations:{'workers/commit_sha':'f'.repeat(40)}},sha),{message:'deployment_source_mismatch'});
 });
 for(const [label,mutate,code] of [
-  ['missing ID',d=>delete d.preview_id,'missing_deployment_preview_id'],
-  ['missing name',d=>delete d.preview_name,'missing_deployment_preview_name'],
-  ['wrong ID',d=>d.preview_id='f'.repeat(32),'wrong_deployment_preview_id'],
-  ['wrong name',d=>d.preview_name='other-preview','wrong_deployment_preview_name'],
-  ['non-string ID',d=>d.preview_id=42,'missing_deployment_preview_id'],
-  ['non-string name',d=>d.preview_name={name:TARGET.preview},'missing_deployment_preview_name'],
+  ['wrong ID',d=>d.preview_id='f'.repeat(32),'wrong_version_preview_id'],
+  ['wrong name',d=>d.preview_name='other-preview','wrong_version_preview_name'],
+  ['non-string ID',d=>d.preview_id=42,'wrong_version_preview_id'],
+  ['non-string name',d=>d.preview_name={name:TARGET.preview},'wrong_version_preview_name'],
 ]) {
   for(const failingRead of [1,2]) test(`deployment ${label} at preflight read ${failingRead} is classified and never uploads`,async()=>{
     const f=fixture();let reads=0;
-    f.io.deployment=async()=>{const d=deployment();if(++reads===failingRead)mutate(d);return d;};
+    f.io.latestVersion=async()=>{const d=version();if(++reads===failingRead)mutate(d);return d;};
     await assert.rejects(updateExistingPreview(f.io),error=>{
       assert.deepEqual(failureSummary(error),{stage:failingRead===1?'initial_preflight':'pre_upload_recheck',cause:code,upload:'unattempted'});return true;
     });
     assert.equal(f.args.length,0);assert.equal(f.calls.includes('upload'),false);
   });
 }
-for(const value of [null,[],{deployment:deployment()}, {result:deployment()}, {id:deployment().id}, {...deployment(),worker_name:'other-worker'}]) {
+for(const value of [null,[],{deployment:deployment()}, {result:deployment()}, {id:deployment().id}, {...version(),worker_name:'other-worker'}]) {
   test("unsupported or unproven GET structure fails closed before upload",async()=>{
-    const f=fixture();f.io.deployment=async()=>value;
+    const f=fixture();f.io.latestVersion=async()=>value;
     await assert.rejects(updateExistingPreview(f.io),error=>failureSummary(error).stage==='initial_preflight'&&error.upload==='unattempted');
     assert.equal(f.args.length,0);
   });
@@ -305,9 +319,9 @@ for(const [label,raw] of [
   const f=fixture(),original=f.io.upload;
   f.io.upload=async args=>{await original(args);return raw();};
   const result=await updateExistingPreview(f.io);
-  assert.equal(result.deploymentId,deployment(true).id);assert.equal(result.deploymentUrl,deployment(true).urls[0]);
+  assert.equal(result.versionId,version(true).id);assert.equal(result.uploadResourceId,deployment(true).id);assert.equal(result.versionUrl,version(true).urls[0]);
   assert.equal(result.upload,'returned');assert.equal(f.args.length,1);
-  assert.equal(f.calls.filter(x=>x==='deployment').length,3);assert.equal(f.calls.filter(x=>x==='production').length,2);
+  assert.equal(f.calls.filter(x=>x==='version').length,3);assert.equal(f.calls.filter(x=>x==='production').length,2);
   assert.equal(f.calls.filter(x=>x==='anonymous').length,2);
 });
 for(const [label,mutate] of [
@@ -343,12 +357,12 @@ for(const raw of [null,[],42,'private invalid JSON',{}, {preview:preview()},
 for(const [label,change] of [
   ['wrong Preview ID',f=>f.io.preview=async()=>f.calls.includes('upload')?{...preview(),id:'f'.repeat(32)}:preview()],
   ['wrong Preview name',f=>f.io.preview=async()=>f.calls.includes('upload')?{...preview(),name:'other'}:preview()],
-  ['missing deployment ID relationship',f=>{const get=f.io.deployment;f.io.deployment=async()=>{const d=await get();if(f.calls.includes('upload'))delete d.preview_id;return d;};}],
-  ['wrong deployment name',f=>{const get=f.io.deployment;f.io.deployment=async()=>{const d=await get();if(f.calls.includes('upload'))d.preview_name='other';return d;};}],
-  ['different deployment',f=>{const get=f.io.deployment;f.io.deployment=async()=>{const d=await get();if(f.calls.includes('upload'))d.id='bbbbbbbb-bbbb-cccc-dddd-eeeeeeeeeeee';return d;};}],
-  ['different allowed URL',f=>{const get=f.io.deployment;f.io.deployment=async()=>{const d=await get();if(f.calls.includes('upload'))d.urls=['https://abcd1234-apu-ms-site.catsystem-exe.workers.dev'];return d;};}],
-  ['missing binding',f=>{const get=f.io.deployment;f.io.deployment=async()=>{const d=await get();if(f.calls.includes('upload'))delete d.env.DEV_LOG_STATE;return d;};}],
-  ['failed read-back',f=>{const get=f.io.deployment;f.io.deployment=async()=>{if(f.calls.includes('upload'))throw Error('PRIVATE_RESPONSE');return get();};}],
+  ['malformed optional Preview ID',f=>{const get=f.io.latestVersion;f.io.latestVersion=async()=>{const d=await get();if(f.calls.includes('upload'))d.preview_id=null;return d;};}],
+  ['wrong deployment name',f=>{const get=f.io.latestVersion;f.io.latestVersion=async()=>{const d=await get();if(f.calls.includes('upload'))d.preview_name='other';return d;};}],
+  ['unchanged Version',f=>{const get=f.io.latestVersion;f.io.latestVersion=async()=>{const d=await get();if(f.calls.includes('upload'))d.id=version().id;return d;};}],
+  ['different allowed URL',f=>{const get=f.io.latestVersion;f.io.latestVersion=async()=>{const d=await get();if(f.calls.includes('upload'))d.urls=['https://abcd1234-apu-ms-site.catsystem-exe.workers.dev'];return d;};}],
+  ['missing binding',f=>{const get=f.io.latestVersion;f.io.latestVersion=async()=>{const d=await get();if(f.calls.includes('upload'))delete d.env.DEV_LOG_STATE;return d;};}],
+  ['failed read-back',f=>{const get=f.io.latestVersion;f.io.latestVersion=async()=>{if(f.calls.includes('upload'))throw Error('PRIVATE_RESPONSE');return get();};}],
 ])test(`post-upload ${label} fails closed and verifies production without retry`,async()=>{
   const f=fixture();change(f);
   await assert.rejects(updateExistingPreview(f.io),error=>error.stage==='post_upload_readback'&&error.upload==='returned');
@@ -356,9 +370,9 @@ for(const [label,change] of [
 });
 test("flat response cannot fill missing read-back source or bindings",async()=>{
   for(const field of ['annotations','env']){
-    const f=fixture(),upload=f.io.upload,get=f.io.deployment;
+    const f=fixture(),upload=f.io.upload,get=f.io.latestVersion;
     f.io.upload=async args=>{await upload(args);return flatUpload();};
-    f.io.deployment=async()=>{const d=await get();if(f.calls.includes('upload'))delete d[field];return d;};
+    f.io.latestVersion=async()=>{const d=await get();if(f.calls.includes('upload'))delete d[field];return d;};
     await assert.rejects(updateExistingPreview(f.io),error=>error.stage==='post_upload_readback');
     assert.equal(f.args.length,1);assert.equal(f.calls.at(-1),'production');
   }
@@ -403,4 +417,92 @@ test("critical production postflight retains sanitized earlier failure and uncer
     assert.doesNotMatch(JSON.stringify(summary),/PRIVATE/);return true;
   });
   assert.equal(reads,2);
+});
+
+test("observed latest Version schema is distinct from both upload resource and rollout inventory",()=>{
+  const v=version();
+  assert.equal(v.id,'ee7c9e97-f7cf-420f-ba55-e23d50688cbd');
+  assert.notEqual(v.id,'7ed83603-ffb0-43ae-be75-ac66f65fac85');
+  assert.equal(Object.hasOwn(v,'preview_id'),false);assert.equal(Object.hasOwn(v,'preview_name'),false);
+  assert.deepEqual(Object.keys(v).sort(),['annotations','assets','author_email','author_id','compatibility_date',
+    'compatibility_flags','created_on','env','id','main_module','number','source','startup_time_ms','urls','usage_model']);
+  assert.deepEqual(Object.keys(v.annotations),['workers/triggered_by']);
+  assert.equal(validatePreviewVersion(v),v.urls[0]);
+  assert.throws(()=>validatePreviewVersion(deployment()),{message:'invalid_version_field_type'});
+  assert.throws(()=>validatePreviewVersion(production().deployments[0]),{message:'unsupported_version_metadata'});
+});
+test("historical missing commit annotation is allowed; present authoritative SHA still prevents once duplication",async()=>{
+  const historical=version();assert.equal(historical.annotations['workers/commit_sha'],undefined);
+  assert.equal(validatePreviewVersion(historical),historical.urls[0]);
+  const f=fixture();const result=await updateExistingPreview(f.io);assert.equal(result.versionId,version(true).id);
+  assert.notEqual(result.versionId,result.uploadResourceId);assert.equal(f.args.length,1);
+  assert.doesNotMatch(JSON.stringify(result),/synthetic-author|author_email|workers\/triggered_by|DEV_LOG_STATE/);
+  await assert.rejects(updateExistingPreview(f.io),{message:'approved_sha_already_deployed',stage:'initial_preflight',upload:'unattempted'});
+  assert.equal(f.args.length,1);
+});
+test("optional Preview identifiers are checked without manufacturing them",()=>{
+  const v=version();const before=structuredClone(v);validatePreviewVersion(v);assert.deepEqual(v,before);
+  assert.equal(validatePreviewVersion({...v,preview_id:TARGET.previewId,preview_name:TARGET.preview}),v.urls[0]);
+  for(const [field,value,code] of [['preview_id','f'.repeat(32),'wrong_version_preview_id'],
+    ['preview_name','other','wrong_version_preview_name'],['preview_id',null,'wrong_version_preview_id'],
+    ['preview_name',undefined,'wrong_version_preview_name']]) {
+    assert.throws(()=>validatePreviewVersion({...v,[field]:value}),{message:code});
+  }
+});
+for(const field of Object.keys(version())) test(`Version contract rejects missing or null ${field}`,()=>{
+  const missing=version();delete missing[field];
+  assert.throws(()=>validatePreviewVersion(missing),{message:'invalid_version_field_type'});
+  assert.throws(()=>validatePreviewVersion({...version(),[field]:null}),{message:'invalid_version_field_type'});
+});
+for(const [label,change,code] of [
+  ['invalid UUID',v=>v.id='not-a-uuid','invalid_version_identity'],
+  ['rollout wrapper',v=>v.versions=[{version_id:version().id,percentage:100}],'unsupported_version_metadata'],
+  ['unknown binding property',v=>v.services=[{service:'production'}],'unsupported_version_metadata'],
+  ['nested response envelope',v=>v.result={id:version().id},'unsupported_version_metadata'],
+  ['wrong counter type',v=>v.number='1','invalid_version_field_type'],
+  ['nonfinite counter',v=>v.number=Infinity,'invalid_version_field_type'],
+  ['wrong startup type',v=>v.startup_time_ms='1','invalid_version_field_type'],
+  ['wrong flags',v=>v.compatibility_flags=[42],'invalid_version_field_type'],
+  ['env array',v=>v.env=[],'invalid_version_field_type'],
+  ['unverified env representation',v=>v.env={bindings:bindings()},'remote_bindings_or_secrets_mismatch'],
+  ['production KV',v=>v.env.DEV_LOG_STATE.namespace_id='4a24c791d31a4c0983170c921cb744aa','remote_bindings_or_secrets_mismatch'],
+  ['inherited binding',v=>v.env.DEV_LOG_STATE={type:'inherit'},'remote_bindings_or_secrets_mismatch'],
+  ['provider secret',v=>v.env.OPENAI_API_KEY={type:'secret_text'},'remote_bindings_or_secrets_mismatch'],
+  ['unknown persistent resource',v=>v.env.EXTRA={type:'d1',database_id:'private'},'remote_bindings_or_secrets_mismatch'],
+  ['wrong Access var',v=>v.env.APU_LOCAL_DEV_AUTH.text='1','remote_bindings_or_secrets_mismatch'],
+  ['unsupported URL host',v=>v.urls=['https://c0ffee12-other.catsystem-exe.workers.dev'],'unexpected_deployment_url'],
+  ['malformed historical annotation',v=>v.annotations['workers/commit_sha']='private-not-a-sha','invalid_version_commit_sha'],
+])test(`observed Version adapter fails closed: ${label}`,()=>{
+  const v=version();change(v);assert.throws(()=>validatePreviewVersion(v),{message:code});
+});
+for(const patch of [{}, {'workers/commit_sha':'f'.repeat(40)}])test("new Version requires authoritative exact source, even with matching URL and upload ID",async()=>{
+  const f=fixture(),read=f.io.latestVersion;
+  f.io.latestVersion=async()=>{const v=await read();if(f.calls.includes('upload'))v.annotations=patch;return v;};
+  await assert.rejects(updateExistingPreview(f.io),{message:'version_source_mismatch',stage:'post_upload_readback',upload:'returned'});
+  assert.equal(f.args.length,1);assert.equal(f.calls.at(-1),'production');
+});
+test("nested upload Version shape is normalized separately from typed SDK upload metadata",async()=>{
+  const f=fixture(),upload=f.io.upload;
+  f.io.upload=async args=>{await upload(args);return JSON.stringify({preview:preview(),deployment:version(true)});};
+  const result=await updateExistingPreview(f.io);
+  assert.equal(result.versionId,version(true).id);assert.equal(result.uploadResourceId,version(true).id);
+  assert.equal(f.args.length,1);
+  for(const annotations of [{},{'workers/commit_sha':'f'.repeat(40)}]) {
+    assert.throws(()=>normalizeUploadResponse({preview:preview(),deployment:{...version(true),annotations}},sha),{message:'version_source_mismatch'});
+  }
+});
+for(const read of [1,2])test(`Preview association must validate before scoped Version read ${read}`,async()=>{
+  const f=fixture(),get=f.io.preview;let reads=0;
+  f.io.preview=async()=>{const p=await get();return ++reads===read?{...p,id:'f'.repeat(32)}:p;};
+  await assert.rejects(updateExistingPreview(f.io),error=>error.stage===(read===1?'initial_preflight':'pre_upload_recheck')&&error.upload==='unattempted');
+  assert.equal(f.args.length,0);assert.equal(f.calls.filter(x=>x==='version').length,read-1);
+});
+test("every Version read is preceded by validated Preview metadata and a post-upload URL disagreement rejects",async()=>{
+  const f=fixture(),get=f.io.latestVersion;
+  f.io.latestVersion=async()=>{assert.equal(f.calls.at(-1),'preview');return get();};
+  await updateExistingPreview(f.io);assert.equal(f.args.length,1);
+  const mismatch=fixture(),upload=mismatch.io.upload;
+  mismatch.io.upload=async args=>{await upload(args);return {...flatUpload(),deployment_urls:['https://abcd1234-apu-ms-site.catsystem-exe.workers.dev']};};
+  await assert.rejects(updateExistingPreview(mismatch.io),{message:'upload_version_url_mismatch',stage:'post_upload_readback',upload:'returned'});
+  assert.equal(mismatch.args.length,1);assert.equal(mismatch.calls.at(-1),'production');
 });

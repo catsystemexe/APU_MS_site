@@ -4,6 +4,13 @@ Status: CURRENT
 
 Records significant verified product/runtime/project changes. It is not a complete Git log. Historical Sites-era entries are retained where they remain useful; current deployment state must not be inferred from a changelog entry alone.
 
+## 2026-10-20 — ENV-D4-B2-LIVE-CONTRACT-REPAIR observed Version schema
+
+- Authenticated diagnostic `39494160174` confirms the fixed Preview latest GET returns a Version-shaped object, ID `ee7c9e97-f7cf-420f-ba55-e23d50688cbd`, without Preview ID/name; its annotation keys expose only `workers/triggered_by`. Rollout ID `7ed83603-ffb0-43ae-be75-ac66f65fac85` is separate. Added a narrow exact-key/type Version adapter and scoped Preview-before-Version association checks; contradictory optional identifiers/unknown schema still fail closed.
+- Preserved exact binding isolation without inferring live `env` values from its object type. Historical missing source SHA is allowed; future read-back must prove the approved SHA. Pinned upload formats normalize opaque upload IDs separately from Version IDs; correlate authoritative target/source/exact URL and require a changed Version instead of equating unrelated UUIDs. Double preflight, six failure stages, Access checks and production comparison after invoked/uncertain upload remain; no retry/rollback.
+- Verification PASS: **332/332 provider-free tests**, zero failures/skips, syntax/typecheck/canonical build/artifact/offline config and scope review. Strict location test now accepts only the unchanged approved diagnostic file in addition to the reviewed DEV workflow. Updated activation/runtime and KI-03; **KI-03 stays OPEN** for real binding/URL/future POST/source/hosted update and production-preservation evidence. Fixtures are synthetic beyond the captured key/type/identity evidence.
+- **Unpublished local repair**, per operator request: fresh gate/Workers Builds publication checks are unavailable. No workflow/capture-script/capture-test/application/config/variable/infrastructure change, upload/deployment/retry, merge or release. `automaticDevUpdatesConfigured=false`; historical evidence and unrelated Windows edits are preserved.
+
 ## 2026-10-20 — ENV-D4-B2-REPAIR metadata validation and diagnostic stages
 
 - Investigated run `39475401133` on `c5966b9eb8661444407a15206225a658f9a124d1`: the token-bearing guard failed with `wrong_deployment_preview`; old diagnostics cannot identify the missing/wrong identity field, stage or upload-attempt state. Actual Preview-specific GET metadata remains unverified; inventory data does not establish that contract.
