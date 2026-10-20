@@ -1,0 +1,51 @@
+name: APU Preview Metadata Capture
+
+on:
+  push:
+    branches:
+      - codex/f1-f3-mvp-stabilization
+    paths:
+      - .github/workflows/apu-preview-metadata-capture.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: apu-preview-metadata-capture
+  cancel-in-progress: false
+
+jobs:
+  capture:
+    if: >-
+      github.repository == 'catsystemexe/APU_MS_site' &&
+      github.event_name == 'push' &&
+      github.event.deleted == false &&
+      github.ref == 'refs/heads/codex/f1-f3-mvp-stabilization' &&
+      vars.APU_DEV_PREVIEW_CI_ENABLED == 'disabled' &&
+      vars.APU_PREVIEW_METADATA_CAPTURE_ENABLED == 'approved' &&
+      vars.APU_PREVIEW_METADATA_CAPTURE_SHA == github.sha
+    runs-on: ubuntu-24.04
+    environment: apu-dev-preview
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact diagnostic commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24.19.0
+      - name: Run sanitized metadata capture
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_REF: ${{ github.ref }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          GITHUB_EVENT_DELETED: ${{ github.event.deleted }}
+          GITHUB_SHA: ${{ github.sha }}
+          APU_DEV_PREVIEW_CI_ENABLED: ${{ vars.APU_DEV_PREVIEW_CI_ENABLED }}
+          APU_PREVIEW_METADATA_CAPTURE_ENABLED: ${{ vars.APU_PREVIEW_METADATA_CAPTURE_ENABLED }}
+          APU_PREVIEW_METADATA_CAPTURE_SHA: ${{ vars.APU_PREVIEW_METADATA_CAPTURE_SHA }}
+        run: node ops/ci/read-preview-metadata.mjs
