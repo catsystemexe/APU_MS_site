@@ -4,6 +4,13 @@ Status: CURRENT
 
 Records significant verified product/runtime/project changes. It is not a complete Git log. Historical Sites-era entries are retained where they remain useful; current deployment state must not be inferred from a changelog entry alone.
 
+## 2026-10-20 — ENV-D4-B2-REPAIR metadata validation and diagnostic stages
+
+- Investigated run `39475401133` on `c5966b9eb8661444407a15206225a658f9a124d1`: the token-bearing guard failed with `wrong_deployment_preview`; old diagnostics cannot identify the missing/wrong identity field, stage or upload-attempt state. Actual Preview-specific GET metadata remains unverified; inventory data does not establish that contract.
+- Inspected pinned Wrangler 4.150.0: `--json` stdout is nested `{ preview, deployment }`; flat fields belong to the separate `writeOutput` record. Added an explicit adapter for both verified source shapes, rejecting mixed/invalid output and using authoritative read-back for source/bindings/identity/URL agreement. Removed unsupported URL derivation from deployment ID; Version identity is separate. Missing GET Preview ID/name still fail closed, with distinct causes; no hardcoded identity fallback.
+- Added six sanitized failure stages and upload state; production comparison is attempted after invoked/uncertain upload, normalization and postflight failure. Retained fixed authorization/source/target, exact KV/Access/no-secret bindings, two pre-upload validations, Access checks and no guard retry/rollback.
+- Code verification PASS: **284/284 focused provider-free tests**, zero failures/skips, JS syntax, typecheck, canonical build/artifact and offline config/pinned Wrangler. Updated activation handoff/runtime and added **KI-03**, left open until successful separately authorized V3 hosted update evidence. No Cloudflare mutation, deployment/rerun, workflow/variable/application/config-manifest change, merge or release; `automaticDevUpdatesConfigured=false`. Code PASS does not establish live compatibility or hosted preservation; earlier history is retained.
+
 ## 2026-10-20 — ENV-D4-B1 publication and P2 preservation reconciled
 
 - Independently verified publication of `c1ab08d54cf375130df4f8ea3590025a60f3b25a`, its exact four-file B1 scope and published workflow/template byte equality; PR #60 remains open/unmerged into `next`. Registered DEV workflow is **INSTALLED / INACTIVE**, not automatically updating DEV. Run [`39462704145`](https://github.com/catsystemexe/APU_MS_site/actions/runs/39462704145) completed/skipped; `preview` skipped with zero executed steps and no credential-bearing deployment execution. `APU_DEV_PREVIEW_CI_ENABLED` remains unset according to read-only GitHub operator verification.

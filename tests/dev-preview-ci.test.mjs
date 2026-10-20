@@ -5,7 +5,7 @@ import { execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { TARGET, ACCESS_VARS, validateConfig, validateContext, validateCommand, validatePreview, validateDeployment,
-  productionState, previewArgs, updateExistingPreview, liveIO } from "../ops/ci/dev-preview-guard.mjs";
+  productionState, previewArgs, updateExistingPreview, liveIO, normalizeUploadResponse, failureSummary } from "../ops/ci/dev-preview-guard.mjs";
 const require = createRequire(import.meta.url);
 const yaml = require("js-yaml"); // Existing locked tooling dependency; no dependency upgrade.
 const read = path => readFile(new URL(path, import.meta.url), "utf8");
@@ -19,10 +19,16 @@ const env = () => ({ GITHUB_REPOSITORY: TARGET.repository, GITHUB_REF: `refs/hea
   CLOUDFLARE_API_TOKEN: "synthetic-cf-only", GITHUB_TOKEN: "synthetic-github-only" });
 const bindings = () => ({ ...Object.fromEntries(Object.entries(ACCESS_VARS).map(([name,text]) => [name,{type:"plain_text",text}])),
   DEV_LOG_STATE:{type:"kv_namespace",namespace_id:TARGET.kv}, ASSETS:{type:"assets"} });
-const preview = () => ({ id:TARGET.previewId, name:TARGET.preview, urls:[TARGET.url] });
+const preview = () => ({ id:TARGET.previewId, name:TARGET.preview, slug:'apu-pr60-e2e', urls:[TARGET.url] });
+// Synthetic fixtures grounded in the pinned types/output constructors, NOT live
+// Cloudflare observations. URL prefix intentionally differs from deployment ID.
 const deployment = (fresh = false) => ({ id:fresh?"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee":"11111111-2222-3333-4444-555555555555",
   preview_id:TARGET.previewId, preview_name:TARGET.preview, env:bindings(), annotations:{"workers/commit_sha":fresh?sha:'0'.repeat(40)},
-  urls:[`https://${fresh?"aaaaaaaa":"11111111"}-apu-ms-site.catsystem-exe.workers.dev`] });
+  urls:[`https://${fresh?"ee7c9e97":"deadbeef"}-apu-ms-site.catsystem-exe.workers.dev`] });
+const flatUpload = () => ({ type:'preview', version:1, worker_name:TARGET.worker,
+  preview_id:TARGET.previewId, preview_name:TARGET.preview, preview_slug:preview().slug,
+  preview_urls:[TARGET.url], deployment_id:deployment(true).id, deployment_urls:deployment(true).urls,
+  timestamp:'2026-10-20T17:00:00.000Z' });
 const production = () => ({ deployments:[{id:"99999999-8888-7777-6666-555555555555", versions:[
   {version_id:"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",percentage:70},
   {version_id:"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",percentage:30},
@@ -195,7 +201,8 @@ test("source/target are checked again immediately before upload",async()=>{
 test("Wrangler adapter strips credential/base/output overrides and suppresses raw failures",async()=>{
   const calls=[],input={...env(),PATH:'/synthetic/bin',CLOUDFLARE_API_BASE_URL:'https://forbidden.invalid',WRANGLER_OUTPUT_FILE_PATH:'/forbidden',OPENAI_API_KEY:'synthetic-forbidden'};
   const io=liveIO(input,{execute:async(command,args,options)=>{calls.push({command,args,options});return {stdout:JSON.stringify({preview:preview(),deployment:deployment(true)})};}});
-  assert.deepEqual(await io.upload(previewArgs()),{preview:preview(),deployment:deployment(true)});
+  assert.deepEqual(normalizeUploadResponse(await io.upload(previewArgs()),sha),{
+    previewId:TARGET.previewId,previewName:TARGET.preview,previewSlug:preview().slug,deploymentId:deployment(true).id,deploymentUrl:deployment(true).urls[0]});
   assert.equal(calls.length,1);assert.equal(calls[0].command,'npx');assert.deepEqual(calls[0].args,previewArgs());
   const passed=calls[0].options.env;
   assert.deepEqual(Object.keys(passed).sort(),['PATH','GITHUB_SHA','GITHUB_REPOSITORY','CLOUDFLARE_ACCOUNT_ID','CLOUDFLARE_API_TOKEN','CI','GITHUB_SERVER_URL','WRANGLER_SEND_METRICS','WRANGLER_WRITE_LOGS'].sort());
@@ -250,4 +257,150 @@ test("read-only transports use supported fixed API paths; anonymous checks never
   for(const response of [Response.json({}, {status:200}),new Response(null,{status:302,headers:{Location:'https://other.invalid/login'}})]){
     t.mock.method(globalThis,'fetch',async()=>response);await assert.rejects(io.anonymous(TARGET.url));
   }
+});
+
+test("pinned Wrangler distinguishes nested stdout, flat output records and commit annotations",async()=>{
+  const source=await read('../node_modules/wrangler/wrangler-dist/cli.js');
+  assert.ok(source.includes('JSON.stringify({ preview: previewResource, deployment }, null, 2)'));
+  const output=source.slice(source.indexOf('worker_name: resolveWorkerName(args, previewConfig)'),source.indexOf('// src/preview/secrets/bulk.ts'));
+  for(const field of ['preview_id: previewResource.id','preview_name: previewResource.name','preview_slug: previewResource.slug',
+    'preview_urls: previewResource.urls','deployment_id: deployment.id','deployment_urls: deployment.urls']) assert.ok(output.includes(field));
+  assert.ok(source.includes('process.env.GITHUB_SHA || process.env.CI_COMMIT_SHA'));
+  assert.ok(source.includes('...commitSha && { "workers/commit_sha": commitSha }'));
+});
+test("authoritative deployment identity and URL are accepted without equating deployment and Version IDs",()=>{
+  const d=deployment(true);
+  assert.notEqual(d.id.slice(0,8),new URL(d.urls[0]).hostname.slice(0,8));
+  assert.equal(validateDeployment(d,sha),d.urls[0]);
+  assert.throws(()=>validateDeployment({...d,annotations:{'workers/commit_sha':'f'.repeat(40)}},sha),{message:'deployment_source_mismatch'});
+});
+for(const [label,mutate,code] of [
+  ['missing ID',d=>delete d.preview_id,'missing_deployment_preview_id'],
+  ['missing name',d=>delete d.preview_name,'missing_deployment_preview_name'],
+  ['wrong ID',d=>d.preview_id='f'.repeat(32),'wrong_deployment_preview_id'],
+  ['wrong name',d=>d.preview_name='other-preview','wrong_deployment_preview_name'],
+  ['non-string ID',d=>d.preview_id=42,'missing_deployment_preview_id'],
+  ['non-string name',d=>d.preview_name={name:TARGET.preview},'missing_deployment_preview_name'],
+]) {
+  for(const failingRead of [1,2]) test(`deployment ${label} at preflight read ${failingRead} is classified and never uploads`,async()=>{
+    const f=fixture();let reads=0;
+    f.io.deployment=async()=>{const d=deployment();if(++reads===failingRead)mutate(d);return d;};
+    await assert.rejects(updateExistingPreview(f.io),error=>{
+      assert.deepEqual(failureSummary(error),{stage:failingRead===1?'initial_preflight':'pre_upload_recheck',cause:code,upload:'unattempted'});return true;
+    });
+    assert.equal(f.args.length,0);assert.equal(f.calls.includes('upload'),false);
+  });
+}
+for(const value of [null,[],{deployment:deployment()}, {result:deployment()}, {id:deployment().id}, {...deployment(),worker_name:'other-worker'}]) {
+  test("unsupported or unproven GET structure fails closed before upload",async()=>{
+    const f=fixture();f.io.deployment=async()=>value;
+    await assert.rejects(updateExistingPreview(f.io),error=>failureSummary(error).stage==='initial_preflight'&&error.upload==='unattempted');
+    assert.equal(f.args.length,0);
+  });
+}
+for(const [label,raw] of [
+  ['nested stdout',()=>JSON.stringify({preview:preview(),deployment:deployment(true)})],
+  ['flat writeOutput record',()=>JSON.stringify(flatUpload())],
+])test(`mocked successful once flow normalizes ${label}, reads back identity/source/bindings and uploads exactly once`,async()=>{
+  const f=fixture(),original=f.io.upload;
+  f.io.upload=async args=>{await original(args);return raw();};
+  const result=await updateExistingPreview(f.io);
+  assert.equal(result.deploymentId,deployment(true).id);assert.equal(result.deploymentUrl,deployment(true).urls[0]);
+  assert.equal(result.upload,'returned');assert.equal(f.args.length,1);
+  assert.equal(f.calls.filter(x=>x==='deployment').length,3);assert.equal(f.calls.filter(x=>x==='production').length,2);
+  assert.equal(f.calls.filter(x=>x==='anonymous').length,2);
+});
+for(const [label,mutate] of [
+  ['missing ID',v=>delete v.preview_id], ['missing name',v=>delete v.preview_name],
+  ['wrong ID',v=>v.preview_id='f'.repeat(32)], ['wrong name',v=>v.preview_name='other'],
+  ['non-string ID',v=>v.preview_id=123], ['wrong Worker',v=>v.worker_name='other'],
+  ['malformed deployment UUID',v=>v.deployment_id='invalid'], ['missing deployment ID',v=>delete v.deployment_id],
+  ['wrong deployment ID type',v=>v.deployment_id=123], ['missing named URLs',v=>delete v.preview_urls],
+  ['wrong named URL',v=>v.preview_urls=['https://other.invalid']], ['wrong slug type',v=>v.preview_slug={}],
+  ['missing slug',v=>delete v.preview_slug], ['invalid slug',v=>v.preview_slug='../other'],
+  ['missing deployment URLs',v=>delete v.deployment_urls], ['wrong URL type',v=>v.deployment_urls=deployment(true).urls[0]],
+  ['extra URL',v=>v.deployment_urls.push(TARGET.url)], ['unknown host',v=>v.deployment_urls=['https://ee7c9e97.other.workers.dev']],
+  ['HTTP URL',v=>v.deployment_urls=['http://ee7c9e97-apu-ms-site.catsystem-exe.workers.dev']],
+  ['URL credentials',v=>v.deployment_urls=['https://user:pass@ee7c9e97-apu-ms-site.catsystem-exe.workers.dev']],
+  ['URL query',v=>v.deployment_urls=[deployment(true).urls[0]+'?unexpected=1']],
+  ['named URL as unique',v=>v.deployment_urls=[TARGET.url]],
+  ['wrong type',v=>v.type='deploy'], ['wrong schema version',v=>v.version='1'],
+  ['invalid timestamp',v=>v.timestamp=42], ['unknown field',v=>v.unexpected={}],
+  ['mixed flat/nested',v=>v.preview=preview()],
+])test(`flat CLI metadata rejects ${label}`,()=>{
+  const value=flatUpload();mutate(value);assert.throws(()=>normalizeUploadResponse(value,sha));
+});
+for(const raw of [null,[],42,'private invalid JSON',{}, {preview:preview()},
+  {deployment:deployment(true)}, {preview:preview(),deployment:deployment(true),deployment_id:deployment(true).id}]) {
+  test("unsupported upload shapes are classified after return and still check production",async()=>{
+    const f=fixture(),original=f.io.upload;
+    f.io.upload=async args=>{await original(args);return raw;};
+    await assert.rejects(updateExistingPreview(f.io),error=>error.stage==='upload_response_normalization'&&error.upload==='returned');
+    assert.equal(f.args.length,1);assert.equal(f.calls.at(-1),'production');
+    assert.equal(f.calls.filter(x=>x==='production').length,2);
+  });
+}
+for(const [label,change] of [
+  ['wrong Preview ID',f=>f.io.preview=async()=>f.calls.includes('upload')?{...preview(),id:'f'.repeat(32)}:preview()],
+  ['wrong Preview name',f=>f.io.preview=async()=>f.calls.includes('upload')?{...preview(),name:'other'}:preview()],
+  ['missing deployment ID relationship',f=>{const get=f.io.deployment;f.io.deployment=async()=>{const d=await get();if(f.calls.includes('upload'))delete d.preview_id;return d;};}],
+  ['wrong deployment name',f=>{const get=f.io.deployment;f.io.deployment=async()=>{const d=await get();if(f.calls.includes('upload'))d.preview_name='other';return d;};}],
+  ['different deployment',f=>{const get=f.io.deployment;f.io.deployment=async()=>{const d=await get();if(f.calls.includes('upload'))d.id='bbbbbbbb-bbbb-cccc-dddd-eeeeeeeeeeee';return d;};}],
+  ['different allowed URL',f=>{const get=f.io.deployment;f.io.deployment=async()=>{const d=await get();if(f.calls.includes('upload'))d.urls=['https://abcd1234-apu-ms-site.catsystem-exe.workers.dev'];return d;};}],
+  ['missing binding',f=>{const get=f.io.deployment;f.io.deployment=async()=>{const d=await get();if(f.calls.includes('upload'))delete d.env.DEV_LOG_STATE;return d;};}],
+  ['failed read-back',f=>{const get=f.io.deployment;f.io.deployment=async()=>{if(f.calls.includes('upload'))throw Error('PRIVATE_RESPONSE');return get();};}],
+])test(`post-upload ${label} fails closed and verifies production without retry`,async()=>{
+  const f=fixture();change(f);
+  await assert.rejects(updateExistingPreview(f.io),error=>error.stage==='post_upload_readback'&&error.upload==='returned');
+  assert.equal(f.args.length,1);assert.equal(f.calls.at(-1),'production');
+});
+test("flat response cannot fill missing read-back source or bindings",async()=>{
+  for(const field of ['annotations','env']){
+    const f=fixture(),upload=f.io.upload,get=f.io.deployment;
+    f.io.upload=async args=>{await upload(args);return flatUpload();};
+    f.io.deployment=async()=>{const d=await get();if(f.calls.includes('upload'))delete d[field];return d;};
+    await assert.rejects(updateExistingPreview(f.io),error=>error.stage==='post_upload_readback');
+    assert.equal(f.args.length,1);assert.equal(f.calls.at(-1),'production');
+  }
+});
+test("flat output slug must agree with authoritative Preview read-back",async()=>{
+  const f=fixture(),upload=f.io.upload;
+  f.io.upload=async args=>{await upload(args);return {...flatUpload(),preview_slug:'different-slug'};};
+  await assert.rejects(updateExistingPreview(f.io),{message:'upload_preview_slug_mismatch',stage:'post_upload_readback',upload:'returned'});
+  assert.equal(f.args.length,1);assert.equal(f.calls.at(-1),'production');
+});
+test("nested stdout cannot omit or contradict its Preview slug",async()=>{
+  for(const slug of [undefined,'different-slug']){
+    const f=fixture(),upload=f.io.upload;
+    f.io.upload=async args=>{await upload(args);return {preview:{...preview(),slug},deployment:deployment(true)};};
+    await assert.rejects(updateExistingPreview(f.io));
+    assert.equal(f.args.length,1);assert.equal(f.calls.at(-1),'production');
+  }
+});
+test("subprocess failure versus invalid returned JSON have distinct stages and disclose no raw output",async()=>{
+  for(const returned of [false,true]){
+    const f=fixture();let executions=0;
+    const adapter=liveIO(env(),{execute:async()=>{executions++;if(!returned)throw Error('PRIVATE_TOKEN_STDERR');return {stdout:'PRIVATE_TOKEN_STDOUT'};}});
+    f.io.upload=adapter.upload;
+    await assert.rejects(updateExistingPreview(f.io),error=>{
+      assert.deepEqual(failureSummary(error),{stage:returned?'upload_response_normalization':'wrangler_execution',
+        cause:returned?'upload_json_invalid':'preview_upload_failed_output_suppressed',upload:returned?'returned':'invoked'});
+      assert.doesNotMatch(JSON.stringify(failureSummary(error)),/PRIVATE/);return true;
+    });
+    assert.equal(executions,1);assert.equal(f.calls.filter(x=>x==='production').length,2);
+  }
+  assert.deepEqual(failureSummary(Error('ALL_LETTER_PRIVATE_SECRET')),
+    {stage:'guard_entry',cause:'guard_failed_details_suppressed',upload:'unattempted'});
+});
+test("critical production postflight retains sanitized earlier failure and uncertain upload state",async()=>{
+  const f=fixture();let reads=0;
+  f.io.upload=async()=>{throw Error('PRIVATE_UNKNOWN_OUTCOME');};
+  f.io.production=async()=>{if(++reads===2)throw Error('PRIVATE_RESPONSE');return production();};
+  await assert.rejects(updateExistingPreview(f.io),error=>{
+    const summary=failureSummary(error);
+    assert.equal(summary.stage,'production_preservation_postflight');assert.equal(summary.upload,'invoked');
+    assert.equal(summary.priorFailure.operation.stage,'wrangler_execution');
+    assert.doesNotMatch(JSON.stringify(summary),/PRIVATE/);return true;
+  });
+  assert.equal(reads,2);
 });
