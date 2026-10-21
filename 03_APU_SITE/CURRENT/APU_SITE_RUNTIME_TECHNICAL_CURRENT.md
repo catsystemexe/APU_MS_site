@@ -4,6 +4,32 @@ Status: CURRENT SOURCE/RUNTIME CONTRACT
 
 Purpose: describe the current repository/runtime contract. Deployment state is recorded only when independently verified; this document must not infer production state from repository contents alone.
 
+## APU-P5-E — dedicated hosted DEV bootstrap closeout (2026-10-21)
+
+**HOSTED DEV PROVISIONED / P5-D2 HOSTED SMOKE PASS / PROVIDER-FUNCTIONAL READINESS PENDING.** The operator's supplied P5-D2 completion evidence establishes the dedicated permanent DEV Worker below. This is operator-reported authenticated hosted evidence, not a new Cloudflare inspection or smoke run by Codex. It supersedes the pre-bootstrap "DEV not provisioned" statements in the historical records below, without replacing earlier deployment identities or implementation evidence.
+
+| Dedicated DEV runtime | Operator-reported identity |
+| --- | --- |
+| Worker | `apu-ms-site-dev` |
+| URL | `https://apu-ms-site-dev.catsystem-exe.workers.dev` |
+| Deployment | `ca7ca974-40c1-4669-8ddb-21db4b8a75bf` |
+| Version | `cba179ae-6f82-4c0e-bdac-5727d197cc85` |
+| Dedicated DEV KV namespace ID | `2c5cbe4b59424993804c3882cc220aa3` |
+| Dedicated DEV Access application ID | `6b37b2f7-9f2d-4128-ba50-cf7bcf79f4d1` |
+| Dedicated DEV Access audience identity | `2d0dfdd8b8776a42637707a3482d8d424853aa877a96538b55584166dc857900` |
+
+The operator supplied and verified all three resource identities above and confirms that they belong exclusively to `apu-ms-site-dev`. This is operator evidence of dedicated DEV KV/Access identity, not a new Cloudflare API inspection by Codex; production, legacy and PR60 Preview identities and synthetic preparation fixtures are not used as substitutes. These are resource identifiers, not authentication credentials. No API token, authentication JWT, cookie, provider key, Access client secret or hook URL is recorded. Deployment source SHA, traffic allocation and individual smoke inspection timestamps were not supplied; source baseline `03df55356e7751a96bc6ba0efb4bc146b5d923a7` is independently verified on GitHub `dev`, not asserted as independently proven deployed-source metadata.
+
+**P5-D2 PASS — operator-reported scope:** operator authentication; hosted UI and navigation; static assets; anonymous Cloudflare Access interception; no additional public routes observed; production preservation. The route finding is limited to the reported smoke observation, not a claim of exhaustive public-endpoint coverage. Version URLs are disabled **by configuration** (`preview_urls=false` in the dedicated DEV source template); no untested Version URL response, status code or endpoint behavior is claimed as dynamically verified here.
+
+**Production and release boundaries:** production remains Worker `apu-ms-site` with stable URL `https://apu-ms-site.catsystem-exe.workers.dev`; P5-D2 reports production preservation PASS. Its earlier Deployment/Version/traffic records remain historical baselines, not newly inspected values. GitHub `next` remains `b0162eb2c0f72d1bc0fea2886ae8695418beb251`; `dev` is for development, `next` for production. Preserve the P4-B2 solo-operator governance (`catsystemexe` integration/release authority), PR/required CI controls and independent source-versus-merge provenance. CI PASS and this smoke record authorize neither merge nor deployment. Draft PR #62 remains OPEN/DRAFT/unmerged in the source read-back. No automatic DEV or production deployment is configured by this closeout; `automaticDevUpdatesConfigured=false`, old CI activation gates and the separate Deploy Hook authorization boundary are unchanged. Prior operator Builds-OFF evidence is not a fresh P5 Cloudflare configuration read.
+
+**Remaining functional readiness:** dedicated DEV provider-secret provisioning and full authenticated F1→F2→F3 provider testing remain pending. UI/navigation/static-asset/authentication smoke does not establish provider-functional PASS or complete the existing KI-01/KI-03 closure criteria. Both issues remain OPEN; no Known Issues file is changed. Future deployments, provider-secret provisioning, infrastructure changes, integration and production release still require their own authorization. This task changes only two documentation files, performs no hosted mutation and has no publication authorization.
+
+### Historical pre-P5 records
+
+The hosting-readiness statements below describe their recorded preparation stages. Current hosted DEV state is the P5 record above; existing source/security/release contracts remain in force except for explicitly superseded hosting status.
+
 ## APU-ENV-P4-B2 — solo-operator release governance closeout (2026-10-21)
 
 **VERIFIED SOURCE/PR CI / SOLO-OPERATOR GOVERNANCE / NO MERGE OR DEPLOYMENT AUTHORIZATION.** This record supersedes the earlier one-review/independent-reviewer assumptions and release-check readiness statements below. Historical preparation/implementation records retain their original scope. Permanent source branch `dev` is independently verified at `8f5d0d69e4ce5f55a748c77eb2e9aabde5f8f049`; production branch `next` remains `b0162eb2c0f72d1bc0fea2886ae8695418beb251`. Draft PR #62 remains OPEN/DRAFT/unmerged, verification evidence only; it is not an approved production release.
