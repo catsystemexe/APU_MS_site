@@ -181,5 +181,77 @@
     "automaticDevUpdatesConfigured": false,
     "productionBranch": "next",
     "furtherDeploymentAuthorized": false
+  },
+  "runtimeEvidenceScopes": {
+    "completedDeployment": "Historical ENV-D3 bootstrap evidence, preserved unchanged; not the current active Preview Version.",
+    "classification": "ENV-D3 baseline classification retained; current hosted state and limitations are in currentHostedPreview.",
+    "verifiedResources": "Historical provisioning/ENV-D3 identities; not a fresh KV namespace read on the current Version.",
+    "verifiedAccess": "Historical ENV-D3 login/role/AUD evidence; not a full re-verification of current effective bindings.",
+    "currentHostedPreview": "Latest supplied ENV-D4-B2-V3 operator runtime evidence, separated from independently read GitHub results."
+  },
+  "currentHostedPreview": {
+    "batch": "ENV-D4-B2-V3",
+    "recordedOn": "2026-10-21",
+    "status": "HOSTED MUTATION VERIFIED BY OPERATOR; CI CANCELLED; SECURITY VERIFICATION PARTIAL; KI-03 OPEN",
+    "evidenceClassification": "GitHub source/run/job/diagnostic independently read by Codex; Cloudflare hosted state, Access comparisons and production preservation supplied by operator, not independently inspected through Cloudflare by Codex.",
+    "cloudflareInspectionTimestamp": null,
+    "sourceCommit": "b266d4058bb7ca937d72ac2dcb834e631fbcabbc",
+    "parentWorker": "apu-ms-site",
+    "previewName": "apu-pr60-e2e",
+    "previewId": "79968345270d4008954af42b360775d2",
+    "activeVersionId": "764e8603-d50b-41c5-94b6-030edd77755d",
+    "rolloutId": "4b89c5c6-444c-440b-a7d3-1e737e5fdc16",
+    "trafficPercent": 100,
+    "previewUrl": "https://apu-pr60-e2e-apu-ms-site.catsystem-exe.workers.dev",
+    "uniqueVersionUrl": null,
+    "urlEvidenceLimit": "Operator reports both actual URL Access redirects PASS; new unique URL not supplied here and not derived from Version/rollout IDs.",
+    "github": {
+      "runId": "39567377884",
+      "jobId": "119112809289",
+      "status": "completed",
+      "conclusion": "cancelled",
+      "credentialBearingGuardConclusion": "failure",
+      "stage": "upload_response_normalization",
+      "cause": "upload_json_invalid",
+      "uploadState": "returned",
+      "runCreatedAt": "2026-10-21T08:11:14Z",
+      "runUpdatedAt": "2026-10-21T08:22:23Z",
+      "guardDiagnosticAt": "2026-10-21T08:22:20.1626000Z",
+      "workflowSuccess": false
+    },
+    "accessRedirects": {
+      "namedPreviewUrl": "PASS — operator-reported",
+      "uniqueVersionUrl": "PASS — operator-reported"
+    },
+    "bindingEvidence": {
+      "namesAndTypes": "VERIFIED — operator-reported; detailed listing not supplied with this reconciliation",
+      "devKvNamespaceIdVerified": false,
+      "expectedHistoricalDevKvNamespaceId": "1729ce8a6acd4cdcbed8248ac543677b",
+      "currentDevKvNamespaceId": null,
+      "exactComparedAccessValues": {
+        "APU_LOCAL_DEV_AUTH": "0",
+        "CF_ACCESS_TEAM_DOMAIN": "https://catsystem-ai.cloudflareaccess.com",
+        "CF_ACCESS_AUD": "1e1680481c99464a844a6ef0e502cf49fae89fc91c8cf3806ba48026b0088610"
+      },
+      "accessComparisonEvidence": "Three exact comparisons operator-reported; APU_DEVELOPER_EMAILS effective value not demonstrated by captured commands.",
+      "developerEmailsExactValueVerified": false,
+      "completeEffectiveBindingEqualityVerified": false,
+      "completeKvIsolationVerified": false
+    },
+    "productionPreservation": {
+      "status": "PASS — operator-reported unchanged against recorded baseline",
+      "deploymentId": "08a0cd96-fb57-4f2f-9a6b-14950420b89e",
+      "versionId": "2a28cdf6-5a61-4f6c-be55-382e5bfa28cd",
+      "trafficPercent": 100,
+      "independentlyReadByCodex": false
+    },
+    "remainingVerification": [
+      "Safe diagnosis/correction of returned stdout JSON parsing and successful normalization",
+      "Exact current DEV KV namespace ID and complete effective binding equality, including APU_DEVELOPER_EMAILS",
+      "Successful separately authorized guarded hosted verification, upload/read-back agreement and production preservation"
+    ],
+    "automaticDevUpdatesConfigured": false,
+    "productionBranch": "next",
+    "furtherDeploymentAuthorized": false
   }
 }

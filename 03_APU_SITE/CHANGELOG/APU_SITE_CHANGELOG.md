@@ -4,6 +4,12 @@ Status: CURRENT
 
 Records significant verified product/runtime/project changes. It is not a complete Git log. Historical Sites-era entries are retained where they remain useful; current deployment state must not be inferred from a changelog entry alone.
 
+## 2026-10-21 — ENV-D4-B2-V3 runtime evidence reconciled
+
+- Recorded operator-verified hosted mutation from source `b266d4058bb7ca937d72ac2dcb834e631fbcabbc`: active DEV Preview Version `764e8603-d50b-41c5-94b6-030edd77755d`, rollout `4b89c5c6-444c-440b-a7d3-1e737e5fdc16`, 100% Preview allocation; named/unique Access redirects PASS and production deployment/Version/100% traffic preserved. Cloudflare evidence is operator-reported, not independently re-read by Codex; the new unique URL and inspection timestamp were not supplied.
+- Independently verified GitHub run [`39567377884`](https://github.com/catsystemexe/APU_MS_site/actions/runs/39567377884) as COMPLETED / CANCELLED, credential-bearing guard FAILURE at `upload_response_normalization / upload_json_invalid / returned`. Actual mutation is not CI PASS. Earlier Codex-reported local V2 **332/332 provider-free tests PASS** remains historical; no V2 tests were rerun for this documentation V1 reconciliation.
+- **KI-03 stays OPEN:** names/types verification does not prove the actual DEV KV namespace ID; only `APU_LOCAL_DEV_AUTH`, `CF_ACCESS_TEAM_DOMAIN` and `CF_ACCESS_AUD` were exactly compared, while `APU_DEVELOPER_EMAILS` equality remains undemonstrated. Parser/output normalization, upload/read-back agreement and complete binding equality still need verification. Preserved ENV-D3 unchanged and added a separate current hosted-state record; `automaticDevUpdatesConfigured=false` and future deployment authorization false. No guard/workflow/application/gate/infrastructure changes or new deployment/rerun.
+
 ## 2026-10-20 — ENV-D4-B2-DOC-PUBLICATION-CLOSE
 
 - Reconciled **PUBLISHED SOURCE / HOSTED UPDATE NOT VERIFIED** across runtime, activation and KI-03. Exact six-file repair `88e997911d0e1cb1460476216036988a1965224b` was published by fast-forward from `6d3ebf5cec1b5f58bd4468cb9a2b3b1c4f277359`; PR #60 remains OPEN/unmerged into `next`.
