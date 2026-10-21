@@ -27,6 +27,49 @@ merge SHA. The local merge parents must equal the event's base and candidate SHA
 that order. Both SHAs are recorded in logs and the job summary. Reject stale or unproven
 relationships; do not substitute a successful check for a different candidate.
 
+### PR provenance contract repair — P4-B1-R1 (2026-10-21)
+
+| Value | Source and trust boundary |
+| --- | --- |
+| `GITHUB_SHA` / `GITHUB_REF` | Runner-provided Actions context: PR merge-ref SHA / exact `refs/pull/N/merge`, not the candidate head SHA. |
+| `GITHUB_EVENT_PATH` | Runner-provided path to the event snapshot; the path itself proves no source identity. Read only the required event fields. |
+| `pull_request.head.sha` / `base.sha` | Declared candidate/base snapshot; validate SHA syntax, exact repository/branches and compare with the local merge parents. |
+| `pull_request.merge_commit_sha` | Nullable mergeability metadata; not an additional identity authority or a guaranteed synchronized copy of `GITHUB_SHA`. |
+| Actual checkout HEAD / parents | Local Git object evidence: HEAD must equal `GITHUB_SHA`, with exactly two parents equal to declared base, then candidate. A head-only checkout is rejected. |
+| Actions run API `head_sha` | Run/candidate metadata; never substitute it for the synthetic merge SHA. |
+
+The [Actions PR event contract](https://github.com/github/docs/blob/cca0c9d7299f760587d6601bd96acfd2f5cb8929/content/actions/reference/workflows-and-actions/events-that-trigger-workflows.md#pull_request)
+defines the merge-ref SHA and default PR actions. The [REST PR contract](https://docs.github.com/rest/pulls/pulls#get-a-pull-request)
+describes asynchronous mergeability computation; the official API/webhook schema at
+`github/rest-api-description` commit `755ee33b4a81d51f6f07a902cce26cbec3b822f2`
+allows nullable `merge_commit_sha`. Requiring its equality in the event snapshot was
+an unsupported redundant condition. The repair retains all checkout/parent, open
+same-repository PR, `dev → next`, action/ref/number and SHA checks. Missing, null,
+different or malformed optional merge metadata does not authorize a checkout;
+only the complete validated Git relationship can pass. Logs expose only its fixed
+`webhookMergeShaStatus`: `unavailable`, `matches`, `differs` or `invalid`.
+
+Historical run [39630801929](https://github.com/catsystemexe/APU_MS_site/actions/runs/39630801929)
+remains **FAILURE**, at the provenance step, with subsequent validation steps skipped.
+GitHub independently confirms checkout `3f783948ae6c02e94384991c06d16216b6ad4951`
+and parents `b0162eb2c0f72d1bc0fea2886ae8695418beb251`, then
+`ccdf975cab8665386725cfa042b8af9b240d5cce`. The event snapshot and historical
+`merge_commit_sha` value were not captured; the exact rejecting condition is therefore
+**NOT PROVEN**. The current PR API value does not reconstruct that old snapshot.
+
+New rejection output contains only `release_context_rejected` and a fixed cause:
+`unsupported_repository`, `unsupported_event`, `unsupported_push`, `push_source_mismatch`,
+`unsupported_pr_metadata`, `unsupported_pr_state`, `unsupported_pr_ref`,
+`unsupported_pr_branches`, `invalid_pr_source`, `invalid_checkout_sha`,
+`checkout_sha_mismatch` or `unproven_merge_source`. Event/Git read/parse failures use
+`release_metadata_unavailable`; summary-write failures retain `release_provenance_record_failed`.
+Never log raw payload/environment/errors. No workflow change, reviewer-policy change,
+retry or new authorization is introduced. The repair is offline V2 evidence only;
+source publication needs separate operator authorization and current Builds/gates
+preflight. A later authorized push may create a fresh Draft PR #62 synchronize run;
+evaluate that actual result before any branch-protection change, without rerunning
+the historical failure or marking the PR ready/merged.
+
 A successful offline job proves neither hosted acceptance nor a deployment. A new
 workflow is **CI NOT VERIFIED** until its actual run completes successfully. No required
 status check is configured by this task. P2's PR/one-approval protection on `next` is

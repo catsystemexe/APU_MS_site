@@ -4,6 +4,12 @@ Status: CURRENT
 
 Records significant verified product/runtime/project changes. It is not a complete Git log. Historical Sites-era entries are retained where they remain useful; current deployment state must not be inferred from a changelog entry alone.
 
+## 2026-10-21 — APU-ENV-P4-B1-R1 PR provenance contract repair
+
+- **OFFLINE V2 PASS / SOURCE UNPUBLISHED / NEW HOSTED PR CHECK NOT VERIFIED.** Removed the unsupported mandatory `pull_request.merge_commit_sha == GITHUB_SHA` equality. GitHub documents the Actions merge ref/SHA separately from nullable/asynchronous PR mergeability metadata. The optional field now supplies only a fixed diagnostic status; exact repository/event/ref/open PR/branches, candidate/base SHA, checkout HEAD and both ordered merge parents remain mandatory. Head-only checkouts remain rejected; valid DEV push behavior is unchanged.
+- Added fixed sanitized rejection causes and tests for missing/null/stale diagnostic metadata, malformed source/checkout relationships, reversed/wrong/extra parents, foreign/fork/branch/state/action failures and actual CLI rejection without payload leakage. **60/60 focused + 588/588 related provider-free release regressions = 648/648 PASS**, zero failures/skips; syntax, typecheck, canonical build, standalone artifact and exact four-file diff review PASS. Dependency lock and all workflows/application/Worker configuration remain unchanged.
+- Historical PR run `39630801929` remains FAILURE at `release_context_rejected`; GitHub confirms merge `3f783948ae6c02e94384991c06d16216b6ad4951` with exact `next`/`dev` parents. Its event payload was not captured, so the exact historical rejecting condition is **not proven**. Updated only the runbook provenance contract, without changing reviewer/solo-operator permissions or branch protection. Publication requires separate operator authorization and current disabled Builds/gates evidence; any future PR #62 synchronize run must be independently evaluated. No push, retry, PR transition/merge, deployment, hook invocation or Cloudflare mutation. KI-01/KI-03 remain OPEN.
+
 ## 2026-10-21 — APU-ENV-P4-A pilot release verification preparation
 
 - Added one read-only, provider-free verification workflow for `dev` pushes and PRs into `next`; exact same-repository DEV/release context and source versus tested-merge provenance checks, pinned actions, no persisted checkout credentials/environment/secrets/deploy hooks/publishing/deployment steps. Old Preview/capture workflow behavior and all application/deployment scripts/configuration remain unchanged.

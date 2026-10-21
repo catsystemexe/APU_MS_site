@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFile } from 'node:fs/promises';
+import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { validateReleaseContext } from '../ops/release/verify-context.mjs';
 
@@ -67,7 +72,17 @@ test('valid push records equal source and tested SHAs', () => {
   assert.deepEqual(validate(push()), { event: 'push', sourceBranch: 'dev', candidateSourceSha: source, testedCheckoutSha: source });
 });
 test('valid PR records candidate separately from verified synthetic merge checkout', () => {
-  assert.deepEqual(validate(pr()), { event: 'pull_request', sourceBranch: 'dev', targetBranch: 'next', candidateSourceSha: source, testedCheckoutSha: merge, baseSha: base });
+  assert.deepEqual(validate(pr()), { event: 'pull_request', sourceBranch: 'dev', targetBranch: 'next', candidateSourceSha: source, testedCheckoutSha: merge, baseSha: base, webhookMergeShaStatus: 'matches' });
+});
+// Synthetic webhook fixtures: none reconstructs the uncaptured run 39630801929 payload.
+for (const [name, value, status] of [
+  ['null', null, 'unavailable'], ['missing', undefined, 'unavailable'],
+  ['stale', base, 'differs'], ['malformed diagnostic', 'not-a-sha', 'invalid'],
+]) test(`verified merge accepts ${name} optional webhook merge SHA`, () => {
+  const f = pr(); f.event.pull_request.merge_commit_sha = value;
+  if (value === undefined) delete f.event.pull_request.merge_commit_sha;
+  assert.deepEqual(validate(f), { event: 'pull_request', sourceBranch: 'dev', targetBranch: 'next',
+    candidateSourceSha: source, testedCheckoutSha: merge, baseSha: base, webhookMergeShaStatus: status });
 });
 for (const [name, fixture, mutate] of [
   ['foreign runner repository', push, f => f.env.GITHUB_REPOSITORY = 'fork/APU_MS_site'],
@@ -95,12 +110,57 @@ for (const [name, fixture, mutate] of [
   ['invalid PR number', pr, f => f.event.number = -1],
   ['mismatched PR number', pr, f => f.event.pull_request.number = 62],
   ['head ref instead of merge', pr, f => f.env.GITHUB_REF = 'refs/heads/dev'],
-  ['wrong merge SHA', pr, f => f.event.pull_request.merge_commit_sha = base],
+  ['missing PR metadata', pr, f => delete f.event.pull_request],
+  ['missing head metadata', pr, f => delete f.event.pull_request.head],
+  ['missing base metadata', pr, f => delete f.event.pull_request.base],
+  ['array PR metadata', pr, f => f.event.pull_request = []],
+  ['PR checkout mismatch', pr, f => f.checkout.head = source],
+  ['head-only checkout', pr, f => { f.env.GITHUB_SHA = f.checkout.head = source; f.event.pull_request.merge_commit_sha = source; f.checkout.parents = [base]; }],
   ['malformed source SHA', pr, f => f.event.pull_request.head.sha = 'short'],
   ['missing base SHA', pr, f => delete f.event.pull_request.base.sha],
+  ['invalid base SHA', pr, f => f.event.pull_request.base.sha = '0'.repeat(40)],
+  ['newline source SHA', pr, f => f.event.pull_request.head.sha = source + '\n'],
   ['unknown merge relationship', pr, f => f.checkout.parents = []],
   ['wrong merge parent order', pr, f => f.checkout.parents.reverse()],
+  ['wrong base merge parent', pr, f => f.checkout.parents[0] = merge],
   ['wrong source merge parent', pr, f => f.checkout.parents[1] = merge],
+  ['octopus merge', pr, f => f.checkout.parents.push(source)],
 ]) test(`context fails closed: ${name}`, () => {
   const f = structuredClone(fixture()); mutate(f); assert.throws(() => validate(f));
+});
+
+for (const [code, change] of [
+  ['unsupported_event', f => f.env.GITHUB_EVENT_NAME = 'workflow_dispatch'],
+  ['unsupported_pr_ref', f => f.env.GITHUB_REF = 'refs/heads/dev'],
+  ['unsupported_repository', f => f.env.GITHUB_REPOSITORY = 'fork/APU_MS_site'],
+  ['unsupported_pr_branches', f => f.event.pull_request.base.ref = 'main'],
+  ['invalid_pr_source', f => f.event.pull_request.head.sha = 'invalid'],
+  ['invalid_checkout_sha', f => f.env.GITHUB_SHA = 'invalid'],
+  ['checkout_sha_mismatch', f => f.checkout.head = source],
+  ['unproven_merge_source', f => f.checkout.parents.reverse()],
+  ['unsupported_pr_metadata', f => delete f.event.pull_request],
+]) test(`fixed diagnostic code: ${code}`, () => {
+  const f = pr(); change(f); assert.throws(() => validate(f), { message: code });
+});
+
+test('CLI provenance and sanitized rejection use the real local HEAD without logging payloads', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'apu-provenance-'));
+  try {
+    const cwd = fileURLToPath(new URL('../', import.meta.url));
+    const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd, encoding: 'utf8' }).trim();
+    const eventPath = join(directory, 'event.json'), summary = join(directory, 'summary.md');
+    const payload = { repository, ref: 'refs/heads/dev', deleted: false, after: head, head_commit: { id: head }, private_canary: 'DO_NOT_LOG_PAYLOAD' };
+    const env = { PATH: process.env.PATH, GITHUB_REPOSITORY: repository.full_name, GITHUB_EVENT_NAME: 'push',
+      GITHUB_REF: 'refs/heads/dev', GITHUB_SHA: head, GITHUB_EVENT_PATH: eventPath, GITHUB_STEP_SUMMARY: summary };
+    const invoke = () => spawnSync(process.execPath, ['ops/release/verify-context.mjs'], { cwd, env, encoding: 'utf8' });
+    await writeFile(eventPath, JSON.stringify(payload));
+    const success = invoke(); assert.equal(success.status, 0); assert.equal(success.stderr, '');
+    assert.equal(JSON.parse(success.stdout).testedCheckoutSha, head); assert.match(await readFile(summary, 'utf8'), new RegExp(head));
+    payload.ref = 'refs/heads/next'; await writeFile(eventPath, JSON.stringify(payload));
+    const rejected = invoke(); assert.equal(rejected.status, 1); assert.equal(rejected.stdout, '');
+    assert.deepEqual(JSON.parse(rejected.stderr), { error: 'release_context_rejected', cause: 'unsupported_push' });
+    await writeFile(eventPath, 'invalid private payload');
+    const malformed = invoke(); assert.equal(malformed.status, 1); assert.equal(malformed.stdout, '');
+    assert.deepEqual(JSON.parse(malformed.stderr), { error: 'release_context_rejected', cause: 'release_metadata_unavailable' });
+  } finally { await rm(directory, { recursive: true, force: true }); }
 });

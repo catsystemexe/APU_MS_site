@@ -4,12 +4,15 @@ import { pathToFileURL } from 'node:url';
 
 const REPOSITORY = 'catsystemexe/APU_MS_site';
 const sha = value => typeof value === 'string' && value.length === 40 && /^[a-f0-9]{40}$/.test(value) && value !== '0'.repeat(40);
-const requireValue = (condition, code) => { if (!condition) throw new Error(code); };
+class ReleaseContextFailure extends Error {}
+const requireValue = (condition, code) => { if (!condition) throw new ReleaseContextFailure(code); };
+const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 
 // Event fixtures in tests are synthetic GitHub contracts, not hosted evidence.
 export function validateReleaseContext(env, event, checkout) {
   requireValue(env.GITHUB_REPOSITORY === REPOSITORY && event?.repository?.full_name === REPOSITORY, 'unsupported_repository');
-  requireValue(sha(env.GITHUB_SHA) && checkout?.head === env.GITHUB_SHA, 'checkout_sha_mismatch');
+  requireValue(sha(env.GITHUB_SHA), 'invalid_checkout_sha');
+  requireValue(checkout?.head === env.GITHUB_SHA, 'checkout_sha_mismatch');
   if (env.GITHUB_EVENT_NAME === 'push') {
     requireValue(env.GITHUB_REF === 'refs/heads/dev' && event.ref === env.GITHUB_REF && event.deleted === false, 'unsupported_push');
     requireValue(event.after === env.GITHUB_SHA && event.head_commit?.id === env.GITHUB_SHA, 'push_source_mismatch');
@@ -17,16 +20,22 @@ export function validateReleaseContext(env, event, checkout) {
   }
   requireValue(env.GITHUB_EVENT_NAME === 'pull_request', 'unsupported_event');
   const pr = event.pull_request;
+  requireValue(object(pr) && object(pr.head) && object(pr.base), 'unsupported_pr_metadata');
   requireValue(['opened', 'synchronize', 'reopened'].includes(event.action) && pr?.state === 'open' && pr.merged === false, 'unsupported_pr_state');
   requireValue(Number.isSafeInteger(event.number) && event.number > 0 && pr.number === event.number &&
     env.GITHUB_REF === `refs/pull/${event.number}/merge`, 'unsupported_pr_ref');
   requireValue(pr.head?.repo?.full_name === REPOSITORY && pr.base?.repo?.full_name === REPOSITORY &&
     pr.head.ref === 'dev' && pr.base.ref === 'next', 'unsupported_pr_branches');
-  requireValue(sha(pr.head.sha) && sha(pr.base.sha) && pr.merge_commit_sha === env.GITHUB_SHA, 'invalid_pr_source');
+  requireValue(sha(pr.head.sha) && sha(pr.base.sha), 'invalid_pr_source');
   requireValue(Array.isArray(checkout.parents) && checkout.parents.length === 2 &&
     checkout.parents[0] === pr.base.sha && checkout.parents[1] === pr.head.sha, 'unproven_merge_source');
+  // Actions defines GITHUB_SHA as the merge-ref commit. The nullable webhook
+  // merge_commit_sha reflects asynchronous mergeability metadata; it is not an
+  // additional checkout authority. Identity is proven by HEAD + both parents.
+  const webhookMergeShaStatus = pr.merge_commit_sha == null ? 'unavailable' :
+    !sha(pr.merge_commit_sha) ? 'invalid' : pr.merge_commit_sha === checkout.head ? 'matches' : 'differs';
   return { event: 'pull_request', sourceBranch: 'dev', targetBranch: 'next',
-    candidateSourceSha: pr.head.sha, testedCheckoutSha: checkout.head, baseSha: pr.base.sha };
+    candidateSourceSha: pr.head.sha, testedCheckoutSha: checkout.head, baseSha: pr.base.sha, webhookMergeShaStatus };
 }
 
 async function main() {
@@ -37,9 +46,10 @@ async function main() {
     result = validateReleaseContext(process.env, event, {
       head: git(['rev-parse', 'HEAD']), parents: git(['show', '-s', '--format=%P', 'HEAD']).split(' '),
     });
-  } catch {
+  } catch (error) {
     // Never echo an event payload, subprocess output, environment or raw error.
-    console.error('release_context_rejected');
+    console.error(JSON.stringify({ error: 'release_context_rejected',
+      cause: error instanceof ReleaseContextFailure ? error.message : 'release_metadata_unavailable' }));
     process.exitCode = 1;
     return;
   }
