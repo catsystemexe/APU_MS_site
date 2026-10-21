@@ -71,7 +71,8 @@ test("template is valid YAML; PREP and identical INSTALLED states allow no unexp
   // Installation does not authorize deployment; job/runtime gates remain intact.
   if(activeFiles.length){
     const capture='apu-preview-metadata-capture.yml';
-    assert.deepEqual(activeFiles.sort(),activeFiles.includes(capture)?[capture,'dev-preview.yml']:['dev-preview.yml']);
+    const release='pilot-release-verification.yml'; // Non-deploying P4-A workflow, independently security-tested.
+    assert.deepEqual(activeFiles.sort(),['dev-preview.yml',...(activeFiles.includes(capture)?[capture]:[]),...(activeFiles.includes(release)?[release]:[])].sort());
     // Temporary diagnostic workflow was approved in baseline 6d3ebf5. Permit
     // exactly that file, unchanged; retain strict rejection of other workflows.
     if(activeFiles.includes(capture)) assert.equal(createHash('sha256').update(await readFile(new URL('../.github/workflows/'+capture,import.meta.url))).digest('hex'),

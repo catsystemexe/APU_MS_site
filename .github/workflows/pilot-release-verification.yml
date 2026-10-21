@@ -1,0 +1,60 @@
+name: Pilot release verification
+
+on:
+  push:
+    branches: [dev]
+  pull_request:
+    branches: [next]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Provider-free release checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    env:
+      CI: 'true'
+      WRANGLER_SEND_METRICS: 'false'
+      WRANGLER_WRITE_LOGS: 'false'
+    steps:
+      - name: Checkout tested push or PR merge SHA
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # reviewed v4 pin
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Pinned Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # reviewed v4 pin
+        with:
+          node-version-file: ops/ci/.node-version
+      - name: Validate event and record source versus tested SHA
+        run: node ops/release/verify-context.mjs
+      - name: Locked dependencies without lifecycle scripts
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Canonical build
+        run: npm run build
+      - name: Validate standalone artifact
+        run: npm run validate:artifact
+      - name: Provider-free application, isolation and workflow regressions
+        run: >-
+          node --test tests/pilot-release-verification.test.mjs
+          tests/f1-response-contract.test.mjs tests/manual-notebook-context.test.mjs
+          tests/notebook-ownership.test.mjs tests/f2-build-model.test.mjs
+          tests/f2-api-contract.test.mjs tests/f3-api-contract.test.mjs
+          tests/f3-finalization-model.test.mjs tests/f3-generation-eligibility.test.mjs
+          tests/access-control.test.mjs tests/server-capabilities.test.mjs
+          tests/deployment-config.test.mjs tests/dev-worker-preparation.test.mjs
+          tests/dev-preview-ci.test.mjs tests/e2e-preview-preparation.test.mjs
+          tests/preview-metadata-capture.test.mjs
+      - name: Validate inactive DEV template
+        run: node ops/dev/prepare-worker.mjs --check-template --target apu-ms-site-dev
+      - name: Validate existing Preview configuration offline
+        run: node ops/ci/dev-preview-guard.mjs --check-config
