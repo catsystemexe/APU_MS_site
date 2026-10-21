@@ -4,6 +4,13 @@ Status: CURRENT
 
 Records significant verified product/runtime/project changes. It is not a complete Git log. Historical Sites-era entries are retained where they remain useful; current deployment state must not be inferred from a changelog entry alone.
 
+## 2026-10-21 — APU-ENV-P3 dedicated DEV Worker preparation
+
+- **LOCAL V2 PASS / UNPUBLISHED / NO HOSTED DEV ACTIVATION.** Added dedicated `wrangler.dev.json` for `apu-ms-site-dev` / `dev`, null-only provisioning input example, offline preparation/strict validation helper and focused tests. Canonical Vinext artifacts are reused through an explicit separate DEV config; production Worker/URL, `wrangler.jsonc`, scripts, KV/Access/secrets and `next`/`main` remain unchanged. No deployment command is executable through the helper; future args require explicit DEV config and Worker.
+- Missing KV/Access/operator inputs fail closed; production/legacy/PR60 KV and existing Access identities are rejected. No production/provider env defaults or resource inheritance; authentication bypass remains off. Real IDs must come from authenticated provisioning; local shape checks do not verify ownership or an operator-only Access policy. Existing Preview guard/workflows remain unchanged and do not trigger from `dev`; KI-03 stays OPEN and `automaticDevUpdatesConfigured=false`.
+- **80/80 dedicated + 412/412 related provider-free tests = 492/492 PASS**, zero failures/skips; syntax, typecheck, canonical build/artifact, offline configuration/schema/command checks and scope review PASS. No Cloudflare mutation, Worker/KV/Access/secret provisioning, upload, CI activation/retry, PR merge or release.
+- Publication held: operator confirms both CI gates disabled and Production/Preview Builds OFF on `next`, but external integration audit is incomplete and the separate APU manual deploy path remains unverified/unexecuted. No automatic push-to-deploy safety claim is made. Future hosted bootstrap, scoped credentials, complete resource/Access/binding verification and production preservation need separate authorization; preparation does not establish an active DEV environment.
+
 ## 2026-10-21 — ENV-D4-B2-STRUCTURED-OUTPUT-REPAIR
 
 - **LOCAL V2 PASS / SOURCE REPAIR UNPUBLISHED / HOSTED V3 NOT VERIFIED.** Replaced the unsupported whole-stdout JSON assumption with pinned Wrangler 4.150.0 `WRANGLER_OUTPUT_FILE_PATH` and exactly `wrangler-session → preview` NDJSON records. Source proves asset progress shares stdout with JSON; historical run stdout was not retained. Command, workflow, authorization, targets and binding/source/Access/production checks remain unchanged.
