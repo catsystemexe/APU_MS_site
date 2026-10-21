@@ -1,7 +1,9 @@
-import { readFile } from "node:fs/promises";
+import { readFile, mkdtemp, chmod, open, lstat, realpath, rm } from "node:fs/promises";
+import { constants } from "node:fs";
+import { tmpdir } from "node:os";
 import { execFile } from "node:child_process";
 import { promisify, isDeepStrictEqual } from "node:util";
-import { resolve, dirname } from "node:path";
+import { resolve, dirname, join, isAbsolute, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const TARGET = Object.freeze({
@@ -20,12 +22,21 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 class GuardFailure extends Error {
   constructor(code) { super(code); this.code = code; }
 }
+// Only the live upload adapter may refine whether the command was attempted or
+// returned before a local file failure. Ordinary IO errors stay suppressed.
+class UploadFailure extends GuardFailure {
+  constructor(code, upload) {
+    super(code); this.upload = upload;
+    this.stage = upload === "returned" ? "upload_response_normalization" : "wrangler_execution";
+  }
+}
 function requireThat(condition, code) { if (!condition) throw new GuardFailure(code); }
 function equal(actual, expected, code) { requireThat(isDeepStrictEqual(actual, expected), code); }
 const record = value => value !== null && typeof value === "object" && !Array.isArray(value);
 function classified(stage, error, upload) {
   const failure = new GuardFailure(error instanceof GuardFailure ? error.code : "guard_failed_details_suppressed");
   failure.stage = stage; failure.upload = upload;
+  if (error instanceof GuardFailure && error.cleanupFailed) failure.cleanupFailed = true;
   return failure;
 }
 export function failureSummary(error) {
@@ -33,6 +44,7 @@ export function failureSummary(error) {
   return { stage: error instanceof GuardFailure ? error.stage ?? "guard_entry" : "guard_entry",
     cause: error instanceof GuardFailure ? error.code : "guard_failed_details_suppressed",
     upload: error instanceof GuardFailure ? error.upload ?? "unattempted" : "unattempted",
+    ...(error instanceof GuardFailure && error.cleanupFailed ? { cleanup: "structured_output_cleanup_failed" } : {}),
     ...(error instanceof GuardFailure && error.priorFailure ? { priorFailure: error.priorFailure } : {}) };
 }
 // Normalized Vinext fields not used as resource configuration. Unknown fields
@@ -182,6 +194,39 @@ export function normalizeUploadResponse(raw, sha) {
   return { previewId: value.preview_id, previewName: value.preview_name, previewSlug: value.preview_slug,
     uploadResourceId: value.deployment_id, uploadUrl: deploymentUrl(value.deployment_urls) };
 }
+export const MAX_STRUCTURED_OUTPUT_BYTES = 64 * 1024;
+function validateOutputTimestamp(value) {
+  requireThat(typeof value === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value) &&
+    Number.isFinite(Date.parse(value)) && new Date(value).toISOString() === value, "structured_output_timestamp_invalid");
+}
+export function normalizeStructuredOutput(raw, sha) {
+  requireThat(typeof raw === "string", "structured_output_unavailable");
+  requireThat(Buffer.byteLength(raw, "utf8") <= MAX_STRUCTURED_OUTPUT_BYTES, "structured_output_oversized");
+  // Pinned writeOutput appends compact JSON plus LF on every call. Require its
+  // complete two-record framing; never trim away blank/extra/incomplete records.
+  requireThat(raw.endsWith("\n"), "structured_output_incomplete");
+  const lines = raw.slice(0, -1).split("\n");
+  requireThat(lines.length === 2 && lines.every(line => line.length > 0), "structured_output_record_count_invalid");
+  const entries = lines.map(line => {
+    let value;
+    try { value = JSON.parse(line); } catch { throw new GuardFailure("structured_output_json_invalid"); }
+    // Exact JSON.stringify framing also rejects duplicate keys, multiple JSON
+    // documents, non-JSON prefixes/suffixes and non-canonical serialization.
+    requireThat(record(value) && JSON.stringify(value) === line, "structured_output_record_invalid");
+    return value;
+  });
+  const [session, preview] = entries;
+  requireThat(session.type === "wrangler-session" && preview.type === "preview", "structured_output_sequence_invalid");
+  equal(Object.keys(session).sort(), ["type", "version", "wrangler_version", "command_line_args", "log_file_path", "timestamp"].sort(), "structured_output_session_invalid");
+  equal(session.version, 1, "structured_output_session_invalid");
+  equal(session.wrangler_version, "4.150.0", "structured_output_session_invalid");
+  equal(session.command_line_args, previewArgs().slice(2), "structured_output_session_command_mismatch");
+  requireThat(typeof session.log_file_path === "string" && isAbsolute(session.log_file_path), "structured_output_session_invalid");
+  validateOutputTimestamp(session.timestamp); validateOutputTimestamp(preview.timestamp);
+  // Session metadata is supporting evidence only. Keep the strict flat Preview
+  // schema/target/IDs/URLs and all authoritative post-upload checks unchanged.
+  return normalizeUploadResponse(preview, sha);
+}
 export function productionState(result) {
   const active = result?.deployments?.[0];
   requireThat(UUID.test(active?.id ?? "") && Array.isArray(active.versions) && active.versions.length > 0, "production_state_unavailable");
@@ -226,7 +271,7 @@ export async function updateExistingPreview(io) {
     stage = "wrangler_execution"; upload = "invoked";
     const raw = await io.upload(args);
     upload = "returned"; stage = "upload_response_normalization";
-    const uploaded = normalizeUploadResponse(raw, io.env.GITHUB_SHA);
+    const uploaded = normalizeStructuredOutput(raw, io.env.GITHUB_SHA);
     stage = "post_upload_readback";
     const latest = await readScopedVersion(io, io.env.GITHUB_SHA);
     if (uploaded.previewSlug !== undefined) equal(latest.preview.slug, uploaded.previewSlug, "upload_preview_slug_mismatch");
@@ -241,6 +286,7 @@ export async function updateExistingPreview(io) {
     result = { source: io.env.GITHUB_SHA, preview: TARGET.preview, previewId: TARGET.previewId,
       versionId: latest.version.id, uploadResourceId: uploaded.uploadResourceId, previewUrl: TARGET.url, versionUrl: url, upload };
   } catch (error) {
+    if (error instanceof UploadFailure) { stage = error.stage; upload = error.upload; }
     failure = classified(stage, error, upload);
   } finally {
     // Even an uncertain subprocess outcome/parse/read-back failure must compare
@@ -267,7 +313,84 @@ async function wranglerContract() {
   const installed = JSON.parse(await readFile(resolve(ROOT, "node_modules/wrangler/package.json"), "utf8"));
   equal(installed.version, "4.150.0", "unreviewed_wrangler_version");
 }
-export function liveIO(env, { execute = exec } = {}) {
+const OUTPUT_FILES = Object.freeze({ mkdtemp, chmod, open, lstat, realpath, rm });
+function sameFile(actual, expected) { return actual.dev === expected.dev && actual.ino === expected.ino; }
+function outsideCheckout(path) {
+  const fromRoot = relative(ROOT, path);
+  return fromRoot === ".." || fromRoot.startsWith(`..${sep}`) || isAbsolute(fromRoot);
+}
+async function structuredUpload(args, env, execute, files) {
+  let directory, directoryStat, handle, original, output, failure, upload = "unattempted";
+  const trustedFile = stat => stat.isFile() && stat.nlink === 1 && sameFile(stat, original) &&
+    (stat.mode & 0o777) === 0o600 && stat.uid === process.getuid();
+  try {
+    requireThat(process.platform !== "win32" && constants.O_NOFOLLOW !== undefined, "structured_output_platform_unsupported");
+    const temporaryRoot = await files.realpath(tmpdir());
+    requireThat(isAbsolute(temporaryRoot) && outsideCheckout(temporaryRoot), "structured_output_location_invalid");
+    directory = await files.mkdtemp(join(temporaryRoot, "apu-preview-output-"));
+    await files.chmod(directory, 0o700);
+    directoryStat = await files.lstat(directory);
+    requireThat(directoryStat.isDirectory() && directoryStat.uid === process.getuid() &&
+      (directoryStat.mode & 0o777) === 0o700 && await files.realpath(directory) === directory, "structured_output_directory_invalid");
+    const path = join(directory, "result.ndjson");
+    handle = await files.open(path, constants.O_RDWR | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
+    original = await handle.stat();
+    requireThat(trustedFile(original) && original.size === 0, "structured_output_file_invalid");
+    // Preserve the allowlist. Only this newly generated, private path is added;
+    // inherited output-directory/path, log and API-base overrides stay excluded.
+    const cliEnv = Object.fromEntries(["PATH", "TMPDIR", "LANG", "LC_ALL", "GITHUB_SHA", "GITHUB_REPOSITORY", "CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN"]
+      .filter(key => env[key] !== undefined).map(key => [key, env[key]]));
+    upload = "invoked";
+    try {
+      await execute("npx", args, { cwd: ROOT, env: { ...cliEnv, CI: "true", GITHUB_SERVER_URL: "https://github.com",
+        WRANGLER_SEND_METRICS: "false", WRANGLER_WRITE_LOGS: "false", WRANGLER_OUTPUT_FILE_PATH: path }, maxBuffer: 4 * 1024 * 1024 });
+    } catch { throw new GuardFailure("preview_upload_failed_output_suppressed"); }
+    upload = "returned";
+    const checkPath = async () => {
+      const parent = await files.lstat(directory), entry = await files.lstat(path);
+      requireThat(parent.isDirectory() && sameFile(parent, directoryStat) && parent.uid === process.getuid() &&
+        (parent.mode & 0o777) === 0o700 && trustedFile(entry), "structured_output_file_invalid");
+    };
+    await checkPath();
+    const before = await handle.stat();
+    requireThat(trustedFile(before), "structured_output_file_invalid");
+    requireThat(before.size > 0, "structured_output_empty");
+    requireThat(before.size <= MAX_STRUCTURED_OUTPUT_BYTES, "structured_output_oversized");
+    // Read the original descriptor, never a substituted pathname. Bound even a
+    // concurrent append to max+1 bytes instead of an unbounded readFile().
+    const buffer = Buffer.alloc(MAX_STRUCTURED_OUTPUT_BYTES + 1);
+    let length = 0;
+    while (length < buffer.length) {
+      const { bytesRead } = await handle.read(buffer, length, buffer.length - length, length);
+      if (bytesRead === 0) break;
+      length += bytesRead;
+    }
+    requireThat(length <= MAX_STRUCTURED_OUTPUT_BYTES, "structured_output_oversized");
+    const after = await handle.stat();
+    requireThat(trustedFile(after) && length === before.size && after.size === before.size &&
+      after.mtimeMs === before.mtimeMs && after.ctimeMs === before.ctimeMs, "structured_output_file_changed");
+    await checkPath();
+    try { output = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(buffer.subarray(0, length)); }
+    catch { throw new GuardFailure("structured_output_encoding_invalid"); }
+  } catch (error) {
+    failure = new UploadFailure(error instanceof GuardFailure ? error.code :
+      upload === "returned" ? "structured_output_read_failed" : "structured_output_prepare_failed", upload);
+  } finally {
+    let cleanupFailed = false;
+    if (handle) { try { await handle.close(); } catch { cleanupFailed = true; } }
+    if (directory) {
+      try { await files.rm(directory, { recursive: true, force: true }); }
+      catch { cleanupFailed = true; }
+    }
+    if (cleanupFailed) {
+      failure ??= new UploadFailure("structured_output_cleanup_failed", upload);
+      failure.cleanupFailed = true;
+    }
+  }
+  if (failure) throw failure;
+  return output;
+}
+export function liveIO(env, { execute = exec, files = OUTPUT_FILES } = {}) {
   const cfBase = `https://api.cloudflare.com/client/v4/accounts/${TARGET.account}`;
   const previewPath = `/workers/workers/${TARGET.worker}/previews/${TARGET.preview}`;
   async function get(url, token) {
@@ -289,14 +412,7 @@ export function liveIO(env, { execute = exec } = {}) {
     production: () => cf(`/workers/scripts/${TARGET.worker}/deployments`),
     upload: async args => {
       validateCommand(args);
-      // Exclude API-base overrides, OAuth/legacy auth, secret-file/output-path
-      // overrides and unrelated provider credentials from the Wrangler process.
-      const cliEnv = Object.fromEntries(["PATH", "TMPDIR", "LANG", "LC_ALL", "GITHUB_SHA", "GITHUB_REPOSITORY", "CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN"]
-        .filter(key => env[key] !== undefined).map(key => [key, env[key]]));
-      try {
-        const { stdout } = await execute("npx", args, { cwd: ROOT, env: { ...cliEnv, CI: "true", GITHUB_SERVER_URL: "https://github.com", WRANGLER_SEND_METRICS: "false", WRANGLER_WRITE_LOGS: "false" }, maxBuffer: 4 * 1024 * 1024 });
-        return stdout; // Parsed only in the separately classified normalization stage.
-      } catch { throw new GuardFailure("preview_upload_failed_output_suppressed"); }
+      return structuredUpload(args, env, execute, files);
     },
     anonymous: async url => {
       let response;

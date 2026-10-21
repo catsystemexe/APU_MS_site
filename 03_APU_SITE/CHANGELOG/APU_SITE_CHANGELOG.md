@@ -4,6 +4,12 @@ Status: CURRENT
 
 Records significant verified product/runtime/project changes. It is not a complete Git log. Historical Sites-era entries are retained where they remain useful; current deployment state must not be inferred from a changelog entry alone.
 
+## 2026-10-21 — ENV-D4-B2-STRUCTURED-OUTPUT-REPAIR
+
+- **LOCAL V2 PASS / SOURCE REPAIR UNPUBLISHED / HOSTED V3 NOT VERIFIED.** Replaced the unsupported whole-stdout JSON assumption with pinned Wrangler 4.150.0 `WRANGLER_OUTPUT_FILE_PATH` and exactly `wrangler-session → preview` NDJSON records. Source proves asset progress shares stdout with JSON; historical run stdout was not retained. Command, workflow, authorization, targets and binding/source/Access/production checks remain unchanged.
+- Private per-invocation OS-temp directory/file (`0700`/`0600`), exclusive no-follow creation, original-descriptor bounded read (64 KiB), strict schemas/timestamps/framing and unconditional cleanup; inherited output/log/API overrides remain excluded. No stdout fallback. Sanitized stages/upload states remain; production comparison follows invoked/uncertain upload even after output/cleanup failure, with no retry/rollback.
+- Offline verification: **254/254 focused + 158/158 related provider-free tests = 412/412 PASS**, zero failures/skips; syntax, typecheck, canonical build/artifact and offline pinned configuration PASS. **KI-03 OPEN** for hosted structured-output/full guarded verification, exact DEV KV ID and complete bindings including `APU_DEVELOPER_EMAILS`. Prior run `39567377884` remains CANCELLED / guard FAILURE despite the operator-verified hosted mutation and preservation; no new hosted success is claimed. Historical ENV-D3/V3 evidence is preserved; `automaticDevUpdatesConfigured=false` and deployment authorization false. No mutation, activation, rerun, merge or release; source publication awaits fresh safety preflight.
+
 ## 2026-10-21 — ENV-D4-B2-V3 runtime evidence reconciled
 
 - Recorded operator-verified hosted mutation from source `b266d4058bb7ca937d72ac2dcb834e631fbcabbc`: active DEV Preview Version `764e8603-d50b-41c5-94b6-030edd77755d`, rollout `4b89c5c6-444c-440b-a7d3-1e737e5fdc16`, 100% Preview allocation; named/unique Access redirects PASS and production deployment/Version/100% traffic preserved. Cloudflare evidence is operator-reported, not independently re-read by Codex; the new unique URL and inspection timestamp were not supplied.

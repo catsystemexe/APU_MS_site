@@ -5,8 +5,11 @@ import { execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
+import * as outputFs from "node:fs/promises";
+import { dirname, isAbsolute, relative, sep, join } from "node:path";
+import { tmpdir } from "node:os";
 import { TARGET, ACCESS_VARS, validateConfig, validateContext, validateCommand, validatePreview, validateDeployment,
-  productionState, previewArgs, updateExistingPreview, liveIO, normalizeUploadResponse, failureSummary, validatePreviewVersion } from "../ops/ci/dev-preview-guard.mjs";
+  productionState, previewArgs, updateExistingPreview, liveIO, normalizeUploadResponse, failureSummary, validatePreviewVersion, normalizeStructuredOutput, MAX_STRUCTURED_OUTPUT_BYTES } from "../ops/ci/dev-preview-guard.mjs";
 const require = createRequire(import.meta.url);
 const yaml = require("js-yaml"); // Existing locked tooling dependency; no dependency upgrade.
 const read = path => readFile(new URL(path, import.meta.url), "utf8");
@@ -40,6 +43,10 @@ const flatUpload = () => ({ type:'preview', version:1, worker_name:TARGET.worker
   preview_id:TARGET.previewId, preview_name:TARGET.preview, preview_slug:preview().slug,
   preview_urls:[TARGET.url], deployment_id:deployment(true).id, deployment_urls:deployment(true).urls,
   timestamp:'2026-10-20T17:00:00.000Z' });
+// Pinned writeOutput records, wholly synthetic; never historical stdout.
+const session = () => ({type:'wrangler-session',version:1,wrangler_version:'4.150.0',
+  command_line_args:previewArgs().slice(2),log_file_path:'/synthetic/wrangler.log',timestamp:'2026-10-21T10:00:00.000Z'});
+const structured = (entry=flatUpload(), first=session()) => `${JSON.stringify(first)}\n${JSON.stringify(entry)}\n`;
 const production = () => ({ deployments:[{id:"99999999-8888-7777-6666-555555555555", versions:[
   {version_id:"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",percentage:70},
   {version_id:"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",percentage:30},
@@ -49,7 +56,7 @@ function fixture() {
   const io={ env:env(), head:async()=>sha, config:async()=>structuredClone(generated), clean:async()=>calls.push("clean"), wranglerContract:async()=>calls.push("contract"),
     branchHead:async()=>{calls.push("branch");return sha;}, preview:async()=>{calls.push("preview");return preview();},
     latestVersion:async()=>{calls.push("version");return version(uploaded);}, production:async()=>{calls.push("production");return production();},
-    upload:async command=>{calls.push("upload");args.push(command);uploaded=true;return {preview:preview(),deployment:deployment(true)};},
+    upload:async command=>{calls.push("upload");args.push(command);uploaded=true;return structured();},
     anonymous:async url=>{calls.push("anonymous");assert.ok([TARGET.url,deployment(true).urls[0]].includes(url));},
   };
   return {io,calls,args};
@@ -215,14 +222,17 @@ test("source/target are checked again immediately before upload",async()=>{
   }
 });
 test("Wrangler adapter strips credential/base/output overrides and suppresses raw failures",async()=>{
-  const calls=[],input={...env(),PATH:'/synthetic/bin',CLOUDFLARE_API_BASE_URL:'https://forbidden.invalid',WRANGLER_OUTPUT_FILE_PATH:'/forbidden',OPENAI_API_KEY:'synthetic-forbidden'};
-  const io=liveIO(input,{execute:async(command,args,options)=>{calls.push({command,args,options});return {stdout:JSON.stringify({preview:preview(),deployment:deployment(true)})};}});
-  assert.deepEqual(normalizeUploadResponse(await io.upload(previewArgs()),sha),{
+  const calls=[],input={...env(),PATH:'/synthetic/bin',CLOUDFLARE_API_BASE_URL:'https://forbidden.invalid',WRANGLER_OUTPUT_FILE_PATH:'/forbidden',WRANGLER_OUTPUT_FILE_DIRECTORY:'/forbidden-directory',WRANGLER_LOG:'debug',WRANGLER_LOG_PATH:'/forbidden-log',OPENAI_API_KEY:'synthetic-forbidden'};
+  const io=liveIO(input,{execute:async(command,args,options)=>{calls.push({command,args,options});await outputFs.appendFile(options.env.WRANGLER_OUTPUT_FILE_PATH,structured());return {stdout:'PRIVATE_MIXED_PROGRESS_AND_JSON',stderr:'PRIVATE_STDERR'};}});
+  assert.deepEqual(normalizeStructuredOutput(await io.upload(previewArgs()),sha),{
     previewId:TARGET.previewId,previewName:TARGET.preview,previewSlug:preview().slug,uploadResourceId:deployment(true).id,uploadUrl:deployment(true).urls[0]});
   assert.equal(calls.length,1);assert.equal(calls[0].command,'npx');assert.deepEqual(calls[0].args,previewArgs());
   const passed=calls[0].options.env;
-  assert.deepEqual(Object.keys(passed).sort(),['PATH','GITHUB_SHA','GITHUB_REPOSITORY','CLOUDFLARE_ACCOUNT_ID','CLOUDFLARE_API_TOKEN','CI','GITHUB_SERVER_URL','WRANGLER_SEND_METRICS','WRANGLER_WRITE_LOGS'].sort());
+  assert.deepEqual(Object.keys(passed).sort(),['PATH','GITHUB_SHA','GITHUB_REPOSITORY','CLOUDFLARE_ACCOUNT_ID','CLOUDFLARE_API_TOKEN','CI','GITHUB_SERVER_URL','WRANGLER_SEND_METRICS','WRANGLER_WRITE_LOGS','WRANGLER_OUTPUT_FILE_PATH'].sort());
   assert.equal(passed.CLOUDFLARE_API_TOKEN,input.CLOUDFLARE_API_TOKEN);
+  assert.notEqual(passed.WRANGLER_OUTPUT_FILE_PATH,input.WRANGLER_OUTPUT_FILE_PATH);
+  await assert.rejects(outputFs.lstat(passed.WRANGLER_OUTPUT_FILE_PATH),{code:'ENOENT'});
+  await assert.rejects(outputFs.lstat(dirname(passed.WRANGLER_OUTPUT_FILE_PATH)),{code:'ENOENT'});
   await assert.rejects(io.upload([...previewArgs(),'--secrets-file','forbidden']));assert.equal(calls.length,1);
   const failure=liveIO(env(),{execute:async()=>{throw Error('SYNTHETIC_PRIVATE_PROVIDER_OR_TOKEN_DETAIL');}});
   await assert.rejects(failure.upload(previewArgs()),error=>error.message==='preview_upload_failed_output_suppressed');
@@ -312,12 +322,8 @@ for(const value of [null,[],{deployment:deployment()}, {result:deployment()}, {i
     assert.equal(f.args.length,0);
   });
 }
-for(const [label,raw] of [
-  ['nested stdout',()=>JSON.stringify({preview:preview(),deployment:deployment(true)})],
-  ['flat writeOutput record',()=>JSON.stringify(flatUpload())],
-])test(`mocked successful once flow normalizes ${label}, reads back identity/source/bindings and uploads exactly once`,async()=>{
-  const f=fixture(),original=f.io.upload;
-  f.io.upload=async args=>{await original(args);return raw();};
+test("mocked successful once flow normalizes the pinned session/Preview sequence and uploads exactly once",async()=>{
+  const f=fixture();
   const result=await updateExistingPreview(f.io);
   assert.equal(result.versionId,version(true).id);assert.equal(result.uploadResourceId,deployment(true).id);assert.equal(result.versionUrl,version(true).urls[0]);
   assert.equal(result.upload,'returned');assert.equal(f.args.length,1);
@@ -371,7 +377,7 @@ for(const [label,change] of [
 test("flat response cannot fill missing read-back source or bindings",async()=>{
   for(const field of ['annotations','env']){
     const f=fixture(),upload=f.io.upload,get=f.io.latestVersion;
-    f.io.upload=async args=>{await upload(args);return flatUpload();};
+    f.io.upload=async args=>{await upload(args);return structured();};
     f.io.latestVersion=async()=>{const d=await get();if(f.calls.includes('upload'))delete d[field];return d;};
     await assert.rejects(updateExistingPreview(f.io),error=>error.stage==='post_upload_readback');
     assert.equal(f.args.length,1);assert.equal(f.calls.at(-1),'production');
@@ -379,7 +385,7 @@ test("flat response cannot fill missing read-back source or bindings",async()=>{
 });
 test("flat output slug must agree with authoritative Preview read-back",async()=>{
   const f=fixture(),upload=f.io.upload;
-  f.io.upload=async args=>{await upload(args);return {...flatUpload(),preview_slug:'different-slug'};};
+  f.io.upload=async args=>{await upload(args);return structured({...flatUpload(),preview_slug:'different-slug'});};
   await assert.rejects(updateExistingPreview(f.io),{message:'upload_preview_slug_mismatch',stage:'post_upload_readback',upload:'returned'});
   assert.equal(f.args.length,1);assert.equal(f.calls.at(-1),'production');
 });
@@ -394,11 +400,11 @@ test("nested stdout cannot omit or contradict its Preview slug",async()=>{
 test("subprocess failure versus invalid returned JSON have distinct stages and disclose no raw output",async()=>{
   for(const returned of [false,true]){
     const f=fixture();let executions=0;
-    const adapter=liveIO(env(),{execute:async()=>{executions++;if(!returned)throw Error('PRIVATE_TOKEN_STDERR');return {stdout:'PRIVATE_TOKEN_STDOUT'};}});
+    const adapter=liveIO(env(),{execute:async(command,args,options)=>{executions++;if(!returned)throw Error('PRIVATE_TOKEN_STDERR');await outputFs.appendFile(options.env.WRANGLER_OUTPUT_FILE_PATH,'PRIVATE_TOKEN_FILE\n'+JSON.stringify(flatUpload())+'\n');return {stdout:'PRIVATE_TOKEN_STDOUT'};}});
     f.io.upload=adapter.upload;
     await assert.rejects(updateExistingPreview(f.io),error=>{
       assert.deepEqual(failureSummary(error),{stage:returned?'upload_response_normalization':'wrangler_execution',
-        cause:returned?'upload_json_invalid':'preview_upload_failed_output_suppressed',upload:returned?'returned':'invoked'});
+        cause:returned?'structured_output_json_invalid':'preview_upload_failed_output_suppressed',upload:returned?'returned':'invoked'});
       assert.doesNotMatch(JSON.stringify(failureSummary(error)),/PRIVATE/);return true;
     });
     assert.equal(executions,1);assert.equal(f.calls.filter(x=>x==='production').length,2);
@@ -481,12 +487,10 @@ for(const patch of [{}, {'workers/commit_sha':'f'.repeat(40)}])test("new Version
   await assert.rejects(updateExistingPreview(f.io),{message:'version_source_mismatch',stage:'post_upload_readback',upload:'returned'});
   assert.equal(f.args.length,1);assert.equal(f.calls.at(-1),'production');
 });
-test("nested upload Version shape is normalized separately from typed SDK upload metadata",async()=>{
-  const f=fixture(),upload=f.io.upload;
-  f.io.upload=async args=>{await upload(args);return JSON.stringify({preview:preview(),deployment:version(true)});};
-  const result=await updateExistingPreview(f.io);
-  assert.equal(result.versionId,version(true).id);assert.equal(result.uploadResourceId,version(true).id);
-  assert.equal(f.args.length,1);
+test("legacy nested resource validation remains strict but is not the live output transport",()=>{
+  const result=normalizeUploadResponse({preview:preview(),deployment:version(true)},sha);
+  assert.equal(result.uploadResourceId,version(true).id);
+  assert.throws(()=>normalizeStructuredOutput(JSON.stringify({preview:preview(),deployment:version(true)}),sha));
   for(const annotations of [{},{'workers/commit_sha':'f'.repeat(40)}]) {
     assert.throws(()=>normalizeUploadResponse({preview:preview(),deployment:{...version(true),annotations}},sha),{message:'version_source_mismatch'});
   }
@@ -502,7 +506,238 @@ test("every Version read is preceded by validated Preview metadata and a post-up
   f.io.latestVersion=async()=>{assert.equal(f.calls.at(-1),'preview');return get();};
   await updateExistingPreview(f.io);assert.equal(f.args.length,1);
   const mismatch=fixture(),upload=mismatch.io.upload;
-  mismatch.io.upload=async args=>{await upload(args);return {...flatUpload(),deployment_urls:['https://abcd1234-apu-ms-site.catsystem-exe.workers.dev']};};
+  mismatch.io.upload=async args=>{await upload(args);return structured({...flatUpload(),deployment_urls:['https://abcd1234-apu-ms-site.catsystem-exe.workers.dev']});};
   await assert.rejects(updateExistingPreview(mismatch.io),{message:'upload_version_url_mismatch',stage:'post_upload_readback',upload:'returned'});
   assert.equal(mismatch.args.length,1);assert.equal(mismatch.calls.at(-1),'production');
+});
+
+// Structured output-file contract: fixtures are source-derived/synthetic only.
+test("pinned writeOutput emits session then Preview records and includes timestamps",async()=>{
+  const source=await read('../node_modules/wrangler/wrangler-dist/cli.js');
+  const sessionSource=source.slice(source.indexOf('type: "wrangler-session"'),source.indexOf('type: "wrangler-session"')+310);
+  for(const field of ['version: 1','wrangler_version: version2','command_line_args: redactEventCode(argv)','log_file_path: debugLogFilepath']) assert.ok(sessionSource.includes(field));
+  assert.ok(source.includes('fs14.appendFileSync(outputFilePath, entryJSON + "\\n")'));
+  assert.ok(source.includes('variableName: "WRANGLER_OUTPUT_FILE_PATH"'));
+  const writer=source.slice(source.indexOf('function writeOutput(entry)'),source.indexOf('function getOutputFilePath()'));
+  assert.ok(writer.includes('timestamp: (/* @__PURE__ */ new Date()).toISOString()'));
+  assert.ok(source.includes('type: "command-failed"'));
+  assert.ok(source.includes('logger.info("\\u{1F300} Building list of assets...")'));
+  assert.ok(source.includes('JSON.stringify({ preview: previewResource, deployment }, null, 2)'));
+  assert.deepEqual(normalizeStructuredOutput(structured(),sha),normalizeUploadResponse(flatUpload(),sha));
+});
+for(const [label,raw] of [
+  ['empty',''], ['only newline','\n'], ['missing session',JSON.stringify(flatUpload())+'\n'],
+  ['missing Preview',JSON.stringify(session())+'\n'],
+  ['missing terminal newline',structured().slice(0,-1)],
+  ['extra terminal blank',structured()+'\n'], ['leading blank','\n'+structured()],
+  ['interior blank',JSON.stringify(session())+'\n\n'+JSON.stringify(flatUpload())+'\n'],
+  ['reversed records',structured(session(),flatUpload())],
+  ['duplicate session',structured(session(),session())], ['duplicate Preview',structured(flatUpload(),flatUpload())],
+  ['third record',structured()+JSON.stringify(flatUpload())+'\n'],
+  ['extra session',JSON.stringify(session())+'\n'+structured()],
+  ['command failure',structured({type:'command-failed',version:1,message:'PRIVATE_PROVIDER_ERROR'})],
+  ['unknown type',structured({...flatUpload(),type:'deploy'})],
+  ['invalid first JSON','PRIVATE_TOKEN\n'+JSON.stringify(flatUpload())+'\n'],
+  ['invalid second JSON',JSON.stringify(session())+'\nPRIVATE_TOKEN\n'],
+  ['truncated JSON',JSON.stringify(session())+'\n{"type":"preview"\n'],
+  ['two documents on one line',JSON.stringify(session())+' '+JSON.stringify(flatUpload())+'\n'],
+  ['non-JSON prefix','PRIVATE_PREFIX'+structured()], ['non-JSON suffix',structured()+'PRIVATE_SUFFIX'],
+  ['standalone stdout',JSON.stringify({preview:preview(),deployment:deployment(true)})],
+  ['nested stdout as record',structured({preview:preview(),deployment:deployment(true)})],
+  ['root array',structured([])], ['null root',structured(null)],
+  ['oversized','x'.repeat(MAX_STRUCTURED_OUTPUT_BYTES+1)],
+  ['CRLF framing',structured().replaceAll('\n','\r\n')], ['BOM prefix','\ufeff'+structured()],
+  ['noncanonical whitespace',' '+structured()],
+  ['duplicate JSON key',structured().replace('"worker_name":"apu-ms-site"','"worker_name":"other","worker_name":"apu-ms-site"')],
+])test(`strict NDJSON rejects ${label} without exposing contents`,()=>{
+  assert.throws(()=>normalizeStructuredOutput(raw,sha),error=>{
+    assert.doesNotMatch(JSON.stringify(failureSummary(error)),/PRIVATE|PROVIDER|TOKEN/);return true;
+  });
+});
+for(const [label,change] of [
+  ['session schema version',s=>s.version=2], ['wrong Wrangler version',s=>s.wrangler_version='4.151.0'],
+  ['missing Wrangler version',s=>delete s.wrangler_version], ['unknown session property',s=>s.extra='PRIVATE_TOKEN'],
+  ['relative log path',s=>s.log_file_path='relative.log'], ['non-string log path',s=>s.log_file_path=null],
+  ['wrong command',s=>s.command_line_args[0]='deploy'], ['different target flag',s=>s.command_line_args[6]='other'],
+  ['extra CLI flag',s=>s.command_line_args.push('--secrets-file','PRIVATE_PATH')], ['missing args',s=>delete s.command_line_args],
+  ['args wrong type',s=>s.command_line_args='preview'], ['missing timestamp',s=>delete s.timestamp],
+  ['non-string timestamp',s=>s.timestamp=1], ['noncanonical timestamp',s=>s.timestamp='2026-10-21T10:00:00Z'],
+  ['impossible timestamp',s=>s.timestamp='2026-02-30T10:00:00.000Z'],
+])test(`strict session rejects ${label}`,()=>{
+  const first=session();change(first);assert.throws(()=>normalizeStructuredOutput(structured(flatUpload(),first),sha));
+});
+for(const [label,change] of [
+  ['missing timestamp',p=>delete p.timestamp], ['invalid timestamp',p=>p.timestamp='not-a-date'],
+  ['impossible timestamp',p=>p.timestamp='2026-02-30T10:00:00.000Z'],
+  ['wrong target',p=>p.preview_id='f'.repeat(32)], ['wrong target name',p=>p.preview_name='other'],
+  ['missing resource ID',p=>delete p.deployment_id], ['invalid resource ID',p=>p.deployment_id='invalid'],
+  ['unknown field',p=>p.extra='PRIVATE_BINDING'], ['wrong schema version',p=>p.version=2],
+  ['wrong unique URL',p=>p.deployment_urls=['https://other.invalid']],
+])test(`structured Preview validation rejects ${label}`,()=>{
+  const entry=flatUpload();change(entry);assert.throws(()=>normalizeStructuredOutput(structured(entry),sha));
+});
+function fileFlow(mutate=async path=>outputFs.appendFile(path,structured()),files=outputFs) {
+  const f=fixture(),original=f.io.upload,paths=[];
+  f.io.upload=liveIO(env(),{files,execute:async(command,args,options)=>{
+    assert.equal(command,'npx');assert.deepEqual(args,previewArgs());
+    const path=options.env.WRANGLER_OUTPUT_FILE_PATH;paths.push(path);
+    await original(args);
+    await mutate(path,options);
+    // Even perfectly shaped stdout is irrelevant; only the private file counts.
+    return {stdout:JSON.stringify({preview:preview(),deployment:deployment(true)}),stderr:'PRIVATE_STDERR'};
+  }}).upload;
+  return {...f,paths};
+}
+async function gone(path) {
+  await assert.rejects(outputFs.lstat(path),{code:'ENOENT'});
+  await assert.rejects(outputFs.lstat(dirname(path)),{code:'ENOENT'});
+}
+test("private output lifecycle: exclusive empty file, restrictive modes, outside checkout, unique per attempt, cleanup before read-back",async()=>{
+  const paths=[];
+  for(let i=0;i<2;i++) {
+    const f=fileFlow(async(path,options)=>{
+      paths.push(path);
+      assert.ok(isAbsolute(path));
+      const root=fileURLToPath(new URL('..',import.meta.url));
+      assert.ok(relative(root,path).startsWith(`..${sep}`));
+      assert.ok(path.startsWith((await outputFs.realpath(tmpdir()))+sep));
+      const file=await outputFs.lstat(path),dir=await outputFs.lstat(dirname(path));
+      assert.ok(file.isFile());assert.equal(file.nlink,1);assert.equal(file.size,0);
+      assert.equal(file.mode&0o777,0o600);assert.equal(dir.mode&0o777,0o700);
+      assert.equal(file.uid,process.getuid());assert.equal(dir.uid,process.getuid());
+      assert.equal(options.env.WRANGLER_OUTPUT_FILE_DIRECTORY,undefined);
+      await outputFs.appendFile(path,structured());
+    });
+    const read=f.io.latestVersion;
+    f.io.latestVersion=async()=>{if(f.paths.length)await gone(f.paths[0]);return read();};
+    const result=await updateExistingPreview(f.io);
+    assert.equal(result.uploadResourceId,deployment(true).id);assert.equal(f.args.length,1);
+    assert.equal(f.calls.filter(x=>x==='production').length,2);await gone(f.paths[0]);
+  }
+  assert.notEqual(paths[0],paths[1]);assert.notEqual(dirname(paths[0]),dirname(paths[1]));
+});
+for(const [label,mutate,cause] of [
+  ['missing file',async path=>outputFs.unlink(path),'structured_output_read_failed'],
+  ['empty file',async()=>{},'structured_output_empty'],
+  ['invalid JSON',async path=>outputFs.appendFile(path,'PRIVATE_FILE_TOKEN\n'+JSON.stringify(flatUpload())+'\n'),'structured_output_json_invalid'],
+  ['truncated file',async path=>outputFs.appendFile(path,structured().slice(0,-3)),'structured_output_incomplete'],
+  ['duplicate Preview',async path=>outputFs.appendFile(path,structured()+JSON.stringify(flatUpload())+'\n'),'structured_output_record_count_invalid'],
+  ['failed command record',async path=>outputFs.appendFile(path,structured({type:'command-failed',version:1,message:'PRIVATE_TOKEN'})),'structured_output_sequence_invalid'],
+  ['oversized',async path=>outputFs.appendFile(path,'x'.repeat(MAX_STRUCTURED_OUTPUT_BYTES+1)),'structured_output_oversized'],
+  ['invalid UTF8',async path=>outputFs.appendFile(path,Buffer.from([0xff,0xfe])),'structured_output_encoding_invalid'],
+  ['non-regular entry',async path=>{await outputFs.unlink(path);await outputFs.mkdir(path);},'structured_output_file_invalid'],
+  ['changed permissions',async path=>{await outputFs.chmod(path,0o644);await outputFs.appendFile(path,structured());},'structured_output_file_invalid'],
+])test(`file ${label}: no stdout fallback, cleanup and production postflight`,async()=>{
+  const f=fileFlow(mutate);
+  await assert.rejects(updateExistingPreview(f.io),error=>{
+    assert.deepEqual(failureSummary(error),{stage:'upload_response_normalization',cause,upload:'returned'});
+    assert.doesNotMatch(JSON.stringify(error),/PRIVATE|apu-preview-output|result.ndjson/);return true;
+  });
+  assert.equal(f.args.length,1);assert.equal(f.calls.filter(x=>x==='production').length,2);
+  assert.equal(f.calls.at(-1),'production');await gone(f.paths[0]);
+});
+test("symlink substitution rejects without reading or deleting the target",async()=>{
+  const victimDir=await outputFs.mkdtemp(join(tmpdir(),'apu-output-victim-')),victim=join(victimDir,'private');
+  await outputFs.writeFile(victim,'PRIVATE_VICTIM');
+  try {
+    const f=fileFlow(async path=>{await outputFs.unlink(path);await outputFs.symlink(victim,path);});
+    await assert.rejects(updateExistingPreview(f.io),{stage:'upload_response_normalization',code:'structured_output_file_invalid',upload:'returned'});
+    await gone(f.paths[0]);assert.equal(await outputFs.readFile(victim,'utf8'),'PRIVATE_VICTIM');
+    assert.equal(f.calls.at(-1),'production');
+  } finally {await outputFs.rm(victimDir,{recursive:true,force:true});}
+});
+test("hardlinked output is not accepted as a private single-use file",async()=>{
+  const f=fileFlow(async path=>{await outputFs.appendFile(path,structured());await outputFs.link(path,join(dirname(path),'alias'));});
+  await assert.rejects(updateExistingPreview(f.io),{code:'structured_output_file_invalid',upload:'returned'});
+  await gone(f.paths[0]);assert.equal(f.calls.at(-1),'production');
+});
+test("exclusive creation rejects a pre-existing file before command invocation",async()=>{
+  let pathSeen,executions=0;
+  const files={...outputFs,open:async(path,flags,mode)=>{
+    pathSeen=path;await outputFs.writeFile(path,'PRIVATE_EXISTING');return outputFs.open(path,flags,mode);
+  }};
+  const f=fixture();f.io.upload=liveIO(env(),{files,execute:async()=>{executions++;}}).upload;
+  await assert.rejects(updateExistingPreview(f.io),{code:'structured_output_prepare_failed',stage:'wrangler_execution',upload:'unattempted'});
+  assert.equal(executions,0);assert.equal(f.calls.filter(x=>x==='production').length,1);await gone(pathSeen);
+});
+test("failed descriptor read is sanitized, cleaned and classified after subprocess return",async()=>{
+  const files={...outputFs,open:async(...args)=>{
+    const h=await outputFs.open(...args);
+    return {stat:()=>h.stat(),close:()=>h.close(),read:async()=>{throw Error('PRIVATE_READ_PATH_TOKEN');}};
+  }};
+  const f=fileFlow(undefined,files);
+  await assert.rejects(updateExistingPreview(f.io),{code:'structured_output_read_failed',stage:'upload_response_normalization',upload:'returned'});
+  await gone(f.paths[0]);assert.equal(f.calls.at(-1),'production');
+});
+test("append during bounded descriptor read fails closed and still cleans up",async()=>{
+  let pathSeen,appended=false;
+  const files={...outputFs,open:async(path,...args)=>{
+    pathSeen=path;const h=await outputFs.open(path,...args);
+    return {stat:()=>h.stat(),close:()=>h.close(),read:async(...readArgs)=>{
+      const result=await h.read(...readArgs);
+      if(!appended){appended=true;await outputFs.appendFile(path,'x'.repeat(MAX_STRUCTURED_OUTPUT_BYTES));}
+      return result;
+    }};
+  }};
+  const f=fileFlow(undefined,files);
+  await assert.rejects(updateExistingPreview(f.io),{code:'structured_output_oversized',upload:'returned'});
+  await gone(pathSeen);assert.equal(f.calls.at(-1),'production');
+});
+test("nonzero subprocess exit never parses output and retains uncertain upload state",async()=>{
+  const f=fileFlow(async path=>{await outputFs.appendFile(path,structured());throw Error('PRIVATE_EXEC_STDERR_TOKEN');});
+  await assert.rejects(updateExistingPreview(f.io),error=>{
+    assert.deepEqual(failureSummary(error),{stage:'wrangler_execution',cause:'preview_upload_failed_output_suppressed',upload:'invoked'});
+    assert.doesNotMatch(JSON.stringify(error),/PRIVATE/);return true;
+  });
+  await gone(f.paths[0]);assert.equal(f.args.length,1);assert.equal(f.calls.filter(x=>x==='production').length,2);
+});
+for(const outcome of ['success','execution failure','normalization failure','production failure']) test(`cleanup failure is sanitized and cannot bypass production check after ${outcome}`,async()=>{
+  const files={...outputFs,rm:async()=>{throw Error('PRIVATE_CLEANUP_PATH');}};
+  const f=fileFlow(async path=>{
+    if(outcome==='execution failure')throw Error('PRIVATE_EXEC_STDERR');
+    await outputFs.appendFile(path,outcome==='normalization failure'?'PRIVATE_INVALID\n':structured());
+  },files);
+  if(outcome==='production failure') {let reads=0;f.io.production=async()=>{if(++reads===2)throw Error('PRIVATE_PRODUCTION');return production();};}
+  try {
+    await assert.rejects(updateExistingPreview(f.io),error=>{
+      const summary=failureSummary(error);
+      if(outcome==='production failure') {
+        assert.equal(summary.stage,'production_preservation_postflight');
+        assert.equal(summary.priorFailure.operation.cleanup,'structured_output_cleanup_failed');
+      } else {
+        assert.equal(summary.cleanup,'structured_output_cleanup_failed');
+        assert.equal(summary.stage,outcome==='execution failure'?'wrangler_execution':'upload_response_normalization');
+      }
+      assert.doesNotMatch(JSON.stringify(summary),/PRIVATE|apu-preview-output|result.ndjson/);return true;
+    });
+    assert.equal(f.args.length,1);
+    if(outcome!=='production failure')assert.equal(f.calls.filter(x=>x==='production').length,2);
+  } finally {await outputFs.rm(dirname(f.paths[0]),{recursive:true,force:true});}
+});
+test("close failure has a fixed cleanup code and still attempts production comparison",async()=>{
+  const files={...outputFs,open:async(...args)=>{
+    const h=await outputFs.open(...args);
+    return {stat:()=>h.stat(),read:(...r)=>h.read(...r),close:async()=>{await h.close();throw Error('PRIVATE_CLOSE_ERROR');}};
+  }};
+  const f=fileFlow(undefined,files);
+  await assert.rejects(updateExistingPreview(f.io),{code:'structured_output_cleanup_failed',upload:'returned'});
+  await gone(f.paths[0]);assert.equal(f.calls.at(-1),'production');
+});
+for(const fault of ['read-back','production'])test(`temporary output is already removed before ${fault} failure`,async()=>{
+  const f=fileFlow(),read=f.io.latestVersion;
+  if(fault==='read-back')f.io.latestVersion=async()=>{if(f.paths.length){await gone(f.paths[0]);throw Error('PRIVATE_READBACK');}return read();};
+  else {let count=0;f.io.production=async()=>{if(++count===2){await gone(f.paths[0]);throw Error('PRIVATE_PRODUCTION');}return production();};}
+  await assert.rejects(updateExistingPreview(f.io),{stage:fault==='read-back'?'post_upload_readback':'production_preservation_postflight',upload:'returned'});
+  await gone(f.paths[0]);assert.equal(f.args.length,1);
+});
+test("authorization and both preflights reject before creating output or executing a command",async()=>{
+  for(const failure of ['authorization','second preflight']) {
+    let created=0,executed=0;
+    const f=fixture();
+    f.io.upload=liveIO(env(),{files:{...outputFs,mkdtemp:async()=>{created++;throw Error('must not be called');}},execute:async()=>{executed++;}}).upload;
+    if(failure==='authorization')f.io.env.APU_DEV_PREVIEW_CI_ENABLED='disabled';
+    else {let reads=0;f.io.branchHead=async()=>++reads===2?'f'.repeat(40):sha;}
+    await assert.rejects(updateExistingPreview(f.io));
+    assert.equal(created,0);assert.equal(executed,0);assert.equal(f.args.length,0);
+  }
 });
