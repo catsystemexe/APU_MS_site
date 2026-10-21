@@ -7,6 +7,68 @@ Production Worker: `apu-ms-site`; stable URL: `https://apu-ms-site.catsystem-exe
 Dedicated DEV target: `apu-ms-site-dev`, source-prepared by P3 but **not provisioned or hosted-verified**.
 `automaticDevUpdatesConfigured=false`; future deployment authorization remains false.
 
+## Current solo-operator governance — P4-B1-FINAL / P4-B2 (2026-10-21)
+
+**Release controls verified / no merge or deployment authorized.** The operator reports
+the effective `next` protection below as operationally updated and verified. This
+documentation task did not independently read the administration protection endpoint
+or change protection, permissions or settings. GitHub run/ref/check-provider evidence
+in the next section was independently read back.
+
+| Effective control | Verified operator-reported setting |
+| --- | --- |
+| Pull request | Required |
+| Required human reviews | **0**; no independent reviewer or additional approval mechanism |
+| Required status check | `Provider-free release checks` |
+| Check provider | GitHub Actions, **App ID `15368`** |
+| Administrator enforcement | ON |
+| Force push / branch deletion | Prohibited / prohibited |
+| Strict branch-up-to-date check | OFF |
+| Auto-merge | OFF |
+
+`catsystemexe` is the **sole intended human integration/release authority**. This is
+the project's governance rule. PR/check protection, administrator enforcement and
+zero required reviews do not constitute an identity allowlist restricting all GitHub
+merge permissions to that account; this record is not an audit of collaborator,
+administrator or bypass permissions. No GitHub permission change is implied.
+Pilot application access remains separate from repository integration authority.
+
+CI SUCCESS is evidence for a specific source and tested merge, **not authorization
+to merge or deploy**. `catsystemexe` must explicitly authorize integration and must
+separately authorize any production deployment. No second reviewer is required.
+With strict up-to-date OFF, GitHub does not require an up-to-date merge check before
+integration; recheck the actual candidate/base against the assessed run evidence.
+Draft PR #62 remains **OPEN / DRAFT / unmerged**: verification evidence only, not an
+approved production release. Auto-merge is not enabled or authorized.
+
+## Verified source and PR provenance — 2026-10-21
+
+Exact repair `8f5d0d69e4ce5f55a748c77eb2e9aabde5f8f049`, parent
+`ccdf975cab8665386725cfa042b8af9b240d5cce`, was published by normal fast-forward to `dev`.
+
+| Actual run | Result | Check identity |
+| --- | --- | --- |
+| [Push `39650429541`](https://github.com/catsystemexe/APU_MS_site/actions/runs/39650429541) | SUCCESS, 648/648 tests | `Provider-free release checks`, App `15368` |
+| [PR #62 `39650438040`](https://github.com/catsystemexe/APU_MS_site/actions/runs/39650438040) | SUCCESS, 648/648 tests | `Provider-free release checks`, App `15368` |
+
+Both are completed first attempts; their successful logs verify the candidate source
+SHA above. The PR tested synthetic merge `50495afc0ca8760e8e9412ee8aef53c1d9b48acb`,
+with exactly base `b0162eb2c0f72d1bc0fea2886ae8695418beb251` (`next`) then the candidate
+as its parents. The push tested the candidate directly. The PR reported optional
+webhook merge metadata `differs` while the authoritative checkout/parent validation
+passed. This observed new value does not reconstruct the historical event payload.
+Historical [run `39630801929`](https://github.com/catsystemexe/APU_MS_site/actions/runs/39630801929)
+remains **FAILURE**, not superseded with a successful result or manually retried.
+
+Production Builds OFF and Preview Builds OFF, production branch `next` and the
+disabled old DEV/capture gates are accepted **operator-verified configuration evidence**,
+not a fresh Cloudflare runtime inspection. No dedicated DEV Worker is provisioned;
+KI-01/KI-03 remain OPEN and automatic DEV deployment remains disabled. The separate
+`APU manual deploy` hook boundary below is unchanged. This closeout itself remains
+unpublished until separate source-publication authorization and fresh disabled-Builds/
+gate preflight. Any later authorized documentation push may generate new push and
+PR #62 checks; assess both as new results, not as these already completed runs.
+
 ## Evidence and verification boundary
 
 The `Pilot release verification` workflow runs provider-free checks on pushes to `dev`
@@ -27,7 +89,11 @@ merge SHA. The local merge parents must equal the event's base and candidate SHA
 that order. Both SHAs are recorded in logs and the job summary. Reject stale or unproven
 relationships; do not substitute a successful check for a different candidate.
 
-### PR provenance contract repair — P4-B1-R1 (2026-10-21)
+### Historical PR provenance repair preparation — P4-B1-R1 (2026-10-21)
+
+The source contract remains current. Preparation-time publication/hosted-verification
+limits below were superseded by the independently verified runs above; retain the
+historical failure and its uncaptured-payload limitation.
 
 | Value | Source and trust boundary |
 | --- | --- |
@@ -71,10 +137,11 @@ evaluate that actual result before any branch-protection change, without rerunni
 the historical failure or marking the PR ready/merged.
 
 A successful offline job proves neither hosted acceptance nor a deployment. A new
-workflow is **CI NOT VERIFIED** until its actual run completes successfully. No required
-status check is configured by this task. P2's PR/one-approval protection on `next` is
-operator-reported; eligible reviewer permissions and effective protection must be
-read back before integration. A skipped/missing job is not a release-check PASS.
+workflow is **CI NOT VERIFIED** until its actual run completes successfully. The two
+specific runs above passed; future candidate results must be assessed independently.
+The current required check and zero-review solo-operator model are recorded above;
+the earlier P2 one-review assumption is historical and superseded. Recheck effective
+protection before integration. A skipped/missing job is not a release-check PASS.
 
 ## Ordered future release gates
 
@@ -93,13 +160,16 @@ read back before integration. A skipped/missing job is not a release-check PASS.
    F2/F3 boundaries, Access/login/roles, provider-secret handling, DEV/production
    isolation, logging and retention review. Assess KI-03 explicitly; offline parser
    tests do not close its missing hosted structured-output/full-binding evidence.
-5. Under **separate authorization**, create a release PR from `dev` to `next` for the
-   exact candidate. Do not use PR #60 or silently integrate the stabilization branch.
-6. Require completed successful release checks on the current merge candidate and
-   an eligible **independent** approving reviewer. Recheck branch protection and
-   reviewer eligibility. Pilot application access grants no GitHub review permissions.
-   Configure required status checks only in a separately authorized administration task.
-7. Obtain explicit operator approval for integration, then integrate only within
+5. Identify the exact candidate in the release PR from `dev` to `next`. Existing
+   Draft PR #62 is verification evidence, not an approved release; this record
+   authorizes no Draft transition or integration. Do not use PR #60 or silently
+   integrate the stabilization branch.
+6. Require successful `Provider-free release checks` from GitHub Actions App `15368`
+   for the assessed current candidate/merge and recheck effective protection and base
+   provenance. Required human reviews are **0**; do not add an independent reviewer
+   requirement. Pilot application access grants no integration authority. No protection
+   or permission change is performed by this runbook.
+7. Obtain explicit `catsystemexe` approval for integration, then integrate only within
    that authorization. A green workflow alone does not authorize a merge or release.
 8. Read back automatic **Production Builds OFF** and **Preview Builds OFF**, production
    branch `next`, both old CI gates exactly `disabled`, no competing operation and
@@ -109,7 +179,7 @@ read back before integration. A skipped/missing job is not a release-check PASS.
    The prior baseline is Deployment `08a0cd96-fb57-4f2f-9a6b-14950420b89e`, Version
    `2a28cdf6-5a61-4f6c-be55-382e5bfa28cd` at 100%, from earlier operator evidence;
    **re-read it**, do not assume it remains current from this runbook.
-10. Obtain **separate deployment authorization**, naming the exact integrated source,
+10. Obtain **separate deployment authorization from `catsystemexe`**, naming the exact integrated source,
     account, production target, reviewed mechanism, credential scope and rollback target.
 11. Execute only that selected reviewed mechanism within its authorization. This
     runbook deliberately supplies no executable deployment or hook invocation command.
