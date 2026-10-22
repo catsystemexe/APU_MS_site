@@ -37,7 +37,7 @@ If project state materially contradicts instructions:
 ## 7. Codex Cloud execution
 Codex Cloud is the default executor for APU source-code implementation.
 
-Codex Cloud may expose its checkout as branch `work` even when the task is based on `next`.
+Codex Cloud may expose its checkout as branch `work` even when the task is based on `dev`.
 
 Before declaring a wrong branch, verify:
 - expected HEAD commit;

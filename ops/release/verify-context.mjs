@@ -7,6 +7,12 @@ const sha = value => typeof value === 'string' && value.length === 40 && /^[a-f0
 class ReleaseContextFailure extends Error {}
 const requireValue = (condition, code) => { if (!condition) throw new ReleaseContextFailure(code); };
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
+const MIGRATION_FILES = new Set([
+  '.github/workflows/pilot-release-verification.yml', 'ops/release/verify-context.mjs',
+  'ops/release/run-regressions.mjs', 'tests/pilot-release-verification.test.mjs',
+  'ops/release/PILOT_RELEASE_RUNBOOK.md', '05_WORKFLOW/APU_PROJECT_RULES.md',
+  '05_WORKFLOW/IMPLEMENTATION_ROLE.md', 'AGENTS.md',
+]);
 
 // Event fixtures in tests are synthetic GitHub contracts, not hosted evidence.
 export function validateReleaseContext(env, event, checkout) {
@@ -24,18 +30,26 @@ export function validateReleaseContext(env, event, checkout) {
   requireValue(['opened', 'synchronize', 'reopened'].includes(event.action) && pr?.state === 'open' && pr.merged === false, 'unsupported_pr_state');
   requireValue(Number.isSafeInteger(event.number) && event.number > 0 && pr.number === event.number &&
     env.GITHUB_REF === `refs/pull/${event.number}/merge`, 'unsupported_pr_ref');
-  requireValue(pr.head?.repo?.full_name === REPOSITORY && pr.base?.repo?.full_name === REPOSITORY &&
-    pr.head.ref === 'dev' && pr.base.ref === 'next', 'unsupported_pr_branches');
+  requireValue(pr.head?.repo?.full_name === REPOSITORY && pr.base?.repo?.full_name === REPOSITORY, 'unsupported_pr_branches');
+  const release = pr.head.ref === 'dev' && ['next', 'public'].includes(pr.base.ref);
+  // Temporary, exact branch pairs for the two code-only migration PRs. Never
+  // accept an arbitrary feature/fork PR or application changes via this path.
+  const migration = (pr.head.ref === 'codex/production-branch-dev-compat' && pr.base.ref === 'dev') ||
+    (pr.head.ref === 'codex/production-branch-compat' && ['next', 'public'].includes(pr.base.ref));
+  requireValue(release || migration, 'unsupported_pr_branches');
   requireValue(sha(pr.head.sha) && sha(pr.base.sha), 'invalid_pr_source');
   requireValue(Array.isArray(checkout.parents) && checkout.parents.length === 2 &&
     checkout.parents[0] === pr.base.sha && checkout.parents[1] === pr.head.sha, 'unproven_merge_source');
+  if (migration) requireValue(Array.isArray(checkout.changedFiles) && checkout.changedFiles.length > 0 &&
+    checkout.changedFiles.every(path => typeof path === 'string' && MIGRATION_FILES.has(path)), 'unsupported_migration_scope');
   // Actions defines GITHUB_SHA as the merge-ref commit. The nullable webhook
   // merge_commit_sha reflects asynchronous mergeability metadata; it is not an
   // additional checkout authority. Identity is proven by HEAD + both parents.
   const webhookMergeShaStatus = pr.merge_commit_sha == null ? 'unavailable' :
     !sha(pr.merge_commit_sha) ? 'invalid' : pr.merge_commit_sha === checkout.head ? 'matches' : 'differs';
-  return { event: 'pull_request', sourceBranch: 'dev', targetBranch: 'next',
-    candidateSourceSha: pr.head.sha, testedCheckoutSha: checkout.head, baseSha: pr.base.sha, webhookMergeShaStatus };
+  return { event: 'pull_request', sourceBranch: pr.head.ref, targetBranch: pr.base.ref,
+    candidateSourceSha: pr.head.sha, testedCheckoutSha: checkout.head, baseSha: pr.base.sha, webhookMergeShaStatus,
+    ...(migration ? { verificationScope: 'migration-only' } : {}) };
 }
 
 async function main() {
@@ -43,9 +57,10 @@ async function main() {
   try {
     const event = JSON.parse(await readFile(process.env.GITHUB_EVENT_PATH, 'utf8'));
     const git = args => execFileSync('git', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
-    result = validateReleaseContext(process.env, event, {
-      head: git(['rev-parse', 'HEAD']), parents: git(['show', '-s', '--format=%P', 'HEAD']).split(' '),
-    });
+    const head = git(['rev-parse', 'HEAD']), parents = git(['show', '-s', '--format=%P', 'HEAD']).split(' ');
+    const changedFiles = process.env.GITHUB_EVENT_NAME === 'pull_request' && parents.length === 2 ?
+      git(['diff', '--name-only', '--no-renames', parents[0], parents[1]]).split('\n').filter(Boolean) : undefined;
+    result = validateReleaseContext(process.env, event, { head, parents, changedFiles });
   } catch (error) {
     // Never echo an event payload, subprocess output, environment or raw error.
     console.error(JSON.stringify({ error: 'release_context_rejected',
