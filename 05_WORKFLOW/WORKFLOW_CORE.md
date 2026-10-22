@@ -73,6 +73,19 @@ Perform only work necessary to satisfy the approved task. Do not automatically a
 ## 12. Proportional Verification Principle
 Use **minimum sufficient verification**, not maximum available verification.
 
+### Evidence reuse and change-based verification
+Previously verified evidence should be **reused, not automatically rechecked**. A new agent session, prompt, or execution environment is not, by itself, an invalidation event.
+
+- Record the result, source/provenance, applicable environment/ref/version, verification time, verified scope, and conditions that would invalidate each material finding.
+- Reuse a supported PASS while no relevant change, contradiction, or freshness requirement invalidates it. Do not describe historical read-back as a fresh verification.
+- Distinguish relatively stable configuration facts (e.g. policies, bindings, branch protection) from dynamic release/runtime facts (e.g. branch HEAD, tested merge, required CI, current deployment, version, traffic, rollback availability). Recheck dynamic facts immediately before consequential actions when they matter.
+- Verify the **changed item and its direct effects**, not the entire system. Re-run broader verification only for a concrete dependency, contradiction, or risk that justifies it.
+- Preserve the exact scope of each result: configured secrets are not proof of provider functionality; a UI smoke PASS is not an end-to-end PASS; build/CI PASS does not prove hosted or deployed behavior.
+- API authorization failures, inaccessible dashboards, and unavailable sessions mean **NOT VERIFIED — access blocked**, not FAIL or proof that a resource is absent. Reuse still-applicable authenticated operator evidence when its provenance is known.
+- Treat missing evidence as a blocker only if it is necessary for the next authorized operation; otherwise retain it as an explicit uncertainty or residual risk, without silently changing the acceptance criteria.
+- Carry forward a concise evidence checkpoint across handoffs: verified state and scope, sources, relevant changes since verification, unresolved questions, and the next narrowly required check. Update the checkpoint after actual changes; do not replay all checks.
+- Do not add or silently relax release gates merely to resolve an evidence gap. Changes to approved gates require a concrete rationale and explicit operator decision; deployment authorization remains separate.
+
 ## 13. No redundant replanning
 Trust valid outputs from the previous stage. Reopen earlier reasoning only when instructions contradict actual project state, a required assumption is false, implementation reveals a material dependency, or acceptance criteria cannot be met as specified.
 
