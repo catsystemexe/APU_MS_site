@@ -43,5 +43,6 @@ next-env.d.ts
 /.sites-runtime/
 /outputs/
 /work/
+/evals/f1-extraction/results/
 
 .codex/

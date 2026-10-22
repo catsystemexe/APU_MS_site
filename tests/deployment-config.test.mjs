@@ -1,9 +1,14 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import ts from "typescript";
 
 test("production deploys preserve Cloudflare-managed variables and secrets", async () => {
   const wrangler = await readFile(new URL("../wrangler.jsonc", import.meta.url), "utf8");
+  const parsed = ts.parseConfigFileTextToJson("wrangler.jsonc", wrangler);
+  assert.equal(parsed.error, undefined);
+  // Explicit Preview Access vars are separate from dashboard-managed production.
+  const { previews, ...productionConfig } = parsed.config;
   const generatedWranglerUrl = new URL("../dist/server/wrangler.json", import.meta.url);
   const generatedWrangler = await readFile(generatedWranglerUrl, "utf8").then(JSON.parse, (error) => error.code === "ENOENT" ? null : Promise.reject(error));
   const packageJson = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
@@ -32,10 +37,18 @@ test("production deploys preserve Cloudflare-managed variables and secrets", asy
   for (const runtimeValue of [
     "OPENAI_API_KEY",
     "APU_VECTOR_STORE_ID",
+  ]) {
+    assert.doesNotMatch(wrangler, new RegExp(`"${runtimeValue}"\\s*:`));
+  }
+  for (const runtimeValue of [
     "CF_ACCESS_TEAM_DOMAIN",
     "CF_ACCESS_AUD",
     "APU_DEVELOPER_EMAILS",
   ]) {
-    assert.doesNotMatch(wrangler, new RegExp(`"${runtimeValue}"\\s*:`));
+    assert.doesNotMatch(JSON.stringify(productionConfig), new RegExp(`"${runtimeValue}"\\s*:`));
+    if (generatedWrangler) {
+      const { previews: generatedPreviews, ...generatedProductionConfig } = generatedWrangler;
+      assert.doesNotMatch(JSON.stringify(generatedProductionConfig), new RegExp(`"${runtimeValue}"\\s*:`));
+    }
   }
 });

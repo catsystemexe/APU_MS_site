@@ -46,15 +46,16 @@ test("all experimental presets override tokens without component variants", () =
   assert.match(css, /:root\[data-font-size="larger"\]/);
 });
 
-test("model, usage and design controls share the right settings drawer", () => {
-  assert.match(client, /aria-label="Nastavení modelu, diagnostiky a vzhledu"/);
-  assert.match(client, /id="drawer-model-select"/);
+test("user settings retain appearance and communication; model and usage stay in developer telemetry", () => {
+  assert.match(client, /aria-label="Nastavení APU"/);
+  assert.doesNotMatch(client, /id="drawer-model-select"|id="usage-settings-title"/);
+  assert.match(client, /id="drawer-profile-select"/);
   assert.match(client, /id="color-theme-select"/);
   assert.match(client, /id="typography-select"/);
   assert.match(client, /id="font-size-select"/);
   assert.doesNotMatch(client, /id="design-settings"/);
   assert.match(client, /<Settings aria-hidden="true" \/>/);
-  assert.match(client, /<UserRound aria-hidden="true" \/>/);
+  assert.match(client, /<LogOut aria-hidden="true" \/>/);
 });
 
 test("mobile notebook editing prevents iOS focus zoom", () => {
@@ -77,11 +78,11 @@ test("composer is compact by default and expands for typed text", () => {
   assert.match(client, /rows=\{1\}/);
   assert.doesNotMatch(client, /autoFocus/);
   assert.match(client, /requestAnimationFrame\(\(\) => textareaRef\.current\?\.focus\(\)\)/);
-  assert.match(css, /\.composer textarea \{[\s\S]*?min-height: 44px;[\s\S]*?resize: none;/);
-  assert.match(client, /isComposerExpanded/);
+  assert.match(css, /\.composer textarea \{[\s\S]*?min-height: 42px;[\s\S]*?resize: none;/);
+  assert.doesNotMatch(client, /isComposerExpanded|composer-entry-trigger/);
   assert.match(client, /className="composer-toolbar"/);
   assert.match(css, /\.composer-field \{[\s\S]*?min-height: 52px;/);
-  assert.match(css, /\.composer-field\.is-expanded \{[\s\S]*?grid-template-rows: minmax\(44px, auto\) 42px;/);
+  assert.doesNotMatch(css, /\.composer-field\.is-expanded/);
   assert.match(css, /\.composer textarea \{[\s\S]*?width: 100%;/);
 });
 
@@ -98,7 +99,7 @@ test("composer offers persistent Czech speech-to-text with delayed transcript", 
   assert.match(client, /className="dictation-waveform"/);
   assert.match(client, /Zahodit diktovaný text/);
   assert.match(client, /Array\.from\(\{ length: 15 \}/);
-  assert.match(client, /setIsComposerExpanded\(false\);[\s\S]*?setIsDictating\(true\)/);
+  assert.match(client, /setIsDictating\(true\)/);
   assert.doesNotMatch(client, /setComposerInput\(`\$\{prefix\}\$\{transcript\}`\)/);
   assert.match(client, /Diktování ukončíte tlačítkem Stop nebo Odeslat/);
   assert.match(css, /\.dictation-button \{[\s\S]*?width: 42px;[\s\S]*?height: 42px;/);

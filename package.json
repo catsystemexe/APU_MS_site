@@ -16,6 +16,10 @@
     "test": "npm run build && node --test tests/*.test.mjs",
     "validate:artifact": "bash scripts/validate-artifact.sh",
     "lint": "bash scripts/sites-env.sh -- eslint . --ignore-pattern dist --ignore-pattern .next",
+    "eval:f1": "node evals/f1-extraction/run.ts",
+    "eval:f1-grounding-replay": "node evals/f1-extraction/grounding-replay.ts",
+    "audit:f1-gold": "node evals/f1-extraction/audit-gold-contract.ts",
+    "propose:f1-gold-v2": "node evals/f1-extraction/propose-gold-v2.ts",
     "db:generate": "bash scripts/sites-env.sh -- drizzle-kit generate"
   },
   "dependencies": {
@@ -26,14 +30,15 @@
     "react-dom": "19.2.6"
   },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "1.37.1",
-    "@cloudflare/workers-types": "4.20260702.1",
+    "@cloudflare/vite-plugin": "1.63.2",
+    "@cloudflare/workers-types": "5.20261006.1",
     "@tailwindcss/postcss": "4.2.1",
     "@types/node": "22.19.19",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "6.0.2",
     "@vitejs/plugin-rsc": "0.5.26",
+    "ajv": "6.15.0",
     "drizzle-kit": "0.31.10",
     "eslint": "9.39.4",
     "eslint-config-next": "16.2.6",
@@ -42,7 +47,7 @@
     "typescript": "5.9.3",
     "vinext": "0.0.50",
     "vite": "8.0.13",
-    "wrangler": "4.92.0"
+    "wrangler": "4.150.0"
   },
   "type": "module",
   "displayName": "APU Site 0.1"

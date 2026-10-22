@@ -1,4 +1,4 @@
-import type { WorkingHypothesis } from "./analysis-model";
+import type { NeedAnalysis, WorkingHypothesis } from "./analysis-model";
 import type { CategoryId, F1ToF2NeedContract, F2Path } from "./notepad-model";
 
 // Legacy path/skill, processed-build and Preview contracts remain isolated for
@@ -137,6 +137,12 @@ export type CurrentRozborState = {
   POZOROVAT: PozorovatBuildState;
   VYTVOŘIT: VytvoritBuildState;
 };
+export type F2AnalysisContext = {
+  mainUncertainty: string;
+  summary: string;
+  needAnalysis: NeedAnalysis | null;
+  notebookContext: F2NotebookContextItem[];
+};
 export type F2ToF3Snapshot = {
   kind: "f2-to-f3";
   snapshotId: string;
@@ -145,6 +151,7 @@ export type F2ToF3Snapshot = {
   canonicalNeed: F1ToF2NeedContract;
   activePath: F2Path;
   baselineHypotheses: WorkingHypothesis[];
+  analysisContext?: F2AnalysisContext;
   currentRozbor: {
     config: CurrentRozborBuildConfig;
     components: RozborComponent[];
@@ -383,6 +390,7 @@ function orderedRozborSource(
   hypotheses: WorkingHypothesis[],
   path: F2Path,
   state: { config: CurrentRozborBuildConfig; components: RozborComponent[] },
+  analysisContext?: F2AnalysisContext,
 ) {
   return [
     "current-rozbor-v1",
@@ -394,6 +402,7 @@ function orderedRozborSource(
       ...relevantHypothesisContent(hypothesis),
     ]),
     state.config,
+    ...(analysisContext ? [analysisContext] : []),
     state.components.map(({ id, kind, hypothesisId, fingerprint, content }) => [
       id,
       kind,
@@ -409,8 +418,9 @@ export function currentRozborSourceFingerprint(
   hypotheses: WorkingHypothesis[],
   path: F2Path,
   state: { config: CurrentRozborBuildConfig; components: RozborComponent[] },
+  analysisContext?: F2AnalysisContext,
 ) {
-  return JSON.stringify(orderedRozborSource(need, hypotheses, path, state));
+  return JSON.stringify(orderedRozborSource(need, hypotheses, path, state, analysisContext));
 }
 
 function compactFingerprint(value: string) {
@@ -450,11 +460,35 @@ export function assertCurrentRozborReadyForF3(
   path: F2Path,
   state: { config: CurrentRozborBuildConfig; components: RozborComponent[] },
 ) {
+  if (path !== need.initialF2Path) throw new Error("Strategie Rozboru neodpovídá aktivní pedagogické potřebě.");
   const required = deriveRequiredCurrentRozborComponents(path, need, hypotheses, state.config);
   const reconciliation = reconcileRozborComponents(required, state.components);
   if (!reconciliation.isRozborCurrent) throw new Error("Rozbor není aktuální vůči svému zdroji a nastavení.");
-  if (required.length === 0 || state.components.length === 0) throw new Error("Nejprve vytvořte aktuální Rozbor.");
+  if (!hypotheses.length || !hypotheses.every(isSnapshotHypothesis)) throw new Error("Nejprve vytvořte úspěšný výchozí Rozbor s pracovními hypotézami.");
+  if (!isCurrentRozborConfig(path, state.config)) throw new Error("Neplatná konfigurace Rozboru.");
   parseGeneratedRozborComponents({ components: state.components }, required);
+}
+
+function isCurrentRozborConfig(path: F2Path, config: CurrentRozborBuildConfig) {
+  const defaults = createCurrentRozborState()[path].config;
+  return Object.keys(config).length === Object.keys(defaults).length && [0, 1, 2, 3].includes(config.expansionDepth)
+    && Object.keys(defaults).filter((key) => key !== "expansionDepth").every((key) => typeof (config as unknown as Record<string, unknown>)[key] === "boolean");
+}
+
+function isSnapshotQuestion(q: unknown) {
+  return isComponentRecord(q) && hasText(q.id) && hasText(q.text) && ["manifestations", "goals", "context", "course", "helps"].includes(String(q.target)) && ["active", "skipped", "answered"].includes(String(q.status));
+}
+function isSnapshotHypothesis(value: unknown): value is WorkingHypothesis {
+  if (!isComponentRecord(value)) return false;
+  return hasText(value.id) && Number.isInteger(value.rank) && hasText(value.title) && hasText(value.summary) && isStringArray(value.relevantNeeds)
+    && isStringArray(value.supportingInformation) && isStringArray(value.limitations) && isStringArray(value.unknowns)
+    && (value.question === null || isSnapshotQuestion(value.question)) && Array.isArray(value.questions) && value.questions.every(isSnapshotQuestion);
+}
+
+// Generic working-analysis export and specialized materialization have different readiness.
+export function assertF2SnapshotSupportsMaterialization(snapshot: F2ToF3Snapshot) {
+  if (!isF2ToF3Snapshot(snapshot)) throw new Error("Neplatný zdrojový snapshot Rozboru.");
+  const { activePath: path, currentRozbor: state } = snapshot;
   if (path === "POZOROVAT" && !state.components.some(({ kind }) => kind.startsWith("observation-"))) {
     throw new Error("Rozbor zatím neobsahuje použitelnou pozorovací specifikaci.");
   }
@@ -462,7 +496,7 @@ export function assertCurrentRozborReadyForF3(
     const approaches = state.components.find(({ kind }) => kind === "creation-approaches")?.content;
     const creation = approaches && typeof approaches !== "string" ? approaches as CreationApproachesContent : null;
     if (!creation || !isComponentRecord(creation.workingApproach) || !hasText(creation.workingApproach.title) || !hasText(creation.workingApproach.rationale)) {
-      throw new Error("Rozbor VYTVOŘIT musí před Výstupem obsahovat explicitní pracovní přístup.");
+      throw new Error("Rozbor musí před specializovaným Výstupem obsahovat explicitní pracovní přístup.");
     }
   }
 }
@@ -481,9 +515,12 @@ export function createF2ToF3Snapshot(
   path: F2Path,
   state: { config: CurrentRozborBuildConfig; components: RozborComponent[] },
   sourceRevision: number,
+  analysisContext?: F2AnalysisContext,
 ): F2ToF3Snapshot {
+  if (!Number.isInteger(sourceRevision) || sourceRevision < 0) throw new Error("Neplatná revize Rozboru.");
   assertCurrentRozborReadyForF3(need, hypotheses, path, state);
-  const sourceFingerprint = currentRozborSourceFingerprint(need, hypotheses, path, state);
+  if (analysisContext !== undefined && !isAnalysisContext(analysisContext, need)) throw new Error("Neplatný analytický kontext Rozboru.");
+  const sourceFingerprint = currentRozborSourceFingerprint(need, hypotheses, path, state, analysisContext);
   return deepFreeze(structuredClone({
     kind: "f2-to-f3" as const,
     snapshotId: `current-rozbor-${compactFingerprint(sourceFingerprint)}`,
@@ -492,28 +529,46 @@ export function createF2ToF3Snapshot(
     canonicalNeed: need,
     activePath: path,
     baselineHypotheses: hypotheses,
+    ...(analysisContext ? { analysisContext } : {}),
     currentRozbor: state,
-    limitations: collectRozborLimitations(hypotheses, state.components),
+    limitations: snapshotLimitations(hypotheses, state.components, analysisContext),
     f3Target: need.f3Target,
   }));
 }
 
 export function isF2ToF3Snapshot(value: unknown): value is F2ToF3Snapshot {
   const isPath = (path: unknown): path is F2Path => path === "POCHOPIT" || path === "POZOROVAT" || path === "VYTVOŘIT";
-  const isQuestion = (question: unknown) => isComponentRecord(question) && hasText(question.id) && hasText(question.text) && ["manifestations", "goals", "context", "course", "helps"].includes(String(question.target)) && ["active", "skipped", "answered"].includes(String(question.status));
-  const isSnapshotHypothesis = (hypothesis: unknown) => isComponentRecord(hypothesis) && hasText(hypothesis.id) && Number.isInteger(hypothesis.rank) && hasText(hypothesis.title) && hasText(hypothesis.summary) && isStringArray(hypothesis.relevantNeeds) && isStringArray(hypothesis.supportingInformation) && isStringArray(hypothesis.limitations) && isStringArray(hypothesis.unknowns) && (hypothesis.question === null || isQuestion(hypothesis.question)) && Array.isArray(hypothesis.questions) && hypothesis.questions.every(isQuestion);
   if (!isComponentRecord(value) || value.kind !== "f2-to-f3" || !hasText(value.snapshotId) || !hasText(value.sourceFingerprint) || !Number.isInteger(value.sourceRevision) || (value.sourceRevision as number) < 0) return false;
   if (!isComponentRecord(value.canonicalNeed) || !hasText(value.canonicalNeed.needId) || !hasText(value.canonicalNeed.needText) || !isPath(value.canonicalNeed.initialF2Path) || !(value.canonicalNeed.f3Target === null || typeof value.canonicalNeed.f3Target === "string")) return false;
   if (!isPath(value.activePath) || !Array.isArray(value.baselineHypotheses) || !value.baselineHypotheses.every(isSnapshotHypothesis) || !isComponentRecord(value.currentRozbor) || !isComponentRecord(value.currentRozbor.config) || !Array.isArray(value.currentRozbor.components) || !isStringArray(value.limitations) || !(value.f3Target === null || typeof value.f3Target === "string")) return false;
   try {
     const snapshot = value as F2ToF3Snapshot;
     assertCurrentRozborReadyForF3(snapshot.canonicalNeed, snapshot.baselineHypotheses, snapshot.activePath, snapshot.currentRozbor);
-    const fingerprint = currentRozborSourceFingerprint(snapshot.canonicalNeed, snapshot.baselineHypotheses, snapshot.activePath, snapshot.currentRozbor);
-    const limitations = collectRozborLimitations(snapshot.baselineHypotheses, snapshot.currentRozbor.components);
+    if (snapshot.analysisContext !== undefined && !isAnalysisContext(snapshot.analysisContext, snapshot.canonicalNeed)) return false;
+    const fingerprint = currentRozborSourceFingerprint(snapshot.canonicalNeed, snapshot.baselineHypotheses, snapshot.activePath, snapshot.currentRozbor, snapshot.analysisContext);
+    const limitations = snapshotLimitations(snapshot.baselineHypotheses, snapshot.currentRozbor.components, snapshot.analysisContext);
     return snapshot.sourceFingerprint === fingerprint && snapshot.snapshotId === `current-rozbor-${compactFingerprint(fingerprint)}` && snapshot.f3Target === snapshot.canonicalNeed.f3Target && JSON.stringify(snapshot.limitations) === JSON.stringify(limitations);
   } catch {
     return false;
   }
+}
+
+function snapshotLimitations(hypotheses: WorkingHypothesis[], components: RozborComponent[], context?: F2AnalysisContext) {
+  return [...new Set([...collectRozborLimitations(hypotheses, components), ...(context?.mainUncertainty.trim() ? [context.mainUncertainty] : []), ...(context?.needAnalysis?.limitations ?? [])])];
+}
+function isAnalysisContext(context: F2AnalysisContext, need: F1ToF2NeedContract) {
+  if (!isComponentRecord(context) || typeof context.mainUncertainty !== "string" || typeof context.summary !== "string" || !Array.isArray(context.notebookContext)
+    || !context.notebookContext.every((item) => isComponentRecord(item) && ["manifestations", "goals", "context", "course", "helps"].includes(String(item.category)) && hasText(item.text))) return false;
+  const item = context.needAnalysis;
+  return item === null || (isComponentRecord(item) && item.needId === need.needId && item.sourceText === need.needText && typeof item.title === "string" && typeof item.direction === "string"
+    && [item.relevantHypotheses, item.distinctions, item.parameters, item.limitations].every(isStringArray) && (item.question === null || isSnapshotQuestion(item.question)) && Array.isArray(item.questions) && item.questions.every(isSnapshotQuestion) && typeof item.intendedOutput === "string");
+}
+
+export function advanceAcceptedF2Source(previous: F2ToF3Snapshot | null, need: F1ToF2NeedContract, hypotheses: WorkingHypothesis[], path: F2Path,
+  state: F2ToF3Snapshot["currentRozbor"], analysisContext: F2AnalysisContext): F2ToF3Snapshot {
+  if (!isAnalysisContext(analysisContext, need)) throw new Error("Neplatný analytický kontext Rozboru.");
+  const next = createF2ToF3Snapshot(need, hypotheses, path, state, (previous?.sourceRevision ?? -1) + 1, analysisContext);
+  return previous?.sourceFingerprint === next.sourceFingerprint ? previous : next;
 }
 
 export function createRozborGenerationRequest(
@@ -536,6 +591,7 @@ export function createCurrentRozborGenerationRequest(
   config: CurrentRozborBuildConfig,
   existing: RozborComponent[],
 ): RozborComponentGenerationRequest | null {
+  if (path !== need.initialF2Path) throw new Error("Strategie Rozboru neodpovídá aktivní pedagogické potřebě.");
   const required = deriveRequiredCurrentRozborComponents(path, need, hypotheses, config);
   const { missing, stale } = reconcileRozborComponents(required, existing);
   const components = [...missing, ...stale.map(({ spec }) => spec)];
@@ -712,13 +768,13 @@ export function synchronizeF2BuildWithCanonicalNeed(build: F2BuildState | null, 
   return createF2BuildState(need);
 }
 function revise(state: F2BuildState, change: Partial<F2BuildState>) { return { ...state, ...change, buildRevision: state.buildRevision + 1 }; }
-export function switchF2Path(state: F2BuildState, activePath: F2Path) { return activePath === state.activePath ? state : revise(state, { activePath }); }
 export function toggleF2Skill(state: F2BuildState, id: string) { return revise(state, { skills: state.skills.map((skill) => skill.id === id && skill.path === state.activePath ? { ...skill, active: !skill.active } : skill) }); }
 export function parameterizeF2Skill(state: F2BuildState, id: string, parameterText: string) { const skill = state.skills.find((item) => item.id === id && item.path === state.activePath); return !skill || skill.parameterText === parameterText ? state : revise(state, { skills: state.skills.map((item) => item.id === id ? { ...item, parameterText } : item) }); }
 export function addF2Context(state: F2BuildState, item: F2ContextItem) { return revise(state, { addedContext: [...state.addedContext, item] }); }
 export function removeF2Context(state: F2BuildState, id: string) { return revise(state, { addedContext: state.addedContext.filter((item) => item.id !== id) }); }
 
 export function createF2BuildRequest(build: F2BuildState, canonicalNotebookContext: F2NotebookContextItem[], model?: string): F2BuildRequest {
+  if (build.activePath !== build.canonicalNeed.initialF2Path || build.initialPath !== build.activePath) throw new Error("Strategie Build neodpovídá aktivní pedagogické potřebě.");
   const activeSkills = build.skills.filter((skill) => skill.path === build.activePath && skill.active).map(({ id, label, parameterText }) => ({ id, label, parameterText: parameterText.trim() }));
   return structuredClone({ kind: "f2-build", initialPath: build.initialPath, activePath: build.activePath, canonicalNotebookContext, canonicalNeed: build.canonicalNeed, f3Target: build.f3Target, workingHypotheses: build.workingHypotheses, activeSkills, skillParameters: Object.fromEntries(activeSkills.map((skill) => [skill.id, skill.parameterText])), addedContext: build.addedContext, entryUncertainties: build.entryUncertainties, previousProcessedBuildState: build.processedBuilds[build.activePath] ?? null, buildRevision: build.buildRevision, ...(model ? { model } : {}) });
 }

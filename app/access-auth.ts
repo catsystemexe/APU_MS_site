@@ -186,13 +186,14 @@ function logAccessFailure(
   console.warn(`[access-auth] validation_failed reason=${reason}${suffix}`);
 }
 
-export async function getAccessIdentity(requestHeaders: Headers): Promise<AccessIdentity | null> {
+export async function getAccessIdentity(requestHeaders: Headers, onUnavailable?: () => void): Promise<AccessIdentity | null> {
   if (process.env.NODE_ENV === "development" && process.env.APU_LOCAL_DEV_AUTH === "1") {
     return LOCAL_IDENTITY;
   }
   const configResult = accessConfig();
   if (!configResult.ok) {
     logAccessFailure(configResult.reason, { missing: configResult.missing });
+    onUnavailable?.();
     return null;
   }
   const token = requestHeaders.get(ACCESS_JWT_HEADER);
@@ -203,6 +204,7 @@ export async function getAccessIdentity(requestHeaders: Headers): Promise<Access
   const result = await validateAccessJwt(token, configResult.value);
   if (!result.ok) {
     logAccessFailure(result.reason, result);
+    if (result.reason === "jwks_unavailable") onUnavailable?.();
     return null;
   }
   return {

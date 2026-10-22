@@ -51,7 +51,8 @@ test("Phase 2 chat and card are produced by the same structured analysis request
   assert.match(source, /selectedHypothesisId/);
   assert.match(source, /activeNeedId/);
   assert.match(source, /continue_to_output/);
-  assert.match(source, /canonicalNeed: getF1ToF2NeedContract\(notepadState, activeNeedId\)/);
+  assert.match(source, /canonicalNeed: resolvedNeed/);
+  assert.match(source, /await resolveActiveNeed\(sourceNeed\)/);
 });
 
 test("F2 receives canonical initial routing and validates it against the Zápisník need", async () => {
@@ -69,11 +70,11 @@ test("analysis UI exposes the approved POCHOPIT baseline and component architect
     readFile(new URL("../app/f2-build-model.ts", import.meta.url), "utf8"),
   ]);
   assert.match(source, /<F3Finalization/);
-  assert.match(source, /f2-baseline/);
-  assert.match(source, /Pracovní hypotézy/);
-  assert.match(source, /component\.hypothesisId === hypothesis\.id/);
+  assert.match(source, /id="workspace-document"/);
+  assert.match(source, /documentMode=\{workingAnalysis \? "analysis" : "output"\}/);
+  assert.match(source, /snapshot=\{props.f2ToF3Snapshot\}/);
   assert.match(client, /f2-build-shell/);
-  assert.match(client, /is-f2-layout/);
+  assert.match(client, /is-processing-workspace/);
   assert.match(model, /type PochopitBuildConfig/);
   assert.match(model, /type RozborComponent/);
   assert.doesNotMatch(source, /<F2BuildEditor|Směr rozboru|Aktualizovat preview/);
@@ -98,14 +99,14 @@ test("structured Phase 2 entry does not duplicate the canonical callout text", (
   assert.match(text, /Nejdůležitější nejistota: U/);
 });
 
-test("F2 entry chat links to Rozbor and Build without duplicating hypotheses", async () => {
+test("F2 entry chat links to Dokument and Obsah without duplicating hypotheses", async () => {
   const [client, entry] = await Promise.all([
     readFile(new URL("../app/apu-client.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/f2-entry-summary.tsx", import.meta.url), "utf8"),
   ]);
   assert.match(client, /content: "", analysisEntryHypotheses: entryHypotheses\(result\.analysis\)/);
   assert.match(client, /result\.analysis\.chatUpdate\.kind === "entry"[\s\S]*?analysisEntryHypotheses: entryHypotheses\(result\.analysis\)/);
-  assert.match(client, /<F2EntrySummary[\s\S]*?onOpenAnalysis=\{\(\) => setActivePanel\("analysis"\)\}[\s\S]*?onOpenBuild=/);
+  assert.match(client, /<F2EntrySummary[\s\S]*?onOpenAnalysis=\{\(\) => \{ if \(isDesktop\) selectRightView\("document"\); else setActivePanel\("analysis"\); \}\}[\s\S]*?onOpenBuild=/);
   assert.match(client, /assistant-response--f2-entry/);
   assert.doesNotMatch(await readFile(new URL("../app/analysis-model.ts", import.meta.url), "utf8"), /Připravil jsem kartu Rozbor/);
   assert.doesNotMatch(client, /if \(phase === "intake" && nextPhase === "development"\) setActivePanel\("analysis"\)/);
@@ -113,7 +114,7 @@ test("F2 entry chat links to Rozbor and Build without duplicating hypotheses", a
   assert.match(entry, /V kartě Rozbor máte připravené pracovní situační hypotézy/);
   assert.match(entry, /Jednotlivé směry můžete dál rozpracovat v kartě/);
   assert.doesNotMatch(entry, /Možné směry k ověření|hypotheses\.map/);
-  assert.match(client, /usesDesktopWorkspaceLayout\(\)[\s\S]*?setActivePanel\("analysis"\);[\s\S]*?setIsF2BuildVisible\(false\)/);
+  assert.match(client, /usesDesktopWorkspaceLayout\(\)[\s\S]*?setActivePanel\("analysis"\);[\s\S]*?setDesktopWorkspace\(INITIAL_PROCESSING_WORKSPACE\)/);
 });
 
 test("F2 chat uses only nextPrompt and strips a legacy emoji prefix", () => {

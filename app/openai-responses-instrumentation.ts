@@ -5,6 +5,7 @@ import {
   type ProviderResponseBody,
 } from "./model-call-instrumentation.ts";
 import { upsertUsageRecord, type ModelUsageRecord, type TelemetryPhase, type UsageOperation } from "./usage-ledger.ts";
+import { authorizedModelPayload, type ServerIdentity } from "./server-capabilities.ts";
 
 export type RequestUsageCollector = {
   sink: (record: ModelUsageRecord) => void;
@@ -19,8 +20,8 @@ export function createRequestUsageCollector(): RequestUsageCollector {
   };
 }
 
-export function modelUsagePayload<T extends Record<string, unknown>>(payload: T, collector: RequestUsageCollector) {
-  return { ...payload, model_usage_records: collector.records() };
+export function modelUsagePayload<T extends Record<string, unknown>>(payload: T, collector: RequestUsageCollector, identity?: ServerIdentity | null) {
+  return authorizedModelPayload({ ...payload, model_usage_records: collector.records() }, identity);
 }
 
 function diagnosticToken(value: unknown, fallback = "unknown") {
@@ -107,7 +108,7 @@ export async function callOpenAIResponses<TApplicationResult = void>(input: Open
   });
 }
 
-export function usageErrorPayload(error: unknown, collector: RequestUsageCollector) {
-  if (error instanceof InstrumentedModelCallError) return modelUsagePayload({ error: error.message }, collector);
+export function usageErrorPayload(error: unknown, collector: RequestUsageCollector, identity?: ServerIdentity | null, publicMessage = "Modelové zpracování se nezdařilo.") {
+  if (error instanceof InstrumentedModelCallError) return modelUsagePayload({ error: identity?.role === "developer" ? error.message : publicMessage }, collector, identity);
   return null;
 }

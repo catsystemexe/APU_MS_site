@@ -1,3 +1,4 @@
+import type { ServerIdentity } from "../../server-capabilities";
 import instructions from "../../../apu-core/v1.6/00_INSTRUCTIONS_v1.6.md?raw";
 import { cleanAnalysisQuestionText, stripLegacyQuestionFromSummary, type AnalysisState } from "../../analysis-model";
 import { CATEGORY_IDS, F2_PATHS, type CategoryId, type PedagogicalNeedMapping, type F1ToF2NeedContract } from "../../notepad-model";
@@ -81,7 +82,7 @@ const WORKING_ANALYSIS_SCHEMA = {
   },
 } as const;
 
-function jsonError(message: string, status = 500, collector?: RequestUsageCollector) { return Response.json(collector ? modelUsagePayload({ error: message }, collector) : { error: message }, { status }); }
+function jsonError(message: string, status = 500, collector?: RequestUsageCollector, identity?: ServerIdentity) { return Response.json(collector ? modelUsagePayload({ error: message }, collector, identity) : { error: message }, { status }); }
 function outputText(response: Record<string, unknown>) {
   if (typeof response.output_text === "string") return response.output_text;
   const output = Array.isArray(response.output) ? response.output : [];
@@ -202,7 +203,7 @@ export async function POST(request: Request) {
         return normalize(JSON.parse(text) as AnalysisState, notebook, skipped, previousAnalysis, isEntry ? "entry" : "working");
       },
     });
-    if (usage_record.provider_status !== "completed" || !application_result) return jsonError("Rozbor se nepodařilo vytvořit.", 502, collector);
+    if (usage_record.provider_status !== "completed" || !application_result) return jsonError("Rozbor se nepodařilo vytvořit.", 502, collector, identity);
     const analysisDuration = Math.round(performance.now() - analysisStarted);
     const analysis = application_result;
     const usage = response.body.usage as { input_tokens?: number; output_tokens?: number; total_tokens?: number; input_tokens_details?: { cached_tokens?: number }; output_tokens_details?: { reasoning_tokens?: number } } | undefined;
@@ -218,10 +219,10 @@ export async function POST(request: Request) {
       tools: { file_search: { available: true, invoked: fileSearchCalls > 0, calls: fileSearchCalls, duration_ms: null } },
       streaming: { model: false, backend: false, transport: false, ui: false },
     } } : {};
-    return Response.json(modelUsagePayload({ analysis, ...developerData }, collector));
+    return Response.json(modelUsagePayload({ analysis, ...developerData }, collector, identity));
   }
   catch (cause) {
-    const payload = usageErrorPayload(cause, collector);
-    return Response.json(payload ?? modelUsagePayload({ error: "Model nevrátil platný Rozbor." }, collector), { status: 502 });
+    const payload = usageErrorPayload(cause, collector, identity, "Model nevrátil platný Rozbor.");
+    return Response.json(payload ?? modelUsagePayload({ error: "Model nevrátil platný Rozbor." }, collector, identity), { status: 502 });
   }
 }

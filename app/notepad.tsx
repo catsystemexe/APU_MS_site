@@ -1,30 +1,38 @@
 "use client";
 
 import { FileText, Info, NotebookPen, Plus, ScanSearch, type LucideIcon } from "lucide-react";
-import { ChangeEvent, KeyboardEvent, type RefObject, useEffect, useRef, useState } from "react";
+import { ChangeEvent, KeyboardEvent, type RefObject, useCallback, useEffect, useRef, useState } from "react";
 import {
   CategoryId,
   createLocalId,
   EMPTY_NOTEPAD,
-  LEGACY_NOTEPAD_STORAGE_KEY,
-  migrateLegacyNotepad,
   mapPedagogicalNeed,
   NotepadEntry,
-  NOTEPAD_STORAGE_KEY,
   NotepadState,
-  parseNotepadState,
 } from "./notepad-model";
+import { createNotebookStorage, notebookOwnerId, type NotebookOwner } from "./notebook-storage";
 import { NOTEPAD_CATEGORIES } from "./notepad-categories";
 import type { AnalysisState, SuggestedNeed } from "./analysis-model";
 import type { ConversationPhase } from "./dialog-action";
-import type { CreationApproachesContent, CreationObjectiveContent, CurrentRozborState, F2BuildState, F2PreviewState, F2ToF3Snapshot, FollowUpVerificationContent, ObservationComparisonContent, ObservationIndicatorsContent, ObservationPrioritiesContent, SuccessConditionsContent } from "./f2-build-model";
+import type { CurrentRozborState, F2BuildState, F2PreviewState, F2ToF3Snapshot } from "./f2-build-model";
 import { F3Finalization } from "./f3-finalization";
-import type { F3Config, F3State } from "./f3-finalization-model";
-import { GeneratedMarkdown } from "./generated-markdown";
+import type { F3Config, F3Representation, F3State } from "./f3-finalization-model";
+import type { WorkingDocumentMetadata } from "./working-document-lifecycle";
+import type { WorkingDocumentStyle } from "./document-presentation";
+
+type DesktopPanelNavigation = { view: "notepad" | "document"; documentPanel: "analysis" | "output"; documentAvailable: boolean; onView: (view: "notepad" | "document") => void };
 
 export type WorkspacePanel = "notepad" | "analysis" | "output" | null;
 
 type WorkspacePanelProps = {
+  desktopNavigation?: DesktopPanelNavigation;
+  notebookReadOnly?: boolean;
+  documentStyle: WorkingDocumentStyle;
+  onDocumentReset: () => void;
+  documentMetadata: WorkingDocumentMetadata | null;
+  documentUpdating: boolean;
+  onDocumentStyle: (style: WorkingDocumentStyle) => void;
+  f3ControlsTarget?: HTMLElement | null;
   activePanel: WorkspacePanel;
   entries: NotepadState;
   onEntriesChange: (entries: NotepadState) => void;
@@ -54,7 +62,6 @@ type WorkspacePanelProps = {
   f2BuildError: string | null;
   f2PreviewStatus: "idle" | "loading" | "error";
   f2PreviewError: string | null;
-  onF2PathChange: (path: F2BuildState["activePath"]) => void;
   onF2SkillToggle: (id: string) => void;
   onF2ParameterChange: (id: string, value: string) => void;
   onF2ContextAdd: (text: string) => void;
@@ -64,7 +71,7 @@ type WorkspacePanelProps = {
   f3State: F3State | null;
   f3Status: "idle" | "loading" | "error";
   f3Error: string | null;
-  onF3Enter: () => void;
+  onF3Representation: (representation: F3Representation) => void;
   onF3Config: (change: Partial<F3Config>) => void;
   onF3Render: () => void;
   onF3Adopt: () => void;
@@ -109,45 +116,46 @@ const WORKSPACE_PANELS: Record<OpenWorkspacePanel, {
   },
 };
 
-export function usePersistentNotepad() {
-  const [entries, setEntries] = useState<NotepadState>(EMPTY_NOTEPAD);
-  const [hydrated, setHydrated] = useState(false);
-
+export function usePersistentNotepad(owner: NotebookOwner) {
+  const binding = `${notebookOwnerId(owner)}:${owner.isDeveloper}`;
+  const active = useRef<{ binding: string; entries: NotepadState; storage: ReturnType<typeof createNotebookStorage> | null; closed: boolean } | null>(null);
+  const [state, setState] = useState<{ binding: string; entries: NotepadState } | null>(null);
   useEffect(() => {
-    const hydrate = window.setTimeout(() => {
-      try {
-        const current = window.localStorage.getItem(NOTEPAD_STORAGE_KEY);
-        if (current) {
-          setEntries(parseNotepadState(JSON.parse(current)) ?? EMPTY_NOTEPAD);
-        } else {
-          const legacy = window.localStorage.getItem(LEGACY_NOTEPAD_STORAGE_KEY);
-          setEntries(legacy ? migrateLegacyNotepad(JSON.parse(legacy)) ?? EMPTY_NOTEPAD : EMPTY_NOTEPAD);
-        }
-      } catch {
-        setEntries(EMPTY_NOTEPAD);
-      } finally {
-        setHydrated(true);
-      }
-    }, 0);
-    return () => window.clearTimeout(hydrate);
-  }, []);
-
-  useEffect(() => {
-    if (!hydrated) return;
-    try {
-      window.localStorage.setItem(NOTEPAD_STORAGE_KEY, JSON.stringify(entries));
-    } catch {
-      // Keep the current in-memory map when storage is unavailable.
-    }
-  }, [entries, hydrated]);
-
-  return { entries, setEntries, hydrated };
+    let storage: ReturnType<typeof createNotebookStorage> | null = null;
+    try { storage = createNotebookStorage(owner, { local: window.localStorage, session: window.sessionStorage }); }
+    catch { /* Storage-disabled browsers can work in memory. */ }
+    const current = { binding, entries: storage?.read() ?? structuredClone(EMPTY_NOTEPAD), storage, closed: false };
+    active.current = current;
+    setState({ binding, entries: current.entries });
+    return () => { current.closed = true; current.storage?.close(); if (active.current === current) active.current = null; };
+    // Binding consists solely of the normalized server identity and policy.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [binding]);
+  const setEntries = useCallback((update: NotepadState | ((current: NotepadState) => NotepadState)) => {
+    const current = active.current;
+    if (!current || current.closed || current.binding !== binding) return;
+    current.entries = typeof update === "function" ? update(current.entries) : update;
+    // Synchronous persistence makes an immediate refresh after New Project safe.
+    current.storage?.write(current.entries);
+    setState({ binding, entries: current.entries });
+  }, [binding]);
+  const invalidate = useCallback((logout: boolean) => {
+    const current = active.current;
+    if (!current || current.binding !== binding) return;
+    current.closed = true;
+    current.storage?.invalidate(logout);
+    current.entries = structuredClone(EMPTY_NOTEPAD);
+    setState({ binding, entries: current.entries });
+  }, [binding]);
+  return { entries: state?.binding === binding ? state.entries : EMPTY_NOTEPAD, setEntries,
+    hydrated: state?.binding === binding, invalidate };
 }
 
 function ItemEditor({
   entry,
   label,
   autoFocus,
+  readOnly,
   onChange,
   onRemove,
   onNavigate,
@@ -156,6 +164,7 @@ function ItemEditor({
   entry: NotepadEntry;
   label: string;
   autoFocus: boolean;
+  readOnly: boolean;
   onChange: (value: string) => void;
   onRemove: () => void;
   onNavigate: () => void;
@@ -198,7 +207,7 @@ function ItemEditor({
             ? "Zobrazit zdroj v chatu"
             : "Ručně zadaná položka"}
       />
-      <textarea
+      {readOnly ? <p className="notepad-entry-text">{entry.text}</p> : <textarea
         ref={ref}
         rows={1}
         value={entry.text}
@@ -209,7 +218,7 @@ function ItemEditor({
         }}
         aria-label={`${label} – položka`}
         placeholder="Napište položku…"
-      />
+      />}
     </li>
   );
 }
@@ -219,16 +228,20 @@ function NotepadPanel({
   onEntriesChange,
   onEntryNavigate,
   onEntrySeen,
-}: Pick<WorkspacePanelProps, "entries" | "onEntriesChange" | "onEntryNavigate" | "onEntrySeen">) {
+  readOnly = false,
+  hidden = false,
+}: { readOnly?: boolean; hidden?: boolean } & Pick<WorkspacePanelProps, "entries" | "onEntriesChange" | "onEntryNavigate" | "onEntrySeen">) {
   const [focusedItem, setFocusedItem] = useState<string | null>(null);
 
   function addItem(category: CategoryId) {
+    if (readOnly) return;
     const entry: NotepadEntry = { id: createLocalId(), text: "", origin: "manual", ...(category === "goals" ? { needMapping: mapPedagogicalNeed("") } : {}) };
     setFocusedItem(entry.id);
     onEntriesChange({ ...entries, [category]: [...entries[category], entry] });
   }
 
   function updateItem(category: CategoryId, index: number, value: string) {
+    if (readOnly) return;
     setFocusedItem(null);
     const next = [...entries[category]];
     next[index] = { id: next[index].id, text: value, origin: "manual", ...(category === "goals" ? { needMapping: mapPedagogicalNeed(value) } : {}) };
@@ -236,6 +249,7 @@ function NotepadPanel({
   }
 
   function removeItem(category: CategoryId, index: number) {
+    if (readOnly) return;
     setFocusedItem(null);
     onEntriesChange({
       ...entries,
@@ -244,7 +258,8 @@ function NotepadPanel({
   }
 
   return (
-    <div id="workspace-notepad" className="notepad-scroll" role="tabpanel" aria-label="Zápisník">
+    <div id="workspace-notepad" hidden={hidden} className="notepad-scroll" role="tabpanel" aria-label="Zápisník">
+      {readOnly && <p className="notepad-source-status">Zápisník je zdrojem aktuální analýzy. Úpravy budou dostupné v řízeném režimu.</p>}
       <div className="situation-map" aria-label="Mapa situace">
             {NOTEPAD_CATEGORIES.map(({ id, label, icon: Icon }) => (
               <section className="notepad-category" key={id} aria-labelledby={`notepad-${id}`}>
@@ -263,6 +278,7 @@ function NotepadPanel({
                         entry={entry}
                         label={label}
                         autoFocus={focusedItem === entry.id}
+                        readOnly={readOnly}
                         onChange={(value) => updateItem(id, index, value)}
                         onRemove={() => removeItem(id, index)}
                         onNavigate={() => onEntryNavigate(entry)}
@@ -272,10 +288,10 @@ function NotepadPanel({
                   </ul>
                 ) : null}
 
-                <button className="add-notepad-item" type="button" onClick={() => addItem(id)}>
+                {!readOnly && <button className="add-notepad-item" type="button" onClick={() => addItem(id)}>
                   <Plus aria-hidden="true" />
                   <span>Přidat položku</span>
-                </button>
+                </button>}
               </section>
             ))}
       </div>
@@ -283,85 +299,25 @@ function NotepadPanel({
   );
 }
 
-function CurrentRozborComponents({ build, currentRozbor }: { build: F2BuildState; currentRozbor: CurrentRozborState }) {
-  const path = build.activePath;
-  const components = currentRozbor[path].components;
-  const hypothesisLabels = new Map(build.workingHypotheses.map(({ id, title }) => [id, title]));
-  const labels = (ids: string[]) => ids.map((id) => hypothesisLabels.get(id) ?? id).join(", ");
-  const limitations = (items: string[]) => items.length > 0 && <p><b>Limity / nejistota:</b> {items.join(" · ")}</p>;
-  if (path === "POCHOPIT") return <>
-    {components.find(({ id }) => id === "comparison:all") && <section className="f2-generated-component f2-generated-crosscut"><h2>Porovnání a souvislosti</h2><GeneratedMarkdown content={components.find(({ id }) => id === "comparison:all")!.content as string} /></section>}
-    {components.find(({ id }) => id === "expert-frame:all") && <section className="f2-generated-component f2-generated-crosscut is-expert"><h2>Odborný rámec</h2><GeneratedMarkdown content={components.find(({ id }) => id === "expert-frame:all")!.content as string} /></section>}
-  </>;
-  if (path === "POZOROVAT") {
-    const comparison = components.find(({ kind }) => kind === "observation-comparison")?.content as ObservationComparisonContent | undefined;
-    const indicators = components.find(({ kind }) => kind === "observation-indicators")?.content as ObservationIndicatorsContent | undefined;
-    const priorities = components.find(({ kind }) => kind === "observation-priorities")?.content as ObservationPrioritiesContent | undefined;
-    return <>
-      {comparison && <section className="f2-generated-component f2-generated-crosscut"><h2>Kontrasty podmínek</h2>{comparison.contrasts.map((item, index) => <article key={`${item.conditionA}-${item.conditionB}-${index}`}><h3>{item.conditionA} × {item.conditionB}</h3><p><b>Sledovat:</b> {item.whatToObserve}</p><p><b>Podpůrný signál:</b> {item.supportSignal}</p><p><b>Oslabující signál:</b> {item.weakeningSignal}</p>{item.supportsHypothesisIds.length > 0 && <p><b>Podporuje:</b> {labels(item.supportsHypothesisIds)}</p>}{item.weakensHypothesisIds.length > 0 && <p><b>Oslabuje:</b> {labels(item.weakensHypothesisIds)}</p>}<p><b>Nerozliší, pokud:</b> {item.doesNotDiscriminateWhen}</p>{limitations(item.limitations)}</article>)}{limitations(comparison.limitations)}</section>}
-      {indicators && <section className="f2-generated-component f2-generated-crosscut"><h2>Klíčové pozorovatelné indikátory</h2><p>{indicators.purpose}</p>{indicators.indicators.map((item, index) => <article key={`${item.indicator}-${index}`}><h3>{item.indicator}</h3><p><b>Přímo pozorovat:</b> {item.observableAs}</p><p><b>Situace:</b> {item.situation}</p><p><b>Podpůrný signál:</b> {item.supportSignal}</p><p><b>Oslabující signál:</b> {item.weakeningSignal}</p>{item.supportsHypothesisIds.length > 0 && <p><b>Podporuje:</b> {labels(item.supportsHypothesisIds)}</p>}{item.weakensHypothesisIds.length > 0 && <p><b>Oslabuje:</b> {labels(item.weakensHypothesisIds)}</p>}<p><b>Nerozliší, pokud:</b> {item.doesNotDiscriminateWhen}</p>{limitations(item.limitations)}</article>)}{limitations(indicators.limitations)}</section>}
-      {priorities && <section className="f2-generated-component f2-generated-crosscut"><h2>Priority pozorování</h2><ol>{priorities.priorities.map((item) => <li key={`${item.priority}-${item.focus}`}><h3>{item.priority}. {item.focus}</h3><p>{item.reason}</p><p><b>Vazba na hypotézy:</b> {labels(item.hypothesisIds)}</p></li>)}</ol>{limitations(priorities.limitations)}</section>}
-    </>;
+function DocumentPanel(props: Pick<WorkspacePanelProps,
+  "activePanel" | "phase" | "analysisStatus" | "analysisError" | "onRetryAnalysis" |
+  "f2ToF3Snapshot" | "f2ToF3SourceError" | "f3ControlsTarget" | "onContinueToOutput" |
+  "f3State" | "f3Status" | "f3Error" | "onF3Representation" | "onF3Config" | "onF3Render" | "onF3Adopt" | "onF3Return" | "documentStyle" | "onDocumentStyle" | "documentMetadata" | "documentUpdating" | "onDocumentReset"
+> & { documentActionsTarget: HTMLElement | null; hidden?: boolean }) {
+  const workingAnalysis = props.activePanel === "analysis";
+  let unavailable = null;
+  if (workingAnalysis && !props.f2ToF3Snapshot) {
+    if (props.phase === "intake") unavailable = <div className="workspace-empty-state"><ScanSearch aria-hidden="true" /><h2>Rozbor začne ve Fázi 2</h2><p>Otevření panelu fázi nemění. Do Rozboru přejdete až svým potvrzením.</p></div>;
+    else if (props.analysisStatus === "loading") unavailable = <div className="analysis-state"><span className="analysis-spinner" />Vytvářím Rozbor z aktuálního Zápisníku…</div>;
+    else if (props.analysisStatus === "error") unavailable = <div className="analysis-state"><p>{props.analysisError}</p><button type="button" onClick={props.onRetryAnalysis}>Zkusit znovu</button></div>;
+    else unavailable = <div className="analysis-state"><p>{props.f2ToF3SourceError ?? "Rozbor čeká na kanonickou pedagogickou potřebu v Zápisníku."}</p></div>;
   }
-  const approaches = components.find(({ kind }) => kind === "creation-approaches")?.content as CreationApproachesContent | undefined;
-  const objective = components.find(({ kind }) => kind === "creation-objective")?.content as CreationObjectiveContent | undefined;
-  const conditions = components.find(({ kind }) => kind === "success-conditions")?.content as SuccessConditionsContent | undefined;
-  const verification = components.find(({ kind }) => kind === "follow-up-verification")?.content as FollowUpVerificationContent | undefined;
-  return <>
-    {approaches && <section className="f2-generated-component f2-generated-crosscut"><h2>Možné přístupy</h2><ul>{approaches.candidateApproaches.map((item) => <li key={item.title}><h3>{item.title}</h3><p>{item.description}</p>{item.hypothesisIds.length > 0 && <p><b>Vazba na hypotézy:</b> {labels(item.hypothesisIds)}</p>}{limitations(item.limitations)}</li>)}</ul><article className="f2-working-approach"><h2>Pracovní / doporučený přístup</h2><h3>{approaches.workingApproach.title}</h3><p>{approaches.workingApproach.rationale}</p><p><b>Vazba na hypotézy:</b> {labels(approaches.workingApproach.hypothesisIds)}</p>{limitations(approaches.workingApproach.limitations)}</article></section>}
-    {objective && <section className="f2-generated-component f2-generated-crosscut"><h2>Praktický / pedagogický cíl</h2><p>{objective.objective}</p><p><b>Vazba na hypotézy:</b> {labels(objective.hypothesisIds)}</p>{limitations(objective.limitations)}</section>}
-    {conditions && <section className="f2-generated-component f2-generated-crosscut"><h2>Podmínky úspěchu</h2><ul>{conditions.conditions.map((item) => <li key={item.condition}><b>{item.condition}</b><span> — {item.whyRequired}</span></li>)}</ul>{limitations(conditions.limitations)}</section>}
-    {verification && <section className="f2-generated-component f2-generated-crosscut"><h2>Co následně ověřovat</h2>{verification.checks.map((item, index) => <article key={`${item.indicator}-${index}`}><h3>{item.indicator}</h3><p><b>Kdy:</b> {item.when}</p><p><b>Signál úspěchu:</b> {item.successSignal}</p><p><b>Signál pro úpravu:</b> {item.adjustmentSignal}</p><p><b>Vazba na hypotézy:</b> {labels(item.hypothesisIds)}</p></article>)}{limitations(verification.limitations)}</section>}
-  </>;
-}
-
-function AnalysisPanel(props: Pick<WorkspacePanelProps, "phase" | "analysis" | "analysisStatus" | "analysisError" | "onRetryAnalysis" | "f2Build" | "currentRozbor" | "f2ToF3Snapshot" | "f2ToF3SourceError" | "onContinueToOutput">) {
-  if (props.phase === "intake") return <div id="workspace-analysis" className="notepad-scroll workspace-panel-body" role="tabpanel" aria-label="Rozbor"><div className="workspace-empty-state"><ScanSearch aria-hidden="true" /><h2>Rozbor začne ve Fázi 2</h2><p>Otevření panelu fázi nemění. Do Rozboru přejdete až svým potvrzením.</p></div></div>;
-  if (props.analysisStatus === "loading" && !props.analysis.hypotheses.length) return <div className="analysis-state"><span className="analysis-spinner" />Vytvářím Rozbor z aktuálního Zápisníku…</div>;
-  if (props.analysisStatus === "error" && !props.analysis.hypotheses.length) return <div className="analysis-state"><p>{props.analysisError}</p><button type="button" onClick={props.onRetryAnalysis}>Zkusit znovu</button></div>;
-  if (!props.f2Build) return <div className="analysis-state"><p>Rozbor čeká na kanonickou pedagogickou potřebu v Zápisníku.</p></div>;
-  return <div id="workspace-analysis" className="notepad-scroll f2-baseline" role="tabpanel" aria-label="Rozbor">
-    <section className="f2-baseline-situation" aria-labelledby="f2-situation-title">
-      <span>Situace / pedagogická potřeba</span>
-      <h2 id="f2-situation-title">{props.f2Build.canonicalNeed.needText || "Bez popisu"}</h2>
-    </section>
-    <section className="f2-baseline-hypotheses" aria-labelledby="f2-hypotheses-title">
-      <h2 id="f2-hypotheses-title">Pracovní hypotézy</h2>
-      <div className="f2-baseline-list">
-        {props.f2Build.workingHypotheses.map((hypothesis) => {
-          const activeRozbor = props.currentRozbor[props.f2Build!.activePath];
-          const expansion = activeRozbor.components.find((component) => component.kind === "hypothesis-expansion" && component.hypothesisId === hypothesis.id);
-          const clarifications = [
-            ...hypothesis.unknowns,
-            ...hypothesis.limitations,
-            ...hypothesis.questions.map((question) => question.text),
-            ...(hypothesis.question ? [hypothesis.question.text] : []),
-          ].filter((item, index, items) => item.trim() && items.indexOf(item) === index).slice(0, 2);
-          return <article className="f2-baseline-hypothesis" key={hypothesis.id}>
-            <div className="f2-baseline-hypothesis-heading">
-              <span className="analysis-rank">{hypothesis.rank}</span>
-              <div><h3>{hypothesis.title}</h3><p>{hypothesis.summary}</p></div>
-            </div>
-            {clarifications.length > 0 && <div className="f2-baseline-clarifications"><h4>Co chybí / čím zpřesnit</h4><ul>{clarifications.map((item) => <li key={item}>{item}</li>)}</ul></div>}
-            {expansion && typeof expansion.content === "string" && <section className="f2-generated-component f2-generated-expansion"><h4>Rozvinutí · {(["", "Základně", "Podrobně", "Do hloubky"] as const)[activeRozbor.config.expansionDepth]}</h4><GeneratedMarkdown content={expansion.content} /></section>}
-          </article>;
-        })}
-      </div>
-    </section>
-    <CurrentRozborComponents build={props.f2Build} currentRozbor={props.currentRozbor} />
-    <div className="f2-preview-action">
-      <span>{props.f2ToF3Snapshot ? `Aktuální Rozbor revize ${props.f2ToF3Snapshot.sourceRevision} je připraven pro Výstup.` : props.f2ToF3SourceError}</span>
-      <button type="button" disabled={!props.f2ToF3Snapshot} onClick={props.onContinueToOutput}>PŘEJÍT K VÝSTUPU</button>
-    </div>
+  return <div className="document-workspace-content" hidden={props.hidden}>
+  <div id="workspace-document" aria-busy={props.documentUpdating} className="notepad-scroll workspace-panel-body" role="region" aria-label="Dokument">
+    <F3Finalization documentMode={workingAnalysis ? "analysis" : "output"} documentActionsTarget={props.documentActionsTarget} unavailable={unavailable} controlsTarget={props.f3ControlsTarget} snapshot={props.f2ToF3Snapshot} sourceError={props.f2ToF3SourceError} state={props.f3State} status={props.f3Status} error={props.f3Error} onRepresentation={props.onF3Representation} onConfig={props.onF3Config} onRender={props.onF3Render} onAdopt={props.onF3Adopt} onReturn={props.onF3Return} onContinueToOutput={props.onContinueToOutput} documentStyle={props.documentStyle} onDocumentStyle={props.onDocumentStyle} documentMetadata={props.documentMetadata} documentUpdating={props.documentUpdating} onReset={props.onDocumentReset} />
+  </div>
+  {props.documentUpdating && <div className="document-update-overlay" role="status" aria-live="polite"><span className="document-update-spinner" aria-hidden="true" /><span>AKTUALIZUJI DOKUMENT</span></div>}
   </div>;
-}
-
-function OutputPanel(props: Pick<WorkspacePanelProps, "f2ToF3Snapshot" | "f2ToF3SourceError" | "f3State" | "f3Status" | "f3Error" | "onF3Enter" | "onF3Config" | "onF3Render" | "onF3Adopt" | "onF3Return">) {
-  return (
-    <div id="workspace-output" className="notepad-scroll workspace-panel-body" role="tabpanel" aria-label="Výstup">
-      <F3Finalization snapshot={props.f2ToF3Snapshot} sourceError={props.f2ToF3SourceError} state={props.f3State} status={props.f3Status} error={props.f3Error} onEnter={props.onF3Enter} onConfig={props.onF3Config} onRender={props.onF3Render} onAdopt={props.onF3Adopt} onReturn={props.onF3Return} />
-    </div>
-  );
 }
 
 function PanelHeader({
@@ -369,42 +325,56 @@ function PanelHeader({
   isDescriptionVisible,
   onDescriptionToggle,
   descriptionRef,
+  documentWorkspace,
+  onDocumentActionsTarget,
+  navigation,
 }: {
+  navigation?: DesktopPanelNavigation;
+  onDocumentActionsTarget: (target: HTMLDivElement | null) => void;
+  documentWorkspace: boolean;
   panel: OpenWorkspacePanel;
   isDescriptionVisible: boolean;
   onDescriptionToggle: () => void;
   descriptionRef: React.RefObject<HTMLDivElement | null>;
 }) {
-  const { label, description, icon: Icon } = WORKSPACE_PANELS[panel];
+  const { label, description, icon: Icon } = documentWorkspace ? { label: "Dokument", description: "Pracovní analýza z přijatého Rozboru nebo zvolená podoba Výstupu. Změny zdroje se přijímají explicitně.", icon: FileText } : WORKSPACE_PANELS[panel];
 
   return (
     <header className="notepad-header">
-      <div className="panel-title">
+      {navigation ? <nav className="workspace-view-tabs" aria-label="Pravý pracovní panel">
+        <button type="button" aria-pressed={navigation.view === "notepad"} aria-controls="workspace-notepad" onClick={() => navigation.onView("notepad")}>Zápisník</button>
+        <button type="button" disabled={!navigation.documentAvailable} aria-pressed={navigation.view === "document"} aria-controls="workspace-document" onClick={() => { if (navigation.documentAvailable) navigation.onView("document"); }}>Dokument</button>
+      </nav> : <div className="panel-title">
         <Icon aria-hidden="true" />
         <h2>{label}</h2>
-      </div>
-      <div className="panel-info" ref={descriptionRef}>
-        <button
-          className={`notepad-help-toggle${isDescriptionVisible ? " is-active" : ""}`}
-          type="button"
-          aria-label={isDescriptionVisible ? `Skrýt popis vrstvy ${label}` : `Zobrazit popis vrstvy ${label}`}
-          aria-expanded={isDescriptionVisible}
-          aria-controls="workspace-panel-description"
-          onClick={onDescriptionToggle}
-        >
-          <Info aria-hidden="true" />
-        </button>
-        {isDescriptionVisible && (
-          <p id="workspace-panel-description" className="panel-description" role="note">
-            {description}
-          </p>
-        )}
+      </div>}
+      <div className="panel-header-actions">
+        {panel !== "notepad" && <div className="document-actions-target" ref={onDocumentActionsTarget} />}
+        <div className="panel-info" ref={descriptionRef}>
+          <button
+            className={`notepad-help-toggle${isDescriptionVisible ? " is-active" : ""}`}
+            type="button"
+            aria-label={isDescriptionVisible ? `Skrýt popis vrstvy ${label}` : `Zobrazit popis vrstvy ${label}`}
+            aria-expanded={isDescriptionVisible}
+            aria-controls="workspace-panel-description"
+            onClick={onDescriptionToggle}
+          >
+            <Info aria-hidden="true" />
+          </button>
+          {isDescriptionVisible && (
+            <p id="workspace-panel-description" className="panel-description" role="note">
+              {description}
+            </p>
+          )}
+        </div>
       </div>
     </header>
   );
 }
 
 export function WorkspacePanel({
+  desktopNavigation,
+  notebookReadOnly = false,
   activePanel,
   entries,
   onEntriesChange,
@@ -414,6 +384,7 @@ export function WorkspacePanel({
 }: WorkspacePanelProps) {
   const [describedPanel, setDescribedPanel] = useState<OpenWorkspacePanel | null>(null);
   const descriptionRef = useRef<HTMLDivElement>(null);
+  const [documentActionsTarget, setDocumentActionsTarget] = useState<HTMLDivElement | null>(null);
   const isOpen = activePanel !== null;
   const isDescriptionVisible = activePanel !== null && describedPanel === activePanel;
 
@@ -439,22 +410,26 @@ export function WorkspacePanel({
         {activePanel && (
           <PanelHeader
             panel={activePanel}
+            navigation={desktopNavigation}
+            documentWorkspace={activePanel !== "notepad" && analysisProps.phase !== "intake"}
             isDescriptionVisible={isDescriptionVisible}
             onDescriptionToggle={() => setDescribedPanel((current) => current === activePanel ? null : activePanel)}
             descriptionRef={descriptionRef}
+            onDocumentActionsTarget={setDocumentActionsTarget}
           />
         )}
 
-        {activePanel === "notepad" && (
+        {(activePanel === "notepad" || desktopNavigation) && (
           <NotepadPanel
             entries={entries}
+            readOnly={notebookReadOnly}
+            hidden={activePanel !== "notepad"}
             onEntriesChange={onEntriesChange}
             onEntryNavigate={onEntryNavigate}
             onEntrySeen={onEntrySeen}
           />
         )}
-        {activePanel === "analysis" && <AnalysisPanel {...analysisProps} />}
-        {activePanel === "output" && <OutputPanel {...analysisProps} />}
+        {(activePanel === "analysis" || activePanel === "output" || desktopNavigation) && <DocumentPanel {...analysisProps} activePanel={desktopNavigation?.documentPanel ?? activePanel} hidden={activePanel === "notepad"} documentActionsTarget={documentActionsTarget} />}
       </div>
     </aside>
   );

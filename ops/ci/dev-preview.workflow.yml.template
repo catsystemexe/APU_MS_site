@@ -1,0 +1,66 @@
+# Preparation copy under ops/ci is INACTIVE and undiscoverable by GitHub.
+# ENV-D4-ACTIVATE installs an identical reviewed copy; see ACTIVATION.md.
+name: Guarded APU DEV Preview
+on:
+  push:
+    branches: [codex/f1-f3-mvp-stabilization]
+permissions:
+  contents: read
+concurrency:
+  group: apu-ms-site-apu-pr60-e2e
+  cancel-in-progress: false
+jobs:
+  preview:
+    if: >-
+      github.repository == 'catsystemexe/APU_MS_site' &&
+      github.event_name == 'push' && github.event.deleted == false &&
+      github.ref == 'refs/heads/codex/f1-f3-mvp-stabilization' &&
+      vars.APU_DEV_PREVIEW_CI_ENABLED == 'approved' &&
+      (vars.APU_DEV_PREVIEW_CI_MODE == 'auto' ||
+       (vars.APU_DEV_PREVIEW_CI_MODE == 'once' &&
+        vars.APU_DEV_PREVIEW_CI_APPROVED_SHA == github.sha))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: apu-dev-preview
+    defaults:
+      run:
+        shell: bash
+    env:
+      CI: 'true'
+      WRANGLER_SEND_METRICS: 'false'
+      WRANGLER_WRITE_LOGS: 'false'
+    steps:
+      - name: Checkout exact approved push
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Pinned Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: ops/ci/.node-version
+      - name: Clean locked dependencies (no deployment credentials)
+        run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Canonical build
+        run: npm run build
+      - name: Validate standalone artifact
+        run: npm run validate:artifact
+      - name: Provider-free configuration and security regressions
+        run: >-
+          node --test tests/dev-preview-ci.test.mjs
+          tests/e2e-preview-preparation.test.mjs tests/deployment-config.test.mjs
+          tests/access-control.test.mjs tests/server-capabilities.test.mjs
+          tests/f1-response-contract.test.mjs
+      - name: Validate generated Preview isolation without credentials
+        run: node ops/ci/dev-preview-guard.mjs --check-config
+      - name: Guarded existing Preview update and read-only verification
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          GITHUB_TOKEN: ${{ github.token }}
+          APU_DEV_PREVIEW_CI_ENABLED: ${{ vars.APU_DEV_PREVIEW_CI_ENABLED }}
+          APU_DEV_PREVIEW_CI_MODE: ${{ vars.APU_DEV_PREVIEW_CI_MODE }}
+          APU_DEV_PREVIEW_CI_APPROVED_SHA: ${{ vars.APU_DEV_PREVIEW_CI_APPROVED_SHA }}
+        run: node ops/ci/dev-preview-guard.mjs --deploy-approved

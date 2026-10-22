@@ -1,0 +1,95 @@
+{
+  "variant": "evidence-scope-v2",
+  "cases": [
+    {
+      "id": "shared-subject",
+      "newUserMessage": "Robin při práci vstane a odloží tužku.",
+      "category": "manifestations",
+      "sourceQuote": "odloží tužku",
+      "notebookText": "Robin při práci odloží tužku.",
+      "expectedAccepted": true,
+      "expectedReasonCategory": "accept_shared_subject"
+    },
+    {
+      "id": "shared-subject-context",
+      "newUserMessage": "Sára při obědě křičí a bouchá do stolu.",
+      "category": "manifestations",
+      "sourceQuote": "bouchá do stolu",
+      "notebookText": "Sára při obědě bouchá do stolu.",
+      "expectedAccepted": true,
+      "expectedReasonCategory": "accept_shared_scope"
+    },
+    {
+      "id": "shared-predicate",
+      "newUserMessage": "Pomohlo až klidnější místo a přítomnost známé učitelky.",
+      "category": "helps",
+      "sourceQuote": "přítomnost známé učitelky",
+      "notebookText": "Pomohla přítomnost známé učitelky.",
+      "expectedAccepted": true,
+      "expectedReasonCategory": "accept_shared_scope"
+    },
+    {
+      "id": "pronoun-resolution",
+      "newUserMessage": "Asi dvakrát týdně uteče ze třídy; potřebuji ověřit, zda tomu předchází hluk.",
+      "category": "goals",
+      "sourceQuote": "potřebuji ověřit, zda tomu předchází hluk",
+      "notebookText": "Potřebuji ověřit, zda útěku ze třídy předchází hluk.",
+      "expectedAccepted": true,
+      "expectedReasonCategory": "accept_coreference"
+    },
+    {
+      "id": "context-preserving-course",
+      "newUserMessage": "Častěji se to stává před ostatními dětmi.",
+      "category": "course",
+      "sourceQuote": "Častěji se to stává",
+      "notebookText": "Častěji se to stává před ostatními dětmi.",
+      "expectedAccepted": true,
+      "expectedReasonCategory": "accept_relation_context"
+    },
+    {
+      "id": "duration-manifestation",
+      "newUserMessage": "Ondra někdy zvládne celou řízenou činnost bez problému a jindy po pár minutách odbíhá.",
+      "category": "course",
+      "sourceQuote": "po pár minutách",
+      "notebookText": "Po pár minutách.",
+      "expectedAccepted": true,
+      "expectedReasonCategory": "accept_direct"
+    },
+    {
+      "id": "wrong-helps-category",
+      "newUserMessage": "Po přesazení už nekřičí a při samostatné práci vydrží deset minut.",
+      "category": "helps",
+      "sourceQuote": "při samostatné práci vydrží deset minut",
+      "notebookText": "Při samostatné práci vydrží deset minut.",
+      "expectedAccepted": false,
+      "expectedReasonCategory": "reject_category_mismatch"
+    },
+    {
+      "id": "unsupported-temporal-relation",
+      "newUserMessage": "Ve skupině úkol odmítne, jednotlivě ho dokončí a požádá o další.",
+      "category": "manifestations",
+      "sourceQuote": "požádá o další",
+      "notebookText": "Po dokončení úkolu požádá o další.",
+      "expectedAccepted": false,
+      "expectedReasonCategory": "reject_inferred_relation"
+    },
+    {
+      "id": "ambiguous-antecedent",
+      "newUserMessage": "Robin mluvil s Davidem, když byl rozrušený.",
+      "category": "manifestations",
+      "sourceQuote": "byl rozrušený",
+      "notebookText": "Robin byl rozrušený.",
+      "expectedAccepted": false,
+      "expectedReasonCategory": "reject_ambiguous_coreference"
+    },
+    {
+      "id": "qualifier-removal",
+      "newUserMessage": "Jindy po pár minutách odbíhá.",
+      "category": "manifestations",
+      "sourceQuote": "odbíhá",
+      "notebookText": "Odbíhá.",
+      "expectedAccepted": false,
+      "expectedReasonCategory": "reject_semantic_strengthening"
+    }
+  ]
+}
