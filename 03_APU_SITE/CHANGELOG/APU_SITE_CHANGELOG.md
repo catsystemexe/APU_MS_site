@@ -4,6 +4,13 @@ Status: CURRENT
 
 Records significant verified product/runtime/project changes. It is not a complete Git log. Historical Sites-era entries are retained where they remain useful; current deployment state must not be inferred from a changelog entry alone.
 
+## 2026-10-23 — APU PUBLIC canonical custom domain
+
+- Operator attached `apu.catsystem.ai` as a Production Custom Domain of existing Worker `apu-ms-site` in Cloudflare zone `catsystem.ai`. Set `https://apu.catsystem.ai/` as the preferred PUBLIC URL; retain `https://apu-ms-site.catsystem-exe.workers.dev/` as an alternate. No APU application-code changes or Worker deployment were required for the hostname assignment.
+- Operator verified anonymous requests to the new hostname require Cloudflare Access login, and authenticated `/api/session` returns `catsystem.exe@gmail.com` with `isDeveloper: true`. Existing PUBLIC policy is named `APU PUBLIC`, with two specifically approved identities; One-time PIN and Google are configured as identity providers, and the PUBLIC application permits available configured methods. PIN receipt for third-party mailboxes and tester's authenticated session remain untested.
+- The previously reported deployed PUBLIC release is PR #65 / GitHub merge `284c108d4ae053335a524bacc773a2af5c3a4779`; last supplied runtime read-back recorded Deployment `e6b8f6d3-dd98-415c-a2c7-d9f3602cc829`, Version `58801e13-5c86-4836-8089-fd573b9cfed2` at 100% traffic. This domain-only entry does not claim a fresh deployment read-back. Hosted UI/assets and provider-backed F1 → F2 → F3 on the new hostname are **NOT VERIFIED**; KI-01/KI-03 remain OPEN.
+- Documentation-only update; no Cloudflare, Access, KV, secrets, source-code, production Worker or deployment changes performed by this documentation task.
+
 ## 2026-10-21 — APU-P5-E dedicated hosted DEV bootstrap closeout
 
 - Recorded operator-reported permanent DEV Worker `apu-ms-site-dev`, URL `https://apu-ms-site-dev.catsystem-exe.workers.dev`, Deployment `ca7ca974-40c1-4669-8ddb-21db4b8a75bf` and Version `cba179ae-6f82-4c0e-bdac-5727d197cc85`. **P5-D2 hosted smoke PASS** covers operator authentication, hosted UI/navigation, static assets, anonymous Access interception, no additional public routes observed and production preservation. Codex did not independently re-run Cloudflare/hosted verification; no deployed source SHA, traffic allocation or individual inspection timestamp was supplied.
