@@ -2,15 +2,20 @@
 
 Status: release preparation only. **No integration, deployment or rollback is authorized by this document.**
 
-Permanent source branch: `dev`. Protected production release branch: `next`.
+Permanent source branch: `dev`. Protected production release target: `public`.
+Migration state: the production ref is still `next` until authenticated rename and
+protection read-back are recorded; this preparation does not claim migration PASS.
 Production Worker: `apu-ms-site`; stable URL: `https://apu-ms-site.catsystem-exe.workers.dev`.
-Dedicated DEV target: `apu-ms-site-dev`, source-prepared by P3 but **not provisioned or hosted-verified**.
+Dedicated DEV Worker: `apu-ms-site-dev`, unchanged by this migration. Its hosted
+bootstrap/smoke evidence and remaining provider limits are recorded in Runtime Technical Current.
 `automaticDevUpdatesConfigured=false`; future deployment authorization remains false.
 
 ## Current solo-operator governance — P4-B1-FINAL / P4-B2 (2026-10-21)
 
 **Release controls verified / no merge or deployment authorized.** The operator reports
-the effective `next` protection below as operationally updated and verified. This
+the pre-migration `next` protection below as operationally updated and verified.
+Apply and verify the same controls on actual `public` after rename; prior `next`
+evidence does not prove new-branch protection. This
 documentation task did not independently read the administration protection endpoint
 or change protection, permissions or settings. GitHub run/ref/check-provider evidence
 in the next section was independently read back.
@@ -69,11 +74,56 @@ unpublished until separate source-publication authorization and fresh disabled-B
 gate preflight. Any later authorized documentation push may generate new push and
 PR #62 checks; assess both as new results, not as these already completed runs.
 
+## Branch migration sequence — source only
+
+1. Capture `next`, `dev`, `main`, PR #60/#62, original branch protection and Workers
+   deployment/Version/traffic evidence. Check automatic Production/Preview Builds
+   OFF and both old activation gates disabled. Never print a Deploy Hook URL.
+2. Review two independent source-only PRs: `codex/production-branch-dev-compat → dev`
+   and `codex/production-branch-compat → next`. These exact migration pairs (also
+   production compatibility into `public` after rename) are the only maintenance
+   exceptions to the normal DEV release source. The guard requires actual ordered
+   merge parents and a nonempty exact CI/governance-file allowlist; application,
+   dependency, Wrangler/binding and unrelated workflow changes fail closed.
+3. Require real `Provider-free release checks` SUCCESS from GitHub Actions App
+   `15368` on each PR before integrating only its bounded source diff. The same CI
+   files are installed in both branches. Preserve every existing full DEV test and
+   offline isolation check. The old production branch has no DEV preparation code:
+   its smaller explicit test inventory is accepted only with every DEV marker absent
+   and exact pinned application/Core/configuration/dependency/script tree identities
+   from production `b0162eb2c0f72d1bc0fea2886ae8695418beb251`. Missing/partial tests or
+   any altered legacy source fail closed. No application or dependency is changed.
+4. Rename `next` to `public` through authenticated GitHub administration, without
+   force push or history rewrite. Verify the captured pre-rename HEAD equals actual
+   `public`, protections including App ID and admin enforcement, no force/deletion,
+   zero reviews and auto-merge OFF; keep `main` untouched. A 403 administration read
+   is an executor permission limit, not proof that protection transferred.
+5. Verify production branch mapping `public` with Automatic/Preview Builds still
+   OFF. Inspect hook configuration/callers read-only; never invoke, rotate or delete
+   it. Preserve unresolved hook dependencies and both Workers unchanged. No Worker
+   deployment, KV/Access/secret change, rollback or automatic promotion is authorized.
+6. Assess a fresh real `dev → public` merge-ref check with actual candidate/base
+   parent provenance. Keep PR #62 Draft/unmerged as migration verification evidence
+   with an explicit reason, or close it as superseded only after new verification.
+   Confirm PR #60's source is already represented in permanent DEV and no longer an
+   approved release source before closing it as obsolete; never merge it implicitly.
+7. Reconcile actual migration results without rewriting historical `next` evidence.
+   Synchronize approved project-rule/workflow copies to Drive only after their GitHub
+   publication is verified. Refresh ChatGPT Project Sources from those approved files;
+   no source-refresh capability is assumed when the executor has no such tool.
+
+Until steps 4–6 have actual evidence, report migration BLOCKED/PARTIAL. Source-level
+PASS is not end-to-end governance PASS. Transitional `next` and exact maintenance
+pairs remain explicitly bounded migration compatibility, not additional production
+branches or authorization to deploy. Remove them only through a separately verified
+source cleanup after migration, preserving required-check operation.
+
 ## Evidence and verification boundary
 
 The `Pilot release verification` workflow runs provider-free checks on pushes to `dev`
-and on PR events targeting `next`. Its runtime guard accepts only this repository,
-DEV pushes or same-repository `dev → next` PRs. PR #60's stabilization branch is not
+and on release PR events targeting `public` (legacy `next` during migration). Its runtime
+guard accepts only this repository and proven source/merge parents. Normal release
+PRs must be `dev → public` or transitional `dev → next`. PR #60's stabilization branch is not
 a release source and is not repurposed or merged by this process.
 
 The job `Provider-free release checks` uses SHA-pinned checkout/setup-node, read-only
@@ -160,7 +210,7 @@ protection before integration. A skipped/missing job is not a release-check PASS
    F2/F3 boundaries, Access/login/roles, provider-secret handling, DEV/production
    isolation, logging and retention review. Assess KI-03 explicitly; offline parser
    tests do not close its missing hosted structured-output/full-binding evidence.
-5. Identify the exact candidate in the release PR from `dev` to `next`. Existing
+5. Identify the exact candidate in the release PR from `dev` to `public`. Existing
    Draft PR #62 is verification evidence, not an approved release; this record
    authorizes no Draft transition or integration. Do not use PR #60 or silently
    integrate the stabilization branch.
@@ -172,7 +222,7 @@ protection before integration. A skipped/missing job is not a release-check PASS
 7. Obtain explicit `catsystemexe` approval for integration, then integrate only within
    that authorization. A green workflow alone does not authorize a merge or release.
 8. Read back automatic **Production Builds OFF** and **Preview Builds OFF**, production
-   branch `next`, both old CI gates exactly `disabled`, no competing operation and
+   branch `public` after cutover (legacy `next` before it), both old CI gates exactly `disabled`, no competing operation and
    integration/hook ownership. Resolve the Deploy Hook blocker below before release.
 9. Immediately before any authorized release, record authenticated production
    Deployment ID, Version IDs, traffic allocations and current source with timestamps.
@@ -195,7 +245,10 @@ protection before integration. A skipped/missing job is not a release-check PASS
 ## Deploy Hook — unresolved release blocker
 
 The operator's authenticated Dashboard evidence identifies `APU manual deploy` as
-targeting `next`, not `dev`. Repository connection is preserved. The hook's existence
+historically targeting `next`, not `dev`. Do not assume a branch rename retargets
+the hook or disables it. After production mapping changes to `public`, re-read the
+hook target without invoking it; unresolved/stale ownership, callers or behavior
+remain an open release dependency. Repository connection must be preserved. The hook's existence
 does not prove automatic invocation, nor does **Disable builds** prove the hook is
 disabled. Its behavior with Builds OFF, activation/ownership and complete external
 caller inventory remain **UNVERIFIED**. It may be an independent production build trigger.

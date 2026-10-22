@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { validateReleaseContext } from '../ops/release/verify-context.mjs';
+import { selectReleaseProfile, FULL_TESTS, BASELINE_TESTS, DEV_MARKERS, PRODUCTION_BASELINE } from '../ops/release/run-regressions.mjs';
 
 const yaml = createRequire(import.meta.url)('js-yaml'); // Existing locked dependency.
 const read = path => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
@@ -24,9 +25,9 @@ const pr = () => ({ env: { GITHUB_REPOSITORY: repository.full_name, GITHUB_EVENT
   checkout: { head: merge, parents: [base, source] } });
 const validate = f => validateReleaseContext(f.env, f.event, f.checkout);
 
-test('only DEV pushes and next PR events trigger one read-only, non-environment job', () => {
+test('DEV pushes and bounded migration/release PR events trigger one read-only, non-environment job', () => {
   assert.deepEqual(Object.keys(workflow).sort(), ['jobs', 'name', 'on', 'permissions']);
-  assert.deepEqual(workflow.on, { push: { branches: ['dev'] }, pull_request: { branches: ['next'], types: ['opened', 'synchronize', 'reopened'] } });
+  assert.deepEqual(workflow.on, { push: { branches: ['dev'] }, pull_request: { branches: ['dev', 'next', 'public'], types: ['opened', 'synchronize', 'reopened'] } });
   assert.deepEqual(workflow.permissions, { contents: 'read' });
   assert.deepEqual(Object.keys(workflow.jobs), ['verify']);
   assert.deepEqual(Object.keys(workflow.jobs.verify).sort(), ['defaults', 'env', 'name', 'runs-on', 'steps', 'timeout-minutes']);
@@ -41,21 +42,15 @@ test('only reviewed pinned actions; exact checkout without persisted credentials
     'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020',
   ]);
   assert.deepEqual(steps[0].with, { ref: '${{ github.sha }}', 'fetch-depth': 2, 'persist-credentials': false });
-  assert.deepEqual(steps[1].with, { 'node-version-file': 'ops/ci/.node-version' });
+  assert.deepEqual(steps[1].with, { 'node-version': '24.19.0' });
   assert.ok(steps.every(s => Object.keys(s).every(k => ['name', 'run', 'uses', 'with'].includes(k))));
 });
 test('fixed fail-fast commands validate provenance before dependency installation and never publish', () => {
   const commands = steps.filter(s => s.run).map(s => s.run.trim());
   assert.deepEqual(commands.slice(0, 5), ['node ops/release/verify-context.mjs', 'npm ci --ignore-scripts --no-audit --no-fund',
     'npm run typecheck', 'npm run build', 'npm run validate:artifact']);
-  assert.equal(commands.length, 8);
-  assert.deepEqual(commands[5].split(/\s+/), ['node', '--test',
-    ...['pilot-release-verification', 'f1-response-contract', 'manual-notebook-context', 'notebook-ownership',
-      'f2-build-model', 'f2-api-contract', 'f3-api-contract', 'f3-finalization-model', 'f3-generation-eligibility',
-      'access-control', 'server-capabilities', 'deployment-config', 'dev-worker-preparation', 'dev-preview-ci',
-      'e2e-preview-preparation', 'preview-metadata-capture'].map(n => `tests/${n}.test.mjs`)]);
-  assert.deepEqual(commands.slice(6), ['node ops/dev/prepare-worker.mjs --check-template --target apu-ms-site-dev',
-    'node ops/ci/dev-preview-guard.mjs --check-config']);
+  assert.deepEqual(commands.slice(5), ['node ops/release/run-regressions.mjs']);
+
 });
 test('invoked npm scripts have no deployment lifecycle or provider credentials', async () => {
   const pkg = JSON.parse(await read('package.json'));
@@ -73,6 +68,57 @@ test('valid push records equal source and tested SHAs', () => {
 });
 test('valid PR records candidate separately from verified synthetic merge checkout', () => {
   assert.deepEqual(validate(pr()), { event: 'pull_request', sourceBranch: 'dev', targetBranch: 'next', candidateSourceSha: source, testedCheckoutSha: merge, baseSha: base, webhookMergeShaStatus: 'matches' });
+});
+test('release PR dev to public preserves full source and merge provenance', () => {
+  const f = pr(); f.event.pull_request.base.ref = 'public';
+  assert.deepEqual(validate(f), { event: 'pull_request', sourceBranch: 'dev', targetBranch: 'public',
+    candidateSourceSha: source, testedCheckoutSha: merge, baseSha: base, webhookMergeShaStatus: 'matches' });
+});
+for (const [branch, target] of [
+  ['codex/production-branch-dev-compat', 'dev'],
+  ['codex/production-branch-compat', 'next'],
+  ['codex/production-branch-compat', 'public'],
+]) test(`migration-only PR ${branch} to ${target} requires proven parents and bounded diff`, () => {
+  const f = pr(); f.event.pull_request.head.ref = branch; f.event.pull_request.base.ref = target;
+  f.checkout.changedFiles = ['ops/release/verify-context.mjs'];
+  assert.deepEqual(validate(f), { event: 'pull_request', sourceBranch: branch, targetBranch: target,
+    candidateSourceSha: source, testedCheckoutSha: merge, baseSha: base, webhookMergeShaStatus: 'matches', verificationScope: 'migration-only' });
+  for (const changedFiles of [undefined, [], ['app/api/f1/route.ts'], ['wrangler.jsonc'], ['package-lock.json'],
+    ['.github/workflows/dev-preview.yml'], ['../ops/release/verify-context.mjs'], ['ops/release/verify-context.mjs', 'worker/index.ts']]) {
+    assert.throws(() => validate({ ...f, checkout: { ...f.checkout, changedFiles } }), { message: 'unsupported_migration_scope' });
+  }
+  assert.throws(() => validate({ ...f, checkout: { ...f.checkout, parents: [source, base] } }), { message: 'unproven_merge_source' });
+});
+test('migration source names are exact and may not target a different branch', () => {
+  for (const [branch, target] of [['codex/production-branch-compat-evil', 'public'],
+    ['codex/production-branch-compat', 'dev'], ['codex/production-branch-dev-compat', 'next'],
+    ['dev', 'dev'], ['public', 'dev']]) {
+    const f = pr(); f.event.pull_request.head.ref = branch; f.event.pull_request.base.ref = target;
+    f.checkout.changedFiles = ['ops/release/verify-context.mjs'];
+    assert.throws(() => validate(f), { message: 'unsupported_pr_branches' });
+  }
+});
+test('full DEV retains every existing regression and both offline isolation checks', async () => {
+  assert.deepEqual(FULL_TESTS, ['pilot-release-verification', 'f1-response-contract', 'manual-notebook-context',
+    'notebook-ownership', 'f2-build-model', 'f2-api-contract', 'f3-api-contract', 'f3-finalization-model',
+    'f3-generation-eligibility', 'access-control', 'server-capabilities', 'deployment-config',
+    'dev-worker-preparation', 'dev-preview-ci', 'e2e-preview-preparation', 'preview-metadata-capture']);
+  assert.deepEqual(selectReleaseProfile(Object.fromEntries(DEV_MARKERS.map(path => [path, true])), {}), { name: 'full-dev', tests: FULL_TESTS });
+  const runner = await read('ops/release/run-regressions.mjs');
+  assert.match(runner, /for \(const name of profile.tests\) await access/);
+  assert.match(runner, /'--check-template', '--target', 'apu-ms-site-dev'/);
+  assert.match(runner, /'ops\/ci\/dev-preview-guard.mjs', '--check-config'/);
+  assert.doesNotMatch(runner, /process\.env|fetch\s*\(|--deploy|wrangler (deploy|preview|versions)|https?:\/\/api\./);
+});
+test('legacy production profile requires all DEV markers absent and exact immutable source hashes', () => {
+  const absent = Object.fromEntries(DEV_MARKERS.map(path => [path, false]));
+  assert.deepEqual(BASELINE_TESTS, ['pilot-release-verification', 'f1-response-contract', 'f2-build-model',
+    'f2-api-contract', 'f3-api-contract', 'f3-finalization-model', 'access-control', 'deployment-config']);
+  assert.deepEqual(selectReleaseProfile(absent, PRODUCTION_BASELINE), { name: 'immutable-production-baseline-b0162eb', tests: BASELINE_TESTS });
+  for (const key of Object.keys(PRODUCTION_BASELINE)) assert.throws(() =>
+    selectReleaseProfile(absent, { ...PRODUCTION_BASELINE, [key]: source }), { message: 'unsupported_production_baseline' });
+  for (const key of DEV_MARKERS) assert.throws(() => selectReleaseProfile({ ...absent, [key]: true }, PRODUCTION_BASELINE), { message: 'partial_dev_inventory' });
+  assert.throws(() => selectReleaseProfile({}, PRODUCTION_BASELINE), { message: 'invalid_release_inventory' });
 });
 // Synthetic webhook fixtures: none reconstructs the uncaptured run 39630801929 payload.
 for (const [name, value, status] of [

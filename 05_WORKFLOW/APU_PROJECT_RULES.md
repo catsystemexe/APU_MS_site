@@ -62,8 +62,11 @@ Distinguish content logic, analytical logic, state, presentation, and interactio
 For APU Site source code, the canonical source of truth is:
 
 - GitHub repository: `catsystemexe/APU_MS_site`
-- Stable branch: `main`
-- Active development branch: `next`
+- Legacy/reference branch: `main` (unchanged)
+- Active development branch: `dev`
+- Protected production release branch: `public`
+
+Migration boundary: the original production ref is `next` until its authenticated rename/protection read-back passes. Transitional release CI accepts `dev → next` and `dev → public`; this permits source verification only, never deployment or merging the full DEV application history.
 
 Current checkpoint tags:
 
@@ -104,7 +107,7 @@ Use for:
 
 Codex Cloud does not see Google Drive or ChatGPT Project Sources unless they are explicitly present in the repository checkout or exposed through a verified mount/tool.
 
-Codex Cloud may expose the checkout as branch `work` even when the task is based on `next`. Do not treat `work` alone as wrong branch. Verify by expected HEAD commit and task base ref.
+Codex Cloud may expose the checkout as branch `work` even when the task is based on `dev`. Do not treat `work` alone as wrong branch. Verify by expected HEAD commit and task base ref.
 
 Do not create checkpoint or release tags from Codex Cloud unless `origin`, remote refs, and existing tags are available and verified.
 
@@ -147,7 +150,7 @@ For ordinary implementation batches:
 For governing workflow documents such as `WORKFLOW_CORE.md`, role files, `APU_PROJECT_RULES.md`, or repository `AGENTS.md`:
 
 1. Change them only through an explicit workflow/design decision.
-2. Update the canonical GitHub copy on `next`.
+2. Update the canonical GitHub copy through `dev`; carry only the approved governance/CI diff to protected `public` through a focused PR when needed. During migration the original production branch remains `next` until rename is verified. Never use this as authorization to merge unrelated DEV application commits.
 3. Verify the resulting repository content.
 4. Refresh affected ChatGPT Project Sources manually from the approved GitHub version.
 
