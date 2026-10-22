@@ -54,8 +54,9 @@ Do not reinterpret the requested outcome merely because an alternative implement
 ## Repository model
 
 - Canonical repository: `catsystemexe/APU_MS_site`
-- Stable branch: `main`
-- Active development branch: `next`
+- Legacy/reference branch: `main` (unchanged)
+- Active development branch: `dev`
+- Protected production release branch: `public` (migration: `next` until rename/protection verification)
 
 Codex Cloud may expose its checkout as branch `work`. Do not treat that name alone as evidence of an incorrect base.
 
