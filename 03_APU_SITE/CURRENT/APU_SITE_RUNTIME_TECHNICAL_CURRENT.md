@@ -4,6 +4,21 @@ Status: CURRENT SOURCE/RUNTIME CONTRACT
 
 Purpose: describe the current repository/runtime contract. Deployment state is recorded only when independently verified; this document must not infer production state from repository contents alone.
 
+## APU PUBLIC — canonical hostname and hosted evidence (2026-10-23)
+
+**CURRENT PUBLIC ADDRESS (operator-verified):** `https://apu.catsystem.ai/` is the preferred production URL. Cloudflare Dashboard shows `apu.catsystem.ai` as a Production Custom Domain in zone `catsystem.ai` attached to the existing Worker `apu-ms-site`. The original `https://apu-ms-site.catsystem-exe.workers.dev/` remains an alternate Worker URL; adding the Custom Domain did not require an application-code change or a new Worker deployment.
+
+**Release/runtime context:** PR [#65](https://github.com/catsystemexe/APU_MS_site/pull/65) was merged into `public` at `284c108d4ae053335a524bacc773a2af5c3a4779` (release tree `ad35807067666bc5f71ed0acd177c9b3c27c777f`). The latest supplied production-runtime read-back before the domain change reported Deployment `e6b8f6d3-dd98-415c-a2c7-d9f3602cc829`, Version `58801e13-5c86-4836-8089-fd573b9cfed2`, traffic 100%. These are dated prior observations, not a new post-domain deployment read-back. Dedicated DEV Worker and its URL are not part of this domain change.
+
+**Access and authentication evidence (operator screenshots/session, 2026-10-23):**
+- Existing PUBLIC Access policy renamed to `APU PUBLIC`; previously read-back `Allow` includes only `catsystem.exe@gmail.com` and `z.vilimek@gmail.com`. No broad Everyone Allow or Bypass policy was shown for the PUBLIC application.
+- Cloudflare account has One-time PIN and Google identity providers; PUBLIC application accepts all available configured identity providers. Successful PIN delivery to an external mailbox has **not** been tested.
+- Anonymous browsing of `https://apu.catsystem.ai/` required Cloudflare Access login: **PASS (operator-reported)**.
+- Authenticated `https://apu.catsystem.ai/api/session` returned `{"email":"catsystem.exe@gmail.com","isDeveloper":true}`: **PASS (operator-reported)**. Production `APU_DEVELOPER_EMAILS` was operator-confirmed as operator-only; application assigns other permitted identities tester role.
+- Tester `z.vilimek@gmail.com` session/role on the new hostname, complete authenticated UI/assets flow and provider-backed F1 → F2 → F3 acceptance remain **NOT VERIFIED**. KI-01 and KI-03 remain **OPEN**. Do not generalize the Access/session checks into full end-to-end functional acceptance.
+
+This current record supersedes earlier *current-state* references to production branch `next`, the original Worker URL as the only PUBLIC address, and historical pre-release hosting status. The dated historical sections below are retained as originally recorded.
+
 ## APU-P5-E — dedicated hosted DEV bootstrap closeout (2026-10-21)
 
 **HOSTED DEV PROVISIONED / P5-D2 HOSTED SMOKE PASS / PROVIDER-FUNCTIONAL READINESS PENDING.** The operator's supplied P5-D2 completion evidence establishes the dedicated permanent DEV Worker below. This is operator-reported authenticated hosted evidence, not a new Cloudflare inspection or smoke run by Codex. It supersedes the pre-bootstrap "DEV not provisioned" statements in the historical records below, without replacing earlier deployment identities or implementation evidence.
