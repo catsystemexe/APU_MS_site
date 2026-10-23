@@ -7,13 +7,14 @@ import { fetchWithPilot } from "../app/telemetry/fetch.ts";
 import { createCurrentRozborState, createF2ToF3Snapshot } from "../app/f2-build-model.ts";
 import { createF3State, acceptF3Render, createF3RenderRequest, updateF3Config, markF3SourceStale } from "../app/f3-finalization-model.ts";
 const id=()=>crypto.randomUUID();
-function fixture(t,{enabled=true}={}){
+function fixture(t,{enabled=true,contextReady}={}){
   let now=0,civil=0;const sent=[],events=[],contexts=[];
   const pilot=createPilot({enabled,eligible:enabled,noticeVersion:"test-notice-v1",monotonic:()=>now,wall:()=>civil,random:()=>0,
     fetcher:async(path,init)=>{
       const body=JSON.parse(init.body);sent.push({path,body});
       if(path.endsWith("context")){
         if(body.action==="stop")return Response.json({code:"stopped"});
+        if(contextReady)await contextReady;
         const context={code:"ready",context:"synthetic-opaque-context-"+contexts.length,session_id:id(),tab_id:body.tab_id,server_anchor_ms:0,expires_at:43200000,measurement_version:"pilot-v1",metadata_enabled:false};
         contexts.push(context);return Response.json(context);
       }
@@ -135,4 +136,38 @@ test("old async continuations after consent stop/re-opt-in cannot change the new
   old.transition("F3","controller_instruction");observer.expect(old,request,null);observer.observe(acceptF3Render(state,material,request),true);old.resolve("accepted");await f.drain();
   assert.equal(f.events.slice(before).filter(e=>["workflow_started","phase_transition","document_accepted","operation_resolved"].includes(e.event_name)).length,0);
   assert.deepEqual(await old.headers(),{});
+});
+for(const boundary of ["reset","stop/re-opt-in","idle renewal"])test(`stale transition after ${boundary} cannot overwrite the next real transition's from/to`,async t=>{
+  const f=fixture(t);await f.pilot.optIn();const old=f.pilot.begin("main_chat");await old.headers();
+  if(boundary==="reset")f.pilot.reset();
+  else if(boundary==="stop/re-opt-in"){await f.pilot.stop();await f.pilot.optIn();}
+  else{f.time(1800000);f.pilot.interaction();}
+  const fresh=f.pilot.begin("analysis"),headers=await fresh.headers();
+  assert.equal(old.isCurrent(),false);assert.equal(fresh.isCurrent(),true);
+  fresh.transition("F2","user_navigation");await f.drain();const before=f.events.length;
+  old.transition("F3","controller_instruction");await f.drain();assert.equal(f.events.length,before);
+  fresh.transition("F3","user_navigation");f.pilot.transition("F2","return");await f.drain();
+  assert.deepEqual(f.events.filter(e=>e.event_name==="phase_transition"&&e.workflow_id===headers["x-apu-telemetry-workflow"]).map(e=>[e.payload.from,e.payload.to]),[["F1","F2"],["F2","F3"],["F3","F2"]]);
+});
+for(const boundary of ["reset","stop","opt-in"])test(`unmeasured ticket cannot change phase after ${boundary}`,async t=>{
+  const f=fixture(t),old=f.pilot.begin("main_chat");assert.deepEqual(await old.headers(),{});
+  if(boundary==="reset")f.pilot.reset();else if(boundary==="stop")await f.pilot.stop();
+  if(boundary!=="opt-in")old.transition("F3","controller_instruction");
+  await f.pilot.optIn();old.transition("F3","controller_instruction");
+  const fresh=f.pilot.begin("analysis");await fresh.headers();f.pilot.transition("F2","user_navigation");await f.drain();
+  assert.equal(f.events.find(e=>e.event_name==="workflow_started").payload.phase,"F1");
+  assert.deepEqual(f.events.filter(e=>e.event_name==="phase_transition").map(e=>[e.payload.from,e.payload.to]),[["F1","F2"]]);
+});
+test("current unmeasured transition keeps the actual phase until opt-in without collecting",async t=>{
+  const f=fixture(t),operation=f.pilot.begin("main_chat");operation.transition("F2","controller_instruction");
+  await f.drain();assert.deepEqual(f.sent,[]);
+  await f.pilot.optIn();await f.pilot.begin("analysis").headers();f.pilot.transition("F3","user_navigation");await f.drain();
+  assert.equal(f.events.find(e=>e.event_name==="workflow_started").payload.phase,"F2");
+  assert.deepEqual(f.events.filter(e=>e.event_name==="phase_transition").map(e=>[e.payload.from,e.payload.to]),[["F2","F3"]]);
+});
+test("pre-consent ticket cannot change phase while the new visit context is still pending",async t=>{
+  let release;const contextReady=new Promise(resolve=>{release=resolve;}),f=fixture(t,{contextReady}),old=f.pilot.begin("main_chat");
+  const pending=f.pilot.optIn();old.transition("F3","controller_instruction");release();await pending;
+  await f.pilot.begin("analysis").headers();await f.drain();
+  assert.equal(f.events.find(e=>e.event_name==="workflow_started").payload.phase,"F1");
 });

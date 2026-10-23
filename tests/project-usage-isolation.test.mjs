@@ -186,3 +186,35 @@ test("actual Need Router dispatch consumes an explicit retry intent once without
   assert.deepEqual(observed,[["need_routing","retry"]]);assert.equal(f.context.needRoutingReasonRef.current,"initial");
   await router(f.context.canonicalF2Need);assert.equal(f.requests.length,1,"cache reuse does not emit another intent or provider call");
 });
+for(const mode of ["disabled","before opt-in","stop/re-opt-in","idle renewal"])test(`actual accepted MAIN phase stays synchronized with ${mode} telemetry; reset continuation stays blocked`,async t=>{
+  let now=0;const events=[],requests=[];
+  const pilot=createPilot({enabled:mode!=="disabled",eligible:true,noticeVersion:"test-notice-v1",monotonic:()=>now,
+    fetcher:async(path,init)=>{
+      const body=JSON.parse(init.body);requests.push(path);
+      if(path.endsWith("context"))return Response.json(body.action==="stop"?{code:"stopped"}:{code:"ready",context:"synthetic-context",session_id:crypto.randomUUID(),tab_id:body.tab_id,server_anchor_ms:0,expires_at:43200000,measurement_version:"pilot-v1",metadata_enabled:false});
+      events.push(...body.events);return Response.json({code:"ready",acknowledged:body.events.map(e=>e.event_id)});
+    }});
+  t.after(()=>pilot.stop());
+  async function drain(){for(let attempt=0;attempt<20;attempt++){await Promise.resolve();await pilot.flush();if(pilot.status().queued===0)return;}assert.fail("synthetic telemetry queue did not drain");}
+  if(mode==="stop/re-opt-in"||mode==="idle renewal")await pilot.optIn();
+  const operation=pilot.begin("main_chat");await operation.headers();
+  if(mode==="stop/re-opt-in"){await pilot.stop();await pilot.optIn();}
+  if(mode==="idle renewal"){now=1800000;pilot.interaction();await pilot.begin("analysis").headers();}
+  assert.equal(operation.isCurrent(),false);
+  let arrow;function find(node){if(ts.isVariableDeclaration(node)&&node.name.getText(ast)==="processLine")arrow=node.getText(ast);ts.forEachChild(node,find);}find(ast);assert.ok(arrow);
+  const f=fixture(),phases=[];
+  Object.assign(f.context,{pilot,operation,phase:"intake",requestId:"synthetic-main",requestScope:{epoch:0},isCurrentRequest:()=>f.context.projectEpochRef.current===0,
+    receivedDone:false,completeText:"",clearDialogActionsPreview(){},splitAssistantMetadata:()=>({visibleContent:""}),setPhase:next=>phases.push(next)});
+  const processLine=runInNewContext(`${compile(`const ${arrow};`)}\nprocessLine;`,f.context);
+  processLine(JSON.stringify({type:"done",phase:"development"}));
+  assert.deepEqual(phases,["development"]);
+  if(mode==="disabled")assert.deepEqual(requests,[]);
+  else{
+    if(mode==="before opt-in"){assert.deepEqual(requests,[]);await pilot.optIn();}
+    pilot.transition("F3","user_navigation");await drain();
+    const expected=mode==="before opt-in"?[["F2","F3"]]:[["F1","F2"],["F2","F3"]];
+    assert.deepEqual(events.filter(e=>e.event_name==="phase_transition").map(e=>[e.payload.from,e.payload.to]),expected);
+  }
+  const count=events.length;f.reset();processLine(JSON.stringify({type:"done",phase:"output"}));await drain();
+  assert.deepEqual(phases,["development"]);assert.equal(events.length,count);
+});

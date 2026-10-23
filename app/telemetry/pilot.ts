@@ -11,7 +11,12 @@ export function createPilot(options: ClientOptions & { wall?: () => number } = {
   let pending: Promise<boolean> | null = null, visible = false, focused = false;
   let started = new Set<string>(), documents = new Set<symbol>();
   const lastOperations = new Map<Operation, string>();
-  const ignored: PilotOperation = { isCurrent: () => false, transition(next) { phase = next; }, headers: () => ({}), resolve() {} };
+  function ignored(): PilotOperation {
+    const g = generation, operationEpoch = epoch, session = client.timing()?.session_id;
+    return { isCurrent: () => false, transition(next) {
+      if (g === generation && operationEpoch === epoch && session === client.timing()?.session_id) phase = next;
+    }, headers: () => ({}), resolve() {} };
+  }
   const enabled = () => options.enabled === true && consent;
   function emitIntervals(intervals: ActivityInterval[]) {
     for (const interval of intervals) client.emit("activity_interval", workflow, interval);
@@ -19,7 +24,8 @@ export function createPilot(options: ClientOptions & { wall?: () => number } = {
   function elapsed() { return client.timing()?.elapsed_ms ?? 0; }
   function startSession() {
     if (pending) return pending;
-    const g = generation;
+    // Invalidate previous tickets at renewal start, before the asynchronous context arrives.
+    const g = ++generation;
     pending = client.optIn().then(ok => {
       if (g !== generation) return false;
       if (ok) { activity.reset(phase); activity.view(elapsed(), civil(), visible, focused); if (pendingInteraction) activity.interaction(elapsed(), civil()); pendingInteraction = false; }
@@ -77,10 +83,10 @@ export function createPilot(options: ClientOptions & { wall?: () => number } = {
     meaningful() { if (enabled()) { this.interaction(); ensureWorkflow(); } },
     transition,
     begin(operation: Operation, reason: "initial" | "retry" | "regenerate" = "initial"): PilotOperation {
-      if (!enabled()) return ignored;
+      if (!enabled()) return ignored();
       // Authorized requests extend a visit, independently of the visible/focused activity proxy.
       if (client.status().active && !client.interaction()) activity.reset();
-      ensureSession(); const wf = ensureWorkflow(); if (!wf) return ignored;
+      ensureSession(); const wf = ensureWorkflow(); if (!wf) return ignored();
       const id = crypto.randomUUID(), g = generation, operationEpoch = epoch;
       const phaseAtStart = phase;
       const prior = reason === "initial" ? null : lastOperations.get(operation) ?? null;
@@ -96,7 +102,11 @@ export function createPilot(options: ClientOptions & { wall?: () => number } = {
       const isCurrent = () => g === generation && operationEpoch === epoch && enabled() && emitted && session === client.timing()?.session_id;
       return {
         isCurrent,
-        transition(next, reason) { if (isCurrent()) transition(next, reason); else phase = next; },
+        transition(next, reason) {
+          // A ticket can observe only its own visit/episode, including when no event was collected.
+          if (g !== generation || operationEpoch !== epoch || session !== (client.timing()?.session_id ?? null)) return;
+          if (isCurrent()) transition(next, reason); else phase = next;
+        },
         headers() {
           const capture = () => {
           intent();

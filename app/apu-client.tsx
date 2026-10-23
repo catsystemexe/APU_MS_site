@@ -1446,7 +1446,8 @@ function ApuWorkspace({ email, isDeveloper, onLogout, registerInvalidation, pilo
           if (event.phase) {
             const nextPhase = event.phase as ConversationPhase;
             completedPhase = nextPhase;
-            operation.transition(nextPhase === "intake" ? "F1" : nextPhase === "development" ? "F2" : "F3", "controller_instruction");
+            // The current-project guard above accepts the actual phase, independently of telemetry ticket expiry.
+            pilot.transition(nextPhase === "intake" ? "F1" : nextPhase === "development" ? "F2" : "F3", "controller_instruction");
             setPhase(nextPhase);
             if (phase === "development" && nextPhase === "output") setActivePanel("output");
           }
