@@ -8,14 +8,20 @@ import { upsertUsageRecord, type ModelUsageRecord, type TelemetryPhase, type Usa
 import { authorizedModelPayload, type ServerIdentity } from "./server-capabilities.ts";
 
 export type RequestUsageCollector = {
-  sink: (record: ModelUsageRecord) => void;
+  sink: (record: ModelUsageRecord) => void | Promise<void>;
   records: () => ModelUsageRecord[];
 };
 
-export function createRequestUsageCollector(): RequestUsageCollector {
+export function createRequestUsageCollector(persistence?: (record: ModelUsageRecord) => void | Promise<void>): RequestUsageCollector {
   let current: ModelUsageRecord[] = [];
   return {
-    sink(record) { current = upsertUsageRecord(current, record); },
+    sink(record) {
+      current = upsertUsageRecord(current, record);
+      if (persistence) {
+        // Optional B1 hook; the request-scoped adapter owns its 100ms bound/lifetime.
+        try { return Promise.resolve(persistence(record)).catch(() => {}); } catch { /* fail-open */ }
+      }
+    },
     records: () => current,
   };
 }

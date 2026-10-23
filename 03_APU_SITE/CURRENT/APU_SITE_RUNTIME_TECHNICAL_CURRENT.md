@@ -4,6 +4,14 @@ Status: CURRENT SOURCE/RUNTIME CONTRACT
 
 Purpose: describe the current repository/runtime contract. Deployment state is recorded only when independently verified; this document must not infer production state from repository contents alone.
 
+## Pilot telemetry B1 — source foundation only (2026-10-23)
+
+**IMPLEMENTED / LOCAL V3 PASS / DISABLED / NOT DEPLOYED.** Dedicated telemetry contracts, HMAC/session opt-in context, same-Worker collector, memory-only client interface, telemetry-only SQL/store and a request-scoped fail-open AI persistence interface are present. No existing UI/workflow emitter or AI route is instrumented yet; B2 owns that wiring. Existing authentication, pedagogical flow, diagnostic ledger and business persistence remain unchanged.
+
+DEV defaults are `APU_TELEMETRY_ENABLED=0` and metadata off. Absent/disabled preparation inputs preserve the original materialized DEV configuration. Collection additionally needs explicit isolated DEV resources, enrollment, approved privacy/notice configuration and per-visit opt-in; missing configuration/binding/key is telemetry no-op, not application failure. No persistent browser participant identifier is introduced.
+
+Typecheck, 271 relevant automated tests, focused lint, canonical build and Worker artifact validation passed with synthetic identities/keys and in-memory SQLite. Pinned Vinext 0.0.50 request `waitUntil` lifetime was verified through its actual Worker entry with synthetic RSC/streaming interleaving; this is not hosted or browser acceptance. See [implemented contract/evidence](../TELEMETRY/TELEMETRY_ARCHITECTURE.md#10-implemented-b1-contract-and-verification--2026-10-23). B2–B4 and activation gates remain open; no provisioning, remote migration, real collection, actual provider call or deployment occurred. CI release-context restrictions remain separate from local technical PASS.
+
 ## APU PUBLIC — canonical hostname and hosted evidence (2026-10-23)
 
 **CURRENT PUBLIC ADDRESS (operator-verified):** `https://apu.catsystem.ai/` is the preferred production URL. Cloudflare Dashboard shows `apu.catsystem.ai` as a Production Custom Domain in zone `catsystem.ai` attached to the existing Worker `apu-ms-site`. The original `https://apu-ms-site.catsystem-exe.workers.dev/` remains an alternate Worker URL; adding the Custom Domain did not require an application-code change or a new Worker deployment.

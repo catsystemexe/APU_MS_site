@@ -3,5 +3,6 @@
   "accessApplicationId": null,
   "accessAudience": null,
   "accessTeamDomain": null,
-  "operatorEmail": null
+  "operatorEmail": null,
+  "telemetry": { "enabled": false }
 }

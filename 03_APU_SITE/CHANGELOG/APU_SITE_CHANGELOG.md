@@ -4,6 +4,13 @@ Status: CURRENT
 
 Records significant verified product/runtime/project changes. It is not a complete Git log. Historical Sites-era entries are retained where they remain useful; current deployment state must not be inferred from a changelog entry alone.
 
+## 2026-10-23 — Pilot telemetry B1 disabled foundation
+
+- Implemented strict v1 client/server telemetry boundaries, enrolled HMAC/session opt-in context, same-Worker collector, bounded memory-only client queue, telemetry-only SQL/store and optional request-scoped AI sink using pinned Vinext `waitUntil`. No existing workflow or AI route is instrumented; B2 remains separate.
+- DEV preparation preserves the original absent/disabled output and accepts explicitly dedicated future telemetry inputs. Default collection/metadata stay off; no persistent browser participant identifier or business/authentication persistence changes.
+- Technical V3 PASS: typecheck, 271 relevant tests using synthetic identities/keys and emulated SQL, focused lint, canonical build and Worker artifact validation. [Exact evidence](../TELEMETRY/TELEMETRY_ARCHITECTURE.md#10-implemented-b1-contract-and-verification--2026-10-23). CI `unsupported_pr_branches` remains a separate provenance restriction; no guard changes.
+- **Source only, not deployed or collecting.** No remote provisioning, key provisioning, migrations, hosted update, real user collection or actual AI-provider request. B-07 remains open; B2–B4 and privacy/activation gates remain pending.
+
 ## 2026-10-23 — APU PUBLIC canonical custom domain
 
 - Operator attached `apu.catsystem.ai` as a Production Custom Domain of existing Worker `apu-ms-site` in Cloudflare zone `catsystem.ai`. Set `https://apu.catsystem.ai/` as the preferred PUBLIC URL; retain `https://apu-ms-site.catsystem-exe.workers.dev/` as an alternate. No APU application-code changes or Worker deployment were required for the hostname assignment.
