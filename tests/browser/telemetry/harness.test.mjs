@@ -221,43 +221,115 @@ test("actual browser MAIN disconnect retains only its own late ledger and reload
 });
 
 test("actual browser controlled activity/blur, interval union and idle renewal need no thirty-minute wait", async t => {
-  const result = scenario("activity_idle");
-  const f = await browserFixture(t); const { h, page, context } = f;
-  const cdp = await context.newCDPSession(page);
-  await cdp.send("Emulation.setFocusEmulationEnabled", { enabled: true });
-  await f.consent();
-  const at = await page.evaluate(() => Date.now()) + 1000;
-  assert.ok(Math.abs(at - h.now) < 5000, `browser and server test clocks agree: difference ${at - h.now}ms`);
-  await page.clock.pauseAt(new Date(at)); h.freeze(at);
-  await page.locator("#message").fill("Synthetic activity anchor");
-  const view = await page.evaluate(() => ({ visible: document.visibilityState, focused: document.hasFocus() }));
-  assert.deepEqual(view, { visible: "visible", focused: true });
-  h.advance(15000); await page.clock.runFor(15000);
-  await cdp.send("Emulation.setFocusEmulationEnabled", { enabled: false });
-  // A real CDP focus override can leave native headless focus unchanged; use a
-  // real second tab to blur the first, without directly invoking pilot methods.
-  const other = await context.newPage(); await other.goto(h.origin);
-  const visibility = await page.evaluate(() => ({ visible: document.visibilityState, focused: document.hasFocus() }));
-  await delay(100);
-  h.advance(15000); await page.clock.runFor(15000); await delay(100);
-  const beforeRenewal = createReport(h.db.db, reportOptions);
-  assert.equal(beforeRenewal.rows.sessions[0].active_ms, 15000, "exactly 15s of actual foreground input before blur");
-  assert.equal(beforeRenewal.rows.participants[0].active_ms, 15000);
-  assert.equal(beforeRenewal.rows.days[0].active_ms, 15000);
-  await other.close(); await page.bringToFront();
-  await page.locator("#message:enabled").waitFor();
-  // Focus revalidation intentionally clears measurement. Re-opt-in is explicit;
-  // the subsequent 30m inactivity is a distinct clock-controlled renewal case.
-  if (await page.getByRole("button", { name: "Zapojit měření pro tuto návštěvu" }).count()) await f.consent();
-  const sessions = h.db.rows("telemetry_sessions").length;
-  h.advance(30 * 60000); await page.clock.fastForward(30 * 60000);
-  await page.locator("#message").fill("Synthetic input after idle");
-  await waitFor(() => h.db.rows("telemetry_sessions").length === sessions + 1, "idle interaction renews to distinct context");
-  const renewed = h.db.rows("telemetry_sessions").at(-1);
-  assert.ok(h.db.rows("telemetry_sessions").slice(0, -1).every(s => s.session_id !== renewed.session_id && s.tab_id !== renewed.tab_id));
-  assert.equal(h.providerCalls.length, 0);
-  assert.deepEqual(f.errors, []); assert.deepEqual(f.outbound, []); assert.deepEqual(h.blocked, []);
-  Object.assign(result, { status: "PASS", active_ms: 15000, participant_union_ms: 15000, idle_renewal: true, visibility_observed_after_tab_change: visibility, native_os_focus: "NOT VERIFIED" });
+  // Check aligned timers and a controlled 1,032ms offset matching the reported
+  // shortfall. This is a regression fixture, not a native Windows clock trace.
+  for (const offset of [0, 1032]) await t.test(`input offset ${offset}ms`, async sub => {
+    const result = scenario(offset ? "activity_idle_offset" : "activity_idle");
+    const f = await browserFixture(sub); const { h, page, context } = f;
+    await page.evaluate(() => {
+      window.__activityTrace = [];
+      for (const type of ["keydown", "input", "focus", "blur", "visibilitychange"])
+        window.addEventListener(type, event => {
+          // Bounded, test-only observations: no values, targets, IDs or tokens.
+          if (window.__activityTrace.length < 32) window.__activityTrace.push({ type: event.type,
+            wall: Date.now(), mono: performance.now(), visible: document.visibilityState, focused: document.hasFocus() });
+        });
+    });
+    const intervals = () => h.db.rows("telemetry_events").filter(e => e.event_name === "activity_interval").map(e => JSON.parse(e.event_json).payload);
+    const duration = () => intervals().reduce((sum, i) => sum + i.end_ms - i.start_ms, 0);
+    const timing = result.timing = [];
+    const snapshot = async label => {
+      timing.push({ label, server: h.now, browser: await page.evaluate(() => ({ wall: Date.now(), mono: performance.now(),
+        visible: document.visibilityState, focused: document.hasFocus(), events: window.__activityTrace.splice(0) })),
+        sent: h.requests.filter(r => r.path === "/api/telemetry/events").flatMap(r => (r.body?.events ?? [])
+          .filter(e => e.event_name === "activity_interval").map(e => ({ status: r.status, elapsed: e.elapsed_ms, ...e.payload }))),
+        persisted: intervals() });
+    };
+    await page.bringToFront();
+    const cdp = await context.newCDPSession(page);
+    await cdp.send("Emulation.setFocusEmulationEnabled", { enabled: true });
+    await snapshot("before_pause");
+    const at = await page.evaluate(() => Date.now()) + 1000;
+    await page.clock.pauseAt(new Date(at)); h.freeze(at);
+    await snapshot("paused_before_consent");
+    // Keep real mouse input while paused; force skips RAF actionability checks.
+    await page.getByRole("button", { name: "Zapojit měření pro tuto návštěvu" }).click({ force: true });
+    await page.getByRole("button", { name: "Zastavit měření", exact: true }).waitFor();
+    await snapshot("consented");
+    assert.equal(await page.evaluate(() => Date.now()), h.now);
+    h.advance(offset); await page.clock.runFor(offset);
+    // A real keydown starts activity without enqueueing an unrelated workflow.
+    await page.locator("#message").press("ArrowLeft");
+    await snapshot("input");
+    const input = timing.at(-1).browser;
+    assert.deepEqual([input.visible, input.focused], ["visible", true]);
+
+    // Hold the actual closing-interval request before the collector, never fake
+    // an acknowledgement or storage. A fixed sleep cannot make it observable.
+    let release; const gate = new Promise(resolve => { release = resolve; });
+    let held = false;
+    await context.route("**/api/telemetry/events", async route => {
+      const events = route.request().postDataJSON()?.events ?? [];
+      if (events.some(e => e.event_name === "activity_interval" && e.payload.end_ms === offset + 15000)) {
+        held = true; await gate;
+      }
+      await route.fallback();
+    });
+    try {
+      h.advance(15000); await page.clock.runFor(15000);
+      if (offset) await waitFor(() => duration() === 13968, "first timer fragment persisted");
+      await snapshot("advanced");
+      const endpoint = timing.at(-1).browser;
+      assert.equal(endpoint.mono - input.mono, 15000);
+      assert.equal(endpoint.wall - input.wall, 15000);
+      assert.equal(h.now, endpoint.wall);
+      await cdp.send("Emulation.setFocusEmulationEnabled", { enabled: false });
+      await snapshot("focus_override_off");
+      // Observe a real browser blur; disabling CDP's focus override alone can
+      // leave the native headless window focused. No pilot method is invoked.
+      const other = await context.newPage(); await other.goto(h.origin);
+      await cdp.send("Emulation.setFocusEmulationEnabled", { enabled: false });
+      await waitFor(() => page.evaluate(() => !document.hasFocus() && window.__activityTrace.some(e => e.type === "blur" && !e.focused)), "browser blur delivered");
+      await snapshot("blurred");
+      assert.equal(timing.at(-1).browser.mono, endpoint.mono);
+      // The aligned request is already due at 15s. Only the offset tail needs
+      // the next flush tick; never delay a send across the collector skew gate.
+      if (offset) { h.advance(15000); await page.clock.runFor(15000); }
+      await waitFor(() => held, "closing activity request reached transport gate");
+      result.active_ms_before_delivery = duration();
+      assert.equal(duration(), offset ? 13968 : 0, "a pending request is not persisted evidence");
+      await snapshot("delivery_held");
+      release();
+      await waitFor(() => duration() === 15000, "all foreground intervals persisted");
+      await h.drain(); await snapshot("persisted");
+      const beforeRenewal = createReport(h.db.db, reportOptions);
+      assert.equal(beforeRenewal.rows.sessions[0].active_ms, 15000, "exactly 15s of actual foreground input before blur");
+      assert.equal(beforeRenewal.rows.participants[0].active_ms, 15000);
+      assert.equal(beforeRenewal.rows.days[0].active_ms, 15000);
+      assert.deepEqual(intervals().map(i => i.end_ms - i.start_ms), offset ? [13968, 1032] : [15000]);
+      assert.ok(intervals().every(i => i.start_ms >= offset && i.end_ms <= offset + 15000), "no activity after blur");
+      // Another complete tick while blurred must add neither time nor rows.
+      const before = intervals();
+      h.advance(15000); await page.clock.runFor(15000);
+      await h.drain(); assert.deepEqual(intervals(), before);
+      await other.close(); await page.bringToFront();
+      await page.locator("#message:enabled").waitFor();
+      // Focus revalidation clears measurement; re-opt-in remains explicit.
+      if (await page.getByRole("button", { name: "Zapojit měření pro tuto návštěvu" }).count()) {
+        await page.getByRole("button", { name: "Zapojit měření pro tuto návštěvu" }).press("Enter");
+        await page.getByRole("button", { name: "Zastavit měření", exact: true }).waitFor();
+      }
+      const sessions = h.db.rows("telemetry_sessions").length;
+      h.advance(30 * 60000); await page.clock.fastForward(30 * 60000);
+      await page.locator("#message").fill("Synthetic input after idle");
+      await waitFor(() => h.db.rows("telemetry_sessions").length === sessions + 1, "idle interaction renews to distinct context");
+      const renewed = h.db.rows("telemetry_sessions").at(-1);
+      assert.ok(h.db.rows("telemetry_sessions").slice(0, -1).every(s => s.session_id !== renewed.session_id && s.tab_id !== renewed.tab_id));
+      assert.equal(h.providerCalls.length, 0);
+      assert.deepEqual(f.errors, []); assert.deepEqual(f.outbound, []); assert.deepEqual(h.blocked, []);
+      Object.assign(result, { status: "PASS", active_ms: 15000, participant_union_ms: 15000, idle_renewal: true, native_os_focus: "NOT VERIFIED" });
+    } finally { release(); await snapshot("final"); }
+  });
 });
 
 test("two actual browser tabs persist overlapping activity and B3 unions participant time", async t => {

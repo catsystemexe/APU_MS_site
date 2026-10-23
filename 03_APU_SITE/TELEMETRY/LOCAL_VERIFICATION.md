@@ -160,3 +160,91 @@ Native Windows **NOT VERIFIED**. In PowerShell, set `$env:CHROMIUM_PATH` to an a
 **Still unverified:** native OS focus/minimization and actual hidden-tab visibility timing (headless tab change here reported `visible` with `focused=false`); Windows launcher/toolchain/ACL; full SSR/hydration/RSC/Vinext/Worker/Miniflare bootstrap; real provider, deployed bindings/account quotas and hosted behavior. Controlled CDP focus and virtual clocks prove the harness cases, not these platform boundaries. The prior Nastavení/Session JSON hit-test finding remains unconfirmed and unrepaired. Seeded notebook data means these workflow tests do not validate provider-backed extraction quality from an empty notebook.
 
 **Next:** review the stacked H1 source and use it in separately authorized native Windows B4 V3 acceptance, reconciling the standard-launcher/bootstrap gap without altering auth policy. B-07 stays OPEN; G0–G5 remain open. No activation, real participant data, real provider request, remote DB operation/migration, provisioning, deployment, merge or B4-completion/hosted trial was performed. Stop after H1.
+
+## B4-H1 controlled-activity clock repair — 2026-10-24
+
+**Linux V2 PASS; native Windows NOT VERIFIED; full B4 remains pending.** Repair branch `codex/telemetry-b4-h1-activity-clock-repair`, stacked on PR #71 / exact base `7dd6de18ccaa10134bb9b62945a95ecd5afa8d9a`. The base workspace was clean and preserved. Only the controlled-activity test, this additive evidence and open B-07 tracking changed. The fixture/server clock, activity engine, authentication/consent/collector, SQL/reporting, configuration, dependencies, launcher and build are unchanged. Earlier Windows evidence and historical Linux evidence were not overwritten.
+
+### Diagnosis and evidence boundary
+
+The original harness starts consent/timers **before** advancing to `Date.now() + 1000` with `pauseAt()`. Therefore the first activity tick need not end exactly 15,000ms after the initial interaction. Its partial interval needs the browser blur handler to close the remaining time. `runFor()` completing does not mean asynchronous fetch/collector/storage has completed; the original fixed 100ms sleeps did not establish that boundary. Disabling CDP focus emulation also did not establish that an actual blur had occurred.
+
+Bounded diagnostics added to the original scenario before repair observed the following on Linux (Node 24.19.0, Chromium 151.0.7922.173):
+
+- After the pause, browser wall time equalled the frozen server clock. Input `performance.now()` was **1,570**, controlled endpoint **16,570**: both wall and monotonic deltas were exactly **15,000ms**.
+- Turning off the focus override initially left `document.hasFocus() === true`. Opening the other actual application tab produced browser `blur` at the same paused endpoint, with `visible` / `focused=false`.
+- The actual intervals were **[1054, 15034] = 13,980ms** and **[15034, 16054] = 1,020ms**. Both reached the real events handler with HTTP 200 and were persisted unchanged. Immediately after the first `runFor()`, neither had yet reached the server; after the later flush they totalled exactly **15,000ms**. No evidence of clock arithmetic loss or storage truncation was found.
+
+This identifies two harness assumptions needing synchronization: timer phase was coupled to opt-in/render latency, and completion was inferred from a sleep instead of observed delivery. The numerical proximity of the Windows shortfall to 1,000ms was **not** used as proof. The original Windows run supplied only **13,968ms**, without event/clock traces: its precise native sequence remains **NOT VERIFIED**. In particular, delayed delivery versus a platform focus/visibility invalidation cannot be distinguished retrospectively. No application defect is established and no production semantics were changed.
+
+### Targeted repair and deterministic reproduction
+
+The test now freezes browser and synthetic-server clocks **before consent**, checks exact wall alignment, and uses actual mouse opt-in plus a real `ArrowLeft` keydown in the textarea. The keyboard event starts activity without enqueueing a separate workflow batch. The mouse click skips RAF actionability checks because the clock is paused; it still dispatches browser mouse events to the actual consent button. Subsequent focus revalidation and idle re-opt-in remain actual UI actions.
+
+Two subcases use deterministic input offsets of **0** and **1,032ms**. Each advances both clocks by exactly 15,000ms, checks both browser clocks, opens an actual second application tab, reapplies focus-emulation disable after its initialization, and waits for both `hasFocus=false` and a browser `blur` observation. Clock time must remain unchanged during the focus transition. No synthetic DOM blur or direct pilot call is used.
+
+A test-only Playwright transport gate holds the actual closing-interval request before the collector. It does **not** change the request, create an acknowledgement or mock storage. The test observes incomplete persisted evidence, releases the request, and waits for the actual SQLite duration to reach exactly 15,000ms before asserting B3 session/participant/day results. The aligned request is released without another virtual advance; the offset tail is sent at the next flush tick. Thus the gate never introduces an artificial >5s server/send-time skew or relaxes the existing collector validation.
+
+Final full-suite Linux observations, with offsets measured from the consent anchor:
+
+| Controlled subcase | Input / endpoint browser monotonic time | Persisted while closing delivery is held | Final persisted intervals | Session / participant / day active time |
+| --- | --- | --- | --- | --- |
+| Aligned, input offset 0ms | 1,387 / 16,387ms | 0ms | `[0,15000]` | **15,000 / 15,000 / 15,000ms** |
+| Input offset 1,032ms | 2,404 / 17,404ms | **13,968ms**, actual first fragment already HTTP 200 | `[1032,15000]` + `[15000,16032]` | **15,000 / 15,000 / 15,000ms** |
+
+The second case reproduces the **exact reported incomplete value**, then proves that delivery of the real **1,032ms** blur tail restores the exact total. It demonstrates the harness failure mode; it does not claim to be a native Windows reproduction. In the final trace, server and browser wall clocks matched at every frozen measurement checkpoint; blur occurred at the endpoint and the page remained visible. An additional full timer interval while blurred added neither activity time nor stored activity rows. Virtual 30-minute inactivity followed by actual input created a distinct session/tab context; zero synthetic provider calls were needed in either activity case.
+
+Diagnostics are confined to this scenario: at most 32 event observations between each fixed snapshot, with wall/monotonic time, event type and visibility/focus booleans; only numeric activity payloads and HTTP status are retained. No input values, DOM targets, identity, context token or secrets are logged. Success/failure snapshots go to the existing ignored `tests/browser/telemetry/evidence.json`; the file is not a portable historical PASS certificate. The original overlapping-tab, consent, privacy, lifecycle and workflow tests remain unchanged.
+
+### V2 commands and results
+
+Run from repository root. No build or other resource-heavy check ran concurrently with timing tests.
+
+```sh
+node --test --test-name-pattern='controlled activity' tests/browser/telemetry/harness.test.mjs
+node --test tests/browser/telemetry/harness.test.mjs
+node --test --test-concurrency=1 tests/telemetry-browser-harness.test.mjs tests/telemetry-reporting.test.mjs tests/telemetry-local-tools.test.mjs tests/telemetry.test.mjs tests/telemetry-b2.test.mjs tests/server-capabilities.test.mjs tests/project-reset.test.mjs tests/project-usage-isolation.test.mjs tests/usage-ledger.test.mjs
+npm run typecheck
+npx --no-install eslint tests/browser/telemetry/harness.test.mjs
+node tests/browser/telemetry/check-isolation.mjs
+git diff --check
+```
+
+- Targeted activity run: **3 PASS**, zero failures/skips (parent + two subcases).
+- Full actual Chromium suite: **10 PASS**, zero failures/skips. Both activity cases remain exact; two overlapping sessions each **15,000ms**, participant/day union **15,000ms**. OFF/refusal, consent, privacy, reset, retry/outage and stream lifecycle checks also PASS unchanged.
+- Serialized HTTP/B1–B3 regression: **249 PASS**, zero failures/skips, including send-time skew, idle/activity, report, retention/deletion and reset isolation.
+- Typecheck and focused ESLint: **PASS**, zero errors/warnings. Diff/whitespace and production isolation: **PASS**, 92 production sources / 19 existing production artifacts / zero harness references. No new canonical build was needed for this test-only repair; existing base build/Worker evidence above is reused, not reported as a fresh build.
+- Diagnostic iterations intentionally exposed missing blur synchronization; a prototype that held the aligned request across another 15s advance was rejected with HTTP 400 by the existing skew gate. That test scheduling was corrected; these iterations are not PASS or confirmed product defects. No production validation was weakened.
+
+### Native PowerShell handoff
+
+Native Windows is unavailable in this Cloud environment. **Windows NOT VERIFIED.** Use the exact final repair SHA in the completion report/stacked PR, not the parent H1 commit. The following uses a separate worktree so the existing Windows evidence branch and its uncommitted records remain untouched. Stop if the new directory already exists; do not reset, clean or force it.
+
+```powershell
+$RepairCommit = '<paste the exact final repair SHA from the completion report>'
+git fetch origin codex/telemetry-b4-h1-activity-clock-repair
+if ($LASTEXITCODE -ne 0) { throw 'fetch failed' }
+git worktree add --detach ..\APU_MS_site-h1-activity-repair $RepairCommit
+if ($LASTEXITCODE -ne 0) { throw 'worktree creation failed; do not overwrite an existing directory' }
+Set-Location ..\APU_MS_site-h1-activity-repair
+if ((git rev-parse HEAD).Trim() -ne $RepairCommit) { throw 'unexpected source commit' }
+node.exe --version
+[Environment]::OSVersion.VersionString
+$env:CHROMIUM_PATH = 'C:\Program Files\Google\Chrome\Application\chrome.exe'
+if (!(Test-Path $env:CHROMIUM_PATH)) { throw 'set CHROMIUM_PATH to an installed compatible Chromium executable' }
+(Get-Item $env:CHROMIUM_PATH).VersionInfo.ProductVersion
+npm.cmd ci --ignore-scripts --no-audit --no-fund
+if ($LASTEXITCODE -ne 0) { throw 'root dependency installation failed' }
+npm.cmd ci --prefix tests/browser/telemetry --ignore-scripts --no-audit --no-fund
+if ($LASTEXITCODE -ne 0) { throw 'scoped dependency installation failed' }
+node.exe --test --test-name-pattern='controlled activity' tests/browser/telemetry/harness.test.mjs 2>&1 | Tee-Object activity-windows.log
+if ($LASTEXITCODE -ne 0) { throw 'controlled activity failed; preserve evidence.json and this log' }
+node.exe --test tests/browser/telemetry/harness.test.mjs 2>&1 | Tee-Object browser-windows.log
+if ($LASTEXITCODE -ne 0) { throw 'browser suite failed; preserve evidence.json and this log' }
+node.exe --test --test-concurrency=1 tests/telemetry-browser-harness.test.mjs tests/telemetry-reporting.test.mjs tests/telemetry-local-tools.test.mjs tests/telemetry.test.mjs tests/telemetry-b2.test.mjs tests/server-capabilities.test.mjs tests/project-reset.test.mjs tests/project-usage-isolation.test.mjs tests/usage-ledger.test.mjs
+if ($LASTEXITCODE -ne 0) { throw 'regression failed' }
+```
+
+Record the exact SHA, OS/Node/browser versions, exit codes and counts. Preserve the generated diagnostic evidence after a failure **before rerunning** (a subsequent browser run replaces `evidence.json`). No standard launcher, env-file setup, provider credential or browser download is needed. Do not run builds concurrently. Native Windows PASS and the original platform-specific causal sequence remain follow-up conditions; Linux PASS cannot substitute for them.
+
+B-07 remains OPEN, full B4/G0–G5 remain pending. Roadmap milestone status is unchanged; no CHANGELOG or Known Issues entry. Production telemetry/optional metadata remain **OFF**. No deployment, remote database operation, provisioning, real provider call or real-participant collection occurred. Stop after this targeted repair.
