@@ -1,3 +1,4 @@
+import { createRequestTelemetrySink } from "../../telemetry/model-usage-adapter";
 import type { ServerIdentity } from "../../server-capabilities";
 import { estimateCostUsd } from "../../model-config";
 import { F2_PATHS, locateSourceQuote, type F2Path } from "../../notepad-model";
@@ -192,7 +193,8 @@ async function verifyGrounding(
     let record: ModelUsageRecord | undefined;
     try {
       const rescue = await callOpenAIResponses<{ verdicts: GroundingRescueVerdict[] }>({
-        api_key: apiKey, request_id: requestId, phase: "F1", operation: "grounding", requested_model: PRODUCTION_GROUNDING_RESCUE_MODEL, reasoning_effort: PRODUCTION_GROUNDING_RESCUE_REASONING, requested_service_tier: "default", collector,
+        api_key: apiKey, request_id: requestId, phase: "F1", operation: "grounding", attempt_index: 1,
+        fallback_for_call_id: primary.observation.call_id, requested_model: PRODUCTION_GROUNDING_RESCUE_MODEL, reasoning_effort: PRODUCTION_GROUNDING_RESCUE_REASONING, requested_service_tier: "default", collector,
         payload: {
           model: PRODUCTION_GROUNDING_RESCUE_MODEL,
           reasoning: { effort: PRODUCTION_GROUNDING_RESCUE_REASONING },
@@ -294,7 +296,7 @@ export async function POST(request: Request) {
   if (!apiKey) return jsonError("Extrakční vrstva není nakonfigurována.", 503);
 
   const extractStarted = performance.now();
-  const collector = createRequestUsageCollector();
+  const collector = createRequestUsageCollector((await createRequestTelemetrySink(request, identity)).sink);
   const requestId = crypto.randomUUID();
   let response: Record<string, unknown>;
   let extraction: RawExtraction;

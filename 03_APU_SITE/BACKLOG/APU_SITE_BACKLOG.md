@@ -31,11 +31,12 @@ Contains only unfinished or explicitly undecided work. Completed work belongs in
 - Support context-aware concept explanations and examples within the document's accepted source and uncertainty boundaries.
 - Keep discussion separate from document modification: no automatic changes to canonical Zápisník facts, working hypotheses or accepted snapshots; modifications require a separate explicit action.
 
-### B-07 — Central DEV pilot telemetry — IN PROGRESS (B1 foundation verified; disabled)
+### B-07 — Central DEV pilot telemetry — IN PROGRESS (B1/B2 source verified; disabled)
 - Implement the disabled-by-default collector, dedicated telemetry persistence, session/activity/workflow events and server-side AI usage integration described in [the telemetry package](../TELEMETRY/README.md).
 - Reuse the existing call-level usage/pricing ledger; keep diagnostic Session JSON separate from minimal pilot collection.
 - **B1 foundation source milestone PASS (2026-10-23):** strict contracts/context/collector, telemetry-only migration/store, memory-only client interface, request-scoped safe AI sink and optional DEV preparation. V3: 271 relevant tests, typecheck, focused lint, canonical build/artifact PASS; not provisioned/deployed/collecting. [Evidence and B2 interface](../TELEMETRY/TELEMETRY_ARCHITECTURE.md#10-implemented-b1-contract-and-verification--2026-10-23).
-- Remaining: B2 core metrics → B3 reporting/synthetic reconciliation → B4 local runtime acceptance after separate implementation authorization. Proposed effort: 48–72 engineering hours.
+- **B2 core-metrics source milestone PASS (2026-10-23):** AI sink wiring/controller/MAIN request lifetime, opted-in activity/session/workflow/operation/document events and stale/reset/consent isolation. V3: 573 provider-free tests, typecheck, focused lint (five baseline warnings), canonical build/artifact PASS; no deployment/collection. [B2 evidence / B3 handoff](../TELEMETRY/TELEMETRY_ARCHITECTURE.md#11-implemented-b2-core-metrics-and-verification--2026-10-23).
+- Remaining: B3 reporting/synthetic reconciliation → B4 local runtime acceptance after separate implementation authorization. Proposed effort: 48–72 engineering hours.
 - No database provisioning, hosted update, real-user collection or production deployment is authorized by this documentation item. Resolve privacy, enrollment, live DEV identity, retention and activation gates in the roadmap before launch. Content classification is deferred.
 
 ## NEEDS DECISION

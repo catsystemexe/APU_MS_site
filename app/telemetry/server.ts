@@ -126,3 +126,16 @@ export function telemetryFailure(error: unknown) {
     code === "unauthorized" ? 401 : code === "conflict" ? 409 : code === "rate_limited" ? 429 : code === "unavailable" ? 503 : 400;
   return telemetryResponse({ code }, status);
 }
+
+
+/** Minimal authenticated page bootstrap; no context/request/write before voluntary opt-in. */
+export async function pilotAvailability(request: Request, identity: AccessIdentity, r: TelemetryResources) {
+  const ready = readiness(request, r);
+  if (!ready.policy) return { enabled: false as const };
+  const notice = r.config.APU_TELEMETRY_NOTICE_TEXT;
+  if (typeof notice !== "string" || !notice.trim() || notice.length > 4000) return { enabled: false as const };
+  try {
+    await eligibleParticipant(identity, ready.policy);
+    return { enabled: true as const, noticeVersion: ready.policy.notice, noticeText: notice };
+  } catch { return { enabled: false as const }; }
+}

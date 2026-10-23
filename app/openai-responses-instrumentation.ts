@@ -71,6 +71,9 @@ export type OpenAIResponsesCallInput<TApplicationResult> = {
   api_key: string;
   request_id: string;
   turn_id?: string | null;
+  attempt_index?: number;
+  retry_of_call_id?: string | null;
+  fallback_for_call_id?: string | null;
   phase: TelemetryPhase;
   operation: UsageOperation;
   requested_model: string;
@@ -91,6 +94,9 @@ export async function callOpenAIResponses<TApplicationResult = void>(input: Open
   return runInstrumentedModelCall({
     request_id: input.request_id,
     turn_id: input.turn_id ?? null,
+    attempt_index: input.attempt_index,
+    retry_of_call_id: input.retry_of_call_id,
+    fallback_for_call_id: input.fallback_for_call_id,
     phase: input.phase,
     operation: input.operation,
     requested_model: input.requested_model,

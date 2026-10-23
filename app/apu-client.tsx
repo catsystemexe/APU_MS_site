@@ -1,5 +1,9 @@
 "use client";
 
+import { createDocumentObserver } from "./telemetry/document-observer";
+import { usePilot } from "./telemetry/use-pilot";
+import { fetchWithPilot } from "./telemetry/fetch";
+import type { PilotAvailability, PilotOperation, OperationOutcome } from "./telemetry/pilot";
 import {
   CSSProperties,
   FormEvent,
@@ -282,6 +286,7 @@ function HighlightedMessage({
 }
 
 type ApuClientProps = {
+  pilot?: PilotAvailability;
   email: string;
   isDeveloper: boolean;
 };
@@ -355,10 +360,15 @@ export default function ApuClient(props: ApuClientProps) {
   </AccessSessionBoundary>;
 }
 
-function ApuWorkspace({ email, isDeveloper, onLogout, registerInvalidation }: ApuClientProps & {
+function ApuWorkspace({ email, isDeveloper, onLogout, registerInvalidation, pilot: pilotAvailability }: ApuClientProps & {
   onLogout: (hasWork: boolean) => void;
   registerInvalidation: (callback: (logout?: boolean) => void) => () => void;
 }) {
+  const pilotControls = usePilot(pilotAvailability);
+  const pilot = pilotControls.pilot;
+  const documentObserverRef = useRef<ReturnType<typeof createDocumentObserver> | null>(null);
+  if (!documentObserverRef.current) documentObserverRef.current = createDocumentObserver(pilot);
+  const documentObserver = documentObserverRef.current;
   const [messages, setMessages] = useState<Message[]>([WELCOME]);
   const [input, setInput] = useState("");
   const [responseId, setResponseId] = useState<string | null>(null);
@@ -385,6 +395,8 @@ function ApuWorkspace({ email, isDeveloper, onLogout, registerInvalidation }: Ap
   const [f3ControlsTarget, setF3ControlsTarget] = useState<HTMLDivElement | null>(null);
   const [analysis, setAnalysis] = useState<AnalysisState>(EMPTY_ANALYSIS);
   const [storedF2Build, setF2Build] = useState<F2BuildState | null>(null);
+  const latestF2BuildRef = useRef(storedF2Build);
+  latestF2BuildRef.current = storedF2Build;
   const [currentRozbor, setCurrentRozbor] = useState<CurrentRozborState>(() => createCurrentRozborState());
   const [rozborGenerationStatus, setRozborGenerationStatus] = useState<"idle" | "loading" | "error">("idle");
   const [rozborGenerationError, setRozborGenerationError] = useState<string | null>(null);
@@ -397,6 +409,8 @@ function ApuWorkspace({ email, isDeveloper, onLogout, registerInvalidation }: Ap
   const [f2PreviewError, setF2PreviewError] = useState<string | null>(null);
   const [acceptedF2Source, setAcceptedF2Source] = useState<F2ToF3Snapshot | null>(null);
   const [f3State, setF3State] = useState<F3State | null>(null);
+  useEffect(() => { documentObserver.observe(f3State, phase === "output"); }, [documentObserver, f3State, phase]);
+  function recordVisibleDocument() { documentObserver.expose(); }
   const acceptedF2SourceRef = useRef(acceptedF2Source);
   acceptedF2SourceRef.current = acceptedF2Source;
   const f3StateRef = useRef(f3State);
@@ -446,16 +460,24 @@ function ApuWorkspace({ email, isDeveloper, onLogout, registerInvalidation }: Ap
   const [needRoute, setNeedRoute] = useState<{ key: string; decision: NeedRoutingDecision } | null>(null);
   const [needRouteError, setNeedRouteError] = useState<string | null>(null);
   const [needClarification, setNeedClarification] = useState("");
+  const needRoutingReasonRef = useRef<"initial" | "retry">("initial");
   const needRouterRef = useRef<ReturnType<typeof createNeedRouter> | null>(null);
   if (!needRouterRef.current) {
     const routerProjectEpoch = projectEpochRef.current;
     needRouterRef.current = createNeedRouter(async (routingInput) => {
       if (routerProjectEpoch !== projectEpochRef.current) throw new Error("Projekt byl ukončen.");
-      const response = await fetch("/api/need-route", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(routingInput) });
-      const payload = await response.json().catch(() => null) as ({ decision?: unknown; error?: string } & ModelUsageRecordsResponse) | null;
-      collectModelUsageRecords(payload, routerProjectEpoch);
-      if (!response.ok || !payload?.decision) throw new Error(payload?.error || "Cíl potřeby se nepodařilo určit.");
-      return payload.decision;
+      const operation = pilot.begin("need_routing", needRoutingReasonRef.current);
+      needRoutingReasonRef.current = "initial";
+      const sourceKey = latestSourceNeedKeyRef.current;
+      let outcome: OperationOutcome = "failed";
+      try {
+        const response = await fetchWithPilot(operation, "/api/need-route", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(routingInput) });
+        const payload = await response.json().catch(() => null) as ({ decision?: unknown; error?: string } & ModelUsageRecordsResponse) | null;
+        collectModelUsageRecords(payload, routerProjectEpoch);
+        if (!response.ok || !payload?.decision) throw new Error(payload?.error || "Cíl potřeby se nepodařilo určit.");
+        outcome = sourceKey === latestSourceNeedKeyRef.current ? "accepted" : "stale_discarded";
+        return payload.decision;
+      } finally { operation.resolve(routerProjectEpoch === projectEpochRef.current ? outcome : "stale_discarded"); }
     });
   }
   const canonicalF2Need = useMemo(() => sourceF2Need && needRoute?.key === sourceNeedKey
@@ -926,6 +948,7 @@ function ApuWorkspace({ email, isDeveloper, onLogout, registerInvalidation }: Ap
   }
 
   function handleInputChange(value: string) {
+    if (value.trim()) pilot.meaningful();
     if (isDictating) cancelDictation();
     setDictationNotice(null);
     setComposerInput(value);
@@ -956,6 +979,7 @@ function ApuWorkspace({ email, isDeveloper, onLogout, registerInvalidation }: Ap
 
   function returnToF2() {
     if (!navigationAvailability.build) return;
+    pilot.transition("F2", "return");
     setPhase("development"); setActivePanel("analysis");
     setDesktopWorkspace((current) => selectDesktopTool(current, "build", navigationAvailability));
     setF3Error(null);
@@ -973,17 +997,22 @@ function ApuWorkspace({ email, isDeveloper, onLogout, registerInvalidation }: Ap
     if (!f2Build) return;
     const projectEpoch = projectEpochRef.current;
     setF2BuildStatus("loading"); setF2BuildError(null);
+    const operation = pilot.begin("f2_build", f2BuildStatus === "error" ? "retry" : "initial");
+    let outcome: OperationOutcome = "failed";
     try {
       const buildRequest = createF2BuildRequest(f2Build, f2Situation(), selectedModel);
-      const response = await fetch("/api/f2", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ operation: "build", model: selectedModel, build: buildRequest }) });
+      const response = await fetchWithPilot(operation, "/api/f2", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ operation: "build", model: selectedModel, build: buildRequest }) });
       const payload = await response.json().catch(() => null) as ({ result?: unknown; error?: string } & ModelUsageRecordsResponse) | null;
       collectModelUsageRecords(payload, projectEpoch);
       if (!response.ok || !payload?.result) throw new Error(payload?.error || "Build se nepodařilo rozpracovat.");
       if (projectEpoch !== projectEpochRef.current) return;
       const result = parseF2BuildResult(payload.result, buildRequest.activePath);
+      const observed = latestF2BuildRef.current;
+      outcome = observed && applyF2BuildResult(observed, result, buildRequest.activePath, buildRequest.buildRevision) !== observed ? "accepted" : "stale_discarded";
       setF2Build((current) => current ? applyF2BuildResult(current, result, buildRequest.activePath, buildRequest.buildRevision) : current);
       setF2BuildStatus("idle");
     } catch (cause) { if (projectEpoch !== projectEpochRef.current) return; setF2BuildError(cause instanceof Error ? cause.message : "Build se nepodařilo rozpracovat."); setF2BuildStatus("error"); }
+    finally { operation.resolve(projectEpoch === projectEpochRef.current ? outcome : "stale_discarded"); }
   }
 
   // Both asynchronous generation and synchronous removal commit through this path.
@@ -993,6 +1022,7 @@ function ApuWorkspace({ email, isDeveloper, onLogout, registerInvalidation }: Ap
     acceptedF2SourceRef.current = result.snapshot;
     setAcceptedF2Source(result.snapshot);
     f3StateRef.current = result.f3;
+    if (phase === "output") documentObserver.expose();
     setF3State(result.f3);
   }
 
@@ -1007,51 +1037,63 @@ function ApuWorkspace({ email, isDeveloper, onLogout, registerInvalidation }: Ap
     const request = createCurrentRozborGenerationRequest(path, canonicalF2Need, analysis.hypotheses, pathState.config, pathState.components);
     const updateSignature = JSON.stringify([path, required.map(({ id, kind, hypothesisId, fingerprint }) => [id, kind, hypothesisId, fingerprint]), currentAnalysisContext]);
     if (!request) {
+      const localOperation = pilot.begin("f2_local_reconciliation");
       setRozborGenerationError(null);
       const updated = applyCurrentRozborComponentUpdate(currentRozbor, path, required, []);
       commitBuildDocument(updated, canonicalF2Need, analysis.hypotheses, path, currentAnalysisContext);
       setRozborGenerationStatus("idle");
+      localOperation.resolve("accepted");
       return;
     }
     setRozborGenerationStatus("loading"); setRozborGenerationError(null);
+    const operation = pilot.begin("f2_component_generation", rozborGenerationStatus === "error" ? "retry" : "initial");
+    let outcome: OperationOutcome = "failed";
     try {
-      const response = await fetch("/api/f2", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ operation: "generate-rozbor-components", model: selectedModel, request }) });
+      const response = await fetchWithPilot(operation, "/api/f2", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ operation: "generate-rozbor-components", model: selectedModel, request }) });
       const payload = await response.json().catch(() => null) as ({ components?: unknown; error?: string; diagnostic?: string } & ModelUsageRecordsResponse) | null;
       collectModelUsageRecords(payload, projectEpoch);
       if (!response.ok || !payload?.components) throw new Error(isDeveloper && payload?.diagnostic ? `${payload.error ?? "Rozbor se nepodařilo vytvořit."} ${payload.diagnostic}` : payload?.error || "Rozbor se nepodařilo vytvořit.");
       const generated = parseGeneratedRozborComponents({ components: payload.components }, request.components);
       if (projectEpoch !== projectEpochRef.current) return;
       const latest = latestRozborSourceRef.current;
-      if (!latest.need) throw new Error("Výsledek byl zahozen, protože se mezitím změnil výchozí Rozbor nebo Build.");
+      if (!latest.need) { outcome = "stale_discarded"; throw new Error("Výsledek byl zahozen, protože se mezitím změnil výchozí Rozbor nebo Build."); }
       const latestPathState = latestCurrentRozborRef.current[latest.activePath];
       const currentSpecs = deriveRequiredCurrentRozborComponents(latest.activePath, latest.need, latest.hypotheses, latestPathState.config);
       const currentSignature = JSON.stringify([latest.activePath, currentSpecs.map(({ id, kind, hypothesisId, fingerprint }) => [id, kind, hypothesisId, fingerprint]), latest.analysisContext]);
-      if (currentSignature !== updateSignature || JSON.stringify(latestPathState.config) !== JSON.stringify(request.config)) throw new Error("Výsledek byl zahozen, protože se mezitím změnil výchozí Rozbor nebo Build.");
+      if (currentSignature !== updateSignature || JSON.stringify(latestPathState.config) !== JSON.stringify(request.config)) { outcome = "stale_discarded"; throw new Error("Výsledek byl zahozen, protože se mezitím změnil výchozí Rozbor nebo Build."); }
       const updated = applyCurrentRozborComponentUpdate(latestCurrentRozborRef.current, path, required, generated);
+      outcome = "accepted";
       commitBuildDocument(updated, latest.need, latest.hypotheses, path, latest.analysisContext);
       setRozborGenerationStatus("idle");
     } catch (cause) { if (projectEpoch !== projectEpochRef.current) return; setRozborGenerationError(cause instanceof Error ? cause.message : "Rozbor se nepodařilo vytvořit."); setRozborGenerationStatus("error"); }
+    finally { operation.resolve(projectEpoch === projectEpochRef.current ? outcome : "stale_discarded"); }
   }
 
   async function renderF2Preview() {
     if (!f2Build) return;
     const projectEpoch = projectEpochRef.current;
     setF2PreviewStatus("loading"); setF2PreviewError(null);
+    const operation = pilot.begin("f2_preview", f2PreviewStatus === "error" ? "retry" : "initial");
+    let outcome: OperationOutcome = "failed";
     try {
       const snapshot = createF2PreviewSnapshot(f2Build);
-      const response = await fetch("/api/f2", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ operation: "preview", model: selectedModel, snapshot }) });
+      const response = await fetchWithPilot(operation, "/api/f2", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ operation: "preview", model: selectedModel, snapshot }) });
       const payload = await response.json().catch(() => null) as ({ result?: unknown; error?: string } & ModelUsageRecordsResponse) | null;
       collectModelUsageRecords(payload, projectEpoch);
       if (!response.ok || !payload?.result) throw new Error(payload?.error || "Preview se nepodařilo vytvořit.");
       if (projectEpoch !== projectEpochRef.current) return;
+      outcome = "accepted";
       setF2Preview(acceptRenderedPreview(snapshot, parseF2RenderedPreview(payload.result))); setF2PreviewStatus("idle"); setActivePanel("output");
     } catch (cause) { if (projectEpoch !== projectEpochRef.current) return; setF2PreviewError(cause instanceof Error ? cause.message : "Preview se nepodařilo vytvořit."); setF2PreviewStatus("error"); }
+    finally { operation.resolve(projectEpoch === projectEpochRef.current ? outcome : "stale_discarded"); }
   }
 
   function enterF3() {
     if (!currentF2ToF3Source.snapshot && !f3State) return;
     if (currentF2ToF3Source.snapshot) setF3State((current) => current ?? createF3State(currentF2ToF3Source.snapshot));
     setDesktopWorkspace((current) => selectDesktopTool(current, "output", navigationAvailability));
+    pilot.transition("F3", "user_navigation");
+    recordVisibleDocument();
     setF3Error(null); setPhase("output"); setActivePanel("output");
   }
 
@@ -1059,6 +1101,7 @@ function ApuWorkspace({ email, isDeveloper, onLogout, registerInvalidation }: Ap
     if (!f3State || f3Status === "loading" || rozborGenerationStatus === "loading" || f3GenerationEpochRef.current === projectEpochRef.current) return;
     if (documentStyle === "a" && isDefaultF3Presentation(f3State)) return;
     setF3State((current) => current ? resetF3Presentation(current) : current);
+    documentObserver.expose();
     setDocumentStyle("a");
   }
 
@@ -1067,24 +1110,33 @@ function ApuWorkspace({ email, isDeveloper, onLogout, registerInvalidation }: Ap
     if (!f3State || f3State.sourceSnapshot.sourceFingerprint !== latestF2ToF3FingerprintRef.current || f3GenerationEpochRef.current === projectEpoch || !f3GenerationEligibility(f3State, f3Status === "loading" || rozborGenerationStatus === "loading").enabled) return;
     f3GenerationEpochRef.current = projectEpoch;
     setF3Status("loading"); setF3Error(null);
+    const operation = pilot.begin("f3_render", f3Status === "error" ? "retry" : f3State.finalRender ? "regenerate" : "initial");
+    let staged = false;
+    let outcome: OperationOutcome = "failed";
     try {
       const renderRequest = createF3RenderRequest(f3State, selectedModel);
-      const response = await fetch("/api/f3", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(renderRequest) });
+      const response = await fetchWithPilot(operation, "/api/f3", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(renderRequest) });
       const payload = await response.json().catch(() => null) as ({ result?: unknown; error?: string; diagnostic?: string } & ModelUsageRecordsResponse) | null;
       collectModelUsageRecords(payload, projectEpoch);
       if (!response.ok || !payload?.result) throw new Error(isDeveloper && payload?.diagnostic ? `${payload.error ?? "Finální výstup se nepodařilo vytvořit."} ${payload.diagnostic}` : payload?.error || "Finální výstup se nepodařilo vytvořit.");
       if (projectEpoch !== projectEpochRef.current) return;
       const result = parseF3RenderResult(payload.result);
-      if (renderRequest.sourceSnapshot.sourceFingerprint !== latestF2ToF3FingerprintRef.current) throw new Error("Výsledek byl zahozen, protože se mezitím změnil zdrojový Rozbor.");
+      if (renderRequest.sourceSnapshot.sourceFingerprint !== latestF2ToF3FingerprintRef.current) { outcome = "stale_discarded"; throw new Error("Výsledek byl zahozen, protože se mezitím změnil zdrojový Rozbor."); }
+      const observed = f3StateRef.current;
+      if (observed && acceptF3Render(observed, result, renderRequest) !== observed) {
+        documentObserver.expect(operation, renderRequest, observed.finalRender); staged = true;
+      } else outcome = "stale_discarded";
       setF3State((current) => current ? acceptF3Render(current, result, renderRequest) : current); setF3Status("idle");
     } catch (cause) { if (projectEpoch !== projectEpochRef.current) return; setF3Error(cause instanceof Error ? cause.message : "Finální výstup se nepodařilo vytvořit."); setF3Status("error"); }
-    finally { if (f3GenerationEpochRef.current === projectEpoch) f3GenerationEpochRef.current = null; }
+    finally { if (!staged) operation.resolve(projectEpoch === projectEpochRef.current ? outcome : "stale_discarded"); if (f3GenerationEpochRef.current === projectEpoch) f3GenerationEpochRef.current = null; }
   }
 
   async function refreshStructuredAnalysis(notepadState: NotepadState, focusInstruction = "", turnId?: string, requestId?: string, transitionFrom?: "F1" | "F2" | "F3") {
     const projectEpoch = projectEpochRef.current;
     setAnalysisStatus("loading");
     setAnalysisError(null);
+    let operation: PilotOperation | undefined;
+    let outcome: OperationOutcome = "failed";
     try {
       const sourceNeed = getF1ToF2NeedContract(notepadState, activeNeedId);
       const resolvedNeed = sourceNeed ? await resolveActiveNeed(sourceNeed) : null;
@@ -1093,7 +1145,8 @@ function ApuWorkspace({ email, isDeveloper, onLogout, registerInvalidation }: Ap
       // Derived request mapping only; canonical F1 text and extraction remain unchanged.
       const notebook = compactNotepad(notepadState).map((item) => item.id === resolvedNeed?.needId && item.category === "goals"
         ? { ...item, needMapping: { f2Path: resolvedNeed.initialF2Path, f3Target: resolvedNeed.f3Target } } : item);
-      const response = await fetch("/api/analysis", {
+      operation = pilot.begin("analysis", analysisStatus === "error" ? "retry" : "initial");
+      const response = await fetchWithPilot(operation, "/api/analysis", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1111,7 +1164,7 @@ function ApuWorkspace({ email, isDeveloper, onLogout, registerInvalidation }: Ap
       collectModelUsageRecords(responseResult, projectEpoch);
       if (!response.ok || !responseResult?.analysis) throw new Error(responseResult?.error || "Rozbor se nepodařilo aktualizovat.");
       if (projectEpoch !== projectEpochRef.current) return null;
-      if (sourceNeed && latestSourceNeedKeyRef.current !== activeNeedRoutingKey(sourceNeed)) throw new Error("Pedagogická potřeba se mezitím změnila.");
+      if (sourceNeed && latestSourceNeedKeyRef.current !== activeNeedRoutingKey(sourceNeed)) { outcome = "stale_discarded"; throw new Error("Pedagogická potřeba se mezitím změnila."); }
       const result = responseResult as { analysis: AnalysisState; diagnostics?: Diagnostics; telemetry?: Partial<SessionTelemetry> } & ModelUsageRecordsResponse;
       if (turnId && requestId && result.telemetry) {
         setSessionTelemetry((current) => current.map((item) => item.request_id === requestId
@@ -1145,13 +1198,14 @@ function ApuWorkspace({ email, isDeveloper, onLogout, registerInvalidation }: Ap
             ? mergeSessionTelemetry(item, { latency_ms: { analysis_user_visible_ms: userVisible } }) : item));
         }));
       }
+      outcome = "accepted";
       return result;
     } catch (cause) {
       if (projectEpoch !== projectEpochRef.current) return null;
       setAnalysisError(cause instanceof Error ? cause.message : "Rozbor se nepodařilo aktualizovat.");
       setAnalysisStatus("error");
       throw cause;
-    }
+    } finally { operation?.resolve(projectEpoch === projectEpochRef.current ? outcome : "stale_discarded"); }
   }
 
   async function submitNeedClarification(event: FormEvent) {
@@ -1239,6 +1293,7 @@ function ApuWorkspace({ email, isDeveloper, onLogout, registerInvalidation }: Ap
     requestId: string,
     dialogEvent?: string,
     controllerFastPathEligible = false,
+    retry = false,
   ) {
     const requestScope = assistantRequestRef.current;
     const isCurrentRequest = () => requestScope?.requestId === requestId && requestScope.assistantId === assistantId
@@ -1255,6 +1310,7 @@ function ApuWorkspace({ email, isDeveloper, onLogout, registerInvalidation }: Ap
         } : message));
         return;
       }
+      pilot.transition("F2", "user_navigation");
       setPhase("development");
       const result = await refreshStructuredAnalysis(notepadForChat, "", turnId, requestId, "F1");
       if (!isCurrentRequest()) return;
@@ -1297,152 +1353,159 @@ function ApuWorkspace({ email, isDeveloper, onLogout, registerInvalidation }: Ap
         : [],
     ))];
     const functionalMapping = [...messages].reverse().find((message) => message.debugMapping)?.debugMapping;
-    const request = await fetch("/api/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        message: rawText,
-        previousResponseId: responseId,
-        model: selectedModel,
-        communicationProfile,
-        selectedHypothesisId,
-        activeNeedId,
-        analysisContext: {
-          hypothesis: (() => {
-            const item = analysis.hypotheses.find((hypothesis) => hypothesis.id === selectedHypothesisId);
-            return item ? { title: item.title, summary: item.summary, limitations: item.limitations, unknowns: item.unknowns } : null;
-          })(),
-          need: (() => {
-            const item = analysis.needs.find((need) => need.needId === activeNeedId);
-            return item ? { title: item.title, direction: item.direction, limitations: item.limitations } : null;
-          })(),
-          analysisMode: analysis.mode,
-          mainUncertainty: analysis.mainUncertainty,
-        },
-        notebook: compactNotepad(notepadForChat, { excludeSourceMessageId: sourceMessageId }),
-        intakeNotebook: compactNotepad(notepadForChat),
-        phase,
-        askedRefinementTargets,
-        ...(pendingSide ? { pendingSide: { target: pendingSide.target, question: pendingSide.question } } : {}),
-        ...(functionalMapping ? { functionalMapping } : {}),
-        ...(dialogEvent ? { dialogEvent } : {}),
-        ...(controllerFastPathEligible ? { controllerFastPathEligible: true } : {}),
-        requestId,
-        turnId,
-      }),
-    });
+    const operation = pilot.begin("main_chat", retry ? "retry" : "initial");
+    let outcome: OperationOutcome = "failed";
+    try {
+      const request = await fetchWithPilot(operation, "/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: rawText,
+          previousResponseId: responseId,
+          model: selectedModel,
+          communicationProfile,
+          selectedHypothesisId,
+          activeNeedId,
+          analysisContext: {
+            hypothesis: (() => {
+              const item = analysis.hypotheses.find((hypothesis) => hypothesis.id === selectedHypothesisId);
+              return item ? { title: item.title, summary: item.summary, limitations: item.limitations, unknowns: item.unknowns } : null;
+            })(),
+            need: (() => {
+              const item = analysis.needs.find((need) => need.needId === activeNeedId);
+              return item ? { title: item.title, direction: item.direction, limitations: item.limitations } : null;
+            })(),
+            analysisMode: analysis.mode,
+            mainUncertainty: analysis.mainUncertainty,
+          },
+          notebook: compactNotepad(notepadForChat, { excludeSourceMessageId: sourceMessageId }),
+          intakeNotebook: compactNotepad(notepadForChat),
+          phase,
+          askedRefinementTargets,
+          ...(pendingSide ? { pendingSide: { target: pendingSide.target, question: pendingSide.question } } : {}),
+          ...(functionalMapping ? { functionalMapping } : {}),
+          ...(dialogEvent ? { dialogEvent } : {}),
+          ...(controllerFastPathEligible ? { controllerFastPathEligible: true } : {}),
+          requestId,
+          turnId,
+        }),
+      });
 
-    if (!isCurrentRequest()) { await request.body?.cancel().catch(() => {}); return; }
-    if (!request.ok || !request.body) {
-      const detail = await request.json().catch(() => null) as { error?: string } | null;
-      throw new Error(detail?.error || "APU teď nemůže odpovědět.");
-    }
-
-    const reader = request.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-    let completeText = "";
-    let receivedDone = false;
-    let completedPhase: ConversationPhase | null = null;
-    let receivedFirstDelta = false;
-
-    const processLine = (line: string) => {
-      if (!line.trim() || !isCurrentRequest()) return;
-      const event = JSON.parse(line);
-      collectModelUsageRecords(event, requestScope.epoch);
-      if (event.type === "dialog_actions_preview" && phase === "intake" && requestScope?.previewAllowed
-        && !receivedDone && Array.isArray(event.dialogActions) && event.dialogActions.length > 0) {
-        setDialogActionsPreview({ requestId, assistantId, actions: event.dialogActions as DialogAction[] });
+      if (!isCurrentRequest()) { await request.body?.cancel().catch(() => {}); return; }
+      if (!request.ok || !request.body) {
+        const detail = await request.json().catch(() => null) as { error?: string } | null;
+        throw new Error(detail?.error || "APU teď nemůže odpovědět.");
       }
-      if (event.type === "status" && event.status === "preparing_response" && phase === "intake") {
-        markF1MainPreparing(assistantId);
-      }
-      if (event.type === "delta") {
-        if (!receivedFirstDelta) {
-          const firstDelta = performance.now();
-          receivedFirstDelta = true;
-          if (phase === "intake") clearF1ProcessingStatus();
-          const actionStartedAt = telemetryClockRef.current.get(requestId)?.actionStartedAt;
-          const userToFirstToken = actionStartedAt === undefined ? null : Math.round(firstDelta - actionStartedAt);
-          setSessionTelemetry((current) => current.map((item) => item.request_id === requestId
-            ? mergeSessionTelemetry(item, { latency_ms: { user_to_first_token: userToFirstToken } }) : item));
+
+      const reader = request.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let completeText = "";
+      let receivedDone = false;
+      let completedPhase: ConversationPhase | null = null;
+      let receivedFirstDelta = false;
+
+      const processLine = (line: string) => {
+        if (!line.trim() || !isCurrentRequest()) return;
+        const event = JSON.parse(line);
+        collectModelUsageRecords(event, requestScope.epoch);
+        if (event.type === "dialog_actions_preview" && phase === "intake" && requestScope?.previewAllowed
+          && !receivedDone && Array.isArray(event.dialogActions) && event.dialogActions.length > 0) {
+          setDialogActionsPreview({ requestId, assistantId, actions: event.dialogActions as DialogAction[] });
         }
-        completeText += event.text;
-        const snapshot = splitAssistantMetadata(completeText);
-        setMessages((current) => current.map((message) =>
-          message.id === assistantId
-            ? {
-                ...message,
-                content: snapshot.visibleContent,
-              }
-            : message,
-        ));
-      }
-      if (event.type === "done") {
-        receivedDone = true;
-        clearDialogActionsPreview(requestId);
-        const separated = splitAssistantMetadata(completeText, { ensureDebug: true });
-        completeText = separated.visibleContent;
-        if (event.responseId) setResponseId(event.responseId);
-        if (event.phase) {
-          const nextPhase = event.phase as ConversationPhase;
-          completedPhase = nextPhase;
-          setPhase(nextPhase);
-          if (phase === "development" && nextPhase === "output") setActivePanel("output");
+        if (event.type === "status" && event.status === "preparing_response" && phase === "intake") {
+          markF1MainPreparing(assistantId);
         }
-        if (event.diagnostics || event.controllerDiagnostics || event.dialogActions) {
+        if (event.type === "delta") {
+          if (!receivedFirstDelta) {
+            const firstDelta = performance.now();
+            receivedFirstDelta = true;
+            if (phase === "intake") clearF1ProcessingStatus();
+            const actionStartedAt = telemetryClockRef.current.get(requestId)?.actionStartedAt;
+            const userToFirstToken = actionStartedAt === undefined ? null : Math.round(firstDelta - actionStartedAt);
+            setSessionTelemetry((current) => current.map((item) => item.request_id === requestId
+              ? mergeSessionTelemetry(item, { latency_ms: { user_to_first_token: userToFirstToken } }) : item));
+          }
+          completeText += event.text;
+          const snapshot = splitAssistantMetadata(completeText);
           setMessages((current) => current.map((message) =>
             message.id === assistantId
               ? {
                   ...message,
-                  ...(event.diagnostics ? { diagnostics: event.diagnostics as Diagnostics } : {}),
-                  ...(event.controllerDiagnostics ? { controllerDiagnostics: event.controllerDiagnostics as Diagnostics } : {}),
-                  ...(Array.isArray(event.dialogActions) ? { dialogActions: event.dialogActions as DialogAction[] } : {}),
-                  content: separated.visibleContent,
-                  ...(separated.debugText ? { debugText: separated.debugText } : {}),
-                  ...(separated.debugMapping ? { debugMapping: separated.debugMapping } : {}),
-                  ...(typeof event.phaseLabel === "string" ? { phaseLabel: event.phaseLabel } : {}),
+                  content: snapshot.visibleContent,
                 }
               : message,
           ));
         }
-        if (event.telemetry) {
-          setSessionTelemetry((current) => current.map((item) => item.request_id === requestId
-            ? mergeSessionTelemetry(item, event.telemetry as Partial<SessionTelemetry>) : item));
-          setMessages((current) => current.map((message) => message.id === assistantId
-            ? { ...message, telemetryRefs: [requestId] } : message));
+        if (event.type === "done") {
+          receivedDone = true;
+          clearDialogActionsPreview(requestId);
+          const separated = splitAssistantMetadata(completeText, { ensureDebug: true });
+          completeText = separated.visibleContent;
+          if (event.responseId) setResponseId(event.responseId);
+          if (event.phase) {
+            const nextPhase = event.phase as ConversationPhase;
+            completedPhase = nextPhase;
+            // The current-project guard above accepts the actual phase, independently of telemetry ticket expiry.
+            pilot.transition(nextPhase === "intake" ? "F1" : nextPhase === "development" ? "F2" : "F3", "controller_instruction");
+            setPhase(nextPhase);
+            if (phase === "development" && nextPhase === "output") setActivePanel("output");
+          }
+          if (event.diagnostics || event.controllerDiagnostics || event.dialogActions) {
+            setMessages((current) => current.map((message) =>
+              message.id === assistantId
+                ? {
+                    ...message,
+                    ...(event.diagnostics ? { diagnostics: event.diagnostics as Diagnostics } : {}),
+                    ...(event.controllerDiagnostics ? { controllerDiagnostics: event.controllerDiagnostics as Diagnostics } : {}),
+                    ...(Array.isArray(event.dialogActions) ? { dialogActions: event.dialogActions as DialogAction[] } : {}),
+                    content: separated.visibleContent,
+                    ...(separated.debugText ? { debugText: separated.debugText } : {}),
+                    ...(separated.debugMapping ? { debugMapping: separated.debugMapping } : {}),
+                    ...(typeof event.phaseLabel === "string" ? { phaseLabel: event.phaseLabel } : {}),
+                  }
+                : message,
+            ));
+          }
+          if (event.telemetry) {
+            setSessionTelemetry((current) => current.map((item) => item.request_id === requestId
+              ? mergeSessionTelemetry(item, event.telemetry as Partial<SessionTelemetry>) : item));
+            setMessages((current) => current.map((message) => message.id === assistantId
+              ? { ...message, telemetryRefs: [requestId] } : message));
+          }
         }
-      }
-      if (event.type === "error") throw new Error(event.message);
-    };
+        if (event.type === "error") throw new Error(event.message);
+      };
 
-    while (true) {
-      const { value, done } = await reader.read();
-      if (!isCurrentRequest()) { await reader.cancel().catch(() => {}); return; }
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() ?? "";
-      for (const line of lines) processLine(line);
-    }
-
-    buffer += decoder.decode();
-    if (buffer.trim()) processLine(buffer);
-    if (!completeText || !receivedDone) throw new Error("Model nevrátil dokončenou odpověď s usage daty.");
-    if (phase === "intake" && completedPhase === "development") {
-      const result = await refreshStructuredAnalysis(notepadForChat, "", turnId, requestId, "F1");
-      if (!isCurrentRequest()) return;
-      if (!result) { setMessages((current) => current.filter((message) => message.id !== assistantId)); return; }
-      if (usesDesktopWorkspaceLayout()) {
-        setActivePanel("analysis");
-        setDesktopWorkspace(INITIAL_PROCESSING_WORKSPACE);
+      while (true) {
+        const { value, done } = await reader.read();
+        if (!isCurrentRequest()) { await reader.cancel().catch(() => {}); return; }
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+        for (const line of lines) processLine(line);
       }
-      setMessages((current) => current.map((message) => message.id === assistantId ? withCompletedLifecycleRecord({
-        ...message, content: "", analysisEntryHypotheses: entryHypotheses(result.analysis), analysisNextPrompt: result.analysis.chatUpdate.nextPrompt,
-        phaseLabel: "[FÁZE 2]",
-        ...(result.diagnostics ? { diagnostics: result.diagnostics } : {}),
-      }, { operation: "analysis-entry", state: "completed", label: "Vytvořeny pracovní hypotézy" }) : message));
-    }
+
+      buffer += decoder.decode();
+      if (buffer.trim()) processLine(buffer);
+      if (!completeText || !receivedDone) throw new Error("Model nevrátil dokončenou odpověď s usage daty.");
+      outcome = "accepted";
+      if (phase === "intake" && completedPhase === "development") {
+        const result = await refreshStructuredAnalysis(notepadForChat, "", turnId, requestId, "F1");
+        if (!isCurrentRequest()) return;
+        if (!result) { setMessages((current) => current.filter((message) => message.id !== assistantId)); return; }
+        if (usesDesktopWorkspaceLayout()) {
+          setActivePanel("analysis");
+          setDesktopWorkspace(INITIAL_PROCESSING_WORKSPACE);
+        }
+        setMessages((current) => current.map((message) => message.id === assistantId ? withCompletedLifecycleRecord({
+          ...message, content: "", analysisEntryHypotheses: entryHypotheses(result.analysis), analysisNextPrompt: result.analysis.chatUpdate.nextPrompt,
+          phaseLabel: "[FÁZE 2]",
+          ...(result.diagnostics ? { diagnostics: result.diagnostics } : {}),
+        }, { operation: "analysis-entry", state: "completed", label: "Vytvořeny pracovní hypotézy" }) : message));
+      }
+    } finally { operation.resolve(isCurrentRequest() ? outcome : "stale_discarded"); }
   }
 
   function handleF2OutputNavigation(rawText: string, dialogEvent?: string, silent = false) {
@@ -1463,6 +1526,8 @@ function ApuWorkspace({ email, isDeveloper, onLogout, registerInvalidation }: Ap
     if (resolution === "enter_f3" && currentF2ToF3Source.snapshot) {
       setF3State((current) => current ?? createF3State(currentF2ToF3Source.snapshot));
       setDesktopWorkspace({ tool: "output", document: "output", view: "document" });
+      pilot.transition("F3", "user_navigation");
+      recordVisibleDocument();
       setPhase("output");
       setActivePanel("output");
     } else {
@@ -1471,7 +1536,7 @@ function ApuWorkspace({ email, isDeveloper, onLogout, registerInvalidation }: Ap
     return true;
   }
 
-  async function sendMessage(rawText: string, options?: { dialogEvent?: string; silent?: boolean; explicitNeed?: F2Path }) {
+  async function sendMessage(rawText: string, options?: { dialogEvent?: string; silent?: boolean; explicitNeed?: F2Path; retry?: boolean }) {
     if (isChatReadOnly) { setError("Chat u Výstupu zatím slouží jen k prohlížení historie. Pro pokračování v rozhovoru se vraťte do Rozboru."); return; }
     const text = rawText.trim();
     if (!text || isLoading || !isNotepadHydrated) return;
@@ -1480,6 +1545,7 @@ function ApuWorkspace({ email, isDeveloper, onLogout, registerInvalidation }: Ap
     if (isDictating) cancelDictation();
     if (handleF2OutputNavigation(rawText, options?.dialogEvent, options?.silent)) return;
 
+    pilot.meaningful();
     const turnId = `turn-${createMessageId()}`;
     const requestId = `req-${createMessageId()}`;
     const startedAt = new Date().toISOString();
@@ -1517,14 +1583,17 @@ function ApuWorkspace({ email, isDeveloper, onLogout, registerInvalidation }: Ap
     try {
       let notepadForChat = notepad;
       if (options?.dialogEvent) {
-        await requestAssistant(rawText, assistantId, notepadForChat, options.silent ? "" : userMessage.id, turnId, requestId, options.dialogEvent);
+        await requestAssistant(rawText, assistantId, notepadForChat, options.silent ? "" : userMessage.id, turnId, requestId, options.dialogEvent, false, options.retry);
         return;
       }
+      let extractionOperation: PilotOperation | undefined;
+      let extractionOutcome: OperationOutcome = "failed";
       try {
         const answersNeedQuestion = [...messages].reverse().find(
           (message) => message.role === "assistant" && message.dialogActions?.length,
         )?.dialogActions?.some((action) => action.type === "MAIN" && action.target === "teacher_need") ?? false;
-        const extractionRequest = await fetch("/api/extract", {
+        extractionOperation = pilot.begin("extraction", options?.retry ? "retry" : "initial");
+        const extractionRequest = await fetchWithPilot(extractionOperation, "/api/extract", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -1549,6 +1618,7 @@ function ApuWorkspace({ email, isDeveloper, onLogout, registerInvalidation }: Ap
         } & ModelUsageRecordsResponse;
         collectModelUsageRecords(result, requestScope.epoch);
         if (!isCurrentRequest()) return;
+        extractionOutcome = "accepted";
         if (result.telemetry) setSessionTelemetry((current) => current.map((item) => item.request_id === requestId
           ? mergeSessionTelemetry(item, result.telemetry as Partial<SessionTelemetry>) : item));
         const boundaryRequiresDecision = result.extraction.situationRelation === "different" ||
@@ -1590,13 +1660,13 @@ function ApuWorkspace({ email, isDeveloper, onLogout, registerInvalidation }: Ap
               }
             : message,
         ));
-      }
+      } finally { extractionOperation?.resolve(isCurrentRequest() ? extractionOutcome : "stale_discarded"); }
       if (requiresDecision) {
         clearF1ProcessingStatus();
         setMessages((current) => current.filter((message) => message.id !== assistantId));
         return;
       }
-      await requestAssistant(rawText, assistantId, notepadForChat, userMessage.id, turnId, requestId, undefined, controllerFastPathEligible);
+      await requestAssistant(rawText, assistantId, notepadForChat, userMessage.id, turnId, requestId, undefined, controllerFastPathEligible, options?.retry);
       if (!isCurrentRequest()) return;
       if (phase === "development") {
         setAnalysisFocus({ text: rawText, nonce: Date.now() });
@@ -1648,6 +1718,8 @@ function ApuWorkspace({ email, isDeveloper, onLogout, registerInvalidation }: Ap
   }
 
   function resetCurrentProject() {
+    pilot.reset();
+    documentObserver.reset();
     projectEpochRef.current += 1;
     assistantRequestRef.current = null;
     setDialogActionsPreview(null);
@@ -1684,6 +1756,7 @@ function ApuWorkspace({ email, isDeveloper, onLogout, registerInvalidation }: Ap
     setUnseenAnalysisKeys(new Set());
     setHighlightedAnalysisKeys(new Set());
     needRouterRef.current = null;
+    needRoutingReasonRef.current = "initial";
     setNeedRoute(null); setNeedRouteError(null); setNeedClarification("");
     setF2Build(null); setF2Preview(null); setF2BuildStatus("idle"); setF2BuildError(null); setF2PreviewStatus("idle"); setF2PreviewError(null);
     setCurrentRozbor(createCurrentRozborState());
@@ -1698,6 +1771,8 @@ function ApuWorkspace({ email, isDeveloper, onLogout, registerInvalidation }: Ap
   }
 
   useLayoutEffect(() => registerInvalidation((logout) => {
+    pilotControls.uncertain();
+    documentObserver.reset();
     if (logout === undefined) {
       // Pause asynchronous continuations while Access identity is uncertain,
       // retaining accepted work for a successful revalidation/retry.
@@ -1751,6 +1826,7 @@ function ApuWorkspace({ email, isDeveloper, onLogout, registerInvalidation }: Ap
   }
 
   function confirmSuggestedNeed(need: SuggestedNeed) {
+    pilot.meaningful();
     const normalized = need.title.trim().toLocaleLowerCase("cs-CZ");
     if (notepad.goals.some((item) => item.text.trim().toLocaleLowerCase("cs-CZ") === normalized)) return;
     setNotepad({
@@ -1918,6 +1994,7 @@ function ApuWorkspace({ email, isDeveloper, onLogout, registerInvalidation }: Ap
 
   return (
     <main className="app-shell">
+      {pilotControls.consent}
       <section
         ref={chatCardRef}
         className={`chat-card${isResizingWorkspace ? " is-resizing-workspace" : ""}${isProcessingWorkspace ? " is-processing-workspace" : " is-intake-workspace"}`}
@@ -2247,7 +2324,7 @@ function ApuWorkspace({ email, isDeveloper, onLogout, registerInvalidation }: Ap
                 <span>{error}</span>
               </div>
               {failedInput && (
-                <button type="button" onClick={() => void sendMessage(failedInput)} disabled={isLoading}>
+                <button type="button" onClick={() => void sendMessage(failedInput, { retry: true })} disabled={isLoading}>
                   Zkusit znovu
                 </button>
               )}
@@ -2335,7 +2412,7 @@ function ApuWorkspace({ email, isDeveloper, onLogout, registerInvalidation }: Ap
           {needRoute?.key === sourceNeedKey && needRoute.decision.clarification ? <form onSubmit={(event) => void submitNeedClarification(event)}>
             <label className="f2-parameter"><span>{needRoute.decision.clarification}</span><input aria-label="Požadovaný pedagogický výsledek" value={needClarification} maxLength={Math.max(0, 2000 - sourceF2Need.needText.length - 24)} onChange={(event) => setNeedClarification(event.target.value)} /></label>
             <button type="submit" disabled={!needClarification.trim() || analysisStatus === "loading"}>Upřesnit potřebu</button>
-          </form> : needRouteError ? <><p role="alert">{needRouteError}</p><button type="button" onClick={() => void resolveActiveNeed(sourceF2Need).catch((cause) => setNeedRouteError(cause.message))}>Zkusit znovu</button></> : <p role="status">Určuji zaměření podle pedagogické potřeby…</p>}
+          </form> : needRouteError ? <><p role="alert">{needRouteError}</p><button type="button" onClick={() => { needRoutingReasonRef.current = "retry"; void resolveActiveNeed(sourceF2Need).catch((cause) => setNeedRouteError(cause.message)); }}>Zkusit znovu</button></> : <p role="status">Určuji zaměření podle pedagogické potřeby…</p>}
         </section>}
         {f2Build && <section className="f2-build-shell" aria-label="Obsah">
           <header className="f2-build-header"><h2>Obsah</h2></header>
@@ -2365,7 +2442,7 @@ function ApuWorkspace({ email, isDeveloper, onLogout, registerInvalidation }: Ap
           activePanel={documentPanel}
           f3ControlsTarget={isF2DesktopLayout ? f3ControlsTarget : null}
           entries={notepad}
-          onEntriesChange={setNotepad}
+          onEntriesChange={(next) => { pilot.meaningful(); setNotepad(next); }}
           onEntryNavigate={navigateToSource}
           onEntrySeen={markNotepadEntrySeen}
           phase={phase}
@@ -2375,7 +2452,7 @@ function ApuWorkspace({ email, isDeveloper, onLogout, registerInvalidation }: Ap
           selectedHypothesisId={selectedHypothesisId}
           activeNeedId={activeNeedId}
           onSelectHypothesis={setSelectedHypothesisId}
-          onSelectNeed={setActiveNeedId}
+          onSelectNeed={(id) => { pilot.meaningful(); setActiveNeedId(id); }}
           onRetryAnalysis={() => void refreshStructuredAnalysis(notepad, analysisFocus?.text ?? "")}
           onSkipAnalysisQuestion={skipAnalysisQuestion}
           unseenAnalysisKeys={unseenAnalysisKeys}
@@ -2407,7 +2484,7 @@ function ApuWorkspace({ email, isDeveloper, onLogout, registerInvalidation }: Ap
           onF3Representation={(representation) => setF3State((current) => current ? { ...current, representation } : current)}
           onF3Config={(change: Partial<F3Config>) => setF3State((current) => current ? updateF3Config(current, change) : current)}
           onF3Render={() => void renderF3()}
-          onF3Adopt={() => setF3State((current) => current && currentF2ToF3Source.snapshot ? adoptF2Snapshot(current, currentF2ToF3Source.snapshot) : current)}
+          onF3Adopt={() => { documentObserver.expose(); setF3State((current) => current && currentF2ToF3Source.snapshot ? adoptF2Snapshot(current, currentF2ToF3Source.snapshot) : current); }}
           onF3Return={returnToF2}
         />
 

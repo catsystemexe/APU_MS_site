@@ -1,3 +1,6 @@
+import { createPilot } from "../app/telemetry/pilot.ts";
+import { fetchWithPilot } from "../app/telemetry/fetch.ts";
+import { createDocumentObserver } from "../app/telemetry/document-observer.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
@@ -33,13 +36,17 @@ function fixture({ queued = false } = {}) {
   let session = createModelUsageSession(); const updates = [], requests = [], effects = [];
   const need = { needId: "n", needText: "Porozumět situaci.", initialF2Path: "POCHOPIT", f3Target: null };
   const specs = [{ id: "component", kind: "hypothesis-expansion", hypothesisId: "h", fingerprint: "fingerprint" }];
+  const pilot = createPilot();
   const context = {
+    pilot, documentObserver: createDocumentObserver(pilot),
     JSON, Response, Error, performance, compactNotepad, getF1ToF2NeedContract, activeNeedRoutingKey, createNeedRouter,
     readModelUsageRecords, appendModelUsageSessionRecords,
-    projectEpochRef: { current: 0 }, needRouterRef: { current: null }, f3GenerationEpochRef: { current: null },
+    projectEpochRef: { current: 0 }, needRoutingReasonRef: { current: "initial" }, needRouterRef: { current: null }, f3GenerationEpochRef: { current: null },
     setModelUsageSession: update => { if (queued) updates.push(update); else session = update(session); },
     fetch: (url, init) => { const gate = deferred(); requests.push({ url, body: JSON.parse(init.body), gate }); return gate.promise; },
+    latestF2BuildRef: { current: null }, f3StateRef: { current: null },
     f3State: { sourceSnapshot: { sourceFingerprint: "source" } }, latestF2ToF3FingerprintRef: { current: "source" },
+    analysisStatus: "idle", f2BuildStatus: "idle", f2PreviewStatus: "idle",
     f3Status: "idle", rozborGenerationStatus: "idle", selectedModel: "auto", isDeveloper: false,
     f3GenerationEligibility: () => ({ enabled: true }), createF3RenderRequest: state => ({ sourceSnapshot: state.sourceSnapshot }),
     parseF3RenderResult: value => { if (value.invalid) throw new Error("invalid structured output"); return value; }, acceptF3Render: state => state,
@@ -57,6 +64,7 @@ function fixture({ queued = false } = {}) {
   for (const name of ["setF3Status", "setF3Error", "setF3State", "setF2BuildStatus", "setF2BuildError", "setF2Build", "setF2PreviewStatus", "setF2PreviewError", "setF2Preview", "setActivePanel", "setRozborGenerationStatus", "setRozborGenerationError", "setAnalysisStatus", "setAnalysisError"]) {
     context[name] = value => effects.push([name, value]);
   }
+  context.fetchWithPilot = (operation,input,init) => fetchWithPilot(operation,input,init,context.fetch);
   const collector = compile(functions.get("collectModelUsageRecords"));
   const collect = runInNewContext(`${collector}\ncollectModelUsageRecords;`, context);
   context.collectModelUsageRecords = collect;
@@ -166,4 +174,47 @@ test("actual terminal stream error ingests usage before raising, while old-proje
   const error = JSON.stringify({ type: "error", message: "Synthetic stream failure.", model_usage_records: [usage("main", { phase: "F1", operation: "main_chat", failed: true })] });
   assert.throws(() => processLine(error), /Synthetic stream failure/); assert.equal(f.session().records.length, 1);
   f.reset(); processLine(error); assert.equal(f.session().records.length, 0);
+});
+
+test("actual Need Router dispatch consumes an explicit retry intent once without adding a provider call",async()=>{
+  const f=fixture(),observed=[],begin=f.context.pilot.begin.bind(f.context.pilot);
+  f.context.pilot.begin=(...args)=>{observed.push(args);return begin(...args);};
+  f.context.needRoutingReasonRef.current="retry";
+  const router=f.router(),request=router(f.context.canonicalF2Need);
+  await Promise.resolve();assert.equal(f.requests.length,1);
+  answer(f.requests[0],usage("retry-route",{phase:"F2",operation:"need_routing"}));await request;
+  assert.deepEqual(observed,[["need_routing","retry"]]);assert.equal(f.context.needRoutingReasonRef.current,"initial");
+  await router(f.context.canonicalF2Need);assert.equal(f.requests.length,1,"cache reuse does not emit another intent or provider call");
+});
+for(const mode of ["disabled","before opt-in","stop/re-opt-in","idle renewal"])test(`actual accepted MAIN phase stays synchronized with ${mode} telemetry; reset continuation stays blocked`,async t=>{
+  let now=0;const events=[],requests=[];
+  const pilot=createPilot({enabled:mode!=="disabled",eligible:true,noticeVersion:"test-notice-v1",monotonic:()=>now,
+    fetcher:async(path,init)=>{
+      const body=JSON.parse(init.body);requests.push(path);
+      if(path.endsWith("context"))return Response.json(body.action==="stop"?{code:"stopped"}:{code:"ready",context:"synthetic-context",session_id:crypto.randomUUID(),tab_id:body.tab_id,server_anchor_ms:0,expires_at:43200000,measurement_version:"pilot-v1",metadata_enabled:false});
+      events.push(...body.events);return Response.json({code:"ready",acknowledged:body.events.map(e=>e.event_id)});
+    }});
+  t.after(()=>pilot.stop());
+  async function drain(){for(let attempt=0;attempt<20;attempt++){await Promise.resolve();await pilot.flush();if(pilot.status().queued===0)return;}assert.fail("synthetic telemetry queue did not drain");}
+  if(mode==="stop/re-opt-in"||mode==="idle renewal")await pilot.optIn();
+  const operation=pilot.begin("main_chat");await operation.headers();
+  if(mode==="stop/re-opt-in"){await pilot.stop();await pilot.optIn();}
+  if(mode==="idle renewal"){now=1800000;pilot.interaction();await pilot.begin("analysis").headers();}
+  assert.equal(operation.isCurrent(),false);
+  let arrow;function find(node){if(ts.isVariableDeclaration(node)&&node.name.getText(ast)==="processLine")arrow=node.getText(ast);ts.forEachChild(node,find);}find(ast);assert.ok(arrow);
+  const f=fixture(),phases=[];
+  Object.assign(f.context,{pilot,operation,phase:"intake",requestId:"synthetic-main",requestScope:{epoch:0},isCurrentRequest:()=>f.context.projectEpochRef.current===0,
+    receivedDone:false,completeText:"",clearDialogActionsPreview(){},splitAssistantMetadata:()=>({visibleContent:""}),setPhase:next=>phases.push(next)});
+  const processLine=runInNewContext(`${compile(`const ${arrow};`)}\nprocessLine;`,f.context);
+  processLine(JSON.stringify({type:"done",phase:"development"}));
+  assert.deepEqual(phases,["development"]);
+  if(mode==="disabled")assert.deepEqual(requests,[]);
+  else{
+    if(mode==="before opt-in"){assert.deepEqual(requests,[]);await pilot.optIn();}
+    pilot.transition("F3","user_navigation");await drain();
+    const expected=mode==="before opt-in"?[["F2","F3"]]:[["F1","F2"],["F2","F3"]];
+    assert.deepEqual(events.filter(e=>e.event_name==="phase_transition").map(e=>[e.payload.from,e.payload.to]),expected);
+  }
+  const count=events.length;f.reset();processLine(JSON.stringify({type:"done",phase:"output"}));await drain();
+  assert.deepEqual(phases,["development"]);assert.equal(events.length,count);
 });
