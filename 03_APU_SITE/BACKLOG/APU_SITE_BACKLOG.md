@@ -31,6 +31,12 @@ Contains only unfinished or explicitly undecided work. Completed work belongs in
 - Support context-aware concept explanations and examples within the document's accepted source and uncertainty boundaries.
 - Keep discussion separate from document modification: no automatic changes to canonical Zápisník facts, working hypotheses or accepted snapshots; modifications require a separate explicit action.
 
+### B-07 — Central DEV pilot telemetry — NOT IMPLEMENTED
+- Implement the disabled-by-default collector, dedicated telemetry persistence, session/activity/workflow events and server-side AI usage integration described in [the telemetry package](../TELEMETRY/README.md).
+- Reuse the existing call-level usage/pricing ledger; keep diagnostic Session JSON separate from minimal pilot collection.
+- Execute B1 foundation → B2 core metrics → B3 reporting/synthetic reconciliation → B4 local runtime acceptance after separate implementation authorization. Proposed effort: 48–72 engineering hours.
+- No database provisioning, hosted update, real-user collection or production deployment is authorized by this documentation item. Resolve privacy, enrollment, live DEV identity, retention and activation gates in the roadmap before launch. Content classification is deferred.
+
 ## NEEDS DECISION
 
 ### D-01 — Legacy export/audit internals
