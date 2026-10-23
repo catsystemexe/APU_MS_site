@@ -1,0 +1,94 @@
+{
+  "scope": "isolated synthetic Chromium harness; excludes standard launcher/Vinext/Worker/hosted acceptance",
+  "base": "9018512621c8a2d828932ff78e18f18d702b321d",
+  "scenarios": [
+    {
+      "name": "default_off",
+      "status": "PASS",
+      "provider_calls": 3,
+      "rows": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "refusal",
+      "status": "PASS",
+      "provider_calls": 3,
+      "rows": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "workflow",
+      "status": "PASS",
+      "provider_calls": 8,
+      "known_cost_nano_usd": 1376000,
+      "unknown_cost_count": 1,
+      "first_output_nano_usd": 736000,
+      "outputs": 3,
+      "workflows": 2,
+      "semantic_events": {
+        "workflow_started": 2,
+        "operation_requested": 7,
+        "operation_resolved": 7,
+        "phase_transition": 4,
+        "document_accepted": 3,
+        "workflow_reset": 1
+      },
+      "duplicate_added_rows": 0,
+      "csv_written_and_read": true
+    },
+    {
+      "name": "consent_isolation_outage",
+      "status": "PASS",
+      "sessions": 3,
+      "distinct_tab_contexts": 3,
+      "stopped_added_rows": 0,
+      "invalidated_added_rows": 0,
+      "silent_consent_restore": false,
+      "outage_retry_same_event_ids": true
+    },
+    {
+      "name": "stream_disconnect",
+      "status": "PASS",
+      "provider_calls": 3,
+      "ai_rows": 3,
+      "known_cost_nano_usd": 96000,
+      "outputs": 0,
+      "silent_consent_restore": false
+    },
+    {
+      "name": "activity_idle",
+      "status": "PASS",
+      "active_ms": 15000,
+      "participant_union_ms": 15000,
+      "idle_renewal": true,
+      "visibility_observed_after_tab_change": {
+        "visible": "visible",
+        "focused": false
+      },
+      "native_os_focus": "NOT VERIFIED"
+    },
+    {
+      "name": "overlapping_tabs",
+      "status": "PASS",
+      "session_active_ms": [
+        15000,
+        15000
+      ],
+      "participant_union_ms": 15000,
+      "ai_calls": 6,
+      "known_cost_nano_usd": 1344000,
+      "focus": "controlled CDP, not native OS acceptance"
+    }
+  ],
+  "runtime": {
+    "node": "v24.19.0",
+    "platform": "linux",
+    "chromium": "151.0.7922.173"
+  }
+}

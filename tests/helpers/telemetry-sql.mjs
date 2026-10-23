@@ -2,8 +2,7 @@ import { DatabaseSync } from "node:sqlite";
 import { readFile } from "node:fs/promises";
 const migration = await readFile(new URL("../../telemetry/migrations/0001_pilot_v1.sql", import.meta.url), "utf8");
 export class EmulatedTelemetryD1 {
-  db = new DatabaseSync(":memory:");
-  constructor() { this.db.exec(migration); }
+  constructor(database = ":memory:") { this.db = new DatabaseSync(database); this.db.exec(migration); }
   prepare(sql) {
     const statement = this.db.prepare(sql); let values = [];
     const result = { bind(...v) { values = v; return result; }, async first() { const row = statement.get(...values); return row ? { ...row } : null; },
