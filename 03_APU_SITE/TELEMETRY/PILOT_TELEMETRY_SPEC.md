@@ -1,6 +1,6 @@
 # PILOT_TELEMETRY_SPEC
 
-Status: v1 measurement contract; **B1 foundation and B2 source instrumentation implemented, locally verified and disabled.** Not deployed or collecting. B3 reporting and B4 browser/runtime acceptance remain pending. Source/evidence: [audit](TELEMETRY_INFRA_AUDIT.md). Architecture and privacy: [architecture](TELEMETRY_ARCHITECTURE.md). Prepared 2026-10-23.
+Status: v1 measurement contract; **B1/B2 and B3 reporting source implemented and locally verified; collection disabled.** Not deployed or collecting. B4 browser/runtime acceptance remains pending. Source/evidence: [audit](TELEMETRY_INFRA_AUDIT.md). Architecture and privacy: [architecture](TELEMETRY_ARCHITECTURE.md). Updated 2026-10-23.
 
 ## 1. Pilot questions and statistical boundary
 
@@ -130,3 +130,32 @@ Client operation tickets capture the original visit/workflow/consent generation 
 No new browser participant identifier/storage is added. A minimal, optional server page bootstrap returns only eligibility and controller-configured notice text/version, after existing Access validation and B1 privacy/enrollment/DEV gates. Missing approved `APU_TELEMETRY_NOTICE_TEXT` suppresses the opt-in UI. Refusal leaves the app usable; stop and identity uncertainty stop tracking. Notice configuration and technical tests do not themselves approve real collection. All actual runtime configuration remains disabled/unchanged.
 
 **V3 source PASS:** 573 relevant provider-free tests, typecheck, focused lint (zero errors, the same five preexisting APU-client warnings as B1), canonical build and Worker artifact validation. Exact commands, emitter map and limitations are in [architecture §11](TELEMETRY_ARCHITECTURE.md#11-implemented-b2-core-metrics-and-verification--2026-10-23). No actual provider request, remote infrastructure mutation, hosted update, real data collection or deployment occurred.
+
+## 8. Implemented reporting coverage — B3, 2026-10-23
+
+`createReport(db, options)` in [engine.ts](../../telemetry/reports/engine.ts) implements `pilot-report-v1` over schema 1 / `pilot-v1`. [Local CLI and operational procedure](TELEMETRY_ARCHITECTURE.md#12-implemented-b3-reporting-and-verification--2026-10-23). Dates are Prague civil dates with exclusive `to`; `asOf` and explicit `retainedSince` are UTC instants. Cohort and test class are exact filters; tester is the default, synthetic/developer require explicit selection. Window plus retained history is bounded to 31 elapsed days. Unknown/undefined values export as empty cells, never invented zero estimates.
+
+The metric definitions in §3 remain authoritative. Runnable views (`--view`, non-summary views require `--operator yes`):
+
+| Metrics | View / calculation and denominator |
+| --- | --- |
+| E01 | `calls`: one PK-deduplicated observed server attempt; original nullable nano-USD cost, price version/status and lifecycle state, without repricing. |
+| E02 | `quality`: known input/output/cached/cache-write subtotals with a missing-counter count for each; subsets are not added again to totals. N is observed calls, not provider account traffic. |
+| E03 | `models`: unique calls grouped by requested/reported model, phase, operation, pricing version; known cost and unknown count retained. |
+| E04 | `sessions`: SQL sums AI independently of event aggregates, then joins by session; complete only for observed valid finalized prices with no uncovered AI intent or sequence gap. CTX-only visits have no complete zero estimate. |
+| E05–E06 | `summary`: mean/exact median over complete, qualified, ≥24h mature sessions with AI (`complete_ai_sessions_n`); second pair includes qualified genuine observed zero-call sessions (`complete_active_sessions_n`). Incomplete mature sessions counted separately. |
+| E07 | `workflows`, `summary`: calls started by first accepted DOC; a call pending at that instant leaves its first-output estimate incomplete even if finalized later. Subsequent work does not erase the first-output estimate. Mean/median N=`first_completion_complete_n`; incomplete completed episodes reported separately. |
+| E08 | `summary`: mature-workflow known cost, including unfinished/reset work, divided by completed mature workflows or distinct accepted outputs. `mature_cost_incomplete` labels a lower bound; zero denominator is null. Left-truncated/right-censored work is excluded from this mature numerator/denominator but retained in observed totals/coverage. |
+| E09–E10 | `summary`, `calls`, `operations`: failed/incomplete/transport calls versus application rejection; pending unresolved >15m stays unknown. User retry/regenerate intents, server retry links and grounding fallback links are separate counts. |
+| U01 | `days`, `weeks`, `sessions`: qualifying tab visits counted by session start date, including activity observed after the report end but before `as_of`. CTX-only visits separate. Session union time/cost covers its observed lifetime through `as_of`; daily activity and call cost are clipped/grouped in the requested dates. |
+| U02–U03 | `participants`: qualifying sessions, active civil dates and ACT-only dates; returning=≥2 qualifying visits, return-day=≥2 active dates, ordered intervisit gaps, additional same-day visits. Shares use `observed_participants` (accounts with qualifying visits or activity/calls in dates), not event count. Observation-boundary history is not inferred. |
+| U04–U05 | `sessions`: valid interval union for each visit. `participants`, `days`, `weeks`: cross-tab participant union, split at Prague midnight then summed into ISO weeks. Qualified visits can have zero active days inside the selected dates; no open duration/AI wait substitute. |
+| U06, W05 | `workflows`, `summary`: observed WS, first DOC, reset, ≥24h unfinished-observed, younger right-censored, missing/pre-window/pre-retention start left-truncated. Mature conversion denominator=`workflows_mature`; eligible completed/reset/unfinished are mature. No abandonment-cause inference. |
+| W01–W03 | `workflows`: ordered phase path/start, re-entry after leaving a phase and ordinal backward transitions. `transitions`: from/to counts in dates. No panel/rerender inference. |
+| W04 | `operations`: distinct intent IDs by operation/reason, outcomes and associated unique provider attempts/cost; a multi-stage operation is not automatically a retry. |
+| W06 | `phases`: interval union per session/phase within the selected dates; unknown retained. Phase totals across concurrent tabs are not an attention total. |
+| Q01 | `quality` and CSV coverage columns: observed rows, pending/unresolved/unpriced/unlinked calls, uncovered intents, sequence gaps, delay/drift and missing token counters. Live expected totals/loss rate remain null; synthetic expected-vs-stored counts are independently asserted. |
+
+U02/U03/U05 require `linkage:true` / `--linkage approved` representing separate G2 approval. Without it participant views are unavailable, participant totals/shares null, and row exports omit account pseudonym/key version. Cohort/key-version namespaces never silently merge. This flag does not approve privacy or activate collection. Optional P02/P04 route/format metadata remains G3/P1 and uninstrumented/off; no classifier or new AI call. Latency Q02 remains P1.
+
+**V2 source PASS:** 225 targeted synthetic tests, typecheck, focused lint with zero errors/warnings, actual CSV generation plus independent Python inspection, and a 6000-session SQLite model. [Synthetic summary](../../telemetry/reports/examples/synthetic-summary.csv) and [suppressed shared example](../../telemetry/reports/examples/synthetic-shared.csv) contain no direct identifiers. Three complete AI sessions at 0.01/0.03/0.10 USD give mean 0.046666… and median 0.03; an unknown fourth is excluded from that mean, and a separate zero-call baseline session gives the all-active complete mean 0.035 (N=4). Cost remains 140,000,000 nano-USD despite duplicate/reordered/many general events. All completeness claims concern observed data only. No hosted acceptance, real collection or deployment.

@@ -18,19 +18,22 @@ export async function reportingFixture(t,{duplicate=false}={}){
     now=at;const opened=at,identity={email:`${name}@synthetic.invalid`,role:"tester"};
     const participant=await m.participantId(identity,{cohort:config.APU_TELEMETRY_COHORT,pseudonymKey:config.TELEMETRY_PSEUDONYM_KEY});
     config.APU_TELEMETRY_ELIGIBLE=[config.APU_TELEMETRY_ELIGIBLE,participant].filter(Boolean).join(",");
-    let context;
-    const pilot=createPilot({enabled:true,eligible:true,noticeVersion:"n1",monotonic:()=>now-opened,wall:()=>now,random:()=>0,fetcher:async(path,init)=>{
+    let context;const inFlight=new Set();
+    const transport=async(path,init)=>{
       const body=JSON.parse(init.body);
       if(path.endsWith("context")){const result=await m.handleContext(request("context",body),identity,resources,now);if(body.action==="start")context=result;return Response.json(result);}
       batches.push(body.events);
       const result=await m.handleEvents(request("events",{...body,events:[...body.events].reverse()}),identity,resources,now);
       if(duplicate)for(let i=0;i<2;i++)await m.handleEvents(request("events",body),identity,resources,now);
       return Response.json(result);
+    };
+    const pilot=createPilot({enabled:true,eligible:true,noticeVersion:"n1",monotonic:()=>now-opened,wall:()=>now,random:()=>0,fetcher:(...args)=>{
+      const work=transport(...args);inFlight.add(work);work.then(()=>inFlight.delete(work),()=>inFlight.delete(work));return work;
     }});
     pilots.push(pilot);if(!await pilot.optIn())throw Error("synthetic_context_failed");
-    return {pilot,identity,participant,get context(){return context;}};
+    return {pilot,identity,participant,settle:()=>Promise.all([...inFlight]),get context(){return context;}};
   }
-  async function drain(client){for(let i=0;i<100;i++){await new Promise(setImmediate);await client.pilot.flush();if(client.pilot.status().queued===0)return;}throw Error("synthetic_queue_not_drained");}
+  async function drain(client){for(let i=0;i<20;i++){await client.settle();await client.pilot.flush();if(client.pilot.status().queued===0)return;}throw Error("synthetic_queue_not_drained");}
   async function call(c,operation,tokens,{pending=false,unknown=false,retryOf=null,fallbackFor=null,failed=false}={}){
     const headers=await operation.headers(),writes=[],started=now;
     const record=m.createModelUsageRecord({call_id:crypto.randomUUID(),request_id:crypto.randomUUID(),turn_id:"PRIVATE_BUSINESS_ID",phase:"F1",operation:"main_chat",attempt_index:retryOf||fallbackFor?1:0,retry_of_call_id:retryOf,fallback_for_call_id:fallbackFor,started_at:new Date(started).toISOString(),completed_at:null,requested_model:unknown?"unmapped-private-model":"gpt-5.6-terra",reported_model:null,reasoning_effort:"low",requested_service_tier:"default",reported_service_tier:null,provider_request_id:"PRIVATE_PROVIDER",provider_response_id:null,provider_status:"unknown",application_status:"not_applicable",error:null});

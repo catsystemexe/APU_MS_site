@@ -54,10 +54,21 @@ test("participant deletion is cohort scoped, plan drift refuses apply, and all t
   assert.equal(db.prepare("SELECT count(*) n FROM telemetry_sessions WHERE cohort_id='other'").get().n,1);
   assert.equal(JSON.parse(readFileSync(ledger)).request.participant,a.participant);
 });
+test("retention removes expired children but retains an older session with an unexpired call",async t=>{
+  const f=await reportingFixture(t),cutoff=AS_OF-30*86400000,c=await f.client("straddling",cutoff-60000);
+  c.pilot.meaningful();await f.drain(c);f.time(cutoff+60000);const op=c.pilot.begin("main_chat");await f.call(c,op,5000);await f.drain(c);
+  const target=snapshot(t,f),db=openTarget(target,true);t.after(()=>db.close());const request={action:"retention",asOf:AS_OF},plan=deletionPlan(db,target,request);
+  assert.deepEqual(plan.counts,{events:1,ai_calls:0,sessions:0});
+  applyDeletion(db,target,request,plan.confirmation,join(target.database,"..","telemetry-deletion-straddling.json"));
+  assert.equal(db.prepare("SELECT count(*) n FROM telemetry_sessions").get().n,1);assert.equal(db.prepare("SELECT count(*) n FROM telemetry_ai_calls").get().n,1);
+});
 test("real CLI produces a bounded synthetic CSV with safe headers, nulls and seven-day expiry, then prunes only managed exports",async t=>{
   const f=await reportingFixture(t),c=await f.client(),op=c.pilot.begin("main_chat");await f.call(c,op,5000);op.resolve("accepted");await f.drain(c);
   const target=snapshot(t,f),out=join(target.database,"..","telemetry-example.csv"),args=["scripts/telemetry/report.ts","export","--database",target.database,"--cohort",target.cohort,"--test-class","synthetic","--mode","local-test","--from",reportOptions.from,"--to",reportOptions.to,"--as-of",new Date(AS_OF).toISOString(),"--retained-since",new Date(reportOptions.retainedSince).toISOString(),"--linkage","approved","--operator","yes","--out",out];
   const run=spawnSync(process.execPath,args,{cwd:root,encoding:"utf8"});assert.equal(run.status,0,run.stderr);assert.match(run.stdout,/export_written_local/);
+  const ambiguous=spawnSync(process.execPath,[...args.slice(0,-1),join(target.database,"..","telemetry-ambiguous.csv"),"--participant",c.participant],{cwd:root,encoding:"utf8"});
+  assert.equal(ambiguous.status,1,"export must reject an unsupported participant filter instead of silently exporting the full cohort");
+  assert.match(ambiguous.stderr,/invalid_arguments/);
   const csv=readFileSync(out,"utf8");assert.match(csv,/mean_ai_session_usd/);assert.match(csv,/"0\.01"/);assert.doesNotMatch(csv,/PRIVATE|participant_id|email|call_id|projection_json/);assert.equal(statSync(out).mode&0o777,0o600);
   assert.equal(spawnSync(process.execPath,args,{cwd:root,encoding:"utf8"}).status,1,"exports never overwrite");
   const m=JSON.parse(readFileSync(out+".expiry.json","utf8"));assert.equal(m.expires_at-m.created_at,7*86400000);

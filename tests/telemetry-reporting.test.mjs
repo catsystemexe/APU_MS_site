@@ -83,6 +83,8 @@ test("bounded filters, formula injection, small/complementary-cell suppression, 
   const shared=reportCsv(r,{createdAt:AS_OF});assert.match(shared,/suppressed_small_or_complementary_cells/);assert.equal(shared.split("\r\n")[1].split(",")[shared.split("\r\n")[0].split(",").indexOf('"known_cost_nano_usd"')],"");
   assert.throws(()=>reportCsv(r,{view:"sessions"}),/operator_export_required/);
   assert.match(reportCsv(r,{view:"sessions",operator:true}),/session_id/);
+  const unlinked=createReport(f.db.db,{...reportOptions,linkage:false});
+  for(const view of ["sessions","workflows","calls"])assert.doesNotMatch(reportCsv(unlinked,{view,operator:true}),/"participant_id"|"key_version"/);
   for(const value of ["=1+2"," +cmd","\t@SUM(1)","\n-2","\u0001=2"])assert.ok(csvCell(value).startsWith('"\''));
   assert.equal(csvCell(null),"");assert.equal(csvCell(0),'"0"');assert.equal(csvCell('a,"b"'),'"a,""b"""');
   for(const bad of [{cohort:"x' OR 1=1"},{from:"2026-02-30"},{to:"2027-01-01"},{retainedSince:0},{testClass:"all"}])assert.throws(()=>createReport(f.db.db,{...reportOptions,...bad}));
@@ -109,4 +111,14 @@ test("shared overall aggregate opens for adequate cells and suppresses their sma
   assert.match(reportCsv(createReport(f.db.db,reportOptions)),/"observed"/);
   const other=await f.client("complement",START+600000);other.pilot.meaningful();other.pilot.reset();await f.drain(other);
   assert.match(reportCsv(createReport(f.db.db,reportOptions)),/suppressed_small_or_complementary_cells/);
+});
+test("a session is counted by its start date even when its qualifying activity occurs after the report end date",async t=>{
+  const f=await reportingFixture(t),boundary=midnight("2026-10-21"),c=await f.client("late-activity",boundary-1000);
+  f.time(boundary+60000);c.pilot.view(true,true);c.pilot.interaction();c.pilot.meaningful();f.advance(15000);c.pilot.tick();await f.drain(c);
+  const r=createReport(f.db.db,{...reportOptions,from:"2026-10-20",to:"2026-10-21"});
+  assert.equal(r.rows.sessions[0].qualified,true);assert.equal(r.rows.sessions[0].active_ms,15000);
+  assert.equal(r.rows.days[0].sessions,1);assert.equal(r.rows.days[0].active_ms,0);
+  assert.equal(r.rows.participants[0].sessions,1);assert.equal(r.rows.participants[0].active_days,0);
+  assert.equal(r.rows.summary[0].mean_all_active_session_usd,0);
+  assert.equal(r.rows.workflows.length,0,"a workflow starting outside the reporting dates is excluded");
 });

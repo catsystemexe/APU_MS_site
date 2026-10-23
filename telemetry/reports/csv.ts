@@ -18,7 +18,9 @@ export function reportCsv(report: PilotReport, { view = "summary", operator = fa
   // Coverage is co-exported on every report, with the same suppression as metric values.
   const coverage = Object.fromEntries(Object.entries(report.rows.quality[0]).map(([k, v]) => [`coverage_${k}`, suppressed ? null : v]));
   const data = report.rows[view], rows: Row[] = (data.length ? data : [{}]).map(row => ({ ...meta, ...coverage,
-    ...Object.fromEntries(Object.entries(row).map(([k, v]) => [k, suppressed ? null : v])) }));
+    ...Object.fromEntries(Object.entries(row)
+      .filter(([k]) => report.metadata.participant_linkage === "approved" || !["participant_id", "key_version"].includes(k))
+      .map(([k, v]) => [k, suppressed ? null : v])) }));
   const columns = [...new Set(rows.flatMap(r => Object.keys(r)))];
   return columns.map(csvCell).join(",") + "\r\n" + rows.map(r => columns.map(k => csvCell(r[k] ?? null)).join(",")).join("\r\n") + "\r\n";
 }

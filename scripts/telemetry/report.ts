@@ -17,6 +17,10 @@ function timestamp(value: string) { if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\
 function main() {
   const [command, ...args] = process.argv.slice(2), a = argumentsOf(args);
   if (!["export", "retention", "delete-participant"].includes(command)) throw Error("invalid_command");
+  const common = ["database", "cohort", "test-class", "mode", "as-of"];
+  const specific = command === "export" ? ["from", "to", "retained-since", "view", "operator", "linkage", "out"]
+    : ["apply", "confirm", "ledger", ...(command === "delete-participant" ? ["participant"] : [])];
+  if (Object.keys(a).some(key => !common.includes(key) && !specific.includes(key))) throw Error("invalid_arguments");
   for (const key of ["operator", "apply"]) if (a[key] && a[key] !== "yes") throw Error("invalid_arguments");
   if (a.linkage && !["approved", "unavailable"].includes(a.linkage)) throw Error("invalid_arguments");
   const target: Target = { database: required(a, "database"), cohort: required(a, "cohort"), testClass: (a["test-class"] ?? "tester") as Target["testClass"], mode: required(a, "mode") as Target["mode"] };

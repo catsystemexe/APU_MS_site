@@ -4,6 +4,14 @@ Status: CURRENT
 
 Records significant verified product/runtime/project changes. It is not a complete Git log. Historical Sites-era entries are retained where they remain useful; current deployment state must not be inferred from a changelog entry alone.
 
+## 2026-10-23 — Pilot telemetry B3 reporting, source implementation only
+
+- Completed the preserved B3 WIP over B2 without resetting/recreating the checkout. Added bounded SQL/local reports for all P0 economics/activity/workflow/coverage metrics, exact median/denominators, Prague civil-time union and mature/censored/left-truncated states. Reused immutable ledger pricing; no business or application module change.
+- Added restricted CSV exports with formula escaping, null preservation, linkage gating and conservative small/complementary-cell suppression; local synthetic dry-run/confirmed retention, participant deletion, restore replay and seven-day export expiry. Proven WIP corrections reject ignored CLI filters, remove linkage-off account fields and count visits by their start date even when activity follows the report end.
+- V2 source PASS: 225 provider-free tests, typecheck, focused lint (zero errors/warnings), actual generated CSV plus independent inspection and 6,000-session SQLite resource reconciliation. B2-R01 build/artifact evidence reused because application modules/config/dependencies are unchanged. [Exact evidence and operational procedure](../TELEMETRY/TELEMETRY_ARCHITECTURE.md#12-implemented-b3-reporting-and-verification--2026-10-23).
+- Measured upper model: 570,000 rows, 730,255,360 bytes; estimated ~203,800 indexed writes/day with steady retention at 200 sessions/day, beyond published Free limits. Live account/headroom and billed D1 meta remain unverified.
+- **Telemetry OFF, not deployed or collecting.** No remote DB operation, provisioning, real provider call, hosted update or CI policy change. B-07 remains open for B4; G0–G5 remain gates. Optional metadata stays off. B4 was not started; Known Issues unchanged.
+
 ## 2026-10-23 — Pilot telemetry B2 core metrics, disabled source only
 
 - Connected existing AI routes/controller/MAIN to B1 safe persistence, preserving original provider payloads/counts, pedagogical results and developer/tester response boundaries. Grounding rescue has explicit attempt/fallback linkage; a server-owned chat telemetry request UUID leaves original diagnostic IDs intact. MAIN retains completion/cost under its original request lifetime after downstream cancellation.

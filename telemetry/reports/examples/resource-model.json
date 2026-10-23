@@ -1,0 +1,183 @@
+{
+  "synthetic": true,
+  "sqlite_version": "3.53.3",
+  "sessions": 6000,
+  "per_session": {
+    "sessions": 1,
+    "events": 84,
+    "ai_calls": 10,
+    "rows": 95,
+    "ingest_batches": 71,
+    "logical_writes": 186
+  },
+  "rows": 570000,
+  "page_size": 4096,
+  "pages": 178285,
+  "bytes": 730255360,
+  "bytes_per_session": 121709.22666666667,
+  "bulk_wal_bytes": 734649592,
+  "load_ms": 33570.928688,
+  "report_ms": 56198.560071,
+  "known_cost_nano_usd": 600000000000,
+  "index_sizes": [
+    {
+      "name": "sqlite_autoindex_telemetry_ai_calls_1",
+      "bytes": 3043328,
+      "cells": 60000
+    },
+    {
+      "name": "sqlite_autoindex_telemetry_events_1",
+      "bytes": 25444352,
+      "cells": 504000
+    },
+    {
+      "name": "sqlite_autoindex_telemetry_events_2",
+      "bytes": 50769920,
+      "cells": 504000
+    },
+    {
+      "name": "sqlite_autoindex_telemetry_sessions_1",
+      "bytes": 299008,
+      "cells": 6000
+    },
+    {
+      "name": "sqlite_schema",
+      "bytes": 12288,
+      "cells": 18
+    },
+    {
+      "name": "telemetry_ai_calls",
+      "bytes": 246362112,
+      "cells": 119999
+    },
+    {
+      "name": "telemetry_ai_session_time",
+      "bytes": 3588096,
+      "cells": 60000
+    },
+    {
+      "name": "telemetry_ai_workflow_time",
+      "bytes": 3604480,
+      "cells": 60000
+    },
+    {
+      "name": "telemetry_events",
+      "bytes": 344928256,
+      "cells": 587999
+    },
+    {
+      "name": "telemetry_events_name_time",
+      "bytes": 18649088,
+      "cells": 504000
+    },
+    {
+      "name": "telemetry_events_workflow_time",
+      "bytes": 31805440,
+      "cells": 504000
+    },
+    {
+      "name": "telemetry_sessions",
+      "bytes": 1175552,
+      "cells": 6285
+    },
+    {
+      "name": "telemetry_sessions_cohort_time",
+      "bytes": 188416,
+      "cells": 6000
+    },
+    {
+      "name": "telemetry_sessions_participant_time",
+      "bytes": 385024,
+      "cells": 6000
+    }
+  ],
+  "query_plans": {
+    "sessions": [
+      "MATERIALIZE event_totals",
+      "SEARCH telemetry_sessions USING INDEX telemetry_sessions_cohort_time (cohort_id=? AND opened_at<?)",
+      "SEARCH e USING INDEX sqlite_autoindex_telemetry_events_2 (session_id=?)",
+      "USE TEMP B-TREE FOR GROUP BY",
+      "USE TEMP B-TREE FOR count(DISTINCT)",
+      "MATERIALIZE ai_totals",
+      "SEARCH telemetry_sessions USING INDEX telemetry_sessions_cohort_time (cohort_id=? AND opened_at<?)",
+      "SEARCH a USING INDEX telemetry_ai_session_time (session_id=? AND started_at>? AND started_at<?)",
+      "USE TEMP B-TREE FOR GROUP BY",
+      "SEARCH telemetry_sessions USING INDEX telemetry_sessions_cohort_time (cohort_id=? AND opened_at<?)",
+      "SEARCH e USING AUTOMATIC COVERING INDEX (session_id=?) LEFT-JOIN",
+      "SEARCH a USING AUTOMATIC COVERING INDEX (session_id=?) LEFT-JOIN",
+      "USE TEMP B-TREE FOR LAST TERM OF ORDER BY"
+    ],
+    "workflows": [
+      "CO-ROUTINE episodes",
+      "MERGE (UNION)",
+      "LEFT",
+      "MATERIALIZE event_totals",
+      "SEARCH telemetry_sessions USING INDEX telemetry_sessions_cohort_time (cohort_id=? AND opened_at<?)",
+      "SEARCH telemetry_sessions USING INDEX sqlite_autoindex_telemetry_sessions_1 (session_id=?)",
+      "SEARCH e USING INDEX sqlite_autoindex_telemetry_events_2 (session_id=?)",
+      "USE TEMP B-TREE FOR GROUP BY",
+      "SCAN event_totals",
+      "USE TEMP B-TREE FOR ORDER BY",
+      "RIGHT",
+      "MATERIALIZE ai_totals",
+      "SEARCH telemetry_sessions USING INDEX telemetry_sessions_cohort_time (cohort_id=? AND opened_at<?)",
+      "SEARCH telemetry_sessions USING INDEX sqlite_autoindex_telemetry_sessions_1 (session_id=?)",
+      "SEARCH a USING INDEX telemetry_ai_session_time (session_id=? AND started_at>? AND started_at<?)",
+      "USE TEMP B-TREE FOR GROUP BY",
+      "SCAN ai_totals",
+      "USE TEMP B-TREE FOR ORDER BY",
+      "SCAN k",
+      "SEARCH e USING AUTOMATIC COVERING INDEX (workflow_id=? AND participant_id=? AND key_version=?) LEFT-JOIN",
+      "SEARCH a USING AUTOMATIC COVERING INDEX (workflow_id=? AND participant_id=? AND key_version=?) LEFT-JOIN"
+    ],
+    "calls": [
+      "SEARCH telemetry_sessions USING INDEX telemetry_sessions_cohort_time (cohort_id=? AND opened_at<?)",
+      "SEARCH telemetry_sessions USING INDEX sqlite_autoindex_telemetry_sessions_1 (session_id=?)",
+      "SEARCH a USING INDEX telemetry_ai_session_time (session_id=? AND started_at>? AND started_at<?)",
+      "USE TEMP B-TREE FOR ORDER BY"
+    ],
+    "events": [
+      "SEARCH telemetry_sessions USING INDEX telemetry_sessions_cohort_time (cohort_id=? AND opened_at<?)",
+      "SEARCH telemetry_sessions USING INDEX sqlite_autoindex_telemetry_sessions_1 (session_id=?)",
+      "SEARCH e USING INDEX sqlite_autoindex_telemetry_events_2 (session_id=?)",
+      "USE TEMP B-TREE FOR ORDER BY"
+    ]
+  },
+  "estimates": {
+    "indexed_writes_per_session": 555,
+    "indexed_write_amplification": 2.9838709677419355,
+    "daily_insert_row_writes": 111000,
+    "daily_steady_retention_row_writes": 92800,
+    "daily_steady_total_row_writes": 203800,
+    "report_source_row_visits": 1716000,
+    "d1_billed_meta": "NOT AVAILABLE in SQLite; index-cell writes/source-row visits are estimates",
+    "account_plan": "NOT VERIFIED"
+  },
+  "query_metrics": {
+    "sessions": {
+      "rows": 6000,
+      "elapsed_ms": 998.521511
+    },
+    "workflows": {
+      "rows": 6000,
+      "elapsed_ms": 1365.9241680000002
+    },
+    "calls": {
+      "rows": 60000,
+      "elapsed_ms": 1132.849447
+    },
+    "events": {
+      "rows": 504000,
+      "elapsed_ms": 4922.68697
+    }
+  },
+  "initial_report_ms": 56799.999451,
+  "engine_sha256": "d62169d26a670c40b5ed6ae5b31df24a6f98360568a4294fd967a21bcf959414",
+  "query_sql_sha256": {
+    "sessions": "a6e744a1d2294403a6594aaff14d240d5c884cb844215f4a84c2b8d6d22856c7",
+    "workflows": "0490293383f5c89dff76dfaed2cde821d39897bc7fc22816909750bf28b0ed25",
+    "calls": "a6930069bfbc5af60a3cc40881cb525cd54a70ae7be6d5b7cb6d08ea3210f0c3",
+    "events": "46cc17e0093611a8d2bfbbb06cb12c54a63837c47f88451b1af29393963e90eb"
+  },
+  "measurement_notes": "Final engine re-read the same generated 6000-session DB read-only; bytes/index/query plans unchanged. Final fixture seed independently matched 84 events, 71 batches, 186 logical writes."
+}

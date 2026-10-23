@@ -52,11 +52,12 @@ export function createReport(db: DatabaseSync, options: ReportOptions) {
   const operationKey = (r: Source) => `${episode(r)}:${text(r, "operation_instance_id")}`;
   const callsByOperation = group(calls, operationKey), outcomesByOperation = group(events.filter(e => e.event_name === "operation_resolved"), operationKey);
   const sessionsById = new Map(sessions.map(s => [s.session_id, s]));
-  const intervals = events.filter(e => e.event_name === "activity_interval").flatMap(e => {
-    const start = Math.max(p.from, n(e, "opened_at") + n(e, "start_ms")), end = Math.min(p.to, p.as_of, n(e, "opened_at") + n(e, "end_ms"));
+  const observedIntervals = events.filter(e => e.event_name === "activity_interval").flatMap(e => {
+    const start = Math.max(p.retained_since, n(e, "opened_at") + n(e, "start_ms")), end = Math.min(p.as_of, n(e, "opened_at") + n(e, "end_ms"));
     return end > start ? [{ e, start, end }] : [];
   });
-  const sessionIntervals = group(intervals, i => text(i.e, "session_id"));
+  const intervals = observedIntervals.flatMap(i => { const start = Math.max(p.from, i.start), end = Math.min(p.to, i.end); return end > start ? [{ ...i, start, end }] : []; });
+  const sessionIntervals = group(observedIntervals, i => text(i.e, "session_id"));
   const activeMs = (id: string) => union((sessionIntervals.get(id) ?? []).map(i => [i.start, i.end]));
   const intents = [...group(events.filter(e => e.event_name === "operation_requested"), e => `${episode(e)}:${text(e, "operation_instance_id")}`).values()].map(rows => rows.sort(byTime)[0]);
   const missingIntents = intents.filter(e => e.operation !== "f2_local_reconciliation" && !callsByOperation.has(operationKey(e)));
@@ -99,8 +100,9 @@ export function createReport(db: DatabaseSync, options: ReportOptions) {
       first_completion_cost_nano_usd: first && !left && !gaps && firstMissing === 0 && firstUnknown === 0 ? firstKnown : null,
       first_completion_unknown_count: first ? firstUnknown : null,
       output_count: docs.length, baseline_outputs: docs.filter(e => e.representation === "baseline").length, generated_outputs: docs.filter(e => e.representation === "generated").length,
-      phase_path: path.join(">"), repeated_phase_entries: repeated, backward_transitions: backwards, uncovered_intents: missing, sequence_gap: gaps };
-  }).filter(w => w.last_observed_at >= p.from);
+      phase_path: path.join(">"), repeated_phase_entries: repeated, backward_transitions: backwards, uncovered_intents: missing, sequence_gap: gaps,
+      observed_in_window: ev.some(e => inWindow(n(e, "occurred_at"))) || ai.some(c => inWindow(n(c, "started_at"))) };
+  }).filter(w => w.observed_in_window);
   const periodCalls = calls.filter(c => inWindow(n(c, "started_at")));
   const phaseRows: Row[] = [...group(intervals, i => `${text(i.e, "session_id")}:${text(i.e, "phase")}`).values()].map(v => ({ session_id: text(v[0].e, "session_id"), phase: text(v[0].e, "phase") || "unknown", active_ms: union(v.map(i => [i.start, i.end])) }));
   const transitionRows: Row[] = [...group(events.filter(e => e.event_name === "phase_transition" && inWindow(n(e, "occurred_at"))), e => `${text(e, "from_phase")}>${text(e, "to_phase")}`).values()].map(v => ({ from: text(v[0], "from_phase"), to: text(v[0], "to_phase"), count: v.length }));
@@ -121,10 +123,13 @@ export function createReport(db: DatabaseSync, options: ReportOptions) {
   for (const i of intervals) for (const part of splitDays(i.start, i.end)) dayRow(i.e, part.date).intervals.push(part.interval);
   for (const c of periodCalls) dayRow(c, civilDate(n(c, "started_at"))).ai.push(c);
   const daily = [...participantDays.values()];
-  const participantRows: Row[] = options.linkage ? [...group(daily, d => `${d.key_version}:${d.participant_id}`).values()].map(v => {
-    const qualified = sessionRows.filter(s => s.qualified && s.participant_id === v[0].participant_id && s.key_version === v[0].key_version).sort((a, b) => Number(a.opened_at) - Number(b.opened_at));
+  const dailyByParticipant = group(daily, d => `${d.key_version}:${d.participant_id}`);
+  const participantOwners = new Map([...daily, ...sessionRows.filter(s => s.qualified)].map(r => [`${r.key_version}:${r.participant_id}`, { participant_id: String(r.participant_id), key_version: String(r.key_version) }]));
+  const participantRows: Row[] = options.linkage ? [...participantOwners.entries()].map(([key, owner]) => {
+    const v = dailyByParticipant.get(key) ?? [];
+    const qualified = sessionRows.filter(s => s.qualified && s.participant_id === owner.participant_id && s.key_version === owner.key_version).sort((a, b) => Number(a.opened_at) - Number(b.opened_at));
     const starts = qualified.map(s => Number(s.opened_at)), gaps = starts.slice(1).map((s, i) => s - starts[i]);
-    return { participant_id: v[0].participant_id, key_version: v[0].key_version, sessions: qualified.length, active_days: v.length, act_only_days: v.filter(d => d.intervals.length).length,
+    return { ...owner, sessions: qualified.length, active_days: v.length, act_only_days: v.filter(d => d.intervals.length).length,
       active_ms: v.reduce((a, d) => a + union(d.intervals), 0), returning: qualified.length >= 2, return_day: v.length >= 2,
       additional_same_day_visits: qualified.length - new Set(starts.map(civilDate)).size, intervisit_gap_count: gaps.length, intervisit_mean_ms: gaps.length ? gaps.reduce((a, b) => a + b, 0) / gaps.length : null,
       intervisit_median_ms: median(gaps), ...cost(v.flatMap(d => d.ai)) };
@@ -157,7 +162,7 @@ export function createReport(db: DatabaseSync, options: ReportOptions) {
     drift_events: events.filter(e => n(e, "occurred_at") - n(e, "received_at") > 5000).length,
     expected_live_calls: null, expected_live_events: null, live_loss_rate: null };
   for (const field of ["input_tokens", "output_tokens", "cached_input_tokens", "cache_write_tokens"]) { quality[field] = sum(periodCalls, field); quality[`${field}_missing`] = periodCalls.filter(c => c[field] === null).length; }
-  const participants = new Set(daily.map(d => `${d.key_version}:${d.participant_id}`)).size;
+  const participants = participantOwners.size;
   const summary: Row = { ...total, qualified_sessions: sessionRows.filter(s => s.qualified).length, context_only_sessions: sessionRows.filter(s => !s.qualified).length,
     observed_participants: options.linkage ? participants : null, mature_active_sessions: matureSessions.length,
     complete_ai_sessions_n: aiEligible.length, incomplete_mature_sessions: matureSessions.filter(s => s.complete_cost_nano_usd === null).length,
@@ -182,7 +187,7 @@ export function createReport(db: DatabaseSync, options: ReportOptions) {
     return_day_share: options.linkage ? ratio(participantRows.filter(r => r.return_day).length, participants) : null,
     participant_active_ms: options.linkage ? daily.reduce((a, d) => a + union(d.intervals), 0) : null };
   // Shared exports conservatively suppress the entire row if any behavioral partition or its complement has <5 participants.
-  const sharedParticipants = new Set(sessionRows.map(r => `${r.key_version}:${r.participant_id}`)).size;
+  const sharedParticipants = new Set([...sessionRows, ...daily].map(r => `${r.key_version}:${r.participant_id}`)).size;
   const partitions = [sessionRows.filter(s => s.qualified), sessionRows.filter(s => !s.qualified), matureSessions, eligible, aiEligible, matureSessions.filter(s => s.complete_cost_nano_usd === null), completedCosts,
     periodCalls.filter(c => c.cost_nano_usd === null), periodCalls.filter(c => c.state === "pending"), periodCalls.filter(c => ["failed", "incomplete", "transport_error"].includes(text(c,"provider_status"))),
     ...["input_tokens", "output_tokens", "cached_input_tokens", "cache_write_tokens"].map(field => periodCalls.filter(c => c[field] === null)),
