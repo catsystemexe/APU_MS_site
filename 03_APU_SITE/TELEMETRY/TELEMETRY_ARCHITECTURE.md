@@ -1,6 +1,6 @@
 # TELEMETRY_ARCHITECTURE
 
-Status: proposed DEV-only v1; **not implemented or provisioned**. Decision basis: [audit](TELEMETRY_INFRA_AUDIT.md), source `fc8ac5520b7b49b442bedc47558c73f20ce2bea6`. Measurement authority: [specification](PILOT_TELEMETRY_SPEC.md).
+Status: DEV-only v1; **B1 source foundation implemented and locally verified; disabled, not provisioned or deployed**. B2 instrumentation and B3/B4 remain planned. Decision basis: [audit](TELEMETRY_INFRA_AUDIT.md), source `fc8ac5520b7b49b442bedc47558c73f20ce2bea6`. Measurement authority: [specification](PILOT_TELEMETRY_SPEC.md).
 
 ## 1. Decision and alternatives
 
@@ -148,3 +148,35 @@ Before real collection, the responsible controller must record:
 6. Export recipients/access and small-cell review. Optional G3 route/format metadata must be justified; situation/need/goal text and extra AI classification remain off.
 
 These are activation conditions, not a declaration of GDPR compliance or a redesign of APU authentication. If gates cannot be met, keep collection disabled; preserve synthetic validation capability and report the affected P0 metrics unavailable.
+
+
+## 10. Implemented B1 contract and verification — 2026-10-23
+
+Source baseline: `dev` at `fc8ac5520b7b49b442bedc47558c73f20ce2bea6`. The checkout initially contained legacy `7ea7af27273d4a723652e091fffbc22f32e8c8ea`; it was advanced to the verified DEV source and documentation commit `f850f3b6555fd4f5b07cf50f8163d4fbe3db9f16` from PR #66 (still draft/unmerged at inspection). B1 explicitly permits including the reviewed documentation commit. No unrelated application changes exist between the audited DEV source and that documentation commit.
+
+Implemented boundaries:
+
+- `app/telemetry/contract.ts`: strict v1 discriminated client events, closed enums, recursively rejected unknown keys, batch/UUID/size/time limits. Wire events use `elapsed_ms`; trusted `occurred_at`, `received_at`, build (`unknown`) and participant/cohort are server-owned. `POST /api/telemetry/events` accepts exactly `{context, events, sent_elapsed_ms}`. Send-time anchor skew over five seconds and queue delay over two minutes are rejected independently.
+- `app/telemetry/server.ts` and the context/events routes: existing Access authentication, cohort HMAC enrollment, distinct pseudonym/signing keys, private/no-store, exact origin/JSON, context expiry/ownership/tab binding and stop. Context start accepts exactly `{action:"start", opt_in:true, notice_version, tab_id}`; stop accepts `{action:"stop", context}`. The signed token commits to the immutable server session through its random lookup ID, expiry and key version; participant pseudonyms are not returned to the browser. `session_opened` is represented once by its validated session row (opening time is the opt-in timestamp), rather than duplicating it in general events.
+- `app/telemetry/client.ts`: typed `createTelemetryClient()` with explicit `optIn`, `refuse`, `stop`, `identityUncertain`, eligibility, interaction, emit/flush and operation-header interfaces. Default construction and refusal generate no IDs, timers, requests or browser tracking persistence. The opted-in queue is memory-only, bounded to 100 events/two minutes, 20-event batches/15 seconds and two transient retries with stable event IDs. B2 must supply the approved notice/UI flow and genuine interaction/semantic emitters; no current component instantiates this adapter.
+- `telemetry/migrations/0001_pilot_v1.sql`, `store.ts`, `d1-store.ts`: three telemetry-only tables, parameterized statements, atomic D1 batch ingestion, session/context budgets, conflicting event-ID/sequence rejection and monotonic AI upserts. Identical duplicate events retain original receive time. Stop-vs-ingest interleaving is checked at SQL commit. Business `db/schema.ts` and `getDb()` are untouched.
+- `model-usage-adapter.ts`: explicit safe projection from the existing ledger (no provider IDs, business turn IDs, arbitrary errors or content), integer nano-USD and incomplete-cost flags. AI records carry server-only v1 lifecycle discriminants. `createRequestTelemetrySink(request, validatedIdentity)` is the B2 entrypoint after existing authentication; pass its `.sink` to optional `createRequestUsageCollector(persistence)`. Default collectors preserve synchronous behavior. MAIN may retain the same collector in its existing stream lifecycle.
+- `runtime.ts` and `worker/index.ts`: request-local resource scope via `AsyncLocalStorage`, separate from request identity. The **pinned Vinext 0.0.50** `server/app-router-entry` already calls `runWithExecutionContext(ctx, handleFn)`; its exported `vinext/shims/request-context` accessor provides the request's `waitUntil`. The adapter captures that lifetime and immutable association once, retains contained late write promises there, and bounds added waiting to 100ms per lifecycle write. Missing lifetime returns a no-op; no global request identity/context or new host is introduced.
+
+Readiness requires `APU_TELEMETRY_ENABLED=1`, positive `APU_TELEMETRY_ENV=dev`, exact dedicated DEV hostname, dedicated `TELEMETRY_DB`, valid cohort/key/notice versions, distinct sufficiently long `TELEMETRY_PSEUDONYM_KEY`/`TELEMETRY_CONTEXT_KEY` and HMAC enrollment in `APU_TELEMETRY_ELIGIBLE`. Real tester contexts additionally require `APU_TELEMETRY_PRIVACY_APPROVED=1` (the controller's G2 decision, never inferred by code). Local synthetic fixtures explicitly set `APU_TELEMETRY_SYNTHETIC=1`, accept only generated `@synthetic.invalid` identities and permit localhost. Metadata remains separately off by default. Neither a request flag nor technical PASS constitutes privacy approval.
+
+DEV template defaults remain off. Preparation accepts the original five inputs unchanged, optional `telemetry:{enabled:false}`, or an explicit enabled shape with `databaseId`, exact dedicated `databaseName`, `dedicatedDev:true`, exact DEV `hostname`, `cohort`, `keyVersion`, `noticeVersion`. Absent/disabled inputs produce byte-equivalent legacy materialized configuration. Enabled preparation adds only `TELEMETRY_DB` and scoped DEV variables; it supplies no keys, enrollment or privacy approval. `dedicatedDev` is an input declaration, not live resource evidence: G0/G1 must independently verify the supplied database identity before any separately authorized hosted action. No production Wrangler configuration, release-context guard or deployment workflow changed.
+
+**V3 local technical PASS (Codex Cloud, 2026-10-23):**
+
+```sh
+npm run typecheck
+node --test tests/telemetry.test.mjs tests/access-control.test.mjs tests/server-capabilities.test.mjs tests/dev-worker-preparation.test.mjs tests/deployment-config.test.mjs tests/openai-responses-instrumentation.test.mjs tests/model-call-instrumentation.test.mjs
+npx --no-install eslint app/telemetry app/api/telemetry worker/index.ts app/openai-responses-instrumentation.ts ops/dev/prepare-worker.mjs
+npm run build
+npm run validate:artifact
+```
+
+Relevant suite: **271 tests passed, zero failed/skipped**. Telemetry tests use generated identities/keys, actual in-memory SQLite over the authored migration and an atomic D1-shaped adapter. They cover consent/refusal/stop, commit-time withdrawal races, budgets, validation/dedup conflicts, clocks, disabled HTTP/client modes, real JWT verification with synthetic JWKS, sanitized/monotonic AI persistence and contained failures/timeouts. Runtime integration delegates through the actual pinned Vinext Worker entry with a synthetic RSC handler, interleaves two participants and completes late streaming writes via their respective request lifetimes. Existing server-capability tests mock provider transport only; no actual provider request occurred. This is local source/runtime-contract evidence, not hosted Cloudflare or browser acceptance (B4).
+
+CI provenance remains separate: feature/docs → dev is known to fail `release_context_rejected / unsupported_pr_branches` before technical checks. No CI policy change is included. Collection, infrastructure/key provisioning, remote migrations, hosted updates and deployment remain **NOT AUTHORIZED and not performed**. G0–G5 and B2–B4 remain open.

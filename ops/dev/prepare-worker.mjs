@@ -11,6 +11,17 @@ export const DEV = Object.freeze({
 });
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const INPUT_KEYS = ["kvNamespaceId", "accessApplicationId", "accessAudience", "accessTeamDomain", "operatorEmail"];
+const TELEMETRY_OFF = { APU_TELEMETRY_ENABLED: "0", APU_TELEMETRY_METADATA_ENABLED: "0" };
+function validateTelemetry(value) {
+  requireThat(object(value), "invalid_telemetry_input");
+  if (value.enabled === false) { equal(value, { enabled: false }, "invalid_telemetry_input"); return; }
+  equal(Object.keys(value).sort(), ["enabled", "databaseId", "databaseName", "dedicatedDev", "hostname", "cohort", "keyVersion", "noticeVersion"].sort(), "invalid_telemetry_input");
+  requireThat(value.enabled === true && value.dedicatedDev === true, "dedicated_telemetry_dev_required");
+  requireThat(typeof value.databaseId === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(value.databaseId), "invalid_telemetry_database");
+  equal(value.databaseName, "apu-ms-site-dev-telemetry", "dedicated_telemetry_dev_required");
+  equal(value.hostname, "apu-ms-site-dev.catsystem-exe.workers.dev", "invalid_telemetry_hostname");
+  requireThat([value.cohort, value.keyVersion, value.noticeVersion].every(v => typeof v === "string" && /^[a-zA-Z0-9_-]{1,64}$/.test(v)), "invalid_telemetry_versions");
+}
 const EXISTING_KV = ["4a24c791d31a4c0983170c921cb744aa", "8dd4e8a10dc74086bbd746e733b3d8d8", "1729ce8a6acd4cdcbed8248ac543677b"];
 const EXISTING_AUD = "1e1680481c99464a844a6ef0e502cf49fae89fc91c8cf3806ba48026b0088610";
 const EXISTING_ACCESS_APP = "67a86152-2917-40c8-8e5f-6dce0beeaca8";
@@ -28,13 +39,18 @@ export function validateDevTemplate(template) {
   for (const [key, value] of Object.entries(CORE)) equal(template[key], value, "dev_target_or_build_contract_changed");
   equal(template.$schema, "node_modules/wrangler/config-schema.json", "unexpected_schema");
   equal(template.kv_namespaces, [{ binding: "DEV_LOG_STATE", id: null }], "dev_kv_must_be_provisioned");
-  equal(template.vars, { APU_LOCAL_DEV_AUTH: "0", CF_ACCESS_TEAM_DOMAIN: null, CF_ACCESS_AUD: null, APU_DEVELOPER_EMAILS: null }, "dev_access_must_be_provisioned");
+  const accessVars = { ...template.vars };
+  const telemetryVars = Object.fromEntries(Object.entries(accessVars).filter(([key]) => key.startsWith("APU_TELEMETRY_")));
+  if (Object.keys(telemetryVars).length) equal(telemetryVars, TELEMETRY_OFF, "telemetry_defaults_must_be_disabled");
+  for (const key of Object.keys(telemetryVars)) delete accessVars[key];
+  equal(accessVars, { APU_LOCAL_DEV_AUTH: "0", CF_ACCESS_TEAM_DOMAIN: null, CF_ACCESS_AUD: null, APU_DEVELOPER_EMAILS: null }, "dev_access_must_be_provisioned");
   equal(template.observability, { enabled: false }, "unexpected_dev_observability");
   equal(template.assets, { directory: "dist/client", binding: "ASSETS", not_found_handling: "none" }, "unexpected_dev_assets");
 }
 export function validateDevInputs(inputs) {
   requireThat(object(inputs), "missing_dev_inputs");
-  equal(Object.keys(inputs).sort(), [...INPUT_KEYS].sort(), "unsupported_dev_input");
+  equal(Object.keys(inputs).sort(), [...INPUT_KEYS, ...(Object.hasOwn(inputs, "telemetry") ? ["telemetry"] : [])].sort(), "unsupported_dev_input");
+  if (Object.hasOwn(inputs, "telemetry")) validateTelemetry(inputs.telemetry);
   requireThat(typeof inputs.kvNamespaceId === "string" && /^[0-9a-f]{32}$/.test(inputs.kvNamespaceId) && !/^0+$/.test(inputs.kvNamespaceId), "missing_or_invalid_dev_kv");
   requireThat(!EXISTING_KV.includes(inputs.kvNamespaceId), "existing_kv_reuse_forbidden");
   requireThat(typeof inputs.accessApplicationId === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(inputs.accessApplicationId) && !/^0[-0]+$/.test(inputs.accessApplicationId), "missing_or_invalid_dev_access_application");
@@ -54,6 +70,15 @@ function materialize(template, inputs) {
   config.kv_namespaces = [{ binding: "DEV_LOG_STATE", id: inputs.kvNamespaceId }];
   config.vars = { APU_LOCAL_DEV_AUTH: "0", CF_ACCESS_TEAM_DOMAIN: inputs.accessTeamDomain,
     CF_ACCESS_AUD: inputs.accessAudience, APU_DEVELOPER_EMAILS: inputs.operatorEmail };
+  if (inputs.telemetry?.enabled === true) {
+    const t = inputs.telemetry;
+    requireThat(t.databaseId !== inputs.accessApplicationId, "invalid_telemetry_database");
+    config.d1_databases = [{ binding: "TELEMETRY_DB", database_id: t.databaseId, database_name: t.databaseName }];
+    Object.assign(config.vars, TELEMETRY_OFF, { APU_TELEMETRY_ENABLED: "1", APU_TELEMETRY_ENV: "dev",
+      APU_TELEMETRY_HOSTNAME: t.hostname, APU_TELEMETRY_COHORT: t.cohort, APU_TELEMETRY_KEY_VERSION: t.keyVersion,
+      APU_TELEMETRY_NOTICE_VERSION: t.noticeVersion });
+    // Keys, privacy approval and enrollment are separately gated; preparation cannot activate collection.
+  }
   return config;
 }
 export function validateDevConfig(config, template, inputs) {

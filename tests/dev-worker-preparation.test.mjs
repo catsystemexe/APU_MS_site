@@ -31,7 +31,7 @@ test("DEV has a separate explicit Worker/account, with inactive mandatory placeh
   assert.equal(production.name, "apu-ms-site"); assert.equal(DEV.productionBranch, "next"); assert.equal(DEV.branch, "dev");
   assert.equal(DEV.productionUrl, "https://apu-ms-site.catsystem-exe.workers.dev");
   assert.equal(template.kv_namespaces[0].id, null); assert.equal(template.vars.CF_ACCESS_AUD, null);
-  assert.equal(template.vars.APU_DEVELOPER_EMAILS, null); assert.ok(Object.values(example).every(value => value === null));
+  assert.equal(template.vars.APU_DEVELOPER_EMAILS, null); assert.ok(Object.entries(example).filter(([key]) => key !== "telemetry").every(([, value]) => value === null));
   assert.throws(() => validateDevInputs(example));
   assert.equal(template.vars.APU_LOCAL_DEV_AUTH, "0"); assert.equal(template.keep_vars, false);
   assert.equal(template.preview_urls, false); assert.equal(template.env, undefined); assert.equal(template.previews, undefined);
@@ -44,7 +44,7 @@ test("pinned Wrangler schema rejects incomplete template but accepts isolated ge
   const config = buildDevConfig(template, artifact, inputs());
   assert.equal(validate(config), true, JSON.stringify(validate.errors));
 });
-for (const key of Object.keys(example)) {
+for (const key of Object.keys(example).filter(key => key !== "telemetry")) {
   for (const missing of [undefined, null, ""]) test(`mandatory DEV ${key} rejects ${String(missing)} without fallback`, () => {
     const value = inputs(); if (missing === undefined) delete value[key]; else value[key] = missing;
     assert.throws(() => buildDevConfig(template, artifact, value));
@@ -214,3 +214,40 @@ test("pre-existing staging symlink cannot redirect writes into production artifa
     assert.equal(result.status, 1); assert.deepEqual(await readFile(join(f.directory, "dist/server/wrangler.json")), original);
   } finally { await rm(f.directory, { recursive: true, force: true }); }
 });
+
+const telemetryInputs = () => ({ enabled: true, dedicatedDev: true,
+  databaseId: "12345678-1234-4234-8234-123456789abc", databaseName: "apu-ms-site-dev-telemetry",
+  hostname: "apu-ms-site-dev.catsystem-exe.workers.dev", cohort: "synthetic-cohort", keyVersion: "k1", noticeVersion: "n1" });
+test("B1 absent/disabled telemetry preserves original materialized bytes and has no D1 resource", () => {
+  const legacy = structuredClone(template); delete legacy.vars.APU_TELEMETRY_ENABLED; delete legacy.vars.APU_TELEMETRY_METADATA_ENABLED;
+  const old = buildDevConfig(legacy, artifact, inputs());
+  assert.deepEqual(buildDevConfig(template, artifact, inputs()), old);
+  assert.deepEqual(buildDevConfig(template, artifact, { ...inputs(), telemetry: { enabled: false } }), old);
+  assert.equal(old.d1_databases, undefined);
+  assert.equal(template.vars.APU_TELEMETRY_ENABLED, "0"); assert.equal(template.vars.APU_TELEMETRY_METADATA_ENABLED, "0");
+});
+test("B1 explicit DEV-only D1 input produces only dedicated optional binding, remains privacy/key/enrollment gated", async () => {
+  const value = { ...inputs(), telemetry: telemetryInputs() }, config = buildDevConfig(template, artifact, value);
+  validateDevConfig(config, template, value);
+  assert.deepEqual(config.d1_databases, [{ binding: "TELEMETRY_DB", database_id: value.telemetry.databaseId, database_name: "apu-ms-site-dev-telemetry" }]);
+  assert.equal(config.vars.APU_TELEMETRY_ENABLED,"1"); assert.equal(config.vars.APU_TELEMETRY_ENV,"dev");
+  assert.equal(config.vars.APU_TELEMETRY_METADATA_ENABLED,"0");
+  assert.equal(config.vars.APU_TELEMETRY_PRIVACY_APPROVED,undefined); assert.equal(config.vars.TELEMETRY_CONTEXT_KEY,undefined);
+  assert.equal(config.vars.APU_TELEMETRY_ELIGIBLE,undefined);
+  const Ajv = require("ajv"), schema=JSON.parse(await readFile(new URL("../node_modules/wrangler/config-schema.json",import.meta.url),"utf8"));
+  const validate = new Ajv({strict:false,logger:false}).compile(schema); assert.equal(validate(config),true,JSON.stringify(validate.errors));
+  const forged=structuredClone(config);forged.d1_databases[0].binding="DB";
+  assert.throws(()=>validateDevConfig(forged,template,value));
+});
+for(const [label,change] of [
+  ["production name",t=>t.databaseName="apu-ms-site"], ["business binding",t=>t.binding="DB"],
+  ["missing isolation",t=>delete t.dedicatedDev], ["false isolation",t=>t.dedicatedDev=false],
+  ["malformed identity",t=>t.databaseId="bad"], ["zero identity",t=>t.databaseId="00000000-0000-0000-0000-000000000000"],
+  ["production host",t=>t.hostname="apu.catsystem.ai"], ["cohort text",t=>t.cohort="PRIVATE PEDAGOGY"],
+  ["secret input",t=>t.TELEMETRY_CONTEXT_KEY="PRIVATE"], ["privacy override",t=>t.privacyApproved=true],
+  ["metadata override",t=>t.metadataEnabled=true], ["inactive resource",t=>t.enabled=false],
+]) test(`B1 optional telemetry rejects ${label}`,()=>{
+  const value=telemetryInputs();change(value);assert.throws(()=>buildDevConfig(template,artifact,{...inputs(),telemetry:value}));
+});
+for(const [key,value] of [["APU_TELEMETRY_ENABLED","1"],["APU_TELEMETRY_METADATA_ENABLED","1"],["APU_TELEMETRY_COHORT","unreviewed"]])
+  test(`B1 telemetry template rejects ${key}=${value}`,()=>{const altered=structuredClone(template);altered.vars[key]=value;assert.throws(()=>validateDevTemplate(altered));});
