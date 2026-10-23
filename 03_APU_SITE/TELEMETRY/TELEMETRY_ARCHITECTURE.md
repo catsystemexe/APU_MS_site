@@ -1,6 +1,6 @@
 # TELEMETRY_ARCHITECTURE
 
-Status: DEV-only v1; **B1 foundation and B2 source instrumentation implemented and locally verified; disabled, not provisioned or deployed**. B3/B4 remain planned. Decision basis: [audit](TELEMETRY_INFRA_AUDIT.md), source `fc8ac5520b7b49b442bedc47558c73f20ce2bea6`. Measurement authority: [specification](PILOT_TELEMETRY_SPEC.md).
+Status: DEV-only v1; **B1/B2 and B3 reporting source implemented and locally verified; collection disabled, not provisioned or deployed**. B4 remains pending. Decision basis: [audit](TELEMETRY_INFRA_AUDIT.md), source `fc8ac5520b7b49b442bedc47558c73f20ce2bea6`. Measurement authority: [specification](PILOT_TELEMETRY_SPEC.md).
 
 ## 1. Decision and alternatives
 
@@ -240,3 +240,90 @@ npm run build
 The targeted command passes **72 tests**, zero failures/skips. Twelve added cases cover measured/unmeasured stale tickets, reset, stop/re-opt-in, idle renewal, pending context, current unmeasured synchronization and the actual MAIN stream handler with collection disabled/pre-consent or a stale telemetry ticket. Expected next path is F1 → F2 → F3 → F2 with correct `from`/`to`; a new workflow starts in F1. The actual handler still rejects reset-project continuations and preserves accepted business phase changes. The existing 34-file B2 command above was rerun: **585 tests PASS** (original 573 plus 12), zero failures/skips. Typecheck, focused lint (zero errors, the same five baseline warnings), canonical build including standalone Worker artifact validation and `git diff --check` pass.
 
 This corrects source verification evidence only. The separate CI `unsupported_pr_branches` provenance remains unchanged. Collection remains off; no remote provisioning/migration, real AI call, real-user collection, hosted update or deployment occurred. No changelog, backlog or Known Issues update; no B3 work.
+
+## 12. Implemented B3 reporting and verification — 2026-10-23
+
+Resumed the preserved `codex/telemetry-b3-reporting` worktree over B2 `5be74cf12df9a3f13e64462345f3be2d3b38f416`. WIP `ce90318a35700c00daa7d7f3890b96d0b5b5bad4` preserved incomplete source; it was **not** verification PASS. PR #68 remained open/unmerged at final base inspection; B3 is stacked against its branch. No reset, replacement checkout or implementation restart.
+
+### Interfaces, windows and export boundary
+
+- [Reporting engine](../../telemetry/reports/engine.ts), [SQL scope](../../telemetry/reports/scope.sql), [session aggregate](../../telemetry/reports/sessions.sql), [workflow aggregate](../../telemetry/reports/workflows.sql): one read transaction, parameterized cohort/test/date selection, separate event/AI aggregates before joins. Original B1 uniqueness/monotonic rows are reused. Logical DOC/operation IDs are deduplicated too; sequence/event order breaks equal-millisecond ties. No schema, index, pricing authority or app-module change.
+- `createReport(DatabaseSync, {cohort,from,to,asOf,retainedSince,testClass?,linkage?})` returns metadata plus summary/sessions/workflows/calls/models/participants/days/weeks/phases/transitions/operations/quality. [Metric/denominator map](PILOT_TELEMETRY_SPEC.md#8-implemented-reporting-coverage--b3-2026-10-23). Maximum input is 10k sessions, 20k workflows, 100k calls, 600k events; limit+1 fails explicitly, not partial output. Date/history span ≤31 elapsed days; no inferred retention boundary. `as_of` is a logical cutoff on a supplied snapshot, not a reconstruction of overwritten historical DB state. Historical audits need the matching authorized snapshot.
+- Session reports select start dates, observe qualification/lifetime cost/time through `as_of`; daily/weekly ACT and call-cost statistics use interval/call start dates within `[from,to)`. Workflows require an observation in dates, then use episode history through `as_of`; missing/pre-window/pre-retention WS is left-truncated. Session maturity is ≥24h since last observed activity/event/call; workflow completion/reset is resolved, otherwise ≥24h unfinished-observed or younger right-censored. Retention/sequence gaps/uncovered AI intents prevent falsely complete totals. A known subtotal is a lower bound, never invoice accounting or evidence of no lost calls.
+- [time.ts](../../telemetry/reports/time.ts) unions half-open intervals before participant totals, splits at real Europe/Prague midnights and uses ISO weeks. G2-unavailable participant metrics are explicitly null/unavailable. Activity remains a focus/interaction proxy; concurrent tab totals are not summed as participant time.
+- [CSV projection](../../telemetry/reports/csv.ts) uses only fixed report fields, versions, cohort/test/date/as_of/timezone, coverage and seven-day expiry from actual export time (independent of historical `as_of`). Default shared output is one overall aggregate; the whole metric/coverage row is conservatively suppressed when a behavioral cell or its complement has fewer than five accounts. No unsuppressed complementary row is emitted. This is a conservative reporting rule, not an anonymity guarantee; operators still control any future sharing. `--operator yes` explicitly permits restricted aggregate/row views. Linkage off removes participant pseudonym/key version from all exported rows and refuses participant exports. Null is an empty cell; spreadsheet formula/control/whitespace prefixes get an apostrophe before RFC4180 quoting. No automatic publication.
+
+All tools are local Node scripts (Node ≥22.13; verified Node 24.19.0), with Python 3 for independent CSV inspection and SQLite `dbstat` measurement. No application server or credentials are required. [report.ts](../../scripts/telemetry/report.ts) accepts a regular absolute `telemetry-*.sqlite` file, no symlink, exactly the three telemetry tables, plus an explicit `<database>.target.json` sidecar. Example generated manifest:
+
+```json
+{"kind":"apu-telemetry","schema_version":1,"mode":"local-test","test_class":"synthetic","cohorts":["b3-synthetic"]}
+```
+
+`mode=operator-snapshot` can read an explicitly supplied, separately authorized dedicated offline snapshot with matching manifest/cohort/test class. It grants no remote access or collection authorization. CLI writes are deliberately restricted to `local-test` + `synthetic`; there is no remote mutation/export facility. Test traffic is never folded into the default tester reports. Unknown, duplicate or command-inapplicable flags fail; an unsupported participant filter cannot silently export the whole cohort.
+
+### Runnable synthetic reports and lifecycle procedure
+
+Create a new output directory each time (tools refuse overwrites):
+
+```sh
+node scripts/telemetry/example.mjs work/b3-example-new
+python scripts/telemetry/verify-example.py work/b3-example-new
+node scripts/telemetry/report.ts export \
+  --database /ABS/REPO/work/b3-example-new/telemetry-synthetic.sqlite \
+  --cohort b3-synthetic --test-class synthetic --mode local-test \
+  --from 2026-10-19 --to 2026-10-24 --as-of 2026-10-24T12:00:00Z \
+  --retained-since 2026-10-18T00:00:00Z --linkage approved \
+  --out /ABS/REPO/work/b3-example-new/telemetry-shared.csv
+```
+
+Replace `/ABS/REPO` with the absolute preserved checkout path. Default is aggregate suppression for the small synthetic sample. For restricted detail add `--operator yes --view sessions` (or any listed view), with a distinct output filename; `--operator yes --view summary` reproduces unsuppressed synthetic totals without IDs. It is not permission to export real data. Arbitrary raw SQL/`SELECT *`/whole Session JSON is not an input or shared export interface; any future raw snapshot/SQL access remains separately restricted to the authorized operator. Files use exclusive create and mode 0600 on this Linux runtime; actual Windows ACL handling belongs to B4/operator acceptance.
+
+[local.ts](../../telemetry/reports/local.ts) supplies `deletionPlan`/`applyDeletion`; [export-expiry.ts](../../telemetry/reports/export-expiry.ts) supplies `expiryPlan`/`pruneExports`. Operational procedures for separately authorized local synthetic use:
+
+1. **Retention dry-run:** `node scripts/telemetry/report.ts retention --database /ABS/telemetry-synthetic.sqlite --cohort b3-synthetic --test-class synthetic --mode local-test --as-of 2026-10-24T12:00:00Z`. It returns counts and a plan digest bound to the exact database path, cohort/test class, cutoff and row IDs. Retention is strictly older than `as_of−30d`, by event occurred/call started date; duplicate receive/update times cannot extend it. Expired children are removed first; an old session is retained while it has an unexpired child, then removed when empty/expired.
+2. **Apply only reviewed local scope:** repeat the exact command with `--apply yes --confirm DIGEST --ledger /ABS/telemetry-deletion-UNIQUE.json` beside the DB. `BEGIN IMMEDIATE` recomputes the digest under the write lock. Any changed row set rejects apply. Deletes across all three tables commit atomically. No business table or other cohort/test class is eligible.
+3. **Participant deletion:** replace `retention` with `delete-participant --participant COHORT_PSEUDONYM` (43-character cohort HMAC, never an email). The same dry-run/digest/apply/ledger procedure deletes every matching cohort/test-class session and its children, retaining identical pseudonym values in other cohorts. No identity mapping is created. The immutable replay intent is written before commit, so a failed commit may leave a safe authorized retry intent; preserve it restricted from shared exports. Key rotation/linkage breaks require explicit controller handling, not guessing an email or joining cohorts.
+4. **Export expiry:** run `node scripts/telemetry/prune-exports.ts --directory /ABS/EXPORT_DIR --as-of UTC_TIMESTAMP` for a dry-run, then repeat with `--apply yes --confirm DIGEST`. Only generated `telemetry-*.csv` plus matching `.expiry.json` pairs with verified SHA-256 and seven-day expiry are eligible. Modified files/symlinks reject the operation; unmanaged files stay untouched. Operational copies must also be deleted from recipients/backups under the controller's process; the tool cannot revoke copies.
+5. **Restore:** keep any restored DB isolated from ingestion/reporting. Re-run 30-day retention at current time and replay every approved participant deletion intent under its original cohort using a new dry-run/digest on the restored target. Re-run even if an intent preceded a failed original commit; deletion is idempotent. Verify cohort-scoped counts/no matching rows, then separately authorize resuming reporting. Do not restore personal data into a synthetic target; live backup/restore/deletion requires separately authorized operator action, not this CLI. Provider Time Travel/history is not instantly erased by logical deletion; preserve the restricted replay ledger under the approved rights/backup policy.
+
+Daily cleanup owner/schedule, export recipients, backup access/expiry, privacy and account quotas remain G2/G4 launch gates. No automated job or >30d aggregate persistence is introduced. No live deletion, migration, export or restore was executed.
+
+### Measured synthetic resource model
+
+[Reproducer](../../scripts/telemetry/resource-model.mjs): `node scripts/telemetry/resource-model.mjs work/b3-resource-new 6000`. It measures a real B2/B1 15-minute seed (60 ACT +24 semantic events, ten authoritative ledger-priced calls), then clones only validated stored rows into a dedicated local SQLite file for 100 generated subjects, 200 sessions/day ×30 days. This is synthetic load, not measured user behavior. [Full measured page/index sizes, SQL plans, query timings and source hashes](../../telemetry/reports/examples/resource-model.json).
+
+| Local observation / estimate | Result |
+| --- | --- |
+| Persisted rows/session | 1 session +84 events +10 monotonic AI rows =95; 570,000 rows at 6,000 sessions |
+| Logical seed writes, actual SQLite `total_changes()` | 186/session: create 1, insert events 84, ingestion budget updates 71, request touches 10, AI pending/final writes 20 |
+| Actual SQLite allocation, 4,096-byte pages | 178,285 pages =730,255,360 bytes (696.4 MiB); about 121.7 kB/session including indexes |
+| Table/index split | Event table 344,928,256 bytes, AI table 246,362,112, session table 1,175,552; indexes 137,777,152; schema 12,288 |
+| Actual bulk WAL bytes / generation time | 734,649,592 bytes /33.57s for one synthetic bulk transaction; not a production batch/write amplification measurement |
+| Upper-load SQL results / measured query times | sessions 6,000 /1.00s; workflows 6,000 /1.37s; calls 60,000 /1.13s; events 504,000 /4.92s; machine/cache-specific |
+| Full final engine reconciliation | 60,000 calls, 600,000,000,000 nano-USD; final timing in artifact (about 56s including civil interval calculations), no cost multiplication |
+| Estimated indexed writes | 555/session versus 186 logical (2.98×); 111,000/day ingest plus 92,800/day steady retention deletes =203,800/day at 200 sessions |
+| Approximate source row visits/report | 1,716,000 across the four bounded queries before index/temp/trigger overhead; **not D1 billed rows read** |
+
+Plans use `telemetry_sessions_cohort_time`, event session/sequence uniqueness and `telemetry_ai_session_time`, with temporary group/order B-trees and automatic covering indexes on aggregate joins. No speculative new index/migration was added. SQL cost is preaggregated before event joins. Final fixture waiting was made independent of scheduler spin counts after a contended run exposed a synthetic drain flake; the final seed independently reproduced the same 84 events/71 batches/186 writes. The final engine was remeasured read-only against the existing upper-load DB, preserving physical/query evidence; hashes bind the artifact to final engine/SQL source.
+
+Published audit quotas (not live account evidence): Free 500MB/database, 5GB/account, 100k writes/day, 5M reads/day. **Upper load exceeds the Free per-DB cap and estimated write allowance even before other account use.** At 20 participants ×2 visits/day the same density projects ~146MB/30d and ~40,760 indexed writes/day including pruning, leaving ~59k writes/day before other workloads. A full upper-load report is already ~1.7M source visits plus overhead; several daily scans can consume the allowance. Measure actual D1 meta/CPU/account usage under separately authorized hosted verification; review at ~80% of any actual quota, before exceeding storage or raising interval/report density. Reduce pilot volume/density only through an explicit measurement-contract decision, or separately authorize the required plan. Existing published Paid minimum is $5/month; no account plan, actual Free headroom, live throughput or provider-cost forecast is verified here.
+
+### V2 evidence and limits
+
+Codex Cloud, Node 24.19.0 / SQLite 3.53.3; only generated identities/keys, in-memory and local synthetic SQLite, mocked provider-free ledger fixtures. **225 tests PASS**, zero failures/skips:
+
+```sh
+node --test tests/telemetry-reporting.test.mjs tests/telemetry-local-tools.test.mjs tests/telemetry.test.mjs tests/telemetry-b2.test.mjs tests/server-capabilities.test.mjs tests/project-reset.test.mjs tests/project-usage-isolation.test.mjs tests/usage-ledger.test.mjs
+npm run typecheck
+npx --no-install eslint telemetry/reports scripts/telemetry tests/helpers/telemetry-report-fixture.mjs tests/telemetry-reporting.test.mjs tests/telemetry-local-tools.test.mjs
+node scripts/telemetry/example.mjs work/b3-final-sample
+python scripts/telemetry/verify-example.py work/b3-final-sample
+node scripts/telemetry/resource-model.mjs work/b3-resource-verified 6000
+git diff --check
+```
+
+The generated CSVs are committed as [synthetic restricted summary](../../telemetry/reports/examples/synthetic-summary.csv) and [suppressed shared summary](../../telemetry/reports/examples/synthetic-shared.csv); repository copies normalize CRLF to LF, with independently checked identical parsed headers/values. Runtime export remains CRLF. Independent Python CSV inspection verifies header/value/null/suppression/forbidden-field expectations; malicious formula/whitespace/control/quote cells are separately tested. Fixture timestamps are intentionally fixed (including `as_of` 2026-10-24), not an observation of future/real traffic. Tests cover duplicate/reordered delivery, unpriced/pending calls, explicit retries/fallback, zero-call baseline, first-output cutoff, same-ms reset, overlap [0,30)/[15,45)→45s, actual midnight split/cross-day return, 23/25h DST and ISO-year boundaries, censoring/left truncation, start-date qualification, local target/plan drift, 30d boundary/remaining children, cross-cohort deletion, restore replay and seven-day expiry.
+
+Three completion corrections were proven RED then GREEN: unsupported command filters cannot be ignored; linkage-off rows cannot expose account pseudonyms; a visit qualifies by observed lifetime activity even when that activity falls after the report end date. No B1/B2 runtime or business flow was modified. Typecheck and focused lint PASS with zero errors/warnings. Build/artifact evidence is reused from B2-R01 `5be74cf…`: `app/`, Worker, configuration and dependencies are byte-unchanged, and the new modules are local tools, not in the application bundle; canonical B3 explicitly permits this reuse. No hosted or browser acceptance is inferred.
+
+CI `unsupported_pr_branches` remains separate unchanged provenance; stacked feature-base PRs are outside the release-workflow trigger. B4 Local Verification is ready for separate authorization; G0–G5 remain open. Collection/metadata remain **OFF**, no deployment/remote provisioning/migration/export/deletion, actual AI call or real-user collection. No B4 work was started.
