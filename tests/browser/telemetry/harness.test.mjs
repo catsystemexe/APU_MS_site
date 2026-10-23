@@ -1,0 +1,300 @@
+import assert from "node:assert/strict";
+import test, { after } from "node:test";
+import { existsSync } from "node:fs";
+import { readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
+import { chromium } from "playwright-core";
+import { startHarness } from "../../helpers/telemetry-browser-server.mjs";
+import { reportOptions } from "../../helpers/telemetry-browser-fixture.mjs";
+import { createReport } from "../../../telemetry/reports/engine.ts";
+import { reportCsv } from "../../../telemetry/reports/csv.ts";
+import { writeExport } from "../../../telemetry/reports/local.ts";
+
+const evidence = { scope: "isolated synthetic Chromium harness; excludes standard launcher/Vinext/Worker/hosted acceptance", base: "9018512621c8a2d828932ff78e18f18d702b321d", scenarios: [] };
+function scenario(name) { const result = { name, status: "FAIL" }; evidence.scenarios.push(result); return result; }
+after(async () => { await writeFile(new URL("./evidence.json", import.meta.url), JSON.stringify(evidence, null, 2) + "\n"); });
+const executablePath = process.env.CHROMIUM_PATH ?? (process.platform === "linux" ? "/usr/bin/chromium" : undefined);
+async function waitFor(check, label) {
+  const deadline = performance.now() + 12000;
+  while (performance.now() < deadline) { if (await check()) return; await delay(40); }
+  throw Error("Timed out: " + label);
+}
+async function browserFixture(t, { enabled = true, seed = false } = {}) {
+  const h = await startHarness({ syntheticOnly: true, enabled });
+  let context; const observation = evidence.scenarios.at(-1);
+  t.after(async () => {
+    try { try { await context?.close(); } finally { await h.close(); } assert.equal(existsSync(h.directory), false); }
+    catch (error) { observation.status = "FAIL"; observation.failure = "cleanup"; throw error; }
+  });
+  context = await chromium.launchPersistentContext(join(h.directory, "browser-profile"), { executablePath, headless: true,
+    args: ["--no-sandbox", "--disable-background-networking", "--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1"], serviceWorkers: "block", acceptDownloads: false, viewport: { width: 1600, height: 1100 },
+    extraHTTPHeaders: { "cf-access-jwt-assertion": await h.token() } });
+  evidence.runtime = { node: process.version, platform: process.platform, chromium: context.browser()?.version() };
+  const outbound = [], errors = [];
+  await context.route("**/*", route => { if (new URL(route.request().url()).origin === h.origin) return route.continue(); outbound.push("blocked_external_request"); return route.abort(); });
+  const page = context.pages()[0];
+  page.setDefaultTimeout(12000);
+  page.on("pageerror", error => errors.push(error.message));
+  await page.clock.install({ time: new Date(h.now) });
+  await page.goto(h.origin + (seed ? "/?seed=1" : "/"));
+  await page.locator("#message:enabled").waitFor();
+  return { h, context, page, errors, outbound,
+    async tick(ms = 15000) { h.advance(ms); await page.clock.fastForward(ms); await delay(80); await h.drain(); },
+    async settle() { for (let i = 0; i < 2; i++) { h.advance(15000); await page.clock.fastForward(15000); await delay(100); } await h.drain(); },
+    async send(text) { await page.locator("#message").fill(text); await page.getByRole("button", { name: "Odeslat zprávu", exact: true }).click(); await page.locator("#message:enabled").waitFor(); },
+    async consent() { await page.getByRole("button", { name: "Zapojit měření pro tuto návštěvu" }).click(); await page.getByRole("button", { name: "Zastavit měření", exact: true }).waitFor(); },
+  };
+}
+const counts = h => ["telemetry_sessions", "telemetry_events", "telemetry_ai_calls"].map(table => h.db.rows(table).length);
+
+test("actual browser default OFF and explicit refusal keep normal AI workflow usable without collection", async t => {
+  for (const enabled of [false, true]) await t.test(enabled ? "refusal" : "default OFF", async sub => {
+    const result = scenario(enabled ? "refusal" : "default_off");
+    const f = await browserFixture(sub, { enabled }); const { h, page } = f;
+    assert.deepEqual(counts(h), [0, 0, 0]);
+    if (enabled) await page.getByRole("button", { name: "Pokračovat bez měření" }).click();
+    else assert.equal(await page.getByRole("button", { name: "Zapojit měření pro tuto návštěvu" }).count(), 0);
+    await f.send("Synthetic observation.");
+    assert.match(await page.locator(".message-list").innerText(), /Synthetic response/);
+    assert.equal(h.providerCalls.length, 3, "one extraction, controller and MAIN call");
+    await f.settle(); assert.deepEqual(counts(h), [0, 0, 0]);
+    assert.deepEqual(f.errors, []); assert.deepEqual(f.outbound, []); assert.deepEqual(h.blocked, []);
+    Object.assign(result, { status: "PASS", provider_calls: 3, rows: [0, 0, 0] });
+  });
+});
+
+test("actual browser workflow reaches collector, persistent SQLite, SQL report and real CSV", async t => {
+  const result = scenario("workflow");
+  const f = await browserFixture(t, { seed: true }); const { h, page } = f;
+  assert.deepEqual(counts(h), [0, 0, 0]);
+  await f.consent(); assert.deepEqual(counts(h), [1, 0, 0]);
+  await f.send("Synthetic observation.");
+  assert.equal(h.providerCalls.length, 3);
+  await page.locator(".dialog-action-nav-card:not(:disabled)").last().click();
+  await page.locator(".f3-material").waitFor();
+  assert.equal(h.providerCalls.length, 5, "F2 adds one cached need-route classification and one analysis to F1's three");
+  await page.locator('.desktop-tool-tabs button[aria-controls="desktop-tool-output"]').click();
+  await page.locator(".f3-controls").waitFor();
+  assert.equal(h.providerCalls.length, 5, "baseline F3 acceptance adds no AI call");
+  await f.settle();
+  const initial = createReport(h.db.db, reportOptions);
+  assert.equal(initial.rows.summary[0].known_cost_nano_usd, 736000, "3 Luna x 0.000032 + 2 Terra x 0.00032 USD (100 input + 10 output each)");
+  const render = page.locator(".f3-render-action button");
+  await page.locator(".f3-controls select").nth(0).selectOption("parent");
+  await render.click(); await waitFor(() => page.locator(".f3-material").innerText().then(s => s.includes("Synthetic output")), "first generated output");
+  assert.equal(h.providerCalls.length, 6);
+  h.setUnknownUsage(true);
+  await page.locator(".f3-controls select").nth(0).selectOption("internal");
+  await render.click();
+  await waitFor(() => h.providerCalls.length === 7 && h.db.rows("telemetry_ai_calls").filter(c => c.state === "final").length === 7, "unknown usage ledger final");
+  await waitFor(() => render.isDisabled(), "unknown-cost generation finished");
+  h.setUnknownUsage(false);
+  await page.locator('.desktop-tool-tabs button[aria-controls="desktop-tool-build"]').click();
+  await page.locator('.desktop-tool-tabs button[aria-controls="desktop-tool-output"]').click();
+  assert.equal(h.providerCalls.length, 7, "return navigation adds no provider call");
+  await page.locator(".f3-controls select").nth(0).selectOption("student");
+  const release = h.holdReply("_final_render");
+  await render.click(); await waitFor(() => h.providerCalls.length === 8, "held generation started");
+  page.once("dialog", dialog => dialog.accept());
+  await page.getByRole("button", { name: "Nový projekt", exact: true }).click();
+  await page.locator("#message:enabled").waitFor(); release();
+  await waitFor(() => h.db.rows("telemetry_ai_calls").filter(c => c.state === "final").length === 8, "late generation ledger settled");
+  await page.locator("#message").fill("Synthetic new workflow after reset");
+  await f.settle();
+  assert.equal(await page.locator(".f3-material").count(), 0, "stale result cannot restore reset output");
+  const report = createReport(h.db.db, reportOptions);
+  assert.equal(report.rows.workflows.length, 2);
+  const completed = report.rows.workflows.find(w => w.output_count === 3), resetNew = report.rows.workflows.find(w => w.output_count === 0);
+  assert.equal(completed.phase_path, "F1>F2>F3>F2>F3");
+  assert.equal(resetNew.phase_path, "F1");
+  assert.equal(completed.baseline_outputs, 1);
+  assert.equal(completed.generated_outputs, 2);
+  assert.equal(completed.first_completion_cost_nano_usd, 736000);
+  assert.equal(report.rows.summary[0].ai_count, 8);
+  assert.equal(report.rows.summary[0].known_cost_nano_usd, 1376000);
+  assert.equal(report.rows.summary[0].unknown_cost_count, 1);
+  assert.equal(report.rows.summary[0].complete_cost_nano_usd, null);
+  const events = h.db.rows("telemetry_events");
+  const semantic = Object.fromEntries(["workflow_started", "operation_requested", "operation_resolved", "phase_transition", "document_accepted", "workflow_reset"].map(name => [name, events.filter(e => e.event_name === name).length]));
+  assert.deepEqual(semantic, { workflow_started: 2, operation_requested: 7, operation_resolved: 7, phase_transition: 4, document_accepted: 3, workflow_reset: 1 });
+  const calls = h.db.rows("telemetry_ai_calls"), original = events.find(e => e.event_name === "workflow_started" && e.workflow_id === completed.workflow_id);
+  assert.ok(report.rows.calls.every(c => c.session_id === original.session_id && c.workflow_id === completed.workflow_id && c.operation_instance_id));
+  const delivered = h.requests.filter(r => r.path === "/api/telemetry/events" && r.status === 200).at(-1).body;
+  const before = events.length;
+  const duplicate = await page.evaluate(async body => (await fetch("/api/telemetry/events", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })).json(), delivered);
+  assert.equal(duplicate.code, "ready"); assert.equal(h.db.rows("telemetry_events").length, before);
+  const csv = reportCsv(report, { operator: true, createdAt: reportOptions.asOf });
+  writeExport(join(h.directory, "telemetry-browser.csv"), csv, reportOptions.asOf);
+  assert.equal(await readFile(join(h.directory, "telemetry-browser.csv"), "utf8"), csv);
+  assert.match(csv, /"ai_count"/); assert.match(csv, /"1376000"/);
+  assert.doesNotMatch(csv, /@synthetic|Synthetic observation|Synthetic response|cf-access|pseudonym_key|context_key/);
+  // This bounded one-row scalar fixture contains no embedded comma/quote. Reject
+  // unexpected quoting, then compare CSV fields independently of report objects.
+  const [header, row, end] = csv.split("\r\n"); assert.equal(end, "");
+  const decode = line => line.split(",").map(cell => { assert.match(cell, /^(?:"[^"\r\n]*")?$/); return cell === "" ? null : JSON.parse(cell); });
+  const names = decode(header), values = decode(row); assert.equal(values.length, names.length);
+  const columns = Object.fromEntries(names.map((name, i) => [name, values[i]]));
+  assert.equal(columns.ai_count, "8"); assert.equal(columns.known_cost_nano_usd, "1376000");
+  assert.equal(columns.unknown_cost_count, "1"); assert.equal(columns.complete_cost_nano_usd, null);
+  assert.equal(columns.outputs, "3"); assert.equal(columns.timezone, "Europe/Prague");
+  assert.equal(columns.metric_version, "pilot-report-v1"); assert.equal(columns.test_class, "synthetic");
+  assert.equal(Date.parse(columns.expires_at) - Date.parse(columns.exported_at), 7 * 86400000);
+  assert.ok(!names.some(name => /^(?:email|participant_id|call_id|projection_json|identity_json)$/.test(name)));
+  const stored = JSON.stringify([h.db.rows("telemetry_sessions"), events, calls]);
+  for (const forbidden of ["browser-a@synthetic.invalid", "Synthetic observation.", "Synthetic response.", h.bindings.TELEMETRY_PSEUDONYM_KEY, h.bindings.TELEMETRY_CONTEXT_KEY]) assert.ok(!stored.includes(forbidden));
+  assert.deepEqual(f.errors, []); assert.deepEqual(f.outbound, []); assert.deepEqual(h.blocked, []);
+  Object.assign(result, { status: "PASS", provider_calls: 8, known_cost_nano_usd: 1376000, unknown_cost_count: 1, first_output_nano_usd: 736000, outputs: 3, workflows: 2, semantic_events: semantic, duplicate_added_rows: 0, csv_written_and_read: true });
+});
+
+test("actual browser outage/retry, stop/re-opt-in, reload, two tabs and identity invalidation isolate collection", async t => {
+  const result = scenario("consent_isolation_outage");
+  const f = await browserFixture(t); const { h, page, context } = f;
+  await f.consent();
+  h.setUnavailable(true);
+  await f.send("Synthetic observation.");
+  assert.match(await page.locator(".message-list").innerText(), /Synthetic response/);
+  assert.equal(h.providerCalls.length, 3, "collector outage cannot add AI calls or change the response");
+  assert.ok(h.requests.some(r => r.path === "/api/telemetry/events" && r.status === 503));
+  h.setUnavailable(false); await f.settle();
+  const failed = h.requests.find(r => r.path === "/api/telemetry/events" && r.status === 503).body;
+  const ids = new Set(h.db.rows("telemetry_events").map(e => e.event_id));
+  assert.ok(failed.events.every(e => ids.has(e.event_id)), "the actual browser queue retries identical events into storage");
+  const old = h.requests.filter(r => r.path === "/api/telemetry/events" && r.status === 200).at(-1).body;
+  await page.getByRole("button", { name: "Zastavit měření", exact: true }).click();
+  await waitFor(() => h.db.rows("telemetry_sessions")[0].stopped_at !== null, "server consent revocation");
+  const stoppedCount = h.db.rows("telemetry_events").length;
+  await page.locator("#message").fill("Still usable after stop"); await f.settle();
+  assert.equal(h.db.rows("telemetry_events").length, stoppedCount);
+  assert.equal((await h.request("/api/telemetry/events", { token: await h.token(), body: old })).status, 400);
+  await page.getByRole("button", { name: "Možnosti měření" }).click(); await f.consent();
+  assert.equal(h.db.rows("telemetry_sessions").length, 2);
+  await page.reload(); await page.locator("#message:enabled").waitFor();
+  await page.getByRole("button", { name: "Zapojit měření pro tuto návštěvu" }).waitFor();
+  assert.equal(h.db.rows("telemetry_sessions").length, 2, "reload never silently restores consent");
+  const second = await context.newPage(); await second.clock.install({ time: new Date(h.now) });
+  await second.goto(h.origin); await second.locator("#message:enabled").waitFor();
+  await second.getByRole("button", { name: "Zapojit měření pro tuto návštěvu" }).click();
+  await second.getByRole("button", { name: "Zastavit měření", exact: true }).waitFor();
+  assert.equal(h.db.rows("telemetry_sessions").length, 3);
+  assert.equal(new Set(h.db.rows("telemetry_sessions").map(s => s.tab_id)).size, 3);
+  await second.locator("#message").fill("Second tab synthetic input");
+  h.advance(15000); await second.clock.fastForward(15000); await delay(100);
+  const participants = new Set(h.db.rows("telemetry_sessions").map(s => s.participant_id));
+  for (const tab of [page, second]) {
+    const storage = await tab.evaluate(() => JSON.stringify({ local: { ...localStorage }, session: { ...sessionStorage } }));
+    for (const participant of participants) assert.ok(!storage.includes(participant), "no persistent browser telemetry pseudonym");
+    assert.doesNotMatch(storage, /telemetry-context|APU_TELEMETRY|notice_version|"opt_in"/);
+  }
+  await context.setExtraHTTPHeaders({ "cf-access-jwt-assertion": await h.token({ exp: Math.floor(h.now / 1000) - 1 }) });
+  await second.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await second.getByRole("heading", { name: "Relace byla ukončena" }).waitFor();
+  const invalidatedCount = h.db.rows("telemetry_events").length;
+  await second.evaluate(() => window.dispatchEvent(new Event("keydown")));
+  h.advance(15000); await second.clock.fastForward(15000); await delay(100);
+  assert.equal(h.db.rows("telemetry_events").length, invalidatedCount);
+  const sessions = new Map(h.db.rows("telemetry_sessions").map(s => [s.session_id, s]));
+  for (const event of h.db.rows("telemetry_events")) assert.equal(event.tab_id, sessions.get(event.session_id).tab_id);
+  assert.deepEqual(f.errors, []); assert.deepEqual(f.outbound, []); assert.deepEqual(h.blocked, []);
+  Object.assign(result, { status: "PASS", sessions: 3, distinct_tab_contexts: 3, stopped_added_rows: 0, invalidated_added_rows: 0, silent_consent_restore: false, outage_retry_same_event_ids: true });
+});
+
+test("actual browser MAIN disconnect retains only its own late ledger and reload requires new consent", async t => {
+  const result = scenario("stream_disconnect");
+  const f = await browserFixture(t); const { h, page } = f;
+  await f.consent(); const release = h.holdStream();
+  await page.locator("#message").fill("Synthetic observation.");
+  await page.getByRole("button", { name: "Odeslat zprávu", exact: true }).click();
+  await waitFor(() => h.providerCalls.length === 3, "MAIN streaming provider starts");
+  await page.locator(".dialog-actions-preview").waitFor(); // Real route buffers structured F1 prose until terminal provider event.
+  await page.reload(); await page.locator("#message:enabled").waitFor(); release();
+  await page.getByRole("button", { name: "Zapojit měření pro tuto návštěvu" }).waitFor();
+  await waitFor(() => h.db.rows("telemetry_ai_calls").filter(c => c.state === "final").length === 3, "request lifetime keeps provider completion after disconnect");
+  assert.equal(h.db.rows("telemetry_sessions").length, 1); assert.equal(h.providerCalls.length, 3);
+  const report = createReport(h.db.db, reportOptions);
+  assert.equal(report.rows.summary[0].ai_count, 3);
+  assert.equal(report.rows.summary[0].known_cost_nano_usd, 96000);
+  assert.equal(report.rows.summary[0].outputs, 0);
+  assert.ok(!await page.locator(".message-list").innerText().then(s => s.includes("Synthetic response")), "late response does not overwrite reloaded UI");
+  assert.deepEqual(f.errors, []); assert.deepEqual(f.outbound, []); assert.deepEqual(h.blocked, []);
+  Object.assign(result, { status: "PASS", provider_calls: 3, ai_rows: 3, known_cost_nano_usd: 96000, outputs: 0, silent_consent_restore: false });
+});
+
+test("actual browser controlled activity/blur, interval union and idle renewal need no thirty-minute wait", async t => {
+  const result = scenario("activity_idle");
+  const f = await browserFixture(t); const { h, page, context } = f;
+  const cdp = await context.newCDPSession(page);
+  await cdp.send("Emulation.setFocusEmulationEnabled", { enabled: true });
+  await f.consent();
+  const at = await page.evaluate(() => Date.now()) + 1000;
+  assert.ok(Math.abs(at - h.now) < 5000, `browser and server test clocks agree: difference ${at - h.now}ms`);
+  await page.clock.pauseAt(new Date(at)); h.freeze(at);
+  await page.locator("#message").fill("Synthetic activity anchor");
+  const view = await page.evaluate(() => ({ visible: document.visibilityState, focused: document.hasFocus() }));
+  assert.deepEqual(view, { visible: "visible", focused: true });
+  h.advance(15000); await page.clock.runFor(15000);
+  await cdp.send("Emulation.setFocusEmulationEnabled", { enabled: false });
+  // A real CDP focus override can leave native headless focus unchanged; use a
+  // real second tab to blur the first, without directly invoking pilot methods.
+  const other = await context.newPage(); await other.goto(h.origin);
+  const visibility = await page.evaluate(() => ({ visible: document.visibilityState, focused: document.hasFocus() }));
+  await delay(100);
+  h.advance(15000); await page.clock.runFor(15000); await delay(100);
+  const beforeRenewal = createReport(h.db.db, reportOptions);
+  assert.equal(beforeRenewal.rows.sessions[0].active_ms, 15000, "exactly 15s of actual foreground input before blur");
+  assert.equal(beforeRenewal.rows.participants[0].active_ms, 15000);
+  assert.equal(beforeRenewal.rows.days[0].active_ms, 15000);
+  await other.close(); await page.bringToFront();
+  await page.locator("#message:enabled").waitFor();
+  // Focus revalidation intentionally clears measurement. Re-opt-in is explicit;
+  // the subsequent 30m inactivity is a distinct clock-controlled renewal case.
+  if (await page.getByRole("button", { name: "Zapojit měření pro tuto návštěvu" }).count()) await f.consent();
+  const sessions = h.db.rows("telemetry_sessions").length;
+  h.advance(30 * 60000); await page.clock.fastForward(30 * 60000);
+  await page.locator("#message").fill("Synthetic input after idle");
+  await waitFor(() => h.db.rows("telemetry_sessions").length === sessions + 1, "idle interaction renews to distinct context");
+  const renewed = h.db.rows("telemetry_sessions").at(-1);
+  assert.ok(h.db.rows("telemetry_sessions").slice(0, -1).every(s => s.session_id !== renewed.session_id && s.tab_id !== renewed.tab_id));
+  assert.equal(h.providerCalls.length, 0);
+  assert.deepEqual(f.errors, []); assert.deepEqual(f.outbound, []); assert.deepEqual(h.blocked, []);
+  Object.assign(result, { status: "PASS", active_ms: 15000, participant_union_ms: 15000, idle_renewal: true, visibility_observed_after_tab_change: visibility, native_os_focus: "NOT VERIFIED" });
+});
+
+test("two actual browser tabs persist overlapping activity and B3 unions participant time", async t => {
+  const result = scenario("overlapping_tabs");
+  const f = await browserFixture(t, { seed: true }); const { h, page, context } = f;
+  const second = await context.newPage(); await second.goto(h.origin + "/?seed=1"); await second.locator("#message:enabled").waitFor();
+  const sessions = await Promise.all([page, second].map(p => context.newCDPSession(p)));
+  for (const cdp of sessions) await cdp.send("Emulation.setFocusEmulationEnabled", { enabled: true });
+  const at = await page.evaluate(() => Date.now()) + 1000;
+  await page.clock.pauseAt(new Date(at)); h.freeze(at);
+  // Freeze before both context requests so RTT does not shift their wall anchors.
+  for (const p of [page, second]) {
+    await p.getByRole("button", { name: "Zapojit měření pro tuto návštěvu" }).press("Enter");
+    await p.getByRole("button", { name: "Zastavit měření", exact: true }).waitFor();
+  }
+  await page.locator("#message").fill("First overlapping input");
+  await second.locator("#message").fill("Second overlapping input");
+  for (const p of [page, second]) assert.deepEqual(await p.evaluate(() => [document.visibilityState, document.hasFocus()]), ["visible", true]);
+  h.advance(15000); await page.clock.runFor(15000);
+  // At the frozen endpoint, actual F1->F2 transitions close the final partial
+  // activity intervals and their authorized requests flush them. Explicit stop
+  // then ends collection without adding clock time.
+  // Enter is a real browser keyboard action and needs no frozen animation frames.
+  for (const p of [page, second]) {
+    await p.locator("#message").fill("Pokračujme");
+    await p.locator("#message").press("Enter");
+    await p.locator(".f3-material").waitFor();
+  }
+  await waitFor(() => h.providerCalls.length === 6, "two extraction/need-route/analysis operations");
+  for (const p of [page, second]) await p.getByRole("button", { name: "Zastavit měření", exact: true }).press("Enter");
+  await waitFor(() => h.db.rows("telemetry_sessions").every(s => s.stopped_at !== null), "both overlapping visits stop");
+  await h.drain();
+  const report = createReport(h.db.db, reportOptions);
+  assert.deepEqual(report.rows.sessions.map(s => s.active_ms), [15000, 15000]);
+  assert.equal(report.rows.participants.length, 1); assert.equal(report.rows.participants[0].active_ms, 15000);
+  assert.equal(report.rows.days[0].active_ms, 15000);
+  assert.equal(report.rows.summary[0].ai_count, 6);
+  assert.equal(report.rows.summary[0].known_cost_nano_usd, 1344000);
+  Object.assign(result, { status: "PASS", session_active_ms: [15000, 15000], participant_union_ms: 15000, ai_calls: 6, known_cost_nano_usd: 1344000, focus: "controlled CDP, not native OS acceptance" });
+});

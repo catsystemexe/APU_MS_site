@@ -1,6 +1,6 @@
 # APU pilot telemetry — implementation package
 
-Status: **B1/B2 + B3 SOURCE IMPLEMENTED / LOCAL TECHNICAL PASS / COLLECTION OFF / NOT DEPLOYED.** B4 Local Verification and G0–G5 remain pending; not ready for collection from real participants. No infrastructure provisioning is claimed.
+Status: **B1/B2 + B3 SOURCE IMPLEMENTED; B4-H1 ISOLATED LINUX BROWSER V2 PASS / COLLECTION OFF / NOT DEPLOYED.** Full B4 Windows V3 Local Verification and G0–G5 remain pending; not ready for collection from real participants. No infrastructure provisioning is claimed.
 
 Prepared: 2026-10-23, Europe/Prague. Audited source: `dev` at `fc8ac5520b7b49b442bedc47558c73f20ce2bea6`.
 
@@ -50,3 +50,19 @@ Reports cover unique AI attempts/model/token/cost coverage, session mean/median,
 The CLI requires an explicit absolute dedicated telemetry SQLite target, matching scope manifest/cohort/test-class and bounded date/as_of/retention filters. Real/developer/synthetic traffic is not silently merged. Retention/participant deletion default to dry-run; writes require a matching reviewed plan digest and are limited to local synthetic targets. CSVs expire after seven days; raw retention is 30d. [Complete commands, metric definitions, deletion/restore replay and access boundaries](TELEMETRY_ARCHITECTURE.md#12-implemented-b3-reporting-and-verification--2026-10-23).
 
 V2: **225 tests PASS**, actual CSV inspection, typecheck and focused lint PASS. B2 build evidence reused because the application bundle is unchanged. Upper model (100 accounts, 200 sessions/day, 30d) is ~730MB and ~204k estimated steady indexed writes/day, exceeding published Free limits; actual account/hosted quotas remain unverified. No CI-policy change. B4 Local Verification is ready for separate authorization; no browser/hosted acceptance or activation is implied. **Collection/metadata OFF; no remote operations, paid AI calls, real data or deployment.**
+
+## B4-H1 isolated synthetic browser harness — Linux V2 PASS
+
+Requires existing root dependencies, Node 24 and an installed Chromium executable. No env file, real identity, provider key or dev server required. Uses actual Home authentication/availability, actual full client and actual HTTP telemetry/AI routes, persistent synthetic SQLite and B3 SQL/CSV. Home's client server boundary is a marker; this does not run production SSR/RSC/Vinext/Worker or the standard launcher.
+
+```sh
+npm ci --prefix tests/browser/telemetry --ignore-scripts --no-audit --no-fund
+node --test tests/browser/telemetry/harness.test.mjs
+node --test tests/telemetry-browser-harness.test.mjs
+```
+
+`CHROMIUM_PATH` selects an installed browser; Linux defaults to `/usr/bin/chromium`. The pinned `playwright-core` dependency lives only in the nested test package and downloads no browser. Temporary profiles/DBs are closed and removed. Fresh runs write ignored `tests/browser/telemetry/evidence.json`; [archived Linux observations](../../tests/browser/telemetry/verified-linux.json) are evidence, not test fixtures. Every telemetry success response comes from actual handlers/storage, with local bypass off and real synthetic JWT signature checks.
+
+Verified: 8 actual browser tests plus 249 relevant HTTP/B1/B2/B3 regression tests; typecheck, focused lint, canonical build/Worker validation and production artifact isolation PASS. Includes refusal/OFF zero rows, full seeded F1–F3/default/generated/reset path, outage/retry/duplicate/stop/reload/identity/stream isolation, virtual idle and overlapping 15s+15s sessions yielding 15s participant time. [Exact commands, numerical reconciliation, earlier parallel-test failure, scope limits and native Windows handoff](LOCAL_VERIFICATION.md#b4-h1-synthetic-browser-harness--2026-10-23).
+
+Run resource-sensitive regression files serially and separately from build. After canonical build, `node tests/browser/telemetry/check-isolation.mjs` checks production source references and generated artifacts. **Windows B4 V3, native hidden/background/OS focus behavior, standard launcher and hosted verification remain pending. Collection/metadata remain OFF; no deployment or real provider call.**
