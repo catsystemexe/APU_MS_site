@@ -1,3 +1,6 @@
+import { createPilot } from "../app/telemetry/pilot.ts";
+import { fetchWithPilot } from "../app/telemetry/fetch.ts";
+import { createDocumentObserver } from "../app/telemetry/document-observer.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
@@ -33,13 +36,17 @@ function fixture({ queued = false } = {}) {
   let session = createModelUsageSession(); const updates = [], requests = [], effects = [];
   const need = { needId: "n", needText: "Porozumět situaci.", initialF2Path: "POCHOPIT", f3Target: null };
   const specs = [{ id: "component", kind: "hypothesis-expansion", hypothesisId: "h", fingerprint: "fingerprint" }];
+  const pilot = createPilot();
   const context = {
+    pilot, documentObserver: createDocumentObserver(pilot),
     JSON, Response, Error, performance, compactNotepad, getF1ToF2NeedContract, activeNeedRoutingKey, createNeedRouter,
     readModelUsageRecords, appendModelUsageSessionRecords,
-    projectEpochRef: { current: 0 }, needRouterRef: { current: null }, f3GenerationEpochRef: { current: null },
+    projectEpochRef: { current: 0 }, needRoutingReasonRef: { current: "initial" }, needRouterRef: { current: null }, f3GenerationEpochRef: { current: null },
     setModelUsageSession: update => { if (queued) updates.push(update); else session = update(session); },
     fetch: (url, init) => { const gate = deferred(); requests.push({ url, body: JSON.parse(init.body), gate }); return gate.promise; },
+    latestF2BuildRef: { current: null }, f3StateRef: { current: null },
     f3State: { sourceSnapshot: { sourceFingerprint: "source" } }, latestF2ToF3FingerprintRef: { current: "source" },
+    analysisStatus: "idle", f2BuildStatus: "idle", f2PreviewStatus: "idle",
     f3Status: "idle", rozborGenerationStatus: "idle", selectedModel: "auto", isDeveloper: false,
     f3GenerationEligibility: () => ({ enabled: true }), createF3RenderRequest: state => ({ sourceSnapshot: state.sourceSnapshot }),
     parseF3RenderResult: value => { if (value.invalid) throw new Error("invalid structured output"); return value; }, acceptF3Render: state => state,
@@ -57,6 +64,7 @@ function fixture({ queued = false } = {}) {
   for (const name of ["setF3Status", "setF3Error", "setF3State", "setF2BuildStatus", "setF2BuildError", "setF2Build", "setF2PreviewStatus", "setF2PreviewError", "setF2Preview", "setActivePanel", "setRozborGenerationStatus", "setRozborGenerationError", "setAnalysisStatus", "setAnalysisError"]) {
     context[name] = value => effects.push([name, value]);
   }
+  context.fetchWithPilot = (operation,input,init) => fetchWithPilot(operation,input,init,context.fetch);
   const collector = compile(functions.get("collectModelUsageRecords"));
   const collect = runInNewContext(`${collector}\ncollectModelUsageRecords;`, context);
   context.collectModelUsageRecords = collect;
@@ -166,4 +174,15 @@ test("actual terminal stream error ingests usage before raising, while old-proje
   const error = JSON.stringify({ type: "error", message: "Synthetic stream failure.", model_usage_records: [usage("main", { phase: "F1", operation: "main_chat", failed: true })] });
   assert.throws(() => processLine(error), /Synthetic stream failure/); assert.equal(f.session().records.length, 1);
   f.reset(); processLine(error); assert.equal(f.session().records.length, 0);
+});
+
+test("actual Need Router dispatch consumes an explicit retry intent once without adding a provider call",async()=>{
+  const f=fixture(),observed=[],begin=f.context.pilot.begin.bind(f.context.pilot);
+  f.context.pilot.begin=(...args)=>{observed.push(args);return begin(...args);};
+  f.context.needRoutingReasonRef.current="retry";
+  const router=f.router(),request=router(f.context.canonicalF2Need);
+  await Promise.resolve();assert.equal(f.requests.length,1);
+  answer(f.requests[0],usage("retry-route",{phase:"F2",operation:"need_routing"}));await request;
+  assert.deepEqual(observed,[["need_routing","retry"]]);assert.equal(f.context.needRoutingReasonRef.current,"initial");
+  await router(f.context.canonicalF2Need);assert.equal(f.requests.length,1,"cache reuse does not emit another intent or provider call");
 });

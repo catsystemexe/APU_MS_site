@@ -4,6 +4,13 @@ Status: CURRENT
 
 Records significant verified product/runtime/project changes. It is not a complete Git log. Historical Sites-era entries are retained where they remain useful; current deployment state must not be inferred from a changelog entry alone.
 
+## 2026-10-23 — Pilot telemetry B2 core metrics, disabled source only
+
+- Connected existing AI routes/controller/MAIN to B1 safe persistence, preserving original provider payloads/counts, pedagogical results and developer/tester response boundaries. Grounding rescue has explicit attempt/fallback linkage; a server-owned chat telemetry request UUID leaves original diagnostic IDs intact. MAIN retains completion/cost under its original request lifetime after downstream cancellation.
+- Added gated per-visit notice/opt-in/refusal/stop controls, memory-only activity/session/workflow/operation instrumentation and committed accepted-document events. Default usable F3 completes once with zero additional AI calls; stale/boundary/error/revisited output and old reset/consent continuations cannot falsely complete a new episode.
+- V3 source PASS: 573 relevant provider-free tests with synthetic identities/keys, local SQLite, actual authenticated route/stream fixtures and off/on/broken equivalence; typecheck, focused lint (zero errors, five unchanged baseline warnings), canonical build and Worker artifact validation. [Exact evidence](../TELEMETRY/TELEMETRY_ARCHITECTURE.md#11-implemented-b2-core-metrics-and-verification--2026-10-23).
+- **Disabled, not deployed or collecting.** No provisioning, remote migrations, actual AI call, hosted update or production/config/CI policy change. B-07 remains open; B3/B4 and G0–G5 remain pending. No autonomous B3 work.
+
 ## 2026-10-23 — Pilot telemetry B1 disabled foundation
 
 - Implemented strict v1 client/server telemetry boundaries, enrolled HMAC/session opt-in context, same-Worker collector, bounded memory-only client queue, telemetry-only SQL/store and optional request-scoped AI sink using pinned Vinext `waitUntil`. No existing workflow or AI route is instrumented; B2 remains separate.

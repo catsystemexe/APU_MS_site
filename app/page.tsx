@@ -1,3 +1,6 @@
+import { headers } from "next/headers";
+import { telemetryResources } from "./telemetry/runtime";
+import { pilotAvailability } from "./telemetry/server";
 import ApuClient from "./apu-client";
 import ApuLogo from "./apu-logo";
 import { getCurrentAccessIdentity } from "./access-auth";
@@ -19,5 +22,13 @@ export default async function Home() {
     );
   }
 
-  return <ApuClient email={identity.email} isDeveloper={identity.role === "developer"} />;
+  let pilot: Awaited<ReturnType<typeof pilotAvailability>> = { enabled: false };
+  const resources = telemetryResources();
+  if (resources.config.APU_TELEMETRY_ENABLED === "1") {
+    try {
+      const host = (await headers()).get("host");
+      if (host) pilot = await pilotAvailability(new Request(`https://${host}/`), identity, resources);
+    } catch { /* Telemetry readiness never prevents rendering the app. */ }
+  }
+  return <ApuClient email={identity.email} isDeveloper={identity.role === "developer"} pilot={pilot} />;
 }

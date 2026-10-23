@@ -1,6 +1,6 @@
 # PILOT_TELEMETRY_SPEC
 
-Status: proposed v1 measurement contract, implementation-ready with activation gates. **Not implemented.** Source/evidence: [audit](TELEMETRY_INFRA_AUDIT.md). Architecture and privacy: [architecture](TELEMETRY_ARCHITECTURE.md). Prepared 2026-10-23.
+Status: v1 measurement contract; **B1 foundation and B2 source instrumentation implemented, locally verified and disabled.** Not deployed or collecting. B3 reporting and B4 browser/runtime acceptance remain pending. Source/evidence: [audit](TELEMETRY_INFRA_AUDIT.md). Architecture and privacy: [architecture](TELEMETRY_ARCHITECTURE.md). Prepared 2026-10-23.
 
 ## 1. Pilot questions and statistical boundary
 
@@ -109,3 +109,24 @@ Excluded overhead: vector-store storage/embeddings, Workers/D1/Access plan costs
 - Every CSV includes metric/measurement versions, timezone, cohort/test filter, coverage denominators and cost completeness. Divide-by-zero yields null, not zero. Preserve genuine zero-call completions.
 
 See roadmap M4 for deterministic test vectors and gates G2/G3/G5 before activating any of this on real participants.
+
+
+## 7. Implemented source coverage — B2, 2026-10-23
+
+Measurement definitions above are unchanged. This milestone produces versioned source events/rows; it does **not** implement the aggregate calculations, retention/export tooling or reports assigned to B3. Required base is B1 `5ade93fbad714f2c047ae17f59c0073ea98479dc`; PR #66/#67 were open/unmerged and `dev` remained `fc8ac5520b7b49b442bedc47558c73f20ce2bea6` at initial verification, so B2 is stacked directly over B1.
+
+| Metrics | Implemented B2 source coverage | Remaining boundary |
+| --- | --- | --- |
+| E01–E03, E09, Q02 | Pending/final server rows from all six AI routes, controller and MAIN streaming; existing token normalization and immutable calculated-price snapshots. Provider/app-invalid/transport/incomplete outcomes retained. | No invoice/provider-account reconciliation; reporting/statistics in B3. Unknown charge stays incomplete/null. |
+| E04–E08 | Session/workflow/operation UUID association, server start/completion time, one monotonic row per call; accepted baseline/generated document events. | Complete-price means/medians, cost-to-completion and coverage aggregates in B3. No raw event×call multiplication is introduced. |
+| E10, W04 | Distinct request intents/outcomes, explicit retry/regeneration and prior-operation linkage; grounding rescue has attempt 1 and a fallback link to primary grounding. Controller+MAIN remain normal calls within one client operation. | No inferred retry linkage from endpoint repetition or hidden provider IDs. |
+| U01–U05, W06 | Per-visit context plus visible/focused intervals, real-interaction 60s idle clipping, 15s chunks, phase/focus/visibility splits, 30m visit renewal on a genuine interaction/request and 12h expiry. HMAC participant/cohort stays server-side. | Civil date/week/DST splitting and cross-tab/participant interval union in B3; intervals are an active-time proxy. |
+| U06, W01–W03, W05 | Exactly one start per in-memory episode, reset without visit rotation, actual explicit phase changes/backward navigation, accepted usable baseline F3 without a new AI call, accepted generated material after state commit. | Maturation/censoring/conversion aggregates in B3. Retained representation revisit and React effect replay are not new output events. |
+| Q01 | Strict B1 validation/dedup/budgets, fixed readiness/health codes and queue-drop status, explicit pending/unpriced/incomplete records, immutable sequence/clock/operation associations; synthetic expected/stored reconciliation. | No complete live loss denominator after crash or lost memory queue; B3 reports must expose partial episodes/coverage. |
+| P01–P04 | No new content taxonomy or AI classification. Optional route/format fields remain off and no metadata emitter is activated. | G3 and any metadata/report work remain separate. Goal/need/source text is never telemetry input. |
+
+Client operation tickets capture the original visit/workflow/consent generation before dispatch. Reset marks old outcomes stale without associating old AI costs with a new episode. Stop/identity uncertainty drops queued tracking immediately; later server finalizations from already authorized requests retain original scope. A stale or boundary/error F3 result never produces `document_accepted`. The commit observer consumes a staged explicit acceptance once; it does not infer a document from a render alone.
+
+No new browser participant identifier/storage is added. A minimal, optional server page bootstrap returns only eligibility and controller-configured notice text/version, after existing Access validation and B1 privacy/enrollment/DEV gates. Missing approved `APU_TELEMETRY_NOTICE_TEXT` suppresses the opt-in UI. Refusal leaves the app usable; stop and identity uncertainty stop tracking. Notice configuration and technical tests do not themselves approve real collection. All actual runtime configuration remains disabled/unchanged.
+
+**V3 source PASS:** 573 relevant provider-free tests, typecheck, focused lint (zero errors, the same five preexisting APU-client warnings as B1), canonical build and Worker artifact validation. Exact commands, emitter map and limitations are in [architecture §11](TELEMETRY_ARCHITECTURE.md#11-implemented-b2-core-metrics-and-verification--2026-10-23). No actual provider request, remote infrastructure mutation, hosted update, real data collection or deployment occurred.

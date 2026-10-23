@@ -1,3 +1,4 @@
+import { createRequestTelemetrySink } from "../../telemetry/model-usage-adapter";
 import instructions from "../../../apu-core/v1.6/00_INSTRUCTIONS_v1.6.md?raw";
 import {
   estimateCostUsd,
@@ -245,7 +246,8 @@ export async function POST(request: Request) {
 
   const requestId = typeof body.requestId === "string" ? body.requestId : crypto.randomUUID();
   const turnId = typeof body.turnId === "string" ? body.turnId : null;
-  const usageCollector = createRequestUsageCollector();
+  const telemetrySink = await createRequestTelemetrySink(request, authorization, undefined, { requestIdIsClientOwned: true });
+  const usageCollector = createRequestUsageCollector(telemetrySink.sink);
   const communicationProfile = body.communicationProfile ?? DEFAULT_COMMUNICATION_PROFILE_ID;
   if (!isCommunicationProfile(communicationProfile)) {
     return jsonError("Zvolený komunikační profil backend nepodporuje.", 400);
@@ -362,144 +364,156 @@ export async function POST(request: Request) {
   const decoder = new TextDecoder();
   const bufferStructuredF1Prose = isStructuredF1Turn(controllerResult);
 
+  let deliveryClosed = false;
   const stream = new ReadableStream({
-    async start(controller) {
-      let buffer = "";
-      let bufferedMainProse = "";
-      let firstDeltaAt: number | null = null;
-      let terminalEvent = false;
+    start(controller) {
+      const pump = async () => {
+        let buffer = "";
+        let bufferedMainProse = "";
+        let firstDeltaAt: number | null = null;
+        let terminalEvent = false;
 
-      const emit = (event: Record<string, unknown>) => controller.enqueue(encoder.encode(JSON.stringify(authorizedModelPayload(event, authorization)) + "\n"));
-      if (executionPhase === "intake") emit({ type: "status", status: "preparing_response" });
-      if (executionPhase === "intake" && bufferStructuredF1Prose) {
-        emit({ type: "dialog_actions_preview", dialogActions: controllerResult.dialog_actions });
-      }
-      const mainStarted = performance.now();
-      let upstream: Response;
-      try {
-        await mainLifecycle.begin();
-        upstream = await fetch("https://api.openai.com/v1/responses", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-            "Content-Type": "application/json",
-            ...mainLifecycle.headers,
-          },
-          body: JSON.stringify(payload),
-        });
-      } catch {
-        await mainLifecycle.finish_transport("fetch_error");
-        emit({ type: "error", message: "Main odpověď se nepodařilo zahájit.", model_usage_records: usageCollector.records() });
-        controller.close();
-        return;
-      }
-
-      if (!upstream.ok || !upstream.body) {
-        const detail = await upstream.json().catch(() => null) as (ProviderResponseBody & { error?: { message?: string; code?: unknown } | null }) | null;
-        if (!upstream.ok) await mainLifecycle.finish_provider({ body: detail ?? {}, headers: upstream.headers, status_code: upstream.status });
-        else await mainLifecycle.finish_transport("missing_stream_body");
-        emit({ type: "error", message: isDeveloper && detail?.error?.message || "OpenAI API request selhal.", model_usage_records: usageCollector.records() });
-        controller.close();
-        return;
-      }
-
-      const reader = upstream.body.getReader();
-
-      const processSseLine = async (rawLine: string) => {
-        const line = rawLine.endsWith("\r") ? rawLine.slice(0, -1) : rawLine;
-        if (!line.startsWith("data: ") || line === "data: [DONE]") return;
-
-        const event = JSON.parse(line.slice(6));
-        if (terminalEvent) return;
-        if (event.type === "response.output_text.delta") {
-          if (firstDeltaAt === null) firstDeltaAt = performance.now();
-          if (bufferStructuredF1Prose) bufferedMainProse += event.delta;
-          else emit({ type: "delta", text: event.delta });
+        const emit = (event: Record<string, unknown>) => {
+          if (deliveryClosed) return;
+          try { controller.enqueue(encoder.encode(JSON.stringify(authorizedModelPayload(event, authorization)) + "\n")); }
+          catch { deliveryClosed = true; } // Disconnected delivery must not interrupt the already-started provider lifecycle.
+        };
+        const close = () => { if (!deliveryClosed) { deliveryClosed = true; try { controller.close(); } catch { /* already cancelled */ } } };
+        if (executionPhase === "intake") emit({ type: "status", status: "preparing_response" });
+        if (executionPhase === "intake" && bufferStructuredF1Prose) {
+          emit({ type: "dialog_actions_preview", dialogActions: controllerResult.dialog_actions });
         }
-        if (event.type === "response.completed") {
-          const response = event.response as CompletedResponse;
-          await mainLifecycle.finish_provider({ body: { ...response, status: response.status ?? "completed" }, headers: upstream.headers, status_code: upstream.status });
-          terminalEvent = true;
-          const completedAt = performance.now();
-          const diagnostics = buildDiagnostics(response, callId, execution);
-          const fileSearchCalls = response.output?.filter((item) => item.type === "file_search_call").length ?? 0;
-          if (bufferStructuredF1Prose) {
-            emit({ type: "delta", text: enforceStructuredF1Prose(bufferedMainProse, controllerResult.dialog_actions) });
-          }
-          emit({
-            type: "done",
-            responseId: response?.id,
-            ...(isDeveloper ? { diagnostics } : {}),
-            ...(isDeveloper && controllerRun.response ? {
-              controllerDiagnostics: buildDiagnostics(controllerRun.response as CompletedResponse, controllerUsageRecord?.call_id ?? `${callId}-controller`),
-            } : {}),
-            dialogActions: controllerResult.dialog_actions,
-            phase: controllerResult.phase,
-            transitionReady: controllerResult.transition_ready,
-            phaseLabel: controllerResult.phase === "intake" ? "[FÁZE 1]" : controllerResult.phase === "development" ? "[FÁZE 2]" : "[FÁZE 3]",
-            controllerFallback: controllerRun.usedFallback,
-            ...(isDeveloper ? { telemetry: {
-              turn_id: turnId,
-              completed_at: new Date().toISOString(),
-              path: [controllerDuration === null ? null : "controller", "main"].filter(Boolean).join("-"),
-              latency_ms: {
-                user_to_first_token: null,
-                preflight_total: null,
-                analysis_user_visible_ms: null,
-                analysis_backend_total_ms: null,
-                total: Math.round(completedAt - requestStarted),
-                main_model_ttft: firstDeltaAt === null ? null : Math.round(firstDeltaAt - mainStarted),
-                generation: firstDeltaAt === null ? null : Math.round(completedAt - firstDeltaAt),
-              },
-              stages: [
-                ...(controllerDuration === null ? [{ name: "controller", status: "skipped", duration_ms: null }] : [{ name: "controller", status: controllerUsageRecord?.provider_status ?? "unknown", duration_ms: controllerDuration, api_request_id: controllerUsageRecord?.call_id ?? null, model: controllerRun.response?.model ?? "gpt-5.6-luna", reasoning: "low", service_tier: "default", usage: controllerRun.response ? { input_tokens: (controllerRun.response as CompletedResponse).usage?.input_tokens ?? null, cached_input_tokens: (controllerRun.response as CompletedResponse).usage?.input_tokens_details?.cached_tokens ?? null, cache_write_tokens: (controllerRun.response as CompletedResponse).usage?.input_tokens_details?.cache_write_tokens ?? null, output_tokens: (controllerRun.response as CompletedResponse).usage?.output_tokens ?? null, reasoning_tokens: (controllerRun.response as CompletedResponse).usage?.output_tokens_details?.reasoning_tokens ?? null, total_tokens: (controllerRun.response as CompletedResponse).usage?.total_tokens ?? null } : undefined }]),
-                { name: "main", status: "completed", duration_ms: Math.round(completedAt - mainStarted), api_request_id: callId, model: diagnostics.model, reasoning: execution.reasoning, service_tier: "default", usage: { input_tokens: diagnostics.inputTokens, cached_input_tokens: diagnostics.cachedInputTokens ?? null, cache_write_tokens: diagnostics.cacheWriteTokens ?? null, output_tokens: diagnostics.outputTokens, reasoning_tokens: diagnostics.reasoningTokens ?? null, total_tokens: diagnostics.totalTokens } },
-              ],
-              context_sizes: { unit: "chars", core: instructions.length, runtime_instructions: Math.max(0, composedInstructions.length - instructions.length), notebook: JSON.stringify(notebook).length, previous_analysis: body.analysisContext ? JSON.stringify(body.analysisContext).length : 0, user_message: (body.message as string).length, previous_response_context: typeof body.previousResponseId === "string" ? null : 0 },
-              tools: { file_search: { available: execution.useKnowledgeBase, invoked: fileSearchCalls > 0, calls: fileSearchCalls, duration_ms: null } },
-              controller: { mode: controllerMode, fallback_reason: controllerRun.fallbackReason, rejection_reason: controllerRun.rejectionReason },
-              streaming: { model: true, backend: true, transport: true, ui: true },
-            } } : {}),
-            model_usage_records: usageCollector.records(),
+        const mainStarted = performance.now();
+        let upstream: Response;
+        try {
+          await mainLifecycle.begin();
+          upstream = await fetch("https://api.openai.com/v1/responses", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${apiKey}`,
+              "Content-Type": "application/json",
+              ...mainLifecycle.headers,
+            },
+            body: JSON.stringify(payload),
           });
+        } catch {
+          await mainLifecycle.finish_transport("fetch_error");
+          emit({ type: "error", message: "Main odpověď se nepodařilo zahájit.", model_usage_records: usageCollector.records() });
+          close();
+          return;
         }
-        if (event.type === "response.incomplete" || event.type === "response.failed") {
-          await mainLifecycle.finish_provider({ body: { ...(event.response ?? {}), status: event.type === "response.incomplete" ? "incomplete" : "failed" }, headers: upstream.headers, status_code: upstream.status });
-          terminalEvent = true;
-          emit({ type: "error", message: "Model odpověď nedokončil.", model_usage_records: usageCollector.records() });
+
+        if (!upstream.ok || !upstream.body) {
+          const detail = await upstream.json().catch(() => null) as (ProviderResponseBody & { error?: { message?: string; code?: unknown } | null }) | null;
+          if (!upstream.ok) await mainLifecycle.finish_provider({ body: detail ?? {}, headers: upstream.headers, status_code: upstream.status });
+          else await mainLifecycle.finish_transport("missing_stream_body");
+          emit({ type: "error", message: isDeveloper && detail?.error?.message || "OpenAI API request selhal.", model_usage_records: usageCollector.records() });
+          close();
+          return;
         }
-        if (event.type === "error") {
-          await mainLifecycle.finish_provider({ body: { status: "failed", error: { code: typeof event.code === "string" ? event.code : null } }, headers: upstream.headers, status_code: upstream.status });
-          terminalEvent = true;
-          emit({ type: "error", message: isDeveloper && event.message || "Streaming selhal.", model_usage_records: usageCollector.records() });
+
+        const reader = upstream.body.getReader();
+
+        const processSseLine = async (rawLine: string) => {
+          const line = rawLine.endsWith("\r") ? rawLine.slice(0, -1) : rawLine;
+          if (!line.startsWith("data: ") || line === "data: [DONE]") return;
+
+          const event = JSON.parse(line.slice(6));
+          if (terminalEvent) return;
+          if (event.type === "response.output_text.delta") {
+            if (firstDeltaAt === null) firstDeltaAt = performance.now();
+            if (bufferStructuredF1Prose) bufferedMainProse += event.delta;
+            else emit({ type: "delta", text: event.delta });
+          }
+          if (event.type === "response.completed") {
+            const response = event.response as CompletedResponse;
+            await mainLifecycle.finish_provider({ body: { ...response, status: response.status ?? "completed" }, headers: upstream.headers, status_code: upstream.status });
+            terminalEvent = true;
+            const completedAt = performance.now();
+            const diagnostics = buildDiagnostics(response, callId, execution);
+            const fileSearchCalls = response.output?.filter((item) => item.type === "file_search_call").length ?? 0;
+            if (bufferStructuredF1Prose) {
+              emit({ type: "delta", text: enforceStructuredF1Prose(bufferedMainProse, controllerResult.dialog_actions) });
+            }
+            emit({
+              type: "done",
+              responseId: response?.id,
+              ...(isDeveloper ? { diagnostics } : {}),
+              ...(isDeveloper && controllerRun.response ? {
+                controllerDiagnostics: buildDiagnostics(controllerRun.response as CompletedResponse, controllerUsageRecord?.call_id ?? `${callId}-controller`),
+              } : {}),
+              dialogActions: controllerResult.dialog_actions,
+              phase: controllerResult.phase,
+              transitionReady: controllerResult.transition_ready,
+              phaseLabel: controllerResult.phase === "intake" ? "[FÁZE 1]" : controllerResult.phase === "development" ? "[FÁZE 2]" : "[FÁZE 3]",
+              controllerFallback: controllerRun.usedFallback,
+              ...(isDeveloper ? { telemetry: {
+                turn_id: turnId,
+                completed_at: new Date().toISOString(),
+                path: [controllerDuration === null ? null : "controller", "main"].filter(Boolean).join("-"),
+                latency_ms: {
+                  user_to_first_token: null,
+                  preflight_total: null,
+                  analysis_user_visible_ms: null,
+                  analysis_backend_total_ms: null,
+                  total: Math.round(completedAt - requestStarted),
+                  main_model_ttft: firstDeltaAt === null ? null : Math.round(firstDeltaAt - mainStarted),
+                  generation: firstDeltaAt === null ? null : Math.round(completedAt - firstDeltaAt),
+                },
+                stages: [
+                  ...(controllerDuration === null ? [{ name: "controller", status: "skipped", duration_ms: null }] : [{ name: "controller", status: controllerUsageRecord?.provider_status ?? "unknown", duration_ms: controllerDuration, api_request_id: controllerUsageRecord?.call_id ?? null, model: controllerRun.response?.model ?? "gpt-5.6-luna", reasoning: "low", service_tier: "default", usage: controllerRun.response ? { input_tokens: (controllerRun.response as CompletedResponse).usage?.input_tokens ?? null, cached_input_tokens: (controllerRun.response as CompletedResponse).usage?.input_tokens_details?.cached_tokens ?? null, cache_write_tokens: (controllerRun.response as CompletedResponse).usage?.input_tokens_details?.cache_write_tokens ?? null, output_tokens: (controllerRun.response as CompletedResponse).usage?.output_tokens ?? null, reasoning_tokens: (controllerRun.response as CompletedResponse).usage?.output_tokens_details?.reasoning_tokens ?? null, total_tokens: (controllerRun.response as CompletedResponse).usage?.total_tokens ?? null } : undefined }]),
+                  { name: "main", status: "completed", duration_ms: Math.round(completedAt - mainStarted), api_request_id: callId, model: diagnostics.model, reasoning: execution.reasoning, service_tier: "default", usage: { input_tokens: diagnostics.inputTokens, cached_input_tokens: diagnostics.cachedInputTokens ?? null, cache_write_tokens: diagnostics.cacheWriteTokens ?? null, output_tokens: diagnostics.outputTokens, reasoning_tokens: diagnostics.reasoningTokens ?? null, total_tokens: diagnostics.totalTokens } },
+                ],
+                context_sizes: { unit: "chars", core: instructions.length, runtime_instructions: Math.max(0, composedInstructions.length - instructions.length), notebook: JSON.stringify(notebook).length, previous_analysis: body.analysisContext ? JSON.stringify(body.analysisContext).length : 0, user_message: (body.message as string).length, previous_response_context: typeof body.previousResponseId === "string" ? null : 0 },
+                tools: { file_search: { available: execution.useKnowledgeBase, invoked: fileSearchCalls > 0, calls: fileSearchCalls, duration_ms: null } },
+                controller: { mode: controllerMode, fallback_reason: controllerRun.fallbackReason, rejection_reason: controllerRun.rejectionReason },
+                streaming: { model: true, backend: true, transport: true, ui: true },
+              } } : {}),
+              model_usage_records: usageCollector.records(),
+            });
+          }
+          if (event.type === "response.incomplete" || event.type === "response.failed") {
+            await mainLifecycle.finish_provider({ body: { ...(event.response ?? {}), status: event.type === "response.incomplete" ? "incomplete" : "failed" }, headers: upstream.headers, status_code: upstream.status });
+            terminalEvent = true;
+            emit({ type: "error", message: "Model odpověď nedokončil.", model_usage_records: usageCollector.records() });
+          }
+          if (event.type === "error") {
+            await mainLifecycle.finish_provider({ body: { status: "failed", error: { code: typeof event.code === "string" ? event.code : null } }, headers: upstream.headers, status_code: upstream.status });
+            terminalEvent = true;
+            emit({ type: "error", message: isDeveloper && event.message || "Streaming selhal.", model_usage_records: usageCollector.records() });
+          }
+        };
+
+        try {
+          while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split("\n");
+            buffer = lines.pop() ?? "";
+            for (const line of lines) await processSseLine(line);
+          }
+
+          buffer += decoder.decode();
+          if (buffer) await processSseLine(buffer);
+          if (!terminalEvent) {
+            await mainLifecycle.finish_transport("stream_ended_without_terminal_event");
+            emit({ type: "error", message: "Přenos odpovědi skončil bez dokončení.", model_usage_records: usageCollector.records() });
+          }
+        } catch {
+          if (!terminalEvent) {
+            await mainLifecycle.finish_transport("stream_interrupted");
+            emit({ type: "error", message: "Přenos odpovědi byl přerušen.", model_usage_records: usageCollector.records() });
+          }
+        } finally {
+          close();
         }
       };
-
-      try {
-        while (true) {
-          const { value, done } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split("\n");
-          buffer = lines.pop() ?? "";
-          for (const line of lines) await processSseLine(line);
-        }
-
-        buffer += decoder.decode();
-        if (buffer) await processSseLine(buffer);
-        if (!terminalEvent) {
-          await mainLifecycle.finish_transport("stream_ended_without_terminal_event");
-          emit({ type: "error", message: "Přenos odpovědi skončil bez dokončení.", model_usage_records: usageCollector.records() });
-        }
-      } catch {
-        if (!terminalEvent) {
-          await mainLifecycle.finish_transport("stream_interrupted");
-          emit({ type: "error", message: "Přenos odpovědi byl přerušen.", model_usage_records: usageCollector.records() });
-        }
-      } finally {
-        controller.close();
-      }
+      const completion = pump();
+      telemetrySink.retain(completion);
+      return completion;
     },
+    cancel() { deliveryClosed = true; },
   });
 
   return new Response(stream, {

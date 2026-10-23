@@ -19,6 +19,7 @@ globalThis.__needRouteTest = {
   },
 };
 const source = (await readFile(new URL("../app/api/need-route/route.ts", import.meta.url), "utf8"))
+  .replace(/import \{ createRequestTelemetrySink \} from [^;]+;/, "const createRequestTelemetrySink = async () => ({ sink() {} });")
   .replace(/import \{ getAccessIdentity \} from [^;]+;/, 'const { getAccessIdentity } = globalThis.__needRouteTest;')
   .replace(/import \{ callOpenAIResponses[^;]+;/, 'const { callOpenAIResponses, createRequestUsageCollector, modelUsagePayload, usageErrorPayload } = globalThis.__needRouteTest;')
   .replace('"../../f2-need-routing"', JSON.stringify(new URL("../app/f2-need-routing.ts", import.meta.url).href))

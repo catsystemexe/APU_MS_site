@@ -4,9 +4,17 @@ Status: CURRENT SOURCE/RUNTIME CONTRACT
 
 Purpose: describe the current repository/runtime contract. Deployment state is recorded only when independently verified; this document must not infer production state from repository contents alone.
 
+## Pilot telemetry B2 — source instrumentation only (2026-10-23)
+
+**IMPLEMENTED / LOCAL V3 PASS / DISABLED / NOT DEPLOYED.** B2 connects all six existing AI API routes/controller/MAIN lifecycle to the B1 sink. Request/operation/workflow association and pending/final calculated-cost snapshots survive reset, stale UI results and downstream stream cancellation without extra provider calls. The optional client coordinator instruments actual phase/workflow actions, visible/focused active-time intervals and accepted baseline/generated F3 documents; default F3 adds zero AI calls. Business source ownership, prompts/routing, auth/session policy, diagnostic response filtering and persistence are preserved.
+
+Optional opt-in UI requires the existing DEV/privacy/enrollment gates plus approved configured notice text/version; no context/write is created by page bootstrap. Refusal keeps the app usable, stop and Access identity uncertainty clear tracking, and no persistent browser participant identifier is introduced. Configuration and metadata remain off; no remote resources or secrets were created/changed.
+
+V3: **573 relevant provider-free tests PASS**, typecheck, focused lint (zero errors; five reproduced B1 warnings), canonical build and Worker artifact validation PASS. See [exact integration/evidence](../TELEMETRY/TELEMETRY_ARCHITECTURE.md#11-implemented-b2-core-metrics-and-verification--2026-10-23). B2 is stacked over B1 `5ade93fbad714f2c047ae17f59c0073ea98479dc`; B3 reporting and B4 browser/local acceptance remain pending. No hosted verification, actual provider call, real-user collection, provisioning, remote migration, hosted update or deployment occurred; CI provenance policy remains separate and unchanged.
+
 ## Pilot telemetry B1 — source foundation only (2026-10-23)
 
-**IMPLEMENTED / LOCAL V3 PASS / DISABLED / NOT DEPLOYED.** Dedicated telemetry contracts, HMAC/session opt-in context, same-Worker collector, memory-only client interface, telemetry-only SQL/store and a request-scoped fail-open AI persistence interface are present. No existing UI/workflow emitter or AI route is instrumented yet; B2 owns that wiring. Existing authentication, pedagogical flow, diagnostic ledger and business persistence remain unchanged.
+**IMPLEMENTED / LOCAL V3 PASS / DISABLED / NOT DEPLOYED.** Dedicated telemetry contracts, HMAC/session opt-in context, same-Worker collector, memory-only client interface, telemetry-only SQL/store and a request-scoped fail-open AI persistence interface are present. The initial B1 milestone had no UI/workflow or AI-route emitters; B2 source wiring is recorded above. Existing authentication, pedagogical flow, diagnostic ledger and business persistence remain unchanged.
 
 DEV defaults are `APU_TELEMETRY_ENABLED=0` and metadata off. Absent/disabled preparation inputs preserve the original materialized DEV configuration. Collection additionally needs explicit isolated DEV resources, enrollment, approved privacy/notice configuration and per-visit opt-in; missing configuration/binding/key is telemetry no-op, not application failure. No persistent browser participant identifier is introduced.
 

@@ -115,6 +115,7 @@ export function createTelemetryClient(options: ClientOptions = {}) {
       if (elapsed() - lastInteraction >= LIMITS.idleMs || elapsed() >= LIMITS.lifetimeMs) { clear(); health = "invalid_context"; return {}; }
       return { "x-apu-telemetry-context": context!.context, "x-apu-telemetry-workflow": workflow, "x-apu-telemetry-operation": operation };
     },
+    timing: () => active() ? { elapsed_ms: elapsed(), session_id: context!.session_id } : null,
     status: () => ({ code: health, queued: queue.length, dropped, active: active() }),
   };
 }
