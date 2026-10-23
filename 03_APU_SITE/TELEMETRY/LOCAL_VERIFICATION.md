@@ -248,3 +248,63 @@ if ($LASTEXITCODE -ne 0) { throw 'regression failed' }
 Record the exact SHA, OS/Node/browser versions, exit codes and counts. Preserve the generated diagnostic evidence after a failure **before rerunning** (a subsequent browser run replaces `evidence.json`). No standard launcher, env-file setup, provider credential or browser download is needed. Do not run builds concurrently. Native Windows PASS and the original platform-specific causal sequence remain follow-up conditions; Linux PASS cannot substitute for them.
 
 B-07 remains OPEN, full B4/G0–G5 remain pending. Roadmap milestone status is unchanged; no CHANGELOG or Known Issues entry. Production telemetry/optional metadata remain **OFF**. No deployment, remote database operation, provisioning, real provider call or real-participant collection occurred. Stop after this targeted repair.
+
+## B4-H1-R1 native Windows verification — 2026-10-24
+
+Verified in a new detached worktree at required commit `b8fdde42e75398198cd10fe305048aa722a42c43` (PR #72), using the previously installed Chromium executable. No previous checkout, B4 evidence branch or uncommitted evidence was overwritten.
+
+Environment:
+
+- Windows PowerShell 5.1
+- Node `v22.23.2`
+- npm `10.9.8`
+- Chromium `151.0.7922.34`
+- `CHROMIUM_PATH=<previously installed Chromium executable; private local path intentionally omitted from published evidence>`
+
+Dependency installation:
+
+- `npm.cmd ci --ignore-scripts` — PASS, exit 0
+- `npm.cmd ci --prefix tests/browser/telemetry --ignore-scripts --no-audit --no-fund` — PASS, exit 0
+
+### Targeted controlled-activity test
+
+Command:
+
+```powershell
+node.exe --test --test-name-pattern='actual browser controlled activity/blur' tests/browser/telemetry/harness.test.mjs
+```
+
+Result: **3 PASS / 0 FAIL / 0 SKIP**.
+
+Both input offsets passed:
+
+- offset `0ms` — PASS
+- offset `1032ms` — PASS
+
+The repaired Windows evidence confirms:
+
+- incomplete active time before delivery: `0ms` for aligned case and `13968ms` for offset case;
+- final persisted interval: `15000ms`;
+- session `active_ms`: `15000ms`;
+- participant union: `15000ms`;
+- active time after blur: `0ms`;
+- idle renewal: `true`;
+- overlap union: `15000ms`.
+
+### Complete Chromium harness
+
+Command:
+
+```powershell
+node.exe --test tests/browser/telemetry/harness.test.mjs
+```
+
+Result: **10 PASS / 0 FAIL / 0 SKIP**.
+
+Default OFF/refusal, opted-in collector → SQLite → SQL → CSV, outage/retry, stop/re-opt-in, reload, multi-tab isolation, identity invalidation, stream disconnect, controlled activity/blur, idle renewal and overlapping-tab union all passed. No provider request or real participant data was used.
+
+The generated `tests/browser/telemetry/evidence.json` records runtime platform `win32`, Node `v22.23.2`, Chromium `151.0.7922.34`, and all eight scenarios as `PASS`. Its activity records preserve the prior intermediate `13968ms` value while proving final persisted/session/participant totals of `15000ms`.
+
+This closes the original R1 timing blocker for the isolated H1 browser harness. It does not prove standard SSR/Vinext/Worker bootstrap, hosted Cloudflare behavior, Windows symlink capability or production ACL policy.
+
+The prior B4-H1 evidence remains additive historical evidence; this R1 section is the authoritative native Windows result for PR #72.

@@ -1,8 +1,8 @@
 # APU pilot telemetry — implementation package
 
-Status: **B1/B2 + B3 SOURCE IMPLEMENTED; B4-H1 ISOLATED LINUX BROWSER V2 PASS / COLLECTION OFF / NOT DEPLOYED.** Full B4 Windows V3 Local Verification and G0–G5 remain pending; not ready for collection from real participants. No infrastructure provisioning is claimed.
+Status: **B1/B2 + B3 SOURCE IMPLEMENTED; B4-H1-R1 ISOLATED WINDOWS CHROMIUM HARNESS PASS / COLLECTION OFF / NOT DEPLOYED.** The controlled-activity blocker is resolved in the isolated harness; standard SSR/Vinext/Worker and hosted verification remain separate boundaries. No infrastructure provisioning is claimed.
 
-Prepared: 2026-10-23, Europe/Prague. Audited source: `dev` at `fc8ac5520b7b49b442bedc47558c73f20ce2bea6`.
+Prepared: 2026-10-24, Europe/Prague. Verified R1 source: `b8fdde42e75398198cd10fe305048aa722a42c43`.
 
 The request called the development branch `next`. Authenticated GitHub reads show that `next` no longer exists and its branch endpoint redirects to protected `public`. Current `AGENTS.md` and `05_WORKFLOW/APU_PROJECT_RULES.md` identify `dev` as development. This package follows the requested **developers-only boundary** using `dev`; it must never be executed against the redirect or production branch. `main` is a legacy/reference branch.
 
