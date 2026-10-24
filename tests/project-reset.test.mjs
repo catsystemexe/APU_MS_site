@@ -27,7 +27,7 @@ test("the project reset clears all project-scoped state and no global preference
   const reset = createProjectResetState(welcome);
   assert.deepEqual(reset.messages, [welcome]);
   assert.deepEqual(reset.notepad, { manifestations: [], goals: [], context: [], course: [], helps: [] });
-  assert.equal(reset.responseId, null);
+  assert.equal("responseId" in reset, false);
   assert.equal(reset.phase, "intake");
   assert.equal(reset.activePanel, null);
   assert.equal(reset.error, null);
@@ -49,10 +49,9 @@ test("New Project uses the central handler once, preserves global preferences, a
   const resetHandler = source.match(/function resetCurrentProject\(\)[\s\S]*?\n  \}/)?.[0] ?? "";
   assert.equal((requestHandler.match(/resetCurrentProject\(\)/g) ?? []).length, 1);
   assert.doesNotMatch(source, /setIsExportMenuOpen|setDriveFileLink|resetConversation/);
-  assert.match(resetHandler, /setResponseId\(reset\.responseId\)/);
+  assert.doesNotMatch(source, /setResponseId|previousResponseId/);
   assert.match(resetHandler, /setActivePanel\(reset\.activePanel\)/);
   assert.match(resetHandler, /setNotepad\(reset\.notepad\)/);
   assert.doesNotMatch(resetHandler, /setCommunicationProfile|design\.|setSelectedModel/);
-  assert.match(source, /previousResponseId: responseId/);
   assert.match(source, /if \(!text \|\| isLoading \|\| !isNotepadHydrated\) return/);
 });

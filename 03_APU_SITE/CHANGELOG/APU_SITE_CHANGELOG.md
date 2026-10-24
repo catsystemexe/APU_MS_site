@@ -4,6 +4,12 @@ Status: CURRENT
 
 Records significant verified product/runtime/project changes. It is not a complete Git log. Historical Sites-era entries are retained where they remain useful; current deployment state must not be inferred from a changelog entry alone.
 
+## 2026-10-24 — Notebook-based stateless Chat (development branch)
+
+- Implemented on `feat/notebook-stateless-chat` from verified `dev` `fc8ac5520b7b49b442bedc47558c73f20ce2bea6`; not merged or deployed. Main uses `store: false`, no `previous_response_id`, and no client provider-continuation state. Notebook/current input and bounded last-question context replace the stored provider chain; raw Chat is not replayed.
+- Extraction, primary/rescue grounding and Controller share validated question orientation (maximum two questions, 600 characters each), without treating assistant questions as evidence. Latest-response/phase/review boundaries prevent stale SIDE context; canonical Notebook/provenance, explicit navigation, F2/F3 ownership and usage isolation retain their contracts. Current-session UI history and explicit developer diagnostic export remain available; future Save/Open is not implemented.
+- Local V2 PASS: typecheck, canonical build/Worker artifact, **1,202/1,202 provider-free tests**, zero failures/skips; changed TypeScript lint has no errors and five existing client warnings. Added synthetic request/client/context/provenance regressions; no real cases or paid API calls. Hosted/browser/live-model acceptance, GDPR approval and supplier residual retention are not established. No merge, deployment, infrastructure/configuration/Core change or Backlog/Known Issues update.
+
 ## 2026-10-23 — APU PUBLIC canonical custom domain
 
 - Operator attached `apu.catsystem.ai` as a Production Custom Domain of existing Worker `apu-ms-site` in Cloudflare zone `catsystem.ai`. Set `https://apu.catsystem.ai/` as the preferred PUBLIC URL; retain `https://apu-ms-site.catsystem-exe.workers.dev/` as an alternate. No APU application-code changes or Worker deployment were required for the hostname assignment.
