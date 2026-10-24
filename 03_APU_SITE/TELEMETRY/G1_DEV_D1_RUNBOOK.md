@@ -119,7 +119,7 @@ Output is exclusively created under ignored `dist/dev-worker`; existing paths/sy
 
 ## 5. Remote migration preflight / application / read-back — G1-B approval required
 
-Approved schema is only `telemetry/migrations/0001_pilot_v1.sql`, SHA-256 **81d3a4f48446b9583fd13b6288518fc06ea1ff283360001c2c84825f474c9d37**. No business schema or regeneration. Wrangler 4.150.0 resolves `migrations_dir` relative to the **config directory**, so `dist/dev-worker/../../telemetry/migrations` resolves to the repository directory regardless of cwd. Its default bookkeeping table is `d1_migrations`.
+Approved schema is only `telemetry/migrations/0001_pilot_v1.sql`. Its reviewed **canonical Git/LF** byte sequence has SHA-256 **81d3a4f48446b9583fd13b6288518fc06ea1ff283360001c2c84825f474c9d37**; Git checkout on Windows may produce the equivalent **CRLF** byte sequence with SHA-256 **34a97fe1898f6dbc282ad03c67fb3b902f9a4186d65b5cf60266b0560cf31619**. Both exact hashes are approved; no other encoding, whitespace or SQL-content normalization is allowed. A mismatch with both hashes is a hard STOP. No business schema or regeneration. Wrangler 4.150.0 resolves `migrations_dir` relative to the **config directory**, so `dist/dev-worker/../../telemetry/migrations` resolves to the repository directory regardless of cwd. Its default bookkeeping table is `d1_migrations`.
 
 **Important:** `wrangler d1 migrations list --remote` calls `initMigrationsTable` and may issue `CREATE TABLE IF NOT EXISTS d1_migrations`. It is not strictly read-only. Do not run it during the earlier read-only preflight or before remote-migration authorization.
 
@@ -127,7 +127,16 @@ Approved schema is only `telemetry/migrations/0001_pilot_v1.sql`, SHA-256 **81d3
 $MigrationPath = Join-Path $Repo 'telemetry/migrations'
 $Files = @(Get-ChildItem -LiteralPath $MigrationPath -File -Filter '*.sql')
 if ($Files.Count -ne 1 -or $Files[0].Name -cne '0001_pilot_v1.sql') { throw 'Unreviewed migration set' }
-if ((Get-FileHash -Algorithm SHA256 $Files[0].FullName).Hash.ToLowerInvariant() -cne '81d3a4f48446b9583fd13b6288518fc06ea1ff283360001c2c84825f474c9d37') { throw 'Migration changed' }
+# Accept only the two byte-exact reviewed representations (Git LF or Windows CRLF).
+# This is NOT a generic whitespace/SQL normalization or a relaxation of the schema check.
+$ExpectedLfSha = '81d3a4f48446b9583fd13b6288518fc06ea1ff283360001c2c84825f474c9d37'
+$ExpectedCrlfSha = '34a97fe1898f6dbc282ad03c67fb3b902f9a4186d65b5cf60266b0560cf31619'
+$ActualMigrationSha = (Get-FileHash -LiteralPath $Files[0].FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+if ($ActualMigrationSha -cne $ExpectedLfSha -and $ActualMigrationSha -cne $ExpectedCrlfSha) {
+    throw 'Migration hash mismatch: neither approved LF nor approved CRLF byte sequence; STOP'
+}
+$MigrationLineEndings = if ($ActualMigrationSha -ceq $ExpectedLfSha) { 'LF' } else { 'CRLF' }
+Write-Output "Approved migration SHA-256 verified ($MigrationLineEndings)"
 # Repeat exact-name info using the staged config; verify account/UUID/name/EU again.
 & $Wrangler d1 info apu-ms-site-dev-telemetry --config $StagedPath --json > (Join-Path $Evidence 'd1-before-migration.json')
 if ($LASTEXITCODE -ne 0) { throw 'Final target read-back failed' }
