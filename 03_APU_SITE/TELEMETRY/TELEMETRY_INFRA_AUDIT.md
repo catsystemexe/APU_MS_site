@@ -183,3 +183,9 @@ Fresh authenticated read-back confirmed the existing `apu-ms-site-dev-telemetry`
 Post-migration schema reconciliation: 3 telemetry tables, 6 approved telemetry indexes, 4 approved telemetry triggers, plus the single Wrangler `d1_migrations` table. Bookkeeping contains exactly one `0001_pilot_v1.sql` row; final migration listing reports no pending migrations. `PRAGMA foreign_key_check` returned no rows. Telemetry counts are zero: sessions `0`, events `0`, AI calls `0`. The migration-only configuration contained only the account and `TELEMETRY_DB` binding with the exact database UUID and absolute migrations directory; it was not Worker deployment configuration.
 
 This PASS is limited to G1-B migration acceptance. G0 billing/route/retention limitations, G1-C Worker integration, G2/G4/G5, hosted verification and real collection remain open. B-07 remains OPEN.
+
+### G1-B V2 final exact-schema verification - 2026-10-24
+
+**PASS.** A fresh read-only query of `sqlite_schema` was compared with an in-memory SQLite database populated from the approved migration. The accepted CRLF SHA-256 was `34a97fe1898f6dbc282ad03c67fb3b902f9a4186d65b5cf60266b0560cf31619`; comparison used only the whitespace-collapse normalization already used by the migration test. All 13 telemetry definitions matched exactly by `type`, `name`, `tbl_name` and normalized `sql`: 3 tables, 6 indexes and 4 triggers. Constraints and trigger bodies were included in the comparison.
+
+Fresh read-only Cloudflare checks confirmed the existing EU database identity, exactly one `0001_pilot_v1.sql` bookkeeping row, zero telemetry sessions/events/AI calls, zero foreign-key violations, and unchanged DEV deployment/version/traffic. No migration command, DDL, deployment or other remote mutation was performed during this final check. The two native Windows symlink capability SKIPs remain **NOT VERIFIED** and are not security PASS evidence.
