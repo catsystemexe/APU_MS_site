@@ -173,3 +173,19 @@ Repository pricing is explicit and versioned. Current official OpenAI pricing [A
 - [PR2 — GDPR, official EUR-Lex text](https://eur-lex.europa.eu/eli/reg/2016/679/oj/eng)
 
 No real pedagogical records, saved notebooks, provider prompts/responses or account logs were needed. Source schemas and implementation were sufficient. No new dataset of names/emails/IPs or credentials is included in this documentation.
+
+## G1-B-R2 migration acceptance - 2026-10-24
+
+**Result: PASS for the authorized migration-only scope.** Native Windows verification on source `2b3390e24f21aaa2f26dd5644d0dd2336ece210d` used Node `v22.23.2` and Wrangler `4.150.0`: 30 tests, 28 PASS, 0 FAIL, 2 explicit symlink-capability SKIP (`EPERM` on Windows). The Linux symlink evidence remains separate; Windows symlink rejection is NOT VERIFIED.
+
+Fresh authenticated read-back confirmed the existing `apu-ms-site-dev-telemetry` database, the original EU identity, and unchanged DEV deployment/100% traffic. The approved `0001_pilot_v1.sql` passed the accepted CRLF SHA-256 check and was applied exactly once through Wrangler remote migrations. No D1 create, Worker deploy, binding publication, secret change, Zero Trust change or telemetry activation occurred.
+
+Post-migration schema reconciliation: 3 telemetry tables, 6 approved telemetry indexes, 4 approved telemetry triggers, plus the single Wrangler `d1_migrations` table. Bookkeeping contains exactly one `0001_pilot_v1.sql` row; final migration listing reports no pending migrations. `PRAGMA foreign_key_check` returned no rows. Telemetry counts are zero: sessions `0`, events `0`, AI calls `0`. The migration-only configuration contained only the account and `TELEMETRY_DB` binding with the exact database UUID and absolute migrations directory; it was not Worker deployment configuration.
+
+This PASS is limited to G1-B migration acceptance. G0 billing/route/retention limitations, G1-C Worker integration, G2/G4/G5, hosted verification and real collection remain open. B-07 remains OPEN.
+
+### G1-B V2 final exact-schema verification - 2026-10-24
+
+**PASS.** A fresh read-only query of `sqlite_schema` was compared with an in-memory SQLite database populated from the approved migration. The accepted CRLF SHA-256 was `34a97fe1898f6dbc282ad03c67fb3b902f9a4186d65b5cf60266b0560cf31619`; comparison used only the whitespace-collapse normalization already used by the migration test. All 13 telemetry definitions matched exactly by `type`, `name`, `tbl_name` and normalized `sql`: 3 tables, 6 indexes and 4 triggers. Constraints and trigger bodies were included in the comparison.
+
+Fresh read-only Cloudflare checks confirmed the existing EU database identity, exactly one `0001_pilot_v1.sql` bookkeeping row, zero telemetry sessions/events/AI calls, zero foreign-key violations, and unchanged DEV deployment/version/traffic. No migration command, DDL, deployment or other remote mutation was performed during this final check. The two native Windows symlink capability SKIPs remain **NOT VERIFIED** and are not security PASS evidence.
