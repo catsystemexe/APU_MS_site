@@ -12,15 +12,19 @@ export const DEV = Object.freeze({
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const INPUT_KEYS = ["kvNamespaceId", "accessApplicationId", "accessAudience", "accessTeamDomain", "operatorEmail"];
 const TELEMETRY_OFF = { APU_TELEMETRY_ENABLED: "0", APU_TELEMETRY_METADATA_ENABLED: "0" };
+const TELEMETRY_DATABASE = "apu-ms-site-dev-telemetry";
+const TELEMETRY_MIGRATIONS = "../../telemetry/migrations"; // Relative to dist/dev-worker/wrangler.json, not cwd.
 function validateTelemetry(value) {
   requireThat(object(value), "invalid_telemetry_input");
-  if (value.enabled === false) { equal(value, { enabled: false }, "invalid_telemetry_input"); return; }
-  equal(Object.keys(value).sort(), ["enabled", "databaseId", "databaseName", "dedicatedDev", "hostname", "cohort", "keyVersion", "noticeVersion"].sort(), "invalid_telemetry_input");
-  requireThat(value.enabled === true && value.dedicatedDev === true, "dedicated_telemetry_dev_required");
+  if (value.enabled === false && !Object.hasOwn(value, "staged")) { equal(value, { enabled: false }, "invalid_telemetry_input"); return; }
+  const staged = value.enabled === false && value.staged === true;
+  equal(Object.keys(value).sort(), ["enabled", "databaseId", "databaseName", "dedicatedDev", "hostname",
+    ...(staged ? ["staged"] : ["cohort", "keyVersion", "noticeVersion"])].sort(), "invalid_telemetry_input");
+  requireThat((staged || value.enabled === true) && value.dedicatedDev === true, "dedicated_telemetry_dev_required");
   requireThat(typeof value.databaseId === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(value.databaseId), "invalid_telemetry_database");
-  equal(value.databaseName, "apu-ms-site-dev-telemetry", "dedicated_telemetry_dev_required");
+  equal(value.databaseName, TELEMETRY_DATABASE, "dedicated_telemetry_dev_required");
   equal(value.hostname, "apu-ms-site-dev.catsystem-exe.workers.dev", "invalid_telemetry_hostname");
-  requireThat([value.cohort, value.keyVersion, value.noticeVersion].every(v => typeof v === "string" && /^[a-zA-Z0-9_-]{1,64}$/.test(v)), "invalid_telemetry_versions");
+  if (!staged) requireThat([value.cohort, value.keyVersion, value.noticeVersion].every(v => typeof v === "string" && /^[a-zA-Z0-9_-]{1,64}$/.test(v)), "invalid_telemetry_versions");
 }
 const EXISTING_KV = ["4a24c791d31a4c0983170c921cb744aa", "8dd4e8a10dc74086bbd746e733b3d8d8", "1729ce8a6acd4cdcbed8248ac543677b"];
 const EXISTING_AUD = "1e1680481c99464a844a6ef0e502cf49fae89fc91c8cf3806ba48026b0088610";
@@ -70,13 +74,15 @@ function materialize(template, inputs) {
   config.kv_namespaces = [{ binding: "DEV_LOG_STATE", id: inputs.kvNamespaceId }];
   config.vars = { APU_LOCAL_DEV_AUTH: "0", CF_ACCESS_TEAM_DOMAIN: inputs.accessTeamDomain,
     CF_ACCESS_AUD: inputs.accessAudience, APU_DEVELOPER_EMAILS: inputs.operatorEmail };
-  if (inputs.telemetry?.enabled === true) {
+  if (inputs.telemetry?.enabled === true || inputs.telemetry?.staged === true) {
     const t = inputs.telemetry;
-    requireThat(t.databaseId !== inputs.accessApplicationId, "invalid_telemetry_database");
-    config.d1_databases = [{ binding: "TELEMETRY_DB", database_id: t.databaseId, database_name: t.databaseName }];
-    Object.assign(config.vars, TELEMETRY_OFF, { APU_TELEMETRY_ENABLED: "1", APU_TELEMETRY_ENV: "dev",
-      APU_TELEMETRY_HOSTNAME: t.hostname, APU_TELEMETRY_COHORT: t.cohort, APU_TELEMETRY_KEY_VERSION: t.keyVersion,
-      APU_TELEMETRY_NOTICE_VERSION: t.noticeVersion });
+    requireThat(t.databaseId !== inputs.accessApplicationId && t.databaseId !== EXISTING_ACCESS_APP &&
+      ![inputs.kvNamespaceId, ...EXISTING_KV].includes(t.databaseId.replaceAll("-", "")), "invalid_telemetry_database");
+    config.d1_databases = [{ binding: "TELEMETRY_DB", database_id: t.databaseId, database_name: t.databaseName,
+      migrations_dir: TELEMETRY_MIGRATIONS }];
+    Object.assign(config.vars, TELEMETRY_OFF, { APU_TELEMETRY_ENV: "dev", APU_TELEMETRY_HOSTNAME: t.hostname });
+    if (t.enabled === true) Object.assign(config.vars, { APU_TELEMETRY_ENABLED: "1",
+      APU_TELEMETRY_COHORT: t.cohort, APU_TELEMETRY_KEY_VERSION: t.keyVersion, APU_TELEMETRY_NOTICE_VERSION: t.noticeVersion });
     // Keys, privacy approval and enrollment are separately gated; preparation cannot activate collection.
   }
   return config;
@@ -95,6 +101,11 @@ export function buildDevConfig(template, artifact, inputs) {
   equal(artifact.compatibility_date, CORE.compatibility_date, "unexpected_canonical_artifact");
   equal(artifact.compatibility_flags, CORE.compatibility_flags, "unexpected_canonical_artifact");
   equal(artifact.assets, { directory: "../client", binding: "ASSETS", not_found_handling: "none" }, "unexpected_canonical_artifact");
+  if (inputs.telemetry?.enabled === true || inputs.telemetry?.staged === true) {
+    const productionDatabases = artifact.d1_databases ?? [];
+    requireThat(Array.isArray(productionDatabases) && !productionDatabases.some(db => db?.database_id === inputs.telemetry.databaseId),
+      "production_telemetry_database_reuse_forbidden");
+  }
   const config = materialize(template, inputs);
   validateDevConfig(config, template, inputs);
   return config;
@@ -108,6 +119,14 @@ export function validateFutureDevCommand(command, args, config, template, inputs
   equal(command, "npx", "unsupported_dev_deployment_command");
   equal(args, futureDevCommand(), "unsupported_dev_deployment_command");
   validateDevConfig(config, template, inputs);
+}
+// Pure argument plan, never a process runner. G1-B needs separate authorization,
+// account/UUID/EU read-back; even Wrangler migrations list can create bookkeeping.
+export function telemetryMigrationArgs(action, config, template, inputs) {
+  validateDevConfig(config, template, inputs);
+  requireThat(inputs.telemetry?.enabled === false && inputs.telemetry?.staged === true, "staged_telemetry_required");
+  requireThat(action === "list" || action === "apply", "unsupported_telemetry_migration_action");
+  return ["d1", "migrations", action, TELEMETRY_DATABASE, "--remote", "--config", "dist/dev-worker/wrangler.json"];
 }
 export function parsePreparationArgs(args) {
   requireThat(Array.isArray(args), "unsupported_preparation_command");

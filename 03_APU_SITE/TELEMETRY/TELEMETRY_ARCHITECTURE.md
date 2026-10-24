@@ -327,3 +327,38 @@ The generated CSVs are committed as [synthetic restricted summary](../../telemet
 Three completion corrections were proven RED then GREEN: unsupported command filters cannot be ignored; linkage-off rows cannot expose account pseudonyms; a visit qualifies by observed lifetime activity even when that activity falls after the report end date. No B1/B2 runtime or business flow was modified. Typecheck and focused lint PASS with zero errors/warnings. Build/artifact evidence is reused from B2-R01 `5be74cf…`: `app/`, Worker, configuration and dependencies are byte-unchanged, and the new modules are local tools, not in the application bundle; canonical B3 explicitly permits this reuse. No hosted or browser acceptance is inferred.
 
 CI `unsupported_pr_branches` remains separate unchanged provenance; stacked feature-base PRs are outside the release-workflow trigger. B4 Local Verification is ready for separate authorization; G0–G5 remain open. Collection/metadata remain **OFF**, no deployment/remote provisioning/migration/export/deletion, actual AI call or real-user collection. No B4 work was started.
+
+
+## 13. G1-A DEV provisioning staging contract — 2026-10-24
+
+**SOURCE / LOCAL V2 PASS, not provisioned, published or collecting.** Based on verified G0 branch `g0/live-dev-infrastructure-evidence`, exact source HEAD `50cb49d41b0b299a0f0a0f2d34c9bd7430830cbd` (PR #74, stacked on `b4/evidence-h1-r1-windows`). New implementation is stacked directly on that HEAD; no merge. The original clean workspace and parent branch were preserved.
+
+Diagnosis: B1's only resource-bearing input required `enabled:true`, set collection to `1` and omitted the migration directory. The inactive template could not represent a pre-integration binding. [prepare-worker.mjs](../../ops/dev/prepare-worker.mjs) now accepts the smallest separate state: **`enabled:false, staged:true`** with the existing dedicated DEV name/UUID/hostname/isolation fields. `wrangler.dev.json` stays byte-for-byte unchanged and non-deployable as supplied; no binding or fabricated UUID is checked into it.
+
+| Preparation input | Generated binding / vars | Authorization boundary |
+| --- | --- | --- |
+| No telemetry, or exactly `{ "enabled": false }` | Original materialized output unchanged, no D1; telemetry flags remain absent as before, so runtime defaults OFF | Ordinary offline preparation only |
+| `{ "enabled": false, "staged": true, "dedicatedDev": true, "databaseId": "<verified UUID>", "databaseName": "apu-ms-site-dev-telemetry", "hostname": "apu-ms-site-dev.catsystem-exe.workers.dev" }` | One fixed `TELEMETRY_DB`; **APU_TELEMETRY_ENABLED=0**, **APU_TELEMETRY_METADATA_ENABLED=0**, DEV environment/hostname. No cohort/versions, enrollment, privacy override or secrets | G1-A local staging only; actual resource identity requires separate authenticated G1-B verification |
+| Existing `enabled:true` contract with cohort/key/notice versions | Existing enabled-mode validation/vars retained, metadata OFF; explicit migration directory added | Future separately authorized integration only; not selected or activated by G1 |
+
+All key allowlists remain strict. Worker/account/hostname and binding/name are fixed; missing/invalid UUID, unknown fields, binding substitution, activation/privacy/enrollment input and production targets fail closed. Both resource-bearing modes additionally reject normalized UUID reuse of supplied DEV/known production KV, Access identities and any D1 UUID declared in the canonical production artifact. The preparer reads no ambient defaults, production source config or secrets. These checks cannot authenticate an otherwise arbitrary UUID: the G1-B operator must independently verify ownership/name/EU jurisdiction. No auth/AUTH-01, business/reporting/metric/storage/runtime/CI policy change.
+
+**Migration evidence:** `migrations_dir: "../../telemetry/migrations"` is emitted for staged and future enabled bindings in `dist/dev-worker/wrangler.json`. Installed/locked Wrangler **4.150.0** uses `resolveMigrationsConfig` → `projectPath=dirname(configPath)` and `getMigrationsPath` → `resolve(projectPath,migrationsDir)`. Actual CLI tests run from an unrelated cwd with an absolute generated config and `--local`, discover only `0001_pilot_v1.sql`, apply it to disposable Miniflare D1, compare all three tables/six explicit indexes/four triggers against the unchanged SQL, then list/reapply and verify exactly one bookkeeping row and zero telemetry records. No second schema. SQL SHA-256: `81d3a4f48446b9583fd13b6288518fc06ea1ff283360001c2c84825f474c9d37`. Existing `PRAGMA foreign_keys`, JSON/check constraints, cascade references and triggers execute locally; remote compatibility remains subject to G1-B read-back.
+
+`telemetryMigrationArgs(action, config, template, inputs)` is a **pure argument planner** for `list`/`apply`, fixed named database and explicit generated config, requiring the full staged-OFF contract. It cannot execute a process or select a caller-supplied resource. The [Windows G1 operator runbook](G1_DEV_D1_RUNBOOK.md) separates account/inventory/EU creation/read-back, offline staging and approved remote migrations. A minimal unbound local bootstrap config, derived from DEV constants and schema-validated in tests, avoids an incomplete template/fake UUID before creation. Creation uses `--jurisdiction=eu --update-config=false`; migration listing is correctly placed after remote authorization because Wrangler can create `d1_migrations` during `list`.
+
+V2 (Linux, Node **24.19.0**):
+
+```sh
+npm ci --cache /tmp/apu-g1a-npm --ignore-scripts --no-audit --no-fund
+npm run build
+node --test tests/dev-worker-preparation.test.mjs tests/telemetry.test.mjs
+npm run typecheck
+npx --no-install eslint ops/dev/prepare-worker.mjs tests/dev-worker-preparation.test.mjs
+node tests/browser/telemetry/check-isolation.mjs
+git diff --check
+```
+
+**158 tests PASS**, zero failures/skips (139 preparation tests, including actual local Wrangler migration integration, plus 19 B1 telemetry regressions); typecheck and focused lint PASS, zero errors/warnings; canonical build and standalone Worker validation PASS. Artifact isolation: **92 production sources / 19 production artifacts / zero harness references**. Build finished before runtime tests; typecheck/lint followed them. Initial installed Wrangler was 4.92.0; locked reinstall restored 4.150.0 without package/lock edits. `wrangler.jsonc`, `wrangler.dev.json`, original SQL, package/lock and all app/Worker modules remain unchanged.
+
+No authenticated Cloudflare/account/remote jurisdiction verification, provisioning, remote migration, Worker deploy/version upload, secret publication, provider call or participant enrollment/collection was executed. Native Windows procedure is **not executed here**. B-07 stays OPEN; G0/G2/G4/G5 and applicable B4/integration gates remain separate. Secret names `TELEMETRY_PSEUDONYM_KEY` / `TELEMETRY_CONTEXT_KEY` are documented only; `wrangler secret put` is deferred because it can immediately publish/deploy a Worker version. **G1-B requires a separate local operator batch and explicit resource/migration authorization; stop before creation.**

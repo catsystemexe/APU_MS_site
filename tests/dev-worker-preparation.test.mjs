@@ -8,8 +8,9 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import ts from "typescript";
+import { DatabaseSync } from "node:sqlite";
 import { DEV, validateDevTemplate, validateDevInputs, buildDevConfig, validateDevConfig,
-  futureDevCommand, validateFutureDevCommand, parsePreparationArgs } from "../ops/dev/prepare-worker.mjs";
+  futureDevCommand, validateFutureDevCommand, parsePreparationArgs, telemetryMigrationArgs } from "../ops/dev/prepare-worker.mjs";
 const require = createRequire(import.meta.url);
 const yaml = require("js-yaml");
 const root = fileURLToPath(new URL("..", import.meta.url));
@@ -158,7 +159,7 @@ for (const args of [[], ["--deploy"], ["deploy"], futureDevCommand(), ["--check-
   ["--prepare-config", "--target", DEV.worker], ["--prepare-config", "--target", DEV.worker, "--inputs", "relative.json"]]) {
   test(`unsupported or implicit preparation command rejects ${JSON.stringify(args)}`, () => assert.throws(() => parsePreparationArgs(args)));
 }
-async function isolated() {
+async function isolated(telemetry) {
   const directory = await mkdtemp(join(tmpdir(), "apu-dev-preparation-"));
   const script = join(directory, "ops/dev/prepare-worker.mjs"), inputsPath = join(directory, "inputs.json");
   await mkdir(dirname(script), { recursive: true }); await mkdir(join(directory, "dist/server"), { recursive: true });
@@ -167,7 +168,7 @@ async function isolated() {
   await writeFile(join(directory, "wrangler.jsonc"), productionText);
   await writeFile(join(directory, "dist/server/wrangler.json"), JSON.stringify(artifact));
   await writeFile(join(directory, "dist/server/index.js"), "export default {fetch(){return new Response('synthetic')}}");
-  await writeFile(inputsPath, JSON.stringify(inputs()));
+  await writeFile(inputsPath, JSON.stringify({ ...inputs(), ...(telemetry ? { telemetry } : {}) }));
   const invoke = args => spawnSync(process.execPath, [script, ...args], { encoding: "utf8", env: {
     ...process.env, OPENAI_API_KEY: "PRIVATE_PRODUCTION_KEY", APU_VECTOR_STORE_ID: "PRIVATE_VECTOR", CF_ACCESS_AUD: production.previews.vars.CF_ACCESS_AUD } });
   return { directory, inputsPath, invoke };
@@ -229,7 +230,7 @@ test("B1 absent/disabled telemetry preserves original materialized bytes and has
 test("B1 explicit DEV-only D1 input produces only dedicated optional binding, remains privacy/key/enrollment gated", async () => {
   const value = { ...inputs(), telemetry: telemetryInputs() }, config = buildDevConfig(template, artifact, value);
   validateDevConfig(config, template, value);
-  assert.deepEqual(config.d1_databases, [{ binding: "TELEMETRY_DB", database_id: value.telemetry.databaseId, database_name: "apu-ms-site-dev-telemetry" }]);
+  assert.deepEqual(config.d1_databases, [{ binding: "TELEMETRY_DB", database_id: value.telemetry.databaseId, database_name: "apu-ms-site-dev-telemetry", migrations_dir: "../../telemetry/migrations" }]);
   assert.equal(config.vars.APU_TELEMETRY_ENABLED,"1"); assert.equal(config.vars.APU_TELEMETRY_ENV,"dev");
   assert.equal(config.vars.APU_TELEMETRY_METADATA_ENABLED,"0");
   assert.equal(config.vars.APU_TELEMETRY_PRIVACY_APPROVED,undefined); assert.equal(config.vars.TELEMETRY_CONTEXT_KEY,undefined);
@@ -251,3 +252,129 @@ for(const [label,change] of [
 });
 for(const [key,value] of [["APU_TELEMETRY_ENABLED","1"],["APU_TELEMETRY_METADATA_ENABLED","1"],["APU_TELEMETRY_COHORT","unreviewed"]])
   test(`B1 telemetry template rejects ${key}=${value}`,()=>{const altered=structuredClone(template);altered.vars[key]=value;assert.throws(()=>validateDevTemplate(altered));});
+
+
+const stagedTelemetry = () => ({ enabled: false, staged: true, dedicatedDev: true,
+  databaseId: "12345678-1234-4234-8234-123456789abc", databaseName: "apu-ms-site-dev-telemetry",
+  hostname: "apu-ms-site-dev.catsystem-exe.workers.dev" });
+test("G1 staging binds only DEV telemetry D1 with collection/metadata definitively OFF", async () => {
+  const value = { ...inputs(), telemetry: stagedTelemetry() }, config = buildDevConfig(template, artifact, value);
+  validateDevConfig(config, template, value);
+  assert.equal(config.name, "apu-ms-site-dev"); assert.equal(config.account_id, DEV.account);
+  assert.deepEqual(config.d1_databases, [{ binding: "TELEMETRY_DB", database_id: value.telemetry.databaseId,
+    database_name: "apu-ms-site-dev-telemetry", migrations_dir: "../../telemetry/migrations" }]);
+  assert.deepEqual(config.vars, { ...buildDevConfig(template, artifact, inputs()).vars,
+    APU_TELEMETRY_ENABLED: "0", APU_TELEMETRY_METADATA_ENABLED: "0", APU_TELEMETRY_ENV: "dev",
+    APU_TELEMETRY_HOSTNAME: "apu-ms-site-dev.catsystem-exe.workers.dev" });
+  assert.equal(resolve(root, "dist/dev-worker", config.d1_databases[0].migrations_dir), resolve(root, "telemetry/migrations"));
+  const schema = JSON.parse(await readFile(new URL("../node_modules/wrangler/config-schema.json", import.meta.url), "utf8"));
+  const Ajv = require("ajv"), validate = new Ajv({ strict: false, logger: false }).compile(schema);
+  assert.equal(validate(config), true, JSON.stringify(validate.errors));
+});
+for (const [label, change] of [
+  ["missing staging", t => delete t.staged], ["false staging", t => t.staged = false],
+  ["enabled staging", t => t.enabled = true], ["missing disabled flag", t => delete t.enabled],
+  ["false isolation", t => t.dedicatedDev = false], ["production Worker", t => t.worker = "apu-ms-site"],
+  ["production database", t => t.databaseName = "apu-ms-site-telemetry"],
+  ["business binding", t => t.binding = "DB"], ["binding override", t => t.binding = "TELEMETRY_DB"],
+  ["missing UUID", t => delete t.databaseId], ["malformed UUID", t => t.databaseId = "not-a-uuid"],
+  ["zero UUID", t => t.databaseId = "00000000-0000-0000-0000-000000000000"],
+  ["production KV as UUID", t => t.databaseId = "4a24c791-d31a-4c09-8317-0c921cb744aa"],
+  ["DEV Access UUID", t => t.databaseId = inputs().accessApplicationId],
+  ["existing Access UUID", t => t.databaseId = "67a86152-2917-40c8-8e5f-6dce0beeaca8"],
+  ["production hostname", t => t.hostname = "apu-ms-site.catsystem-exe.workers.dev"],
+  ["host suffix", t => t.hostname += ".invalid"], ["URL instead of hostname", t => t.hostname = "https://" + t.hostname],
+  ["metadata activation", t => t.metadataEnabled = true], ["privacy override", t => t.privacyApproved = true],
+  ["enrollment", t => t.eligible = ["actor"]], ["cohort", t => t.cohort = "pilot"],
+  ["secret", t => t.TELEMETRY_CONTEXT_KEY = "PRIVATE"],
+  ["migration substitution", t => t.migrations_dir = "../../db/migrations"],
+]) test(`G1 staged inputs reject ${label}`, () => {
+  const t = stagedTelemetry(); change(t); assert.throws(() => buildDevConfig(template, artifact, { ...inputs(), telemetry: t }));
+});
+for (const [label, change] of [
+  ["production Worker", c => c.name = DEV.productionWorker],
+  ["wrong UUID", c => c.d1_databases[0].database_id = "87654321-1234-4234-8234-123456789abc"],
+  ["wrong binding", c => c.d1_databases[0].binding = "DEV_LOG_STATE"],
+  ["wrong name", c => c.d1_databases[0].database_name = "apu-ms-site"],
+  ["wrong hostname", c => c.vars.APU_TELEMETRY_HOSTNAME = "apu.catsystem.ai"],
+  ["collection activation", c => c.vars.APU_TELEMETRY_ENABLED = "1"],
+  ["metadata activation", c => c.vars.APU_TELEMETRY_METADATA_ENABLED = "1"],
+  ["privacy override", c => c.vars.APU_TELEMETRY_PRIVACY_APPROVED = "1"],
+  ["enrollment", c => c.vars.APU_TELEMETRY_ELIGIBLE = "actor"],
+  ["migration default", c => delete c.d1_databases[0].migrations_dir],
+  ["migration substitution", c => c.d1_databases[0].migrations_dir = "../../db/migrations"],
+  ["production binding inheritance", c => c.d1_databases.push({ binding: "DB", database_name: "production" })],
+]) test(`G1 generated staged config rejects ${label}`, () => {
+  const value = { ...inputs(), telemetry: stagedTelemetry() }, config = buildDevConfig(template, artifact, value);
+  change(config); assert.throws(() => telemetryMigrationArgs("apply", config, template, value));
+});
+for (const mode of ["staged", "enabled"]) test(`G1 ${mode} rejects valid UUID reused from DEV KV or canonical production D1`, () => {
+  const telemetry = mode === "staged" ? stagedTelemetry() : telemetryInputs();
+  const value = { ...inputs(), telemetry };
+  assert.throws(() => buildDevConfig(template, artifact, { ...value, kvNamespaceId: telemetry.databaseId.replaceAll("-", "") }),
+    { code: "invalid_telemetry_database" });
+  assert.throws(() => buildDevConfig(template, { ...artifact, d1_databases: [{ binding: "PRODUCTION", database_id: telemetry.databaseId }] }, value),
+    { code: "production_telemetry_database_reuse_forbidden" });
+});
+test("G1 migration argument plans require staged OFF configuration, named DEV DB and explicit config only", () => {
+  const value = { ...inputs(), telemetry: stagedTelemetry() }, config = buildDevConfig(template, artifact, value);
+  for (const action of ["list", "apply"]) assert.deepEqual(telemetryMigrationArgs(action, config, template, value),
+    ["d1", "migrations", action, "apu-ms-site-dev-telemetry", "--remote", "--config", "dist/dev-worker/wrangler.json"]);
+  for (const action of ["execute", "create", "delete", "apply --config wrangler.jsonc", undefined])
+    assert.throws(() => telemetryMigrationArgs(action, config, template, value));
+  for (const telemetry of [undefined, { enabled: false }, telemetryInputs()]) {
+    const other = { ...inputs(), ...(telemetry ? { telemetry } : {}) };
+    assert.throws(() => telemetryMigrationArgs("apply", buildDevConfig(template, artifact, other), template, other), { code: "staged_telemetry_required" });
+  }
+});
+test("G1 actual pinned Wrangler resolves config-relative migration from unrelated cwd and applies once to local D1", { timeout: 90000 }, async () => {
+  const f = await isolated(stagedTelemetry());
+  try {
+    const migration = await readFile(new URL("../telemetry/migrations/0001_pilot_v1.sql", import.meta.url), "utf8");
+    await mkdir(join(f.directory, "telemetry/migrations"), { recursive: true });
+    await writeFile(join(f.directory, "telemetry/migrations/0001_pilot_v1.sql"), migration);
+    const prepared = f.invoke(["--prepare-config", "--target", DEV.worker, "--inputs", f.inputsPath]);
+    assert.equal(prepared.status, 0, prepared.stderr);
+    const configPath = join(f.directory, "dist/dev-worker/wrangler.json");
+    const configBytes = await readFile(configPath), config = JSON.parse(configBytes);
+    const value = { ...inputs(), telemetry: stagedTelemetry() };
+    validateDevConfig(config, template, value);
+    const cwd = join(f.directory, "unrelated-cwd"); await mkdir(cwd);
+    const env = { ...process.env, WRANGLER_SEND_METRICS: "false", WRANGLER_SEND_ERROR_REPORTS: "false",
+      WRANGLER_LOG_PATH: join(f.directory, "wrangler.log"), CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV: "false" };
+    for (const key of ["CLOUDFLARE_API_TOKEN", "CLOUDFLARE_API_KEY", "CLOUDFLARE_EMAIL", "CLOUDFLARE_ACCOUNT_ID"]) delete env[key];
+    const run = args => {
+      assert.ok(args.includes("--local") && !args.includes("--remote"), "local-only test execution");
+      const result = spawnSync(process.execPath, [resolve(root, "node_modules/wrangler/bin/wrangler.js"), ...args,
+        "--persist-to", join(f.directory, "local-state")], { cwd, env, encoding: "utf8", timeout: 25000 });
+      assert.equal(result.status, 0, result.stderr + result.stdout); return result.stdout;
+    };
+    const migrations = action => run(telemetryMigrationArgs(action, config, template, value)
+      .map(x => x === "--remote" ? "--local" : x === "dist/dev-worker/wrangler.json" ? configPath : x));
+    const query = command => JSON.parse(run(["d1", "execute", "apu-ms-site-dev-telemetry", "--local", "--config", configPath, "--command", command, "--json"]))[0].results;
+    assert.match(migrations("list"), /0001_pilot_v1\.sql/);
+    migrations("apply");
+    const sql = "SELECT type,name,tbl_name,sql FROM sqlite_schema WHERE name LIKE 'telemetry_%' AND sql IS NOT NULL ORDER BY type,name";
+    const expected = new DatabaseSync(":memory:");
+    try {
+      expected.exec(migration);
+      const normalize = rows => rows.map(r => ({ ...r, sql: r.sql.replace(/\s+/g, " ").trim() }));
+      assert.deepEqual(normalize(query(sql)), normalize(expected.prepare(sql).all().map(r => ({ ...r }))));
+    } finally { expected.close(); }
+    assert.doesNotMatch(migrations("list"), /0001_pilot_v1\.sql/);
+    migrations("apply"); // Reapplying via bookkeeping must not rerun CREATE TABLE.
+    assert.deepEqual(query("SELECT name,COUNT(*) AS applied FROM d1_migrations GROUP BY name"), [{ name: "0001_pilot_v1.sql", applied: 1 }]);
+    assert.deepEqual(query("SELECT (SELECT COUNT(*) FROM telemetry_sessions)+(SELECT COUNT(*) FROM telemetry_events)+(SELECT COUNT(*) FROM telemetry_ai_calls) AS records"), [{ records: 0 }]);
+    assert.deepEqual(await readFile(configPath), configBytes);
+    assert.equal(await readFile(join(f.directory, "wrangler.jsonc"), "utf8"), productionText);
+  } finally { await rm(f.directory, { recursive: true, force: true }); }
+});
+
+test("G1 operator bootstrap config is schema-valid without a fake pre-creation UUID; Wrangler matches the lock", async () => {
+  const installed = JSON.parse(await readFile(new URL("../node_modules/wrangler/package.json", import.meta.url), "utf8"));
+  const lock = JSON.parse(await readFile(new URL("../package-lock.json", import.meta.url), "utf8"));
+  assert.equal(installed.version, lock.packages["node_modules/wrangler"].version);
+  const schema = JSON.parse(await readFile(new URL("../node_modules/wrangler/config-schema.json", import.meta.url), "utf8"));
+  const Ajv = require("ajv"), validate = new Ajv({ strict: false, logger: false }).compile(schema);
+  assert.equal(validate({ name: DEV.worker, account_id: DEV.account, send_metrics: false }), true, JSON.stringify(validate.errors));
+});
