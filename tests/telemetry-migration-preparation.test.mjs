@@ -59,7 +59,7 @@ async function fixture() {
   await writeFile(idPath, JSON.stringify(identity()));
   return { directory, repo, evidence, tool, idPath, configPath, script: join(repo, "ops/dev/prepare-telemetry-migration.mjs") };
 }
-test("CLI is offline, external/exclusive, rejects symlinks, unknown args and in-repo UUID config", async () => {
+test("CLI is offline, external/exclusive, rejects unknown args and in-repo UUID config", async t => {
   const f = await fixture();
   try {
     const invoke = args => spawnSync(process.execPath, [f.script, ...args], { encoding: "utf8" });
@@ -75,13 +75,22 @@ test("CLI is offline, external/exclusive, rejects symlinks, unknown args and in-
     await writeFile(readbackPath, JSON.stringify({ ...preflight(), applied: [{ name: MIGRATION.file }] }));
     assert.equal(invoke(["--plan", "apply", "--identity", f.idPath, "--config", f.configPath, "--preflight", readbackPath]).status, 1);
     for (const bad of [["--deploy"], [...args, "--force"], ["--prepare", "--identity", f.idPath, "--config", join(f.repo, "config.json")]]) assert.equal(invoke(bad).status, 1);
-    const linked = join(f.evidence, "linked.json"); await symlink(f.idPath, linked);
-    assert.equal(invoke(["--prepare", "--identity", linked, "--config", join(f.evidence, "other.json")]).status, 1);
+    await t.test("CLI refuses a real identity symlink", async sub => {
+      const linked = join(f.evidence, "linked.json");
+      try { await symlink(f.idPath, linked); }
+      catch (error) {
+        if (process.platform === "win32" && ["EPERM", "EACCES"].includes(error.code)) {
+          sub.skip(`NOT VERIFIED: Windows symlink creation denied (${error.code}); rerun with symlink privileges`); return;
+        }
+        throw error;
+      }
+      assert.equal(invoke(["--prepare", "--identity", linked, "--config", join(f.evidence, "other.json")]).status, 1);
+    });
     const source = await readFile(f.script, "utf8");
     assert.doesNotMatch(source, /node:child_process|\bfetch\s*\(|process\.env\s*[.\[]/);
   } finally { await rm(f.directory, { recursive: true, force: true }); }
 });
-test("only byte-exact approved LF/CRLF migration files pass; changed SQL, extra files and symlinks stop", async () => {
+test("only byte-exact approved LF/CRLF migration files pass; changed SQL and extra files stop", async t => {
   const f = await fixture();
   try {
     const file = join(f.repo, "telemetry/migrations", MIGRATION.file);
@@ -93,8 +102,18 @@ test("only byte-exact approved LF/CRLF migration files pass; changed SQL, extra 
     await writeFile(file, lf + "-- changed\n"); assert.throws(() => f.tool.buildMigrationConfig(identity()), /unapproved_migration_hash/);
     await writeFile(file, lf); await writeFile(join(dirname(file), "0002_other.sql"), "SELECT 1;");
     assert.throws(() => f.tool.verifyApprovedMigration(), /unexpected_migration_files/);
-    await rm(join(dirname(file), "0002_other.sql")); await rm(file); await symlink(resolve(root, "telemetry/migrations", MIGRATION.file), file);
-    assert.throws(() => f.tool.verifyApprovedMigration(), /unsafe_migration_file/);
+    await rm(join(dirname(file), "0002_other.sql"));
+    await t.test("migration refuses a real SQL symlink", async sub => {
+      await rm(file);
+      try { await symlink(resolve(root, "telemetry/migrations", MIGRATION.file), file); }
+      catch (error) {
+        if (process.platform === "win32" && ["EPERM", "EACCES"].includes(error.code)) {
+          sub.skip(`NOT VERIFIED: Windows symlink creation denied (${error.code}); rerun with symlink privileges`); return;
+        }
+        throw error;
+      }
+      assert.throws(() => f.tool.verifyApprovedMigration(), /unsafe_migration_file/);
+    });
   } finally { await rm(f.directory, { recursive: true, force: true }); }
 });
 test("installed Wrangler loads absolute migration path from minimal external config, applies once locally and reconciles schema", { timeout: 90000 }, async () => {

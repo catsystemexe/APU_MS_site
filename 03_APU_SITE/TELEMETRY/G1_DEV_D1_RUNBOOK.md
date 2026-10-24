@@ -51,7 +51,7 @@ No generic whitespace normalization, extra SQL, migration regeneration or symlin
 
 ### 2. Offline Windows preparation
 
-Use the exact reviewed correction SHA from its completion report/PR, a clean source checkout and existing locked dependencies (Node 24 / Wrangler 4.150.0). Preserve earlier evidence/worktrees; no reset, clean or overwrite. If dependencies are absent, use locked `npm.cmd ci`; do not use the default deploy command or production config.
+Use the exact reviewed correction SHA from its completion report/PR, a clean source checkout and existing locked dependencies. The project minimum remains **Node >=22.13.0**, with pinned Wrangler **4.150.0**. **Node 24 is not required.** Node **22.23.2** is verified for this procedure on Linux; native Windows is a separate check. Use 22.23.2 for the reproducible G1-B-R2 Windows comparison below. Preserve earlier evidence/worktrees; no reset, clean or overwrite. If dependencies are absent, use locked `npm.cmd ci`; do not use the default deploy command or production config.
 
 ```powershell
 $SourceSha = '<exact reviewed migration-only correction SHA>'
@@ -63,6 +63,8 @@ $Evidence = (Resolve-Path '<existing restricted directory outside repository>').
 $IdentityFile = Join-Path $Evidence 'identity.json' # Original restricted receipt, four fields above.
 $ConfigFile = Join-Path $Evidence 'migration-only-wrangler.json' # Must be a fresh output path.
 $DeploymentReceipt = Join-Path $Evidence 'original-dev-deployment.json' # Original restricted deployments-list evidence.
+$NodeVersion = (& node.exe --version | Out-String).Trim()
+if ($LASTEXITCODE -ne 0 -or [version]$NodeVersion.TrimStart('v') -lt [version]'22.13.0') { throw 'Node >=22.13.0 required' }
 $Wrangler = Join-Path $Repo 'node_modules\.bin\wrangler.cmd'
 $Version = (& $Wrangler --version | Out-String).Trim()
 if ($LASTEXITCODE -ne 0 -or $Version -cne '4.150.0') { throw 'Wrong project-local Wrangler' }
@@ -198,3 +200,45 @@ git diff --check
 Actual local Wrangler/Miniflare D1 loads the minimal external config from an unrelated cwd without Worker artifact/inputs, discovers the absolute approved migration, applies it once, reconciles exact schema **3/6/4**, one bookkeeping row, zero telemetry rows and no foreign-key violations. Target/account/name/binding/UUID tampering, wrong/duplicate/missing read-back, missing EU, modified/extra/symlink SQL and replay/unknown schema all reject. LF and CRLF hashes both verified; no SQL changes. CLI is local files/pure argument planning only; test subprocesses enforce `--local` and reject `--remote` execution.
 
 Native PowerShell procedure and current remote state were **not executed/verified by this correction**. G1-B remains **PARTIAL**, created D1 / unapplied remote migration per #78; this batch made **zero remote mutations**. No changelog, backlog or Known Issues update; no history rewrite. STOP after source preparation; operator remote migration and later Worker integration are separate execution boundaries.
+
+
+## R01/R02 operator compatibility correction — 2026-10-24
+
+Verified starting HEAD: `3f5c6d39266396b10dc69587ac0d5350ec96707d` (PR #80). Node **22.23.2 / Linux x64**, official archive from `https://nodejs.org/dist/v22.23.2/` checked against its published `SHASUMS256.txt`. The unchanged migration CLI and its actual Wrangler child processes ran through `process.execPath` under Node 22.23.2; configuration preparation/check/planning, local D1 application, exact schema/bookkeeping/zero-row checks and unchanged DEV preparation guards all passed. This verifies Node 22.23.2 on Linux, not native Windows or every Node patch at/above the unchanged project minimum. Package/dependency versions and migration/Worker production code are unchanged.
+
+**V2 Linux PASS: 169 tests, zero fail/skip** — 30 migration-preparation tests (including two isolated symlink subtests) plus 139 original DEV preparation regressions. Both real symlinks were created and their original security assertions executed successfully. Typecheck and focused lint also PASS under Node 22.23.2; diff/scope checks PASS. No build or timing-sensitive operation ran concurrently with the runtime tests.
+
+Actual Cloud commands (temporary Node binary only; no project install/version changes):
+
+```sh
+/tmp/apu-node-22.23.2/node-v22.23.2-linux-x64/bin/node --version
+/tmp/apu-node-22.23.2/node-v22.23.2-linux-x64/bin/node --test --test-concurrency=1 tests/telemetry-migration-preparation.test.mjs tests/dev-worker-preparation.test.mjs
+/tmp/apu-node-22.23.2/node-v22.23.2-linux-x64/bin/node node_modules/typescript/bin/tsc --noEmit
+/tmp/apu-node-22.23.2/node-v22.23.2-linux-x64/bin/node node_modules/eslint/bin/eslint.js tests/telemetry-migration-preparation.test.mjs
+git diff --check
+```
+
+Each migration-test symlink subtest attempts creation in its own existing writable fixture. **Only Windows `EPERM`/`EACCES` from that creation call** cause the corresponding child to report **SKIP / NOT VERIFIED: Windows symlink creation denied**. Other parent assertions still run. Successful creation always runs the original refusal assertion; assertion failures and every other unexpected error (including non-Windows permission errors) remain FAIL. No production symlink/path guard was changed. A capability skip is not a security PASS; rerun that check with an authorized symlink-capable Windows environment to close its coverage.
+
+### Exact native Windows G1-B-R2 verification handoff — offline only
+
+Use the corrective commit from PR #80/completion report in a preserved reviewed checkout, existing locked dependencies and installed Node **22.23.2**. This exact patch check is for reproducing the compatibility evidence, not a new project minimum. Do not reset/clean an evidence worktree or change permissions automatically. No Worker build, private DEV KV/Access values, D1 identity receipt or Cloudflare authentication is required for these synthetic tests.
+
+```powershell
+$ExpectedSource = '<exact R01/R02 correction commit from PR #80 completion report>'
+if ((git rev-parse HEAD).Trim() -cne $ExpectedSource) { throw 'Wrong source' }
+$NodeVersion = (& node.exe --version | Out-String).Trim()
+if ($LASTEXITCODE -ne 0 -or $NodeVersion -cne 'v22.23.2') { throw 'Use Node 22.23.2 for this native compatibility verification' }
+$WranglerVersion = (& .\node_modules\.bin\wrangler.cmd --version | Out-String).Trim()
+if ($LASTEXITCODE -ne 0 -or $WranglerVersion -cne '4.150.0') { throw 'Use the existing pinned Wrangler' }
+$NativeLog = Join-Path $env:TEMP ('apu-g1b-r2-native-' + [guid]::NewGuid().ToString() + '.log')
+"Source=$ExpectedSource`nNode=$NodeVersion`nWrangler=$WranglerVersion`nOS=$([Environment]::OSVersion.VersionString)" | Set-Content -LiteralPath $NativeLog -Encoding utf8
+node.exe --test --test-reporter=spec tests/telemetry-migration-preparation.test.mjs 2>&1 | Tee-Object -FilePath $NativeLog -Append
+$TestExitCode = $LASTEXITCODE
+Write-Output "Evidence: $NativeLog"
+if ($TestExitCode -ne 0) { throw 'Native migration tests FAIL; preserve the log' }
+```
+
+Record exit code, exact SHA/OS/Node/Wrangler versions, PASS/FAIL/SKIP counts and individual skip reasons. Expected suite size is **30**: with symlink capability, **30 PASS / 0 SKIP**; if both Windows symlink creations are permission-denied, **28 PASS / 2 capability SKIP**. A single denied check yields one capability SKIP. Even with exit code zero, mark each skipped symlink security check **NOT VERIFIED**. Other tests must pass; do not hide a failure by skipping a parent or broadening tolerated errors. This native handoff covers migration preparation, not native DEV Worker/toolchain/hosted acceptance; the 139 unchanged DEV preparation regressions were separately run in Linux V2.
+
+**Native Windows NOT VERIFIED in Cloud.** G1-B remote state remains PARTIAL per #78; this compatibility correction made no Cloudflare remote call/mutation, migration, deployment, secret publication or activation. Existing approval remains limited to the original single migration on the already-created EU D1; do not execute it as part of this offline compatibility check. STOP here.
