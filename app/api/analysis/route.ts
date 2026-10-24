@@ -1,3 +1,4 @@
+import { requirePilotRulesAcceptance } from "../../pilot-rules-server";
 import type { ServerIdentity } from "../../server-capabilities";
 import instructions from "../../../apu-core/v1.6/00_INSTRUCTIONS_v1.6.md?raw";
 import { cleanAnalysisQuestionText, stripLegacyQuestionFromSummary, type AnalysisState } from "../../analysis-model";
@@ -170,6 +171,8 @@ export async function POST(request: Request) {
   const started = performance.now();
   const identity = await getAccessIdentity(request.headers);
   if (!identity) return jsonError("Chybí platná identita Cloudflare Access.", 401);
+  const rulesDenied = await requirePilotRulesAcceptance(identity);
+  if (rulesDenied) return rulesDenied;
   const apiKey = process.env.OPENAI_API_KEY;
   const vectorStoreId = process.env.APU_VECTOR_STORE_ID;
   if (!apiKey || !vectorStoreId) return jsonError("APU není dokončeno: chybí serverová konfigurace.", 503);
