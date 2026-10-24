@@ -34,6 +34,10 @@ Source of evidence:
 
 The live evidence confirms the named DEV Worker and its active uploaded version, but does not establish plan capacity, account-wide usage/headroom, route protection, Git provenance, effective observability retention or the required EU telemetry D1. G0 therefore does not satisfy the evidence threshold for G1 or G5.
 
+### Dashboard follow-up — 2026-10-24
+
+An authenticated Dashboard session was not available in the local browser. Opening `https://dash.cloudflare.com/` redirected to the Cloudflare sign-in page; no credentials or SSO flow was entered and no authentication bypass was attempted. Consequently the following remain **NOT VERIFIED** from Dashboard: Workers Free/Paid plan, Workers/D1 usage and headroom, shared account limits, effective DEV routes/domains and Access policy, and observability/edge log retention. The Wrangler evidence above remains valid and is not replaced by this access limitation.
+
 ## 1. Evidence checkpoint and scope correction
 
 Canonical audited tree: [`dev` commit fc8ac5520b7b49b442bedc47558c73f20ce2bea6](https://github.com/catsystemexe/APU_MS_site/commit/fc8ac5520b7b49b442bedc47558c73f20ce2bea6). All repository paths below refer to this exact SHA. Local detached checkout and authenticated connector reads agreed. Working tree was clean before documentation work.
