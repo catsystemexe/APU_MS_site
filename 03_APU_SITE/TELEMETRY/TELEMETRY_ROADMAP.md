@@ -144,6 +144,10 @@ The separately authorized harness is implemented above repair `9018512621c8a2d82
 H1 proves seeded F1–F3/default/regeneration/reset, cost/unknown/output associations, consent and failure boundaries, actual CSV, clock-controlled idle and two overlapping browser intervals. It excludes production SSR/RSC/Vinext/Worker bootstrap, native Windows/OS/hidden-tab behavior and the standard launcher. The prior UI overlay finding remains unconfirmed. B-07 remains OPEN, B4 full acceptance/G0–G5 remain pending, collection/metadata OFF. No B4 completion or hosted verification is authorized by this result; stop after H1.
 
 
+## G1-B-R1 provisioning outcome - 2026-10-24
+
+**PARTIAL.** Canonical Windows build and Worker artifact validation passed on source `bf32bd2fd29f6f6ebd717deea2b7df8163cb8a56`. The authorized `apu-ms-site-dev-telemetry` D1 was created with verified `eu` jurisdiction and remains empty (`num_tables: 0`, zero reads/writes). Staging could not proceed because the protected reviewed DEV KV/Access inputs were unavailable; the public example is null-only. Migration was not applied, no Worker binding was published, and B-07 remains OPEN.
+
 ## G1-A staging verification — 2026-10-24
 
 **DEV PROVISIONING STAGING CONTRACT / SOURCE V2 PASS.** Implemented directly above G0 `50cb49d41b0b299a0f0a0f2d34c9bd7430830cbd`, PR #74 ancestry verified. An explicit `enabled:false, staged:true` telemetry input now permits a dedicated DEV-only binding while both collection and optional metadata remain **0**. Absent/disabled output is unchanged; future enabled-mode fail-closed security validation remains intact. Fixed resource identity/known reuse guards, config-relative `../../telemetry/migrations` and a pure staged-only named migration argument planner are verified. [Implemented contract and exact commands](TELEMETRY_ARCHITECTURE.md#13-g1-a-dev-provisioning-staging-contract--2026-10-24).
