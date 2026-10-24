@@ -4,6 +4,12 @@ Status: CURRENT
 
 Records significant verified product/runtime/project changes. It is not a complete Git log. Historical Sites-era entries are retained where they remain useful; current deployment state must not be inferred from a changelog entry alone.
 
+## 2026-10-24 — G1-A DEV telemetry provisioning staging, source only
+
+- Added explicit strict `enabled:false, staged:true` preparation input: dedicated DEV `TELEMETRY_DB`, collection/metadata OFF, no enrollment/privacy override/secrets. Original absent/disabled behavior and future enabled security contract remain intact; known resource-reuse guards strengthened. Production and inactive DEV template configs unchanged.
+- Added config-relative telemetry migration directory and pure named migration argument plan; verified the unchanged SQL with actual local Wrangler 4.150.0/Miniflare D1, exact schema and once-only bookkeeping. [Contract / V2 evidence](../TELEMETRY/TELEMETRY_ARCHITECTURE.md#13-g1-a-dev-provisioning-staging-contract--2026-10-24) and [separately authorized Windows G1-B runbook](../TELEMETRY/G1_DEV_D1_RUNBOOK.md).
+- V2: 158 preparation/B1 tests, typecheck, focused lint, canonical build/Worker validation and artifact isolation PASS. No remote command, provisioning, deployment, secret publication, provider call or collection. G1-B not executed, B-07 OPEN, G0/G2/G4/G5 remain separate.
+
 ## 2026-10-23 — Pilot telemetry B3 reporting, source implementation only
 
 - Completed the preserved B3 WIP over B2 without resetting/recreating the checkout. Added bounded SQL/local reports for all P0 economics/activity/workflow/coverage metrics, exact median/denominators, Prague civil-time union and mature/censored/left-truncated states. Reused immutable ledger pricing; no business or application module change.
