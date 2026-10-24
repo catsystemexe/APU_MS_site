@@ -4,6 +4,18 @@ Status: read-only evidence audit, 2026-10-23 Europe/Prague. No application/confi
 
 ## 0. G0 live DEV read-back — 2026-10-24
 
+### G1-B EU D1 provisioning - 2026-10-24
+
+**Result: PARTIAL.** The authorized G1-B run used source `bf32bd2fd29f6f6ebd717deea2b7df8163cb8a56` in a clean Windows worktree. The canonical build and standalone Worker artifact validation passed; project Wrangler `4.150.0` was used.
+
+Read-only preflight confirmed the authorized DEV account, Worker `apu-ms-site-dev`, deployment `ca7ca974-40c1-4669-8ddb-21db4b8a75bf` with active version `cba179ae-6f82-4c0e-bdac-5727d197cc85`, and an empty D1 inventory immediately before creation. Workers Paid remained supported by the existing operator evidence; no new billing read-back was performed.
+
+The one authorized D1 was created as `apu-ms-site-dev-telemetry` with jurisdiction `eu`. Restricted operator evidence records UUID `7a5c039d-e1b3-4f37-92a4-412e1ec3a934`; `d1 info` confirmed `jurisdiction: eu`, region `EEUR`, `num_tables: 0`, and zero reads/writes. No binding was published.
+
+The run stopped before staging and migration because the reviewed private DEV KV/Access input values were not available in the worktree; the tracked example contains only null placeholders. No production values were substituted. Consequently the approved migration was **not applied**, `d1_migrations` was not initialized, telemetry tables remain absent, and no telemetry rows exist. Worker deployment/version, production resources, secrets, Zero Trust, and telemetry activation were not changed.
+
+The next minimal step is to provide the already-reviewed DEV-only input file through the protected operator path, rerun staging validation, then perform only the single approved migration. Do not recreate the existing D1 and do not run `DROP`, `DELETE`, or an unplanned repair.
+
 ### Billing follow-up — 2026-10-24
 
 The account owner reported completing the Workers plan upgrade in an external authenticated Brave browser. The operator-provided screenshot showed **“Purchase complete”**, **“Subscription is active”**, and **Workers Paid Plan: USD 5/month**. This is **VERIFIED BY OPERATOR SCREENSHOT**, not an independent Wrangler/API billing read-back. No further upgrade was attempted from this environment.
