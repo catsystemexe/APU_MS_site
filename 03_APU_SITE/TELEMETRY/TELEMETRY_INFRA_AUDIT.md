@@ -1,20 +1,20 @@
 # TELEMETRY_INFRA_AUDIT
 
-Status: read-only evidence audit, 2026-10-23 Europe/Prague. No application/configuration changes, database creation, provider calls or deployment performed. Proposed changes live in the companion documents, not in this capability matrix's current-state claims.
+Status: historical source audit (2026-10-23 Europe/Prague), supplemented by operator G0/G1-B evidence (2026-10-24). G1-B is PARTIAL: EU D1 created, remote schema unapplied per evidence commit `630a7bf97e0cb4628e244464b2238825a67b7910`. This migration-procedure correction is offline only; no fresh Cloudflare state or remote mutation is claimed.
 
 ## 0. G0 live DEV read-back — 2026-10-24
 
 ### G1-B EU D1 provisioning - 2026-10-24
 
-**Result: PARTIAL.** The authorized G1-B run used source `bf32bd2fd29f6f6ebd717deea2b7df8163cb8a56` in a clean Windows worktree. The canonical build and standalone Worker artifact validation passed; project Wrangler `4.150.0` was used.
+**Result: PARTIAL.** Evidence commit: [`630a7bf97e0cb4628e244464b2238825a67b7910`](https://github.com/catsystemexe/APU_MS_site/commit/630a7bf97e0cb4628e244464b2238825a67b7910) (PR #78); executed source is distinct from this evidence SHA. The authorized G1-B run used source `bf32bd2fd29f6f6ebd717deea2b7df8163cb8a56` in a clean Windows worktree. The canonical build and standalone Worker artifact validation passed; project Wrangler `4.150.0` was used.
 
 Read-only preflight confirmed the authorized DEV account, Worker `apu-ms-site-dev`, deployment `ca7ca974-40c1-4669-8ddb-21db4b8a75bf` with active version `cba179ae-6f82-4c0e-bdac-5727d197cc85`, and an empty D1 inventory immediately before creation. Workers Paid remained supported by the existing operator evidence; no new billing read-back was performed.
 
-The one authorized D1 was created as `apu-ms-site-dev-telemetry` with jurisdiction `eu`. Restricted operator evidence records UUID `7a5c039d-e1b3-4f37-92a4-412e1ec3a934`; `d1 info` confirmed `jurisdiction: eu`, region `EEUR`, `num_tables: 0`, and zero reads/writes. No binding was published.
+The one authorized D1 was created as `apu-ms-site-dev-telemetry` with jurisdiction `eu`. The UUID is retained only in the [restricted operator creation receipt / info evidence referenced by PR #78](https://github.com/catsystemexe/APU_MS_site/pull/78); `d1 info` confirmed `jurisdiction: eu`, region `EEUR`, `num_tables: 0`, and zero reads/writes. No binding was published.
 
 The run stopped before staging and migration because the reviewed private DEV KV/Access input values were not available in the worktree; the tracked example contains only null placeholders. No production values were substituted. Consequently the approved migration was **not applied**, `d1_migrations` was not initialized, telemetry tables remain absent, and no telemetry rows exist. Worker deployment/version, production resources, secrets, Zero Trust, and telemetry activation were not changed.
 
-The next minimal step is to provide the already-reviewed DEV-only input file through the protected operator path, rerun staging validation, then perform only the single approved migration. Do not recreate the existing D1 and do not run `DROP`, `DELETE`, or an unplanned repair.
+Procedure correction: the migration no longer depends on protected KV/Access Worker inputs. Use the [migration-only runbook, phase B](G1_DEV_D1_RUNBOOK.md#b-d1-migration-only--pending) with the original restricted UUID receipt plus fresh account/inventory/EU/deployment/schema checks. Phase A creation is complete and must not repeat; phase C Worker staging/binding is deferred. Local source verification does not apply the remote schema. The historical run remains PARTIAL: created EU D1, unapplied migration. This correction executed no Cloudflare remote command and does not re-read current remote state. The previous full UUID is removed from the current document; Git history is preserved without force-push or rewriting.
 
 ### Billing follow-up — 2026-10-24
 
@@ -35,6 +35,8 @@ Source of evidence:
 - Authenticated `wrangler whoami`; account identity and token values are not reproduced here.
 - Commands used: `wrangler --version`, `wrangler whoami`, `deployments list --name apu-ms-site-dev --json`, `versions list --name apu-ms-site-dev --json`, `versions view cba179ae-6f82-4c0e-bdac-5727d197cc85 --name apu-ms-site-dev --json`, `d1 list --json`.
 - No secret values, raw logs, user data or provider calls were read.
+
+The following G0 table is historical **pre-creation** read-back. The G1-B section above supersedes its D1-absence finding; other recorded limitations retain their original scope.
 
 | G0 item | Result | Evidence / limit |
 |---|---|---|
