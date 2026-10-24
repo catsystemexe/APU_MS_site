@@ -2,9 +2,18 @@
 
 Status: **B1 FOUNDATION + B2 CORE METRICS + B3 REPORTING — local technical PASS; B4-H1-R1 native Windows Chromium harness PASS; collection disabled, not deployed. Standard SSR/Vinext/Worker and hosted verification remain separate boundaries.** Hosted activation / collection from real participants: **BLOCKED on explicit gates**, not authorized. Prepared 2026-10-24; verified R1 source `b8fdde42e75398198cd10fe305048aa722a42c43`.
 
+## 0. Approved pilot capacity and tariff decision — 2026-10-24
+
+- **Operating envelope:** at most **50 pilot participants per day**; this is a participant count, **not** a one-session-per-person/day limit. Repeat visits and sessions are expected and remain measurable.
+- **Target plan:** **Cloudflare Workers Paid**, with an indicative base charge of **USD 5 per account per month** plus any usage beyond included allowances. This is a target selection, **not** confirmation of the account's current plan or a guaranteed total bill.
+- **Architecture and value:** retain the approved same-DEV-Worker collector, dedicated telemetry D1 and all P0 economics/activity/workflow/quality metrics. Do not degrade their coverage, event cadence or fidelity solely to fit Workers Free.
+- **Retention and metadata:** retain **30 days of raw telemetry as the proposed baseline**, subject to controller/privacy approval; optional content/route/format metadata remains **OFF** pending G3. No free-text collection is authorized.
+- **Load evidence:** the earlier **200 sessions/day** and 6,000-session/30-day resource models remain upper-load/stress scenarios, **not** the expected 50-participant daily footprint. Actual sessions per participant and D1-billed row usage/headroom require live G0/G4 verification.
+- **Authority boundary:** this decision does not authorize upgrading the Cloudflare plan, provisioning/migrating D1, changing bindings/secrets, deploying, activating telemetry, or collecting from real users. G0–G5 and separate authorizations remain required.
+
 ## 1. Technical sequence and estimates
 
-Estimates are human engineering hours, including targeted tests/review/docs, for someone familiar with this TypeScript/Vinext project. They are not model wall-clock predictions or commercial commitments. Assume 20–100 pilot participants, no authentication redesign, no classifier, one D1, existing AI ledger and local fixture infrastructure. Access delays, security/legal decisions, real-world pilot elapsed time and provider charges are excluded. Unknown Vinext lifetime integration or materially changed source can increase estimates.
+Estimates are human engineering hours, including targeted tests/review/docs, for someone familiar with this TypeScript/Vinext project. They are not model wall-clock predictions or commercial commitments. The original engineering estimates assumed 20–100 pilot participants (historical sizing baseline), no authentication redesign, no classifier, one D1, existing AI ledger and local fixture infrastructure. The approved operating envelope is now up to 50 participants per day, with repeat sessions permitted. Access delays, security/legal decisions, real-world pilot elapsed time and provider charges are excluded. Unknown Vinext lifetime integration or materially changed source can increase estimates.
 
 | Step / batch | Goal and scope | Dependencies / priority | Effort | Profile / environment | Risks | Acceptance and exit condition |
 | --- | --- | --- | --- | --- | --- | --- |
