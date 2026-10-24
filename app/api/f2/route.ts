@@ -1,3 +1,4 @@
+import { requirePilotRulesAcceptance } from "../../pilot-rules-server";
 import { getAccessIdentity } from "../../access-auth";
 import { manualModelOverrideDenied, type ServerIdentity } from "../../server-capabilities";
 import { parseProviderRozborComponents, rozborComponentProviderSchema } from "../../f2-component-provider-contract";
@@ -85,6 +86,8 @@ function validSnapshot(value: unknown): value is F2PreviewSnapshot { if (!value 
 export async function POST(request: Request) {
   const identity = await getAccessIdentity(request.headers);
   if (!identity) return error("Chybí platná identita Cloudflare Access.", 401);
+  const rulesDenied = await requirePilotRulesAcceptance(identity);
+  if (rulesDenied) return rulesDenied;
   const apiKey = process.env.OPENAI_API_KEY;
   let body: Record<string, unknown>; try { body = await request.json(); } catch { return error("Neplatný formát požadavku.", 400); }
   if (!body || typeof body !== "object" || Array.isArray(body)) return error("Neplatný formát požadavku.", 400);

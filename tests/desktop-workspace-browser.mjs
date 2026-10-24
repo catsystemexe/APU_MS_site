@@ -22,6 +22,8 @@ const require = createRequire(new URL("../package.json", import.meta.url));
 const fixture = `import React from 'react';
 import { createRoot } from 'react-dom/client';
 import ApuClient from '/workspace/APU_MS_site/app/apu-client';
+import {PILOT_RULES_VERSION,PILOT_INFORMATION_VERSION} from '/workspace/APU_MS_site/app/pilot-rules';
+import {fetchPedagogical} from '/workspace/APU_MS_site/app/pilot-rules-client';
 import { createNotebookStorage, notebookStorageKey } from '/workspace/APU_MS_site/app/notebook-storage';
 const fixtureIdentity={email:new URLSearchParams(location.search).get('email') || 'test@example.invalid',isDeveloper:new URLSearchParams(location.search).has('developer')};
 window.fixtureIdentity=fixtureIdentity;
@@ -96,7 +98,23 @@ window.finishPreview = (kind='done', index=window.previewChats.length-1, text='D
   }
   c.close();
 };
+window.rules={receipts:new Map([[fixtureIdentity.email,{rulesVersion:PILOT_RULES_VERSION,informationVersion:PILOT_INFORMATION_VERSION,acceptedAt:new Date(Date.now()-1000).toISOString(),expiresAt:new Date(Date.now()+600000).toISOString()}]]),calls:[],pending:[],failGet:false,failPost:false,lag:false,deferNextGet:false,deferNextPost:false};
+window.fixtureRulesFetch=fetchPedagogical;
 window.fetch = async (url, init) => {
+  if(url==='/api/pilot-rules') {
+    const method=init?.method||'GET',email=window.sessionRevalidation.email;
+    window.rules.calls.push({method,email,body:init?.body?JSON.parse(init.body):null});
+    const respond=()=>{
+      if(!window.rules.enforceFirstEntry&&!window.rules.receipts.has(email)) window.rules.receipts.set(email,{rulesVersion:PILOT_RULES_VERSION,informationVersion:PILOT_INFORMATION_VERSION,acceptedAt:new Date(Date.now()-1000).toISOString(),expiresAt:new Date(Date.now()+600000).toISOString()});
+      if((method==='GET'&&window.rules.failGet)||(method==='POST'&&window.rules.failPost)) return Response.json({error:'Synthetic rules failure'},{status:503});
+      if(method==='POST') window.rules.receipts.set(email,{rulesVersion:PILOT_RULES_VERSION,informationVersion:PILOT_INFORMATION_VERSION,acceptedAt:new Date().toISOString(),expiresAt:new Date(Date.now()+600000).toISOString()});
+      return Response.json({rulesVersion:window.rules.versionOverride||PILOT_RULES_VERSION,informationVersion:PILOT_INFORMATION_VERSION,receipt:method==='GET'&&window.rules.lag?null:window.rules.receipts.get(email)||null});
+    };
+    const deferred=method==='POST'?'deferNextPost':'deferNextGet';
+    if(window.rules[deferred]) {window.rules[deferred]=false;return new Promise(resolve=>window.rules.pending.push(()=>resolve(respond())));}
+    return respond();
+  }
+  if(window.rules.forceRequired&&String(url).startsWith('/api/')&&url!=='/api/session') return Response.json({code:'PILOT_RULES_REQUIRED',error:'Rules required'},{status:428});
   if(url==='/api/session') {
     window.revalidationCalls=(window.revalidationCalls||0)+1;
     if(window.sessionRevalidation==='offline') throw Error('Synthetic connectivity failure');
@@ -153,7 +171,7 @@ await writeFile(join(artifactRoot, "fixture.tsx"), fixture.replaceAll("/workspac
 const esbuild = require("esbuild");
 await esbuild.build({ entryPoints: [join(artifactRoot, "fixture.tsx")], bundle: true, outfile: join(artifactRoot, "app.js"), jsx: "automatic", nodePaths: [join(projectRoot, "node_modules")], define: { "process.env.NODE_ENV": '"production"' } });
 const [js, css] = await Promise.all([readFile(join(artifactRoot, "app.js")), readFile(join(projectRoot, "app/globals.css"))]);
-const server = createServer(async (req, res) => { if(req.url==='/cdn-cgi/access/logout'){res.setHeader('Content-Type','text/html');res.end('<html lang=cs><p id=mock-logout>Mock Access logout</p></html>');return;} if (req.url === '/apu-logo-horizontal.png' || req.url === '/apu-flower.svg') { res.setHeader('Content-Type', req.url.endsWith('.svg') ? 'image/svg+xml' : 'image/png'); res.end(await readFile(join(projectRoot, 'public', req.url.slice(1)))); return; } res.setHeader("Content-Type", req.url === "/app.js" ? "application/javascript" : req.url === "/style.css" ? "text/css" : "text/html"); res.end(req.url === "/app.js" ? js : req.url === "/style.css" ? Buffer.concat([css, Buffer.from("\n:root{--font-manrope:Arial;--font-source-sans:Arial;--font-dm-sans:Arial;--font-inter:Arial}")]) : '<!doctype html><html lang="cs"><meta charset="utf-8"><link rel="stylesheet" href="/style.css"><div id="root"></div><script src="/app.js"></script></html>'); });
+const server = createServer(async (req, res) => { if(req.url==='/cdn-cgi/access/logout'){res.setHeader('Content-Type','text/html');res.end('<html lang=cs><p id=mock-logout>Mock Access logout</p></html>');return;} if (req.url === '/apu-logo-horizontal.png' || req.url === '/apu-flower.svg') { res.setHeader('Content-Type', req.url.endsWith('.svg') ? 'image/svg+xml' : 'image/png'); res.end(await readFile(join(projectRoot, 'public', req.url.slice(1)))); return; } res.setHeader("Content-Type", req.url === "/app.js" ? "application/javascript" : req.url === "/style.css" ? "text/css" : "text/html"); res.end(req.url === "/app.js" ? js : req.url === "/style.css" ? Buffer.concat([css, Buffer.from("\n:root{--font-manrope:Arial;--font-source-sans:Arial;--font-dm-sans:Arial;--font-inter:Arial}")]) : '<!doctype html><html lang="cs"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/style.css"><div id="root"></div><script src="/app.js"></script></html>'); });
 await new Promise((resolve) => server.listen(4333, "127.0.0.1", resolve));
 const chrome = spawn(process.env.CHROMIUM_PATH ?? "chromium", ["--headless", "--no-sandbox", "--disable-dev-shm-usage", "--remote-debugging-port=9228", "--user-data-dir="+join(artifactRoot, "profile"), "about:blank"], { stdio: "ignore" });
 let socket;
@@ -204,7 +222,10 @@ try {
     await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
     await waitFor('!document.querySelector(".welcome-help")');
   };
-  if (process.argv.includes('--session-only')) {
+  if (process.argv.includes('--pilot-rules-only')) {
+    const {runPilotRulesScenarios} = await import('./pilot-rules-browser-scenarios.mjs');
+    await runPilotRulesScenarios({call,evaluate,waitFor,capture});
+  } else if (process.argv.includes('--session-only')) {
     const { runSessionScenarios } = await import('./session-browser-scenarios.mjs');
     await runSessionScenarios({call,evaluate,waitFor,capture,artifactRoot});
   } else if (process.argv.includes('--header-roles-only')) {

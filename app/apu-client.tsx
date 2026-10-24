@@ -1,5 +1,8 @@
 "use client";
 
+import { PilotRulesBoundary, PilotRulesInformation } from "./pilot-rules-boundary";
+import { fetchPedagogical as fetch } from "./pilot-rules-client";
+
 import {
   CSSProperties,
   FormEvent,
@@ -351,7 +354,7 @@ function DeveloperHeaderControls({
 
 export default function ApuClient(props: ApuClientProps) {
   return <AccessSessionBoundary key={`${notebookOwnerId(props)}:${props.isDeveloper}`} identity={props}>
-    {controls => <ApuWorkspace {...props} {...controls} />}
+    {controls => <PilotRulesBoundary onLogout={() => controls.onLogout(false)}><ApuWorkspace {...props} {...controls} /></PilotRulesBoundary>}
   </AccessSessionBoundary>;
 }
 
@@ -2073,6 +2076,7 @@ function ApuWorkspace({ email, isDeveloper, onLogout, registerInvalidation }: Ap
           >
             <div className="diagnostics-drawer-content">
               <div className="diagnostics-drawer-body">
+                <section className="settings-section"><details className="pilot-rules-settings"><summary>Informace a pravidla</summary><PilotRulesInformation /></details></section>
                 <section className="settings-section" aria-labelledby="profile-settings-title">
                   <h2 id="profile-settings-title">Komunikační profil</h2>
                   <label className="sr-only" htmlFor="drawer-profile-select">Komunikační profil APU pro další odpověď</label>
