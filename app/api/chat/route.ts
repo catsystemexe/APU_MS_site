@@ -1,3 +1,4 @@
+import { requirePilotRulesAcceptance } from "../../pilot-rules-server";
 import instructions from "../../../apu-core/v1.6/00_INSTRUCTIONS_v1.6.md?raw";
 import {
   estimateCostUsd,
@@ -170,6 +171,8 @@ export async function POST(request: Request) {
   const requestStarted = performance.now();
   const authorization = await authorizeApiRequest(request);
   if (authorization instanceof Response) return authorization;
+  const rulesDenied = await requirePilotRulesAcceptance(authorization);
+  if (rulesDenied) return rulesDenied;
   const isDeveloper = authorization.role === "developer";
 
   const apiKey = process.env.OPENAI_API_KEY;

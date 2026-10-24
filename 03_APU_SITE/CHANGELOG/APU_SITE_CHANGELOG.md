@@ -4,6 +4,12 @@ Status: CURRENT
 
 Records significant verified product/runtime/project changes. It is not a complete Git log. Historical Sites-era entries are retained where they remain useful; current deployment state must not be inferred from a changelog entry alone.
 
+## 2026-10-24 — DRAFT first-entry pilot rules and repeatable information
+
+- Implemented `feat/pilot-rules-onboarding` directly from verified `dev` `fc8ac5520b7b49b442bedc47558c73f20ce2bea6`, independently of unmerged PR #77. Added first-entry unchecked acknowledgement with retry/logout/focus safeguards, account-bound late-response protection and repeated **Nastavení → Informace a pravidla**, plus optional short guide. Real pedagogical practice is allowed without identifiers/identifying combinations or real/model diagnoses; text remains DRAFT and acknowledgement is not pupil consent or a lawful basis.
+- Added authenticated same-origin rules status/acceptance and independent checks before all six pedagogical AI POST routes. Dedicated receipt KV/explicit finite TTL contract fails closed when unconfigured; server identity/time/versioned pseudonymous receipts contain no case content. KV propagation keeps entry locked pending verification. No namespace/configuration/secret/provider/Core change or deployment; required legal/privacy/contact/retention and provisioning decisions remain OPEN.
+- Local V2 PASS: typecheck, canonical build/Worker artifact, **1,202/1,202 provider-free tests**, zero failures/skips; new actual-client Chromium onboarding scenarios and existing session/account/logout browser scenarios PASS, 390/320px and visual review included. Lint has no errors and five existing client warnings. Existing feature→dev hosted-CI restriction remains separate and unmodified. Runtime documentation includes exact binding requirements, risks, release checklist and verification limits. No LEGAL/customer-foundation files, Backlog or Known Issues updates; no real cases, paid calls, merge or deploy.
+
 ## 2026-10-23 — APU PUBLIC canonical custom domain
 
 - Operator attached `apu.catsystem.ai` as a Production Custom Domain of existing Worker `apu-ms-site` in Cloudflare zone `catsystem.ai`. Set `https://apu.catsystem.ai/` as the preferred PUBLIC URL; retain `https://apu-ms-site.catsystem-exe.workers.dev/` as an alternate. No APU application-code changes or Worker deployment were required for the hostname assignment.

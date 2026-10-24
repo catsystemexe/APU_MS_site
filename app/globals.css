@@ -2203,3 +2203,26 @@ button:disabled { cursor: default; opacity: 0.52; }
   .desktop-tool-tabs { display: flex; }
   .notepad-header:has(.workspace-view-tabs) { flex-wrap: wrap; gap: 6px; }
 }
+
+/* First-entry rules: background remains inert until server verification. */
+.pilot-rules-overlay { position: fixed; inset: 0; z-index: 10000; display: grid; place-items: center; padding: clamp(12px, 3vw, 30px); overflow: auto; background: color-mix(in srgb, var(--text-primary) 45%, transparent); }
+.pilot-rules-dialog { box-sizing: border-box; width: min(100%, 760px); max-height: calc(100dvh - 24px); overflow: auto; padding: clamp(18px, 4vw, 32px); border: 1px solid var(--border); border-radius: 18px; background: var(--bg-surface); color: var(--text-primary); box-shadow: 0 24px 70px var(--shadow-color); font-size: 15px; line-height: 1.55; }
+.pilot-rules-dialog h1 { margin: 0 0 16px; font-size: clamp(22px, 4vw, 30px); line-height: 1.2; }
+.pilot-rules-information h2 { margin: 0 0 10px; font-size: 1.1em; }
+.pilot-rules-information p, .pilot-rules-information ul, .pilot-rules-information ol { margin: 10px 0; }
+.pilot-rules-information ul, .pilot-rules-information ol { padding-left: 22px; }
+.pilot-rules-information li + li { margin-top: 7px; }
+.pilot-rules-draft { padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--accent-soft); }
+.pilot-rules-information details { padding: 10px 0; border-top: 1px solid var(--border); }
+.pilot-rules-information summary { cursor: pointer; font-weight: 650; }
+.pilot-rules-ack-note, .pilot-rules-receipt { color: var(--text-secondary); font-size: .9em; overflow-wrap: anywhere; }
+.pilot-rules-checkbox { display: flex; align-items: flex-start; gap: 10px; margin: 18px 0; font-weight: 600; }
+.pilot-rules-checkbox input { flex: none; width: 19px; height: 19px; margin-top: 3px; accent-color: var(--accent); }
+.pilot-rules-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.pilot-rules-actions button { min-height: 44px; padding: 9px 15px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-surface); color: var(--text-primary); cursor: pointer; font: inherit; }
+.pilot-rules-actions button:first-child { background: var(--accent-soft); font-weight: 700; }
+.pilot-rules-actions button:disabled { opacity: .5; cursor: not-allowed; }
+.pilot-rules-error { color: var(--danger); }
+
+.pilot-rules-settings > summary { cursor: pointer; font-size: 12px; font-weight: 650; }
+.diagnostics-drawer .pilot-rules-information { padding-top: 12px; font-size: 13px; line-height: 1.5; }

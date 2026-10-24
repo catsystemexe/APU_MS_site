@@ -1,3 +1,4 @@
+import { requirePilotRulesAcceptance } from "../../pilot-rules-server";
 import type { ServerIdentity } from "../../server-capabilities";
 import { estimateCostUsd } from "../../model-config";
 import { F2_PATHS, locateSourceQuote, type F2Path } from "../../notepad-model";
@@ -247,6 +248,8 @@ export async function POST(request: Request) {
   const started = performance.now();
   const identity = await getAccessIdentity(request.headers);
   if (!identity) return jsonError("Chybí platná identita Cloudflare Access.", 401);
+  const rulesDenied = await requirePilotRulesAcceptance(identity);
+  if (rulesDenied) return rulesDenied;
 
   let body: { message?: unknown; notebook?: unknown; answersNeedQuestion?: unknown; explicitNeed?: unknown; turnId?: unknown };
   try {
