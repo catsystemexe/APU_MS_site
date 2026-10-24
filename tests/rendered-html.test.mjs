@@ -14,8 +14,8 @@ const keys = await crypto.subtle.generateKey(
 );
 const publicJwk = { ...(await crypto.subtle.exportKey("jwk", keys.publicKey)), kid: keyId, alg: "RS256", use: "sig" };
 
-async function loadWorker(t, { jwks = "available", developerEmails = "developer@example.com", nodeEnv = "test" } = {}) {
-  const environmentKeys = ["CF_ACCESS_TEAM_DOMAIN", "CF_ACCESS_AUD", "APU_DEVELOPER_EMAILS", "NODE_ENV", "APU_LOCAL_DEV_AUTH", "OPENAI_API_KEY", "APU_VECTOR_STORE_ID"];
+async function loadWorker(t, { jwks = "available", developerEmails = "developer@example.com", nodeEnv = "test", runtimeMode = "DEV" } = {}) {
+  const environmentKeys = ["APU_RUNTIME_MODE", "CF_ACCESS_TEAM_DOMAIN", "CF_ACCESS_AUD", "APU_DEVELOPER_EMAILS", "NODE_ENV", "APU_LOCAL_DEV_AUTH", "OPENAI_API_KEY", "APU_VECTOR_STORE_ID"];
   const environment = new Map(environmentKeys.map(key => [key, process.env[key]]));
   // Vinext captures this shared fetch when the bundle loads and installs a wrapper
   // during requests. Own both entry points for this test, restoring their descriptors.
@@ -39,6 +39,8 @@ async function loadWorker(t, { jwks = "available", developerEmails = "developer@
   globalThis.fetch = fixtureFetch;
   globalThis[originalFetchKey] = fixtureFetch;
   delete globalThis[patchInstalledKey];
+  if (runtimeMode === null) delete process.env.APU_RUNTIME_MODE;
+  else process.env.APU_RUNTIME_MODE = runtimeMode;
   process.env.CF_ACCESS_TEAM_DOMAIN = issuer;
   process.env.CF_ACCESS_AUD = audience;
   process.env.APU_DEVELOPER_EMAILS = developerEmails;
@@ -278,7 +280,7 @@ for (const jwks of ["missing", "unavailable"]) test(`model APIs fail closed with
 test("render fixtures own preloaded Vinext fetch state and restore globals/environment", async t => {
   const globalKeys = ["fetch", Symbol.for("vinext.fetchCache.originalFetch"), Symbol.for("vinext.fetchCache.patchInstalled")];
   const globals = new Map(globalKeys.map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
-  const environmentKeys = ["CF_ACCESS_TEAM_DOMAIN", "CF_ACCESS_AUD", "APU_DEVELOPER_EMAILS", "NODE_ENV", "APU_LOCAL_DEV_AUTH", "OPENAI_API_KEY", "APU_VECTOR_STORE_ID"];
+  const environmentKeys = ["APU_RUNTIME_MODE", "CF_ACCESS_TEAM_DOMAIN", "CF_ACCESS_AUD", "APU_DEVELOPER_EMAILS", "NODE_ENV", "APU_LOCAL_DEV_AUTH", "OPENAI_API_KEY", "APU_VECTOR_STORE_ID"];
   const environment = new Map(environmentKeys.map(key => [key, process.env[key]]));
   let staleFetchCalls = 0;
   const staleFetch = async () => { staleFetchCalls++; throw new Error("Synthetic stale fetch must not run"); };
@@ -312,4 +314,14 @@ test("render fixtures own preloaded Vinext fetch state and restore globals/envir
       else process.env[key] = value;
     }
   }
+});
+
+for (const runtimeMode of ["PUBLIC", "invalid", null]) test(`rendered artifact hides developer and test controls (mode=${runtimeMode})`, async t => {
+  const worker = await loadWorker(t, { runtimeMode });
+  const response = await worker.fetch(new Request("http://localhost/", { headers: await identityHeaders("developer@example.com") }), { ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) } }, { waitUntil() {} });
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.doesNotMatch(html, /DEV ON|aria-label="Testovací scénáře"|aria-label="Telemetrie a náklady konverzace"|aria-label="Stáhnout APU Session JSON"|<dialog/);
+  assert.match(html, /Verze 0\.1\.0/);
+  assert.match(html, /Konverzace/);
 });

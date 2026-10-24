@@ -5,7 +5,8 @@ import ts from "typescript";
 
 async function loadAccessAuth() {
   const source = (await readFile(new URL("../app/access-auth.ts", import.meta.url), "utf8"))
-    .replace('import { headers } from "next/headers";', "const headers = async () => new Headers();");
+    .replace('import { headers } from "next/headers";', "const headers = async () => new Headers();")
+    .replace('"./runtime-mode.ts"', JSON.stringify(new URL("../app/runtime-mode.ts", import.meta.url).href));
   const javascript = ts.transpileModule(source, {
     compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
   }).outputText;
@@ -84,6 +85,7 @@ test("the verified Access email and developer role are passed into the header", 
 test("Access validation reports safe, specific failures and preserves successful validation", async (t) => {
   const { getAccessIdentity } = await loadAccessAuth();
   const originalEnv = {
+    APU_RUNTIME_MODE: process.env.APU_RUNTIME_MODE,
     NODE_ENV: process.env.NODE_ENV,
     CF_ACCESS_AUD: process.env.CF_ACCESS_AUD,
     CF_ACCESS_TEAM_DOMAIN: process.env.CF_ACCESS_TEAM_DOMAIN,
@@ -95,6 +97,7 @@ test("Access validation reports safe, specific failures and preserves successful
   console.warn = (message) => logs.push(message);
 
   const configure = (domain = "access.example.com") => {
+    process.env.APU_RUNTIME_MODE = "DEV";
     process.env.NODE_ENV = "test";
     process.env.CF_ACCESS_AUD = "test-audience";
     process.env.CF_ACCESS_TEAM_DOMAIN = domain;

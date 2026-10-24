@@ -1,4 +1,5 @@
 import { headers } from "next/headers";
+import { getRuntimeMode } from "./runtime-mode.ts";
 
 export type AccessRole = "developer" | "tester";
 export type AccessIdentity = { email: string; role: AccessRole };
@@ -188,7 +189,7 @@ function logAccessFailure(
 
 export async function getAccessIdentity(requestHeaders: Headers, onUnavailable?: () => void): Promise<AccessIdentity | null> {
   if (process.env.NODE_ENV === "development" && process.env.APU_LOCAL_DEV_AUTH === "1") {
-    return LOCAL_IDENTITY;
+    return { ...LOCAL_IDENTITY, role: getRuntimeMode() === "DEV" ? "developer" : "tester" };
   }
   const configResult = accessConfig();
   if (!configResult.ok) {
@@ -209,7 +210,7 @@ export async function getAccessIdentity(requestHeaders: Headers, onUnavailable?:
   }
   return {
     email: result.value,
-    role: configResult.value.developerEmails.has(result.value) ? "developer" : "tester",
+    role: getRuntimeMode() === "DEV" && configResult.value.developerEmails.has(result.value) ? "developer" : "tester",
   };
 }
 

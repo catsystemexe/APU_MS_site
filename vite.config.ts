@@ -23,7 +23,7 @@ export default defineConfig(async ({ mode }) => {
       : {};
 
   const previewVars = Object.fromEntries(
-    ["OPENAI_API_KEY", "APU_VECTOR_STORE_ID", "APU_LOCAL_DEV_AUTH", "CF_ACCESS_TEAM_DOMAIN", "CF_ACCESS_AUD", "APU_DEVELOPER_EMAILS"]
+    ["OPENAI_API_KEY", "APU_VECTOR_STORE_ID", "APU_LOCAL_DEV_AUTH", "APU_RUNTIME_MODE", "CF_ACCESS_TEAM_DOMAIN", "CF_ACCESS_AUD", "APU_DEVELOPER_EMAILS"]
       .filter((key) => developmentVars[key])
       .map((key) => [key, developmentVars[key]]),
   );

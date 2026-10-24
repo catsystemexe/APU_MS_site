@@ -10,7 +10,7 @@ export type DevTestScenario = {
   text: string;
 };
 
-// Developer test inputs only; path/load metadata never drives application routing.
+// Methodical test inputs only; path/load metadata never drives application routing.
 export const DEV_TEST_SCENARIOS: readonly DevTestScenario[] = [
   {
     id: "pochopit-1",

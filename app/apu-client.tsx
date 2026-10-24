@@ -5,6 +5,7 @@ import {
   FormEvent,
   KeyboardEvent as ReactKeyboardEvent,
   ReactNode,
+  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -97,7 +98,9 @@ import { addCompletedLifecycleRecord, withCompletedLifecycleRecord, type Complet
 import { clampDesktopSplit, DEFAULT_DESKTOP_SPLIT, DESKTOP_SPLIT_STORAGE_KEY, DESKTOP_WORKSPACE_QUERY, INITIAL_INTAKE_WORKSPACE, INITIAL_PROCESSING_WORKSPACE, readDesktopSplitPreference, selectDesktopTool, selectDesktopView, workspaceAvailability, type DesktopTool, type DesktopView } from "./desktop-workspace";
 import { F2BuildOperations } from "./f2-build-operations";
 import { activeNeedRoutingKey, bindNeedRoutingDecision, createNeedRouter, type NeedRoutingDecision } from "./f2-need-routing";
-import { DEV_TEST_SCENARIOS, type DevTestScenario } from "./dev-test-scenarios";
+import { type DevTestScenario } from "./dev-test-scenarios";
+import { MethodicalTestPanel } from "./methodical-test-panel";
+import { createMethodicalTestSession, createVersionTapActivation, isTestPanelShortcut, type TestPanelActivation } from "./methodical-test-session";
 import { acceptRenderedPreview, addF2Context, advanceAcceptedF2Source, applyCurrentRozborComponentUpdate, applyF2BuildResult, canonicalF1NeedFingerprint, createCurrentRozborGenerationRequest, createCurrentRozborState, createF2BuildRequest, createF2PreviewSnapshot, createF2ToF3Snapshot, currentRozborSourceFingerprint, deriveRequiredCurrentRozborComponents, parameterizeF2Skill, parseF2BuildResult, parseF2RenderedPreview, parseGeneratedRozborComponents, previewStatus, reconcileRozborComponents, removeF2Context, synchronizeF2BuildWithCanonicalNeed, toggleF2Skill, type CurrentRozborState, type F2AnalysisContext, type F2ToF3Snapshot, type F2BuildState, type F2NotebookContextItem, type F2PreviewState } from "./f2-build-model";
 import { acceptBuildDocumentUpdate, acceptWorkingDocumentMetadata, type WorkingDocumentMetadata } from "./working-document-lifecycle";
 import { acceptF3Render, adoptF2Snapshot, createF3RenderRequest, createF3State, f3GenerationEligibility, isDefaultF3Presentation, markF3SourceStale, resetF3Presentation, parseF3RenderResult, updateF3Config, type F3Config, type F3State } from "./f3-finalization-model";
@@ -286,67 +289,14 @@ type ApuClientProps = {
   isDeveloper: boolean;
 };
 
-function DeveloperHeaderControls({
-  onSelectScenario,
-}: {
-  onSelectScenario: (scenario: DevTestScenario) => void;
-}) {
-  const [scenarioMenuOpen, setScenarioMenuOpen] = useState(false);
-  const scenarioPickerRef = useRef<HTMLSpanElement>(null);
-
-  useEffect(() => {
-    if (!scenarioMenuOpen) return;
-    const closeOutside = (event: PointerEvent) => {
-      if (!scenarioPickerRef.current?.contains(event.target as Node)) setScenarioMenuOpen(false);
-    };
-    const closeWithEscape = (event: globalThis.KeyboardEvent) => {
-      if (event.key === "Escape") setScenarioMenuOpen(false);
-    };
-    document.addEventListener("pointerdown", closeOutside);
-    document.addEventListener("keydown", closeWithEscape);
-    return () => {
-      document.removeEventListener("pointerdown", closeOutside);
-      document.removeEventListener("keydown", closeWithEscape);
-    };
-  }, [scenarioMenuOpen]);
-
-  return (
-    <span className="developer-controls">
-      <span className="developer-indicator" title="Developer režim je aktivní">DEV ON</span>
-      <span className="dev-scenario-picker" ref={scenarioPickerRef}>
-        <button
-          type="button"
-          className="developer-log-toggle"
-          aria-label="Testovací scénáře"
-          aria-expanded={scenarioMenuOpen}
-          aria-controls="dev-scenario-menu"
-          title="Testovací scénáře"
-          onClick={() => setScenarioMenuOpen((value) => !value)}
-        >
-          <FlaskConical aria-hidden="true" />
-        </button>
-        {scenarioMenuOpen && <span id="dev-scenario-menu" className="dev-scenario-menu" role="menu" aria-label="Testovací scénáře">
-          {([1, 2, 3] as const).map((difficulty) => <span key={difficulty} className="dev-scenario-column" role="group" aria-label={`Obtížnost ${difficulty}`}>
-            <strong className="dev-scenario-path">Obtížnost {difficulty}</strong>
-            {DEV_TEST_SCENARIOS.filter((scenario) => scenario.difficulty === difficulty)
-              .map((scenario) => <button
-                key={scenario.id}
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  onSelectScenario(scenario);
-                  setScenarioMenuOpen(false);
-                }}
-              >
-                <strong>{scenario.difficulty} · {scenario.load}</strong>
-                <span>{scenario.subtitle}</span>
-                <span>{scenario.label}</span>
-              </button>)}
-          </span>)}
-        </span>}
-      </span>
-    </span>
-  );
+function DeveloperHeaderControls({ onOpen, open }: { onOpen: () => void; open: boolean }) {
+  return <span className="developer-controls">
+    <span className="developer-indicator" title="Developer režim je aktivní">DEV ON</span>
+    <span className="dev-scenario-picker"><button type="button" className="developer-log-toggle" aria-label="Testovací scénáře"
+      aria-expanded={open} aria-haspopup="dialog" title="Testovací scénáře" onClick={onOpen}>
+      <FlaskConical aria-hidden="true" />
+    </button></span>
+  </span>;
 }
 
 export default function ApuClient(props: ApuClientProps) {
@@ -418,6 +368,23 @@ function ApuWorkspace({ email, isDeveloper, onLogout, registerInvalidation }: Ap
   const [modelUsageSession, setModelUsageSession] = useState(createModelUsageSession);
   const usageShadowComparisonRef = useRef<UsageShadowComparison | null>(null);
   const sessionRef = useRef({ id: createMessageId(), startedAt: new Date().toISOString() });
+  const methodicalTestSessionRef = useRef(createMethodicalTestSession(sessionRef.current.id));
+  const versionTapRef = useRef(createVersionTapActivation());
+  const [testPanelOpen, setTestPanelOpen] = useState(false);
+  const openTestPanel = useCallback((source: TestPanelActivation) => {
+    methodicalTestSessionRef.current.panelActivated(source);
+    setTestPanelOpen(true);
+  }, []);
+  useEffect(() => {
+    const activate = (event: globalThis.KeyboardEvent) => {
+      if (!isTestPanelShortcut(event)) return;
+      event.preventDefault();
+      openTestPanel("keyboard");
+    };
+    document.addEventListener("keydown", activate);
+    return () => document.removeEventListener("keydown", activate);
+  }, [openTestPanel]);
+
   const telemetryClockRef = useRef(new Map<string, { actionStartedAt: number }>());
   const [isDictating, setIsDictating] = useState(false);
   const [isDictationSupported, setIsDictationSupported] = useState(false);
@@ -936,6 +903,7 @@ function ApuWorkspace({ email, isDeveloper, onLogout, registerInvalidation }: Ap
     if (isDictating) cancelDictation();
     setDictationNotice(null);
     setComposerInput(scenario.text);
+    methodicalTestSessionRef.current.scenarioInserted(scenario.id);
     requestAnimationFrame(() => textareaRef.current?.focus());
   }
 
@@ -1695,6 +1663,9 @@ function ApuWorkspace({ email, isDeveloper, onLogout, registerInvalidation }: Ap
     setModelUsageSession(createModelUsageSession());
     telemetryClockRef.current.clear();
     sessionRef.current = { id: createMessageId(), startedAt: new Date().toISOString() };
+    methodicalTestSessionRef.current = createMethodicalTestSession(sessionRef.current.id);
+    versionTapRef.current = createVersionTapActivation();
+    setTestPanelOpen(false);
   }
 
   useLayoutEffect(() => registerInvalidation((logout) => {
@@ -1931,8 +1902,9 @@ function ApuWorkspace({ email, isDeveloper, onLogout, registerInvalidation }: Ap
             </span>
             <span className="account-email" title={email}>{email}</span>
             {isDeveloper && <DeveloperHeaderControls
-              onSelectScenario={selectDevTestScenario}
+              open={testPanelOpen} onOpen={() => openTestPanel("dev-button")}
             />}
+            {testPanelOpen && <MethodicalTestPanel onClose={() => setTestPanelOpen(false)} onSelectScenario={selectDevTestScenario} />}
             {isDeveloper && <div className="conversation-diagnostics" ref={statsRef}>
               <button
                 ref={statsButtonRef}
@@ -2073,6 +2045,12 @@ function ApuWorkspace({ email, isDeveloper, onLogout, registerInvalidation }: Ap
           >
             <div className="diagnostics-drawer-content">
               <div className="diagnostics-drawer-body">
+                <section className="settings-section" aria-labelledby="apu-info-title">
+                  <h2 id="apu-info-title">O APU</h2>
+                  <span className="apu-version" onClick={() => {
+                    if (versionTapRef.current(performance.now())) openTestPanel("version-taps");
+                  }}>Verze 0.1.0</span>
+                </section>
                 <section className="settings-section" aria-labelledby="profile-settings-title">
                   <h2 id="profile-settings-title">Komunikační profil</h2>
                   <label className="sr-only" htmlFor="drawer-profile-select">Komunikační profil APU pro další odpověď</label>

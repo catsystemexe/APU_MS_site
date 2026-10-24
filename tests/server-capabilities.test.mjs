@@ -16,10 +16,12 @@ const root = fileURLToPath(new URL("..", import.meta.url));
 const artifacts = await mkdtemp(join(tmpdir(), "apu-server-capabilities-"));
 after(() => rm(artifacts, { recursive: true, force: true }));
 const handlers = {};
-for (const name of ["chat", "extract", "analysis", "need-route", "f2", "f3", "session"]) {
+for (const name of ["chat", "extract", "analysis", "need-route", "f2", "f3", "session", "devlog-state"]) {
   const outfile = join(artifacts, name + ".mjs");
   await build({ entryPoints: [join(root, `app/api/${name}/route.ts`)], outfile, bundle: true, platform: "node", format: "esm", logLevel: "silent",
     plugins: [{ name: "provider-free-server-boundaries", setup(plugin) {
+      plugin.onResolve({ filter: /dev-log-data$/ }, () => ({ path: "dev-log-data", namespace: "test-log" }));
+      plugin.onLoad({ filter: /.*/, namespace: "test-log" }, () => ({ contents: "export function loadDevLog(){return {data:{items:[]}}}", loader: "js" }));
       plugin.onResolve({ filter: /^next\/headers$/ }, () => ({ path: "headers", namespace: "fixture" }));
       plugin.onLoad({ filter: /.*/, namespace: "fixture" }, () => ({ contents: "export const headers=()=>{throw Error('No request-context bypass permitted')};", loader: "js" }));
       plugin.onResolve({ filter: /openai-responses-instrumentation$/ }, () => ({ path: "collector", namespace: "observe" }));
@@ -61,8 +63,8 @@ async function token(email) {
   const signature = await crypto.subtle.sign("RSASSA-PKCS1-v1_5",keyPair.privateKey,new TextEncoder().encode(unsigned));
   return unsigned+"."+Buffer.from(signature).toString("base64url");
 }
-function fixture(t, { emptyAllowlist = false, mode = "success" } = {}) {
-  const vars = { NODE_ENV:"production", APU_LOCAL_DEV_AUTH:"0", CF_ACCESS_TEAM_DOMAIN:issuer, CF_ACCESS_AUD:audience, APU_DEVELOPER_EMAILS:emptyAllowlist?"":"developer@example.com", OPENAI_API_KEY:"synthetic-only", APU_VECTOR_STORE_ID:"synthetic-only" };
+function fixture(t, { emptyAllowlist = false, mode = "success", runtimeMode = "DEV" } = {}) {
+  const vars = { APU_RUNTIME_MODE:runtimeMode, NODE_ENV:"production", APU_LOCAL_DEV_AUTH:"0", CF_ACCESS_TEAM_DOMAIN:issuer, CF_ACCESS_AUD:audience, APU_DEVELOPER_EMAILS:emptyAllowlist?"":"developer@example.com", OPENAI_API_KEY:"synthetic-only", APU_VECTOR_STORE_ID:"synthetic-only" };
   const saved = new Map(Object.keys(vars).map(key=>[key,process.env[key]]));
   const originalCollectors = Object.getOwnPropertyDescriptor(globalThis,"__envS1Collectors");
   const collectors = globalThis.__envS1Collectors = [];
@@ -216,4 +218,36 @@ test("session verification configuration outage returns recoverable 503 rather t
   assert.match(response.headers.get("cache-control"), /no-store/);
   assert.deepEqual(await response.json(), { error: "Přihlášení nyní nelze ověřit." });
   assert.equal(f.calls.length, 0);
+});
+
+for (const runtimeMode of ["PUBLIC", "unknown", ""]) test(`PUBLIC policy denies allowlisted developer operations (mode=${runtimeMode || "empty"})`, async t => {
+  const f = fixture(t, { runtimeMode });
+  for (const c of cases.filter(c => ["chat", "f2", "f3"].includes(c.route))) {
+    const before = f.calls.length;
+    const { response, payload } = await f.invoke(c, { email: "developer@example.com", model: "gpt-5.6-sol" });
+    assert.equal(response.status, 403, c.name);
+    assertPublic(payload);
+    assert.equal(f.calls.length, before, "denied override must not call provider");
+  }
+  for (const c of cases) {
+    const { response, payload } = await f.invoke(c, { email: "developer@example.com" });
+    assert.equal(response.status, 200, c.name);
+    assertPublic(payload);
+  }
+  const headers = { "cf-access-jwt-assertion": await token("developer@example.com"), "x-role": "developer" };
+  const session = await handlers.session.GET(new Request("https://apu.invalid/api/session", { headers }));
+  assert.deepEqual(await session.json(), { email: "developer@example.com", isDeveloper: false });
+  for (const method of ["GET", "PATCH"]) {
+    const response = await handlers["devlog-state"][method](new Request("https://apu.invalid/api/devlog-state", { method, headers, ...(method === "PATCH" ? { body: JSON.stringify({ id: "test", status: "done" }) } : {}) }));
+    assert.equal(response.status, 403);
+  }
+});
+
+test("missing runtime configuration denies privileges despite local developer authentication", async t => {
+  fixture(t);
+  delete process.env.APU_RUNTIME_MODE;
+  process.env.NODE_ENV = "development";
+  process.env.APU_LOCAL_DEV_AUTH = "1";
+  const response = await handlers.session.GET(new Request("http://localhost/api/session"));
+  assert.deepEqual(await response.json(), { email: "local-development@apu.invalid", isDeveloper: false });
 });

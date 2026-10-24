@@ -4,6 +4,14 @@ Status: CURRENT
 
 Records significant verified product/runtime/project changes. It is not a complete Git log. Historical Sites-era entries are retained where they remain useful; current deployment state must not be inferred from a changelog entry alone.
 
+## 2026-10-24 — Hidden PUBLIC methodical test mode (dedicated branch only)
+
+- Implemented on `codex/hidden-public-test-mode`, based on verified `dev` `fc8ac5520b7b49b442bedc47558c73f20ce2bea6`. Explicit `APU_RUNTIME_MODE=DEV` retains developer capabilities; PUBLIC/missing/invalid configuration fails closed through the shared server identity boundary. Model override and DEV LOG operations remain inaccessible in PUBLIC; ordinary chat routing is preserved.
+- Added one closable panel activated by Ctrl+Alt+Shift+T or seven taps on Settings → O APU version within five seconds. DEV retains its scenario button; PUBLIC has no visible test trigger. Reused all nine scenario texts/IDs and exact composer insertion, confirmation and dictation behavior; no automatic send, panel persistence or pedagogical changes.
+- Added cross-platform `dev:public` using the existing local launcher/runtime; documented DEV/PUBLIC startup and Windows smoke. No new hosted environment or deployment configuration.
+- Telemetry **PARTIAL / NOT PUBLIC-READY**: this base has no analytics session collector/aggregation. Added only a typed content-free integration seam with neutral opening and monotonic accepted-insertion attribution; no sink, network transport, platform or new persistence. Real event collection and whole-session analytical exclusion remain BLOCKED. No backlog/known-issue tracking scope was added.
+- V2 technical verification: 139 focused + 27 artifact/related checks PASS; typecheck/build/artifact PASS; Chromium actual-client interactions and desktop/mobile visual inspection PASS with synthetic identities/provider and fallback fonts; both actual local launcher HTML/session checks PASS. Native Windows and real-provider/hosted E2E NOT VERIFIED. Updated only the two requested canonical documents and this changelog. No integration into `dev`, no change to `public`/`main`, release workflows/guards, infrastructure, secrets, merge or deployment.
+
 ## 2026-10-23 — APU PUBLIC canonical custom domain
 
 - Operator attached `apu.catsystem.ai` as a Production Custom Domain of existing Worker `apu-ms-site` in Cloudflare zone `catsystem.ai`. Set `https://apu.catsystem.ai/` as the preferred PUBLIC URL; retain `https://apu-ms-site.catsystem-exe.workers.dev/` as an alternate. No APU application-code changes or Worker deployment were required for the hostname assignment.

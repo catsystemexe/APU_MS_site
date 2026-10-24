@@ -4,6 +4,41 @@ Status: CURRENT SOURCE/RUNTIME CONTRACT
 
 Purpose: describe the current repository/runtime contract. Deployment state is recorded only when independently verified; this document must not infer production state from repository contents alone.
 
+## Hidden methodical test mode — implementation branch only (2026-10-24)
+
+**V2 TECHNICAL CHECKS PASS / TELEMETRY PARTIAL / NOT PUBLIC-READY.** Implemented on `codex/hidden-public-test-mode` from freshly verified `dev` `fc8ac5520b7b49b442bedc47558c73f20ce2bea6`. This section describes that implementation branch, not an integration into DEV or a hosted release. `dev`, `public`, `main`, release CI and deployment/Cloudflare configuration were not changed.
+
+Runtime policy:
+
+- `APU_RUNTIME_MODE=DEV`: existing authenticated developer allowlist and developer tooling remain usable; the local launcher explicitly selects DEV by default. Authenticated users outside the allowlist remain testers.
+- `APU_RUNTIME_MODE=PUBLIC`: all identities receive tester capabilities, including an allowlisted developer. Missing/invalid mode values have the same restricted policy. Mode is resolved on the server, independently of Git branch and NODE_ENV. Model override requests return 403, developer response metadata is withheld, and DEV LOG GET/PATCH is denied before storage access. No authentication bypass was added or broadened.
+- PUBLIC preview uses this exact policy, with no preview-specific capability exception. The pre-existing local development authentication mechanism supplies a synthetic local identity in both launchers; PUBLIC still has tester capabilities. A production build still requires the existing Access authentication.
+- Future hosted DEV use of this source requires explicitly setting `APU_RUNTIME_MODE=DEV` through a separately authorized runtime configuration step. No hosted variables or deployment configuration were changed here. Never enable `APU_LOCAL_DEV_AUTH` in hosted environments.
+
+Panel: Settings → O APU displays version `0.1.0`; seven taps in a rolling five-second window or Ctrl+Alt+Shift+T opens one native dialog. Close button/Escape close it; reload hides it. PUBLIC has no visible test trigger; DEV retains its scenario button, model selector, diagnostics and Session JSON controls. The shared catalog remains nine unchanged texts/IDs. Selection keeps the existing draft-replacement confirmation, dictation cancellation, composer insertion/focus and no automatic send. New project resets the existing session and its methodical-test marker.
+
+Telemetry status: inspection of this exact base found only in-memory request usage/latency diagnostics and manual Session JSON, not an analytics collector, event ingestion endpoint, session store or reporting aggregation. `app/methodical-test-session.ts` supplies an optional typed sink, neutral `test_panel_activated` events, monotonic `test_mode=true` on accepted `test_scenario_inserted`, stable scenario IDs and the existing random session ID. It accepts no scenario/chat text or identity. The application connects no sink, persists no new data and makes no telemetry requests. A future adapter must upsert session classification and exclude all joined events for that session, including events before insertion. Actual collection and session-wide analytical exclusion are **BLOCKED / NOT IMPLEMENTED**; seam tests do not establish analytics readiness. No analytics platform was added.
+
+Reproducible Windows PowerShell startup from a clean checkout (Node >=22.13; these commands start only local Vite/Workerd):
+
+```powershell
+git fetch origin dev codex/hidden-public-test-mode
+git switch codex/hidden-public-test-mode
+npm.cmd ci --ignore-scripts --no-audit --no-fund
+$env:APU_RUNTIME_MODE = 'DEV'
+npm.cmd run dev:local
+# Open the localhost URL printed by Vite (normally http://localhost:5173/).
+# Ctrl+C before switching modes.
+$env:APU_RUNTIME_MODE = 'PUBLIC'
+npm.cmd run dev:public
+```
+
+`dev:local` defaults to DEV when the variable is absent; `dev:public` explicitly selects PUBLIC even if an inherited variable says DEV. `node scripts/dev-local.mjs --runtime-mode DEV|PUBLIC` is the cross-platform equivalent. Invalid launcher modes are rejected before startup. Existing ignored `.env.local` may supply provider credentials for optional real-chat smoke; do not print or commit its contents. No provider credential is required to inspect controls or insert scenarios.
+
+Windows manual smoke: DEV shows its existing controls; all nine scenarios fill the composer without sending. After stopping/restarting PUBLIC, `/api/session` reports `isDeveloper:false`; no developer or test buttons appear. Open with the shortcut, close with button/Escape, then use Settings → O APU and seven taps within five seconds in mobile viewport. Try fewer taps/a slower sequence (no opening), decline and accept replacement of an existing draft, check exact text and focus, and reload (panel hidden). Send a normal message only with locally configured provider credentials to verify optional provider-backed chat.
+
+Verification actually performed in Codex Cloud: locked dependency install; 139/139 focused configuration/authentication/route/scenario/seam checks and 27/27 rendered Worker/chat/reset/usage checks, zero skips/failures; TypeScript, build and standalone ESM `default.fetch` validation PASS. Actual React client in Chromium: both roles, nine exact insertions each, replacement cancellation/acceptance, no insertion API calls, shortcut/close/Escape/reload, native seven-touch activation, desktop/mobile bounds and ordinary chat with synthetic provider responses PASS. Desktop/mobile screenshots inspected (fixture uses fallback fonts). Both actual local launchers independently returned the expected `/api/session` identity/capability and rendered HTML; invalid launcher mode rejected. Native Windows execution and real-provider/hosted E2E are **NOT VERIFIED**. No deployment, merge or PR to `public` was performed.
+
 ## APU PUBLIC — canonical hostname and hosted evidence (2026-10-23)
 
 **CURRENT PUBLIC ADDRESS (operator-verified):** `https://apu.catsystem.ai/` is the preferred production URL. Cloudflare Dashboard shows `apu.catsystem.ai` as a Production Custom Domain in zone `catsystem.ai` attached to the existing Worker `apu-ms-site`. The original `https://apu-ms-site.catsystem-exe.workers.dev/` remains an alternate Worker URL; adding the Custom Domain did not require an application-code change or a new Worker deployment.

@@ -153,7 +153,7 @@ await writeFile(join(artifactRoot, "fixture.tsx"), fixture.replaceAll("/workspac
 const esbuild = require("esbuild");
 await esbuild.build({ entryPoints: [join(artifactRoot, "fixture.tsx")], bundle: true, outfile: join(artifactRoot, "app.js"), jsx: "automatic", nodePaths: [join(projectRoot, "node_modules")], define: { "process.env.NODE_ENV": '"production"' } });
 const [js, css] = await Promise.all([readFile(join(artifactRoot, "app.js")), readFile(join(projectRoot, "app/globals.css"))]);
-const server = createServer(async (req, res) => { if(req.url==='/cdn-cgi/access/logout'){res.setHeader('Content-Type','text/html');res.end('<html lang=cs><p id=mock-logout>Mock Access logout</p></html>');return;} if (req.url === '/apu-logo-horizontal.png' || req.url === '/apu-flower.svg') { res.setHeader('Content-Type', req.url.endsWith('.svg') ? 'image/svg+xml' : 'image/png'); res.end(await readFile(join(projectRoot, 'public', req.url.slice(1)))); return; } res.setHeader("Content-Type", req.url === "/app.js" ? "application/javascript" : req.url === "/style.css" ? "text/css" : "text/html"); res.end(req.url === "/app.js" ? js : req.url === "/style.css" ? Buffer.concat([css, Buffer.from("\n:root{--font-manrope:Arial;--font-source-sans:Arial;--font-dm-sans:Arial;--font-inter:Arial}")]) : '<!doctype html><html lang="cs"><meta charset="utf-8"><link rel="stylesheet" href="/style.css"><div id="root"></div><script src="/app.js"></script></html>'); });
+const server = createServer(async (req, res) => { if(req.url==='/cdn-cgi/access/logout'){res.setHeader('Content-Type','text/html');res.end('<html lang=cs><p id=mock-logout>Mock Access logout</p></html>');return;} if (req.url === '/apu-logo-horizontal.png' || req.url === '/apu-flower.svg') { res.setHeader('Content-Type', req.url.endsWith('.svg') ? 'image/svg+xml' : 'image/png'); res.end(await readFile(join(projectRoot, 'public', req.url.slice(1)))); return; } res.setHeader("Content-Type", req.url === "/app.js" ? "application/javascript" : req.url === "/style.css" ? "text/css" : "text/html"); res.end(req.url === "/app.js" ? js : req.url === "/style.css" ? Buffer.concat([css, Buffer.from("\n:root{--font-manrope:Arial;--font-source-sans:Arial;--font-dm-sans:Arial;--font-inter:Arial}")]) : '<!doctype html><html lang="cs"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/style.css"><div id="root"></div><script src="/app.js"></script></html>'); });
 await new Promise((resolve) => server.listen(4333, "127.0.0.1", resolve));
 const chrome = spawn(process.env.CHROMIUM_PATH ?? "chromium", ["--headless", "--no-sandbox", "--disable-dev-shm-usage", "--remote-debugging-port=9228", "--user-data-dir="+join(artifactRoot, "profile"), "about:blank"], { stdio: "ignore" });
 let socket;
@@ -204,7 +204,10 @@ try {
     await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
     await waitFor('!document.querySelector(".welcome-help")');
   };
-  if (process.argv.includes('--session-only')) {
+  if (process.argv.includes('--methodical-tests-only')) {
+    const { runMethodicalTestScenarios } = await import('./methodical-test-browser-scenarios.mjs');
+    await runMethodicalTestScenarios({call,evaluate,waitFor,capture});
+  } else if (process.argv.includes('--session-only')) {
     const { runSessionScenarios } = await import('./session-browser-scenarios.mjs');
     await runSessionScenarios({call,evaluate,waitFor,capture,artifactRoot});
   } else if (process.argv.includes('--header-roles-only')) {
@@ -241,7 +244,7 @@ try {
       await capture(`header-${developer?'dev':'ordinary'}-${width}`);
       await activate('.project-actions button[aria-controls="diagnostics-drawer"]');
       await waitFor('document.activeElement.id==="drawer-profile-select"');
-      assert.deepEqual(await evaluate('Array.from(document.querySelectorAll("#diagnostics-drawer h2")).map(el=>el.textContent)'),['Komunikační profil','Vzhled']);
+      assert.deepEqual(await evaluate('Array.from(document.querySelectorAll("#diagnostics-drawer h2")).map(el=>el.textContent)'),['O APU','Komunikační profil','Vzhled']);
       assert.equal(await evaluate('document.querySelector("#diagnostics-drawer #model-select, #diagnostics-drawer .dev-scenario-picker")'),null);
       await key('Escape',27);
       await waitFor('document.querySelector("#diagnostics-drawer").inert');
@@ -250,7 +253,7 @@ try {
         await waitFor('document.querySelectorAll("#dev-scenario-menu button").length===9');
         await capture(`header-scenarios-${width}`);
         await key('Tab',9);
-        assert.equal(await evaluate('document.activeElement.getAttribute("role")'),'menuitem');
+        assert.equal(await evaluate('document.activeElement.getAttribute("data-scenario-id")'),'pochopit-1');
         await key('Enter',13);
         await waitFor('!document.querySelector("#dev-scenario-menu") && document.querySelector("#message").value.length>0 && document.activeElement.id==="message"');
         await activate('.conversation-diagnostics .stats-trigger');
@@ -586,7 +589,7 @@ try {
     await waitFor('document.activeElement.id === "drawer-profile-select"');
     assert.equal(await evaluate('document.querySelector("#diagnostics-drawer").inert'), false);
     assert.equal(await evaluate('document.querySelector("#diagnostics-drawer #drawer-model-select, #diagnostics-drawer #model-select, #diagnostics-drawer #usage-settings-title")'), null);
-    assert.deepEqual(await evaluate('Array.from(document.querySelectorAll("#diagnostics-drawer h2")).map(el=>el.textContent)'), ['Komunikační profil','Vzhled']);
+    assert.deepEqual(await evaluate('Array.from(document.querySelectorAll("#diagnostics-drawer h2")).map(el=>el.textContent)'), ['O APU','Komunikační profil','Vzhled']);
     assert.equal(await evaluate('(() => { const el=document.querySelector("#diagnostics-drawer"), r=el.getBoundingClientRect(); return r.left>=0 && r.right<=innerWidth && el.contains(document.elementFromPoint(r.left+20,r.top+20)); })()'), true);
     const original = await evaluate('document.querySelector("#drawer-profile-select").value');
     await evaluate('(() => { const el=document.querySelector("#drawer-profile-select"); el.value=el.options[1].value; el.dispatchEvent(new Event("change",{bubbles:true})); })()');
@@ -1034,7 +1037,7 @@ try {
   await waitFor('document.querySelector("#dev-scenario-menu")');
   assert.equal(await evaluate('document.querySelectorAll("#dev-scenario-menu button").length'),9);
   assert.equal(await evaluate('(() => { const el=document.querySelector("#dev-scenario-menu"), r=el.getBoundingClientRect(); return el.contains(document.elementFromPoint(r.right-10,r.top+40)); })()'),true,'scenario popup must remain accessible');
-  await click('button[aria-label="Testovací scénáře"]');
+  await click('button[aria-label="Zavřít testovací panel"]');
   await click('#message');
   await evaluate('(() => { const el=document.querySelector("#message"); Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,"value").set.call(el,"Přejdi do fáze 2."); el.dispatchEvent(new Event("input",{bubbles:true})); })()');
   await waitFor('!document.querySelector(".send-button").disabled'); await click('.send-button');

@@ -6,6 +6,14 @@ const require = createRequire(import.meta.url);
 const vitePackagePath = require.resolve("vite/package.json");
 const { bin } = require(vitePackagePath);
 const viteBin = typeof bin === "string" ? bin : bin.vite;
+const args = process.argv.slice(2);
+if (args.length && (args.length !== 2 || args[0] !== "--runtime-mode")) {
+  throw new Error("Usage: node scripts/dev-local.mjs [--runtime-mode DEV|PUBLIC]");
+}
+const runtimeMode = args[1] ?? process.env.APU_RUNTIME_MODE ?? "DEV";
+if (runtimeMode !== "DEV" && runtimeMode !== "PUBLIC") {
+  throw new Error("APU_RUNTIME_MODE must be DEV or PUBLIC.");
+}
 
 if (!viteBin) {
   throw new Error("Unable to resolve the local Vite executable.");
@@ -21,6 +29,7 @@ const child = spawn(
     env: {
       ...process.env,
       APU_LOCAL_DEV_AUTH: "1",
+      APU_RUNTIME_MODE: runtimeMode,
       NODE_ENV: "development",
       WRANGLER_LOG_PATH: ".wrangler/wrangler.log",
     },
