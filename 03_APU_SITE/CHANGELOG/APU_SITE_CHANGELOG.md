@@ -4,6 +4,11 @@ Status: CURRENT
 
 Records significant verified product/runtime/project changes. It is not a complete Git log. Historical Sites-era entries are retained where they remain useful; current deployment state must not be inferred from a changelog entry alone.
 
+## 2026-10-24 — CI-01: verify development PRs into dev
+
+- Corrected the release-context validator on `feat/pilot-readiness-integration` to verify same-repository working PRs into `dev` with an explicit development scope. Preserved repository/event/ref/source SHA/ordered merge provenance, fork rejection, protected source exclusions, exact migration scope limits and production release pairs. Workflow permissions/triggers/action pins, test selection, protections and application/configuration source are unchanged.
+- Local V2 PASS: **72/72 focused context/workflow tests**, included in **660/660 actual provider-free release-runner tests**, plus inactive DEV/Preview configuration checks. Updated the runbook and Runtime Technical Current; new hosted candidate evidence must be assessed independently in PR #81. Historical CI failures remain failures. No legal approval, real cases, provider calls, Cloudflare mutations, AGENTS/05_WORKFLOW or Backlog/Known Issues edits, PR merge or deployment.
+
 ## 2026-10-24 — Combined pilot source candidate: conflict resolution and regression
 
 - Prepared `feat/pilot-readiness-integration` from verified `dev` `fc8ac5520b7b49b442bedc47558c73f20ce2bea6`, combining exact PR #77 `57a914563c359512e482c422d116fb65d9a4b4d5` and PR #79 `2345c54d52fded6ad47dfb50c2bf3bbb47eaab1c`. Preserved all client imports and both original changelog records; neither PR nor `dev` is merged by this source preparation.
