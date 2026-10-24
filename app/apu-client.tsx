@@ -1,5 +1,7 @@
 "use client";
 
+import { collectChatDialogState } from "./chat-dialog-context";
+
 import {
   CSSProperties,
   FormEvent,
@@ -361,7 +363,6 @@ function ApuWorkspace({ email, isDeveloper, onLogout, registerInvalidation }: Ap
 }) {
   const [messages, setMessages] = useState<Message[]>([WELCOME]);
   const [input, setInput] = useState("");
-  const [responseId, setResponseId] = useState<string | null>(null);
   const [phase, setPhase] = useState<ConversationPhase>("intake");
   const [selectedModel, setSelectedModel] = useState<ModelSelection>(AUTO_MODEL_SELECTION);
   const [communicationProfile, setCommunicationProfile] = useState<CommunicationProfileId>(DEFAULT_COMMUNICATION_PROFILE_ID);
@@ -1288,21 +1289,14 @@ function ApuWorkspace({ email, isDeveloper, onLogout, registerInvalidation }: Ap
       } : message));
       return;
     }
-    const pendingSide = [...messages].reverse()
-      .find((message) => message.role === "assistant" && message.dialogActions?.some((action) => action.type === "SIDE"))
-      ?.dialogActions?.find((action) => action.type === "SIDE");
-    const askedRefinementTargets = [...new Set(messages.flatMap((message) =>
-      message.role === "assistant"
-        ? (message.dialogActions ?? []).filter((action) => action.type === "SIDE").map((action) => action.target)
-        : [],
-    ))];
+    const { dialogContext, pendingSide, askedRefinementTargets } = collectChatDialogState(messages, phase, sourceMessageId);
     const functionalMapping = [...messages].reverse().find((message) => message.debugMapping)?.debugMapping;
     const request = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         message: rawText,
-        previousResponseId: responseId,
+        ...(dialogContext ? { dialogContext } : {}),
         model: selectedModel,
         communicationProfile,
         selectedHypothesisId,
@@ -1383,7 +1377,6 @@ function ApuWorkspace({ email, isDeveloper, onLogout, registerInvalidation }: Ap
         clearDialogActionsPreview(requestId);
         const separated = splitAssistantMetadata(completeText, { ensureDebug: true });
         completeText = separated.visibleContent;
-        if (event.responseId) setResponseId(event.responseId);
         if (event.phase) {
           const nextPhase = event.phase as ConversationPhase;
           completedPhase = nextPhase;
@@ -1521,9 +1514,7 @@ function ApuWorkspace({ email, isDeveloper, onLogout, registerInvalidation }: Ap
         return;
       }
       try {
-        const answersNeedQuestion = [...messages].reverse().find(
-          (message) => message.role === "assistant" && message.dialogActions?.length,
-        )?.dialogActions?.some((action) => action.type === "MAIN" && action.target === "teacher_need") ?? false;
+        const { dialogContext, answersNeedQuestion } = collectChatDialogState(messages, phase);
         const extractionRequest = await fetch("/api/extract", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -1531,6 +1522,7 @@ function ApuWorkspace({ email, isDeveloper, onLogout, registerInvalidation }: Ap
             message: rawText,
             notebook: compactNotepad(notepad),
             answersNeedQuestion,
+            ...(dialogContext ? { dialogContext } : {}),
             ...(options?.explicitNeed ? { explicitNeed: options.explicitNeed } : {}),
             turnId,
           }),
@@ -1663,7 +1655,6 @@ function ApuWorkspace({ email, isDeveloper, onLogout, registerInvalidation }: Ap
     dictationFinalizedSessionRef.current = 0;
     setMessages(reset.messages);
     setNotepad(reset.notepad);
-    setResponseId(reset.responseId);
     setPhase(reset.phase);
     setActivePanel(reset.activePanel);
     setError(reset.error);

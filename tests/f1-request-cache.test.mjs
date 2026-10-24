@@ -10,13 +10,13 @@ import { CONTINUE_TO_SOLUTION_LABEL } from "../app/dialog-action.ts";
 
 // Full effective request signatures captured from 5f9230c before envelope changes.
 // They pin every instruction byte, dynamic input, schema and model setting.
+// Main signature updated for the intentional stateless migration; both turns use it.
 const baseline = {
   apu_notepad_extraction: "be84e06aa5e12ff81a9ce0910b415f82ba9e53a52d1ab46061a33746a6d41d1f",
   apu_notepad_grounding_verification: "bfa7082371a257da8deb6b87ffaa40230ecd3581b250c2dfa13ebf80c96fe547",
   apu_notepad_grounding_rescue: "94cbabbce22dec16ede3eccdcd54ba4d5b91b2914c4a7c04c8a19448a56b686a",
   apu_quest_controller: "fcd74c54e61cc3b12bc4e3d9c0a3845e3c137c8c1f83896b924a8d7e2c1d9868",
-  main_initial: "3423fdb2ee424bc085d095827e85e1cc67e1875deb6d6bb1d4d66e699f4f2fd2",
-  main_followup: "8e28164211b94d439b321b96e3058c3d9a01327cda73ba29057f53e1b89cba91",
+  main_stateless: "8eb76e981c0a798fa5860f618e24329049bab99724b364127ed42935fd69a7de",
 };
 const root = fileURLToPath(new URL("..", import.meta.url));
 const artifacts = await mkdtemp(join(tmpdir(), "apu-f1-cache-"));
@@ -94,7 +94,7 @@ function assertBaselineRequests(payloads, names) {
 }
 const extractionNames = ["apu_notepad_extraction", "apu_notepad_grounding_verification", "apu_notepad_grounding_rescue"];
 
-async function run(t, operation, { role = "developer", rescue = true, currentMessage = message, currentNotebook = notebook, previousResponseId, context = {}, fixtureHandlers = handlers } = {}) {
+async function run(t, operation, { role = "developer", rescue = true, currentMessage = message, currentNotebook = notebook, previousResponseId, context = {}, fixtureHandlers = handlers, expectedStatus = 200, fixtureCandidates = candidates } = {}) {
   for (const key of ["OPENAI_API_KEY", "APU_VECTOR_STORE_ID"]) {
     const previous = process.env[key];
     process.env[key] = "synthetic-unit-only";
@@ -112,7 +112,7 @@ async function run(t, operation, { role = "developer", rescue = true, currentMes
     ].map(event => `data: ${JSON.stringify(event)}\n\n`).join(""), { headers: { "Content-Type": "text/event-stream" } });
     const name = payload.text.format.name;
     let result;
-    if (name === "apu_notepad_extraction") result = { situationRelation: "same", situationReason: null, categoryReview: { manifestations: "found", goals: "none", context: "none", course: "none", helps: "none" }, candidates };
+    if (name === "apu_notepad_extraction") result = { situationRelation: "same", situationReason: null, categoryReview: { manifestations: "found", goals: "none", context: "none", course: "none", helps: "none" }, candidates: fixtureCandidates };
     else if (name === "apu_notepad_grounding_verification") result = { verdicts: [{ index: 0, accepted: true, reason: null }, { index: 1, accepted: !rescue, reason: null }] };
     else if (name === "apu_notepad_grounding_rescue") result = { verdicts: [{ index: 0, accepted: true, reasonCategory: "accept_shared_subject", reason: "Synthetic rescue justification." }] };
     else if (name === "apu_quest_controller") result = controllerResult;
@@ -123,7 +123,8 @@ async function run(t, operation, { role = "developer", rescue = true, currentMes
     method: "POST", headers: { "Content-Type": "application/json", "x-fixture-role": role },
     body: JSON.stringify({ message: currentMessage, notebook: currentNotebook, phase: "intake", turnId: "fixture-turn", previousResponseId, ...context }),
   }));
-  assert.equal(response.status, 200);
+  assert.equal(response.status, expectedStatus);
+  if (expectedStatus !== 200) return { payloads, result: await response.json() };
   const result = operation === "extract" ? await response.json() : (await response.text()).trim().split("\n").map(line => JSON.parse(line));
   return { payloads, result };
 }
@@ -190,16 +191,17 @@ test("Controller changing context stays entirely in the user block and preserves
 });
 
 for (const previousResponseId of [undefined, "previous-fixture"]) {
-  test(`Controller envelope preserves authority and Main remains byte-equivalent (${previousResponseId ?? "first turn"})`, async t => {
+  test(`Controller envelope preserves authority and Main uses independent stateless requests (${previousResponseId ?? "first turn"})`, async t => {
     const { payloads, result } = await run(t, "chat", { previousResponseId });
-    assertBaselineRequests(payloads, ["apu_quest_controller", previousResponseId ? "main_followup" : "main_initial"]);
+    assertBaselineRequests(payloads, ["apu_quest_controller", "main_stateless"]);
     const [controller, main] = payloads;
     assert.equal(main.input, message);
     assert.equal(typeof main.instructions, "string");
     assert.ok(main.instructions.includes(JSON.stringify(notebook)));
     assert.ok(main.instructions.includes("In which setting?"));
     assert.equal(Object.hasOwn(main, "prompt_cache_options"), false);
-    assert.equal(main.previous_response_id, previousResponseId);
+    assert.equal(Object.hasOwn(main, "previous_response_id"), false);
+    assert.equal(main.store, false);
     const complete = result.find(event => event.type === "done");
     assert.ok(complete);
     assert.equal(complete.controllerFallback, false);
@@ -213,7 +215,7 @@ test("simulated Windows CRLF Markdown preserves every original request baseline"
   assertBaselineRequests(extraction.payloads, extractionNames);
   for (const previousResponseId of [undefined, "previous-fixture"]) {
     const chat = await run(t, "chat", { fixtureHandlers, previousResponseId });
-    assertBaselineRequests(chat.payloads, ["apu_quest_controller", previousResponseId ? "main_followup" : "main_initial"]);
+    assertBaselineRequests(chat.payloads, ["apu_quest_controller", "main_stateless"]);
   }
 });
 
@@ -246,4 +248,58 @@ test("fixture EOL repair still rejects non-EOL instruction, input, schema, setti
     mutate(changed);
     assert.throws(() => assertBaselineRequests(changed, extractionNames), assert.AssertionError, name);
   }
+});
+
+test("short replies use Notebook and last questions without stored response/transcript replay", async t => {
+  const dialogContext = { lastQuestions: ["Při které činnosti?"] };
+  const { payloads, result } = await run(t, "chat", { currentMessage: "Při společné práci.", previousResponseId: "obsolete-response", context: {
+    dialogContext, messages: [{ role: "user", content: "OBSOLETE_TRANSCRIPT_SENTINEL" }],
+  } });
+  const [controller, main] = payloads;
+  assert.deepEqual(JSON.parse(effective(controller).input).dialogContext, dialogContext);
+  assert.equal(effective(controller).instructions.includes("Při které činnosti?"), false, "questions stay outside the cached controller instruction block");
+  assert.ok(main.instructions.includes(JSON.stringify(notebook)));
+  assert.ok(main.instructions.includes(JSON.stringify({ dialogContext })));
+  assert.equal(main.input, "Při společné práci.");
+  for (const payload of payloads) {
+    assert.equal(payload.store, false);
+    assert.equal(Object.hasOwn(payload, "previous_response_id"), false);
+    assert.doesNotMatch(JSON.stringify(payload), /OBSOLETE_TRANSCRIPT_SENTINEL|obsolete-response/);
+  }
+  const done = result.find(event => event.type === "done");
+  assert.equal(done.telemetry.context_sizes.previous_response_context, 0);
+  assert.equal(done.model_usage_records.length, 2);
+});
+
+test("extraction and both grounding stages receive the same bounded questions with raw source unchanged", async t => {
+  const dialogContext = { lastQuestions: ["Co pozorujete?"] };
+  const { payloads, result } = await run(t, "extract", { context: { dialogContext } });
+  assert.equal(payloads.length, 3);
+  for (const payload of payloads) {
+    assertCached(payload);
+    const input = JSON.parse(effective(payload).input);
+    assert.deepEqual(input.dialogContext, dialogContext);
+    assert.equal(input.newUserMessage, message);
+    assert.deepEqual(input.currentNotebook, notebook);
+    assert.equal(payload.store, false);
+    assert.equal(effective(payload).instructions.includes("Co pozorujete?"), false);
+  }
+  for (const candidate of result.extraction.candidates) {
+    assert.ok(message.includes(candidate.sourceQuote));
+    assert.equal(message.slice(candidate.start, candidate.end), candidate.sourceQuote);
+  }
+});
+
+test("an assistant question cannot supply an absent source quote for a Notebook fact", async t => {
+  const question = "Při společné práci odchází?";
+  const { payloads, result } = await run(t, "extract", { currentMessage: "ano", context: { dialogContext: { lastQuestions: [question] } }, fixtureCandidates: [
+    { ...candidates[0], sourceQuote: question, notebookText: "Při společné práci odchází." },
+  ] });
+  assert.equal(result.extraction.candidates.length, 0);
+  assert.equal(payloads.length, 1, "an ungrounded question quote is discarded before grounding");
+});
+
+for (const operation of ["chat", "extract"]) test(`${operation} rejects malformed dialog context before provider calls`, async t => {
+  const { payloads } = await run(t, operation, { expectedStatus: 400, context: { dialogContext: { lastQuestions: ["q".repeat(601)] } } });
+  assert.equal(payloads.length, 0);
 });

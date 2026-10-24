@@ -1,3 +1,4 @@
+import { DIALOG_CONTEXT_RULES, type ChatDialogContext } from "./chat-dialog-context.ts";
 import { cacheableF1Input } from "./f1-request-cache.ts";
 import {
   CONTINUE_TO_SOLUTION_LABEL,
@@ -135,6 +136,7 @@ export async function runQuestController(args: {
   collector: RequestUsageCollector;
   coreInstructions: string;
   message: string;
+  dialogContext?: ChatDialogContext;
   notebook: IntakeNotebookItem[];
   phase: ConversationPhase;
   refinement: IntakeRefinementContext;
@@ -157,9 +159,10 @@ export async function runQuestController(args: {
         model: QUEST_CONTROLLER_MODEL,
         reasoning: { effort: "low" },
         service_tier: "default",
-        ...cacheableF1Input(`${args.coreInstructions}\n\n${CONTROLLER_INSTRUCTIONS}\n\n${FUNCTIONAL_ROUTING_HINTS}`, JSON.stringify({
+        ...cacheableF1Input(`${args.coreInstructions}\n\n${CONTROLLER_INSTRUCTIONS}\n\n${FUNCTIONAL_ROUTING_HINTS}${args.dialogContext ? DIALOG_CONTEXT_RULES : ""}`, JSON.stringify({
           phase: args.phase,
           currentMessage: args.message,
+          ...(args.dialogContext ? { dialogContext: args.dialogContext } : {}),
           currentNotebook: args.notebook,
           askedRefinementTargets: args.refinement.askedTargets,
           pendingSide: args.refinement.pendingSide ?? null,
