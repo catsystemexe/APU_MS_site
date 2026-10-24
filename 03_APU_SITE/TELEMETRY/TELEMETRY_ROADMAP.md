@@ -1,6 +1,6 @@
 # TELEMETRY_ROADMAP
 
-Status: **B1 FOUNDATION + B2 CORE METRICS + B3 REPORTING — local technical PASS; B4-H1-R1 native Windows Chromium harness PASS; G0 live DEV audit PARTIAL; collection disabled, not deployed.** Standard SSR/Vinext/Worker and hosted verification remain separate boundaries. Hosted activation / collection from real participants: **BLOCKED on explicit gates**, not authorized. Prepared 2026-10-24; verified R1 source `b8fdde42e75398198cd10fe305048aa722a42c43`. Dashboard follow-up could not authenticate, so plan/usage/headroom, effective routes/Access policy and observability retention remain NOT VERIFIED.
+Status: **B1 FOUNDATION + B2 CORE METRICS + B3 REPORTING — local technical PASS; B4-H1-R1 native Windows Chromium harness PASS; G0 live DEV audit PARTIAL; collection disabled, not deployed.** Standard SSR/Vinext/Worker and hosted verification remain separate boundaries. Hosted activation / collection from real participants: **BLOCKED on explicit gates**, not authorized. Prepared 2026-10-24; verified R1 source `b8fdde42e75398198cd10fe305048aa722a42c43`. Workers Paid is **VERIFIED BY OPERATOR SCREENSHOT** at USD 5/month; independent billing read-back remains unavailable. Zero Trust Free Base is operator-reported (2/50 seats), not independently re-read. Usage/headroom, effective routes/Access policy and observability retention remain NOT VERIFIED.
 
 ## 0. Approved pilot capacity and tariff decision — 2026-10-24
 
@@ -10,6 +10,7 @@ Status: **B1 FOUNDATION + B2 CORE METRICS + B3 REPORTING — local technical PAS
 - **Retention and metadata:** retain **30 days of raw telemetry as the proposed baseline**, subject to controller/privacy approval; optional content/route/format metadata remains **OFF** pending G3. No free-text collection is authorized.
 - **Load evidence:** the earlier **200 sessions/day** and 6,000-session/30-day resource models remain upper-load/stress scenarios, **not** the expected 50-participant daily footprint. Actual sessions per participant and D1-billed row usage/headroom require live G0/G4 verification.
 - **Authority boundary:** this decision does not authorize upgrading the Cloudflare plan, provisioning/migrating D1, changing bindings/secrets, deploying, activating telemetry, or collecting from real users. G0–G5 and separate authorizations remain required.
+- **Billing follow-up:** the account owner separately reported completing the Workers Free → Paid upgrade. The operator screenshot showed an active Workers Paid subscription at USD 5/month. This does not authorize deployment, D1 provisioning, binding/secret changes, telemetry activation, or hosted verification. Zero Trust Free Base (2/50 seats) is operator-reported and remains distinct from the Workers plan.
 
 ## 1. Technical sequence and estimates
 

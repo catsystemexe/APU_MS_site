@@ -4,6 +4,16 @@ Status: read-only evidence audit, 2026-10-23 Europe/Prague. No application/confi
 
 ## 0. G0 live DEV read-back — 2026-10-24
 
+### Billing follow-up — 2026-10-24
+
+The account owner reported completing the Workers plan upgrade in an external authenticated Brave browser. The operator-provided screenshot showed **“Purchase complete”**, **“Subscription is active”**, and **Workers Paid Plan: USD 5/month**. This is **VERIFIED BY OPERATOR SCREENSHOT**, not an independent Wrangler/API billing read-back. No further upgrade was attempted from this environment.
+
+The account owner also reported that Zero Trust remains **Free Base**, with **2 of 50 seats occupied**, and that Workers plan changes did not alter Zero Trust. This remains **OPERATOR-REPORTED**; post-upgrade Dashboard/API read-back was not available in the local browser session.
+
+Workers billing usage, quota headroom, shared account limits, effective DEV routes/Access policy, observability retention, and deployment Git-SHA provenance remain **NOT VERIFIED**. The previously verified Worker metadata and empty D1 inventory remain unchanged evidence; no Worker, binding, D1, secret, deployment, or telemetry state was modified by this follow-up.
+
+The approved operating decision remains: maximum **50 pilot participants per day**, target **Workers Paid**, and unchanged approved P0 telemetry scope. The USD 5/month amount is recorded as the operator-reported base fee; payment details and personal account data are intentionally excluded.
+
 **Overall result: PARTIAL.** This section records a new read-only Wrangler inspection. It does not replace the historical audit below and does not authorize G1 provisioning or hosted verification.
 
 Source of evidence:
