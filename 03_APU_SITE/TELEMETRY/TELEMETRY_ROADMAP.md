@@ -1,6 +1,6 @@
 # TELEMETRY_ROADMAP
 
-Status: **B1 FOUNDATION + B2 CORE METRICS + B3 REPORTING — local technical PASS; B4-H1-R1 native Windows Chromium harness PASS; collection disabled, not deployed. Standard SSR/Vinext/Worker and hosted verification remain separate boundaries.** Hosted activation / collection from real participants: **BLOCKED on explicit gates**, not authorized. Prepared 2026-10-24; verified R1 source `b8fdde42e75398198cd10fe305048aa722a42c43`.
+Status: **B1 FOUNDATION + B2 CORE METRICS + B3 REPORTING — local technical PASS; B4-H1-R1 native Windows Chromium harness PASS; G0 live DEV audit PARTIAL; collection disabled, not deployed.** Standard SSR/Vinext/Worker and hosted verification remain separate boundaries. Hosted activation / collection from real participants: **BLOCKED on explicit gates**, not authorized. Prepared 2026-10-24; verified R1 source `b8fdde42e75398198cd10fe305048aa722a42c43`.
 
 ## 0. Approved pilot capacity and tariff decision — 2026-10-24
 
@@ -88,7 +88,7 @@ Future B1–B3 documentation sections identify exact updates after verification.
 
 The data specification, source audit, conditional hosted feasibility, architecture, cost model, privacy gates, roadmap and executor prompts are prepared. Cloudflare live state remains explicitly NOT VERIFIED; source implementation can begin after separate authorization. No database, application code or deployment has been changed by the audit.
 
-**Current next action after B4-H1-R1:** retain the isolated harness PASS while separately deciding standard launcher/SSR/Worker and hosted verification. Do not activate collection or skip G0–G5. Live G0 can be supplied in parallel before any hosted step; it does not require re-auditing the repository.
+**Current next action after B4-H1-R1:** close the missing G0 evidence before any G1 provisioning request. The 2026-10-24 read-only Wrangler audit verified `apu-ms-site-dev`, its active deployment/version and ASSETS/KV/Access-variable metadata, and found an empty D1 inventory. Workers plan/headroom, routes/effective Access policy, observability retention, Git SHA provenance and the required EU telemetry D1 remain unverified or not provisioned. G0 is **PARTIAL**. Do not activate collection or skip G0–G5.
 
 
 ## 7. B1 completion checkpoint — 2026-10-23

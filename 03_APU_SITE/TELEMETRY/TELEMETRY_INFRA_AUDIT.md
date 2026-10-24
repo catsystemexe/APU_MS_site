@@ -2,6 +2,38 @@
 
 Status: read-only evidence audit, 2026-10-23 Europe/Prague. No application/configuration changes, database creation, provider calls or deployment performed. Proposed changes live in the companion documents, not in this capability matrix's current-state claims.
 
+## 0. G0 live DEV read-back — 2026-10-24
+
+**Overall result: PARTIAL.** This section records a new read-only Wrangler inspection. It does not replace the historical audit below and does not authorize G1 provisioning or hosted verification.
+
+Source of evidence:
+
+- Local Windows PowerShell.
+- Project-local Wrangler `4.150.0`.
+- Authenticated `wrangler whoami`; account identity and token values are not reproduced here.
+- Commands used: `wrangler --version`, `wrangler whoami`, `deployments list --name apu-ms-site-dev --json`, `versions list --name apu-ms-site-dev --json`, `versions view cba179ae-6f82-4c0e-bdac-5727d197cc85 --name apu-ms-site-dev --json`, `d1 list --json`.
+- No secret values, raw logs, user data or provider calls were read.
+
+| G0 item | Result | Evidence / limit |
+|---|---|---|
+| Authenticated account | **VERIFIED** | Wrangler authenticated to the authorized Catsystem account; account identifier is intentionally omitted from this shared report. |
+| Workers plan | **NOT VERIFIED** | Wrangler read-back used here does not expose Free/Paid plan or account billing state. No upgrade was attempted. |
+| Workers/D1 usage and quota headroom | **NOT VERIFIED** | No read-only usage/quota output was available from the executed project-local Wrangler commands. |
+| DEV Worker identity | **VERIFIED** | Worker `apu-ms-site-dev` exists and returned deployment/version data. |
+| Active deployment | **VERIFIED** | Deployment `ca7ca974-40c1-4669-8ddb-21db4b8a75bf`, 100% to version `cba179ae-6f82-4c0e-bdac-5727d197cc85`, created `2026-10-21T21:36:50.763Z`. |
+| Active version | **VERIFIED** | Version `cba179ae-6f82-4c0e-bdac-5727d197cc85`, number 1, source `wrangler`, upload-triggered. |
+| Git SHA provenance | **NOT VERIFIED** | Version metadata contains no Git SHA/tag linking the deployment to a repository commit. |
+| Compatibility | **VERIFIED** | Compatibility date `2026-08-21`, flag `nodejs_compat`, standard usage model. |
+| ASSETS binding | **VERIFIED** | Effective version metadata contains an `ASSETS` assets binding. |
+| DEV_LOG_STATE | **VERIFIED** | Effective version metadata contains a KV binding; the namespace identity is recorded in Cloudflare metadata but is intentionally not reproduced here. |
+| Access metadata | **PARTIAL** | Effective version metadata shows Access-related variables are present; values/audience are intentionally not reproduced. Effective Access application policy was not available from these commands. |
+| Observability/log retention | **NOT VERIFIED** | Version metadata did not establish effective dashboard retention or account log settings. |
+| Domains/routes | **NOT VERIFIED** | Deployment/version read-back did not provide a verified route/domain inventory. |
+| D1 inventory | **VERIFIED (empty)** | `wrangler d1 list --json` returned `[]`; no telemetry D1 or other account D1 was visible to this authenticated read-back. |
+| EU telemetry D1 | **NOT PROVISIONED** | No dedicated telemetry D1 was present in the returned inventory; no database or binding was created. |
+
+The live evidence confirms the named DEV Worker and its active uploaded version, but does not establish plan capacity, account-wide usage/headroom, route protection, Git provenance, effective observability retention or the required EU telemetry D1. G0 therefore does not satisfy the evidence threshold for G1 or G5.
+
 ## 1. Evidence checkpoint and scope correction
 
 Canonical audited tree: [`dev` commit fc8ac5520b7b49b442bedc47558c73f20ce2bea6](https://github.com/catsystemexe/APU_MS_site/commit/fc8ac5520b7b49b442bedc47558c73f20ce2bea6). All repository paths below refer to this exact SHA. Local detached checkout and authenticated connector reads agreed. Working tree was clean before documentation work.
