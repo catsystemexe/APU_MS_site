@@ -1,10 +1,19 @@
 # APU pilot telemetry — implementation package
 
-Status: **B1/B2 + B3 SOURCE IMPLEMENTED; B4-H1 ISOLATED LINUX BROWSER V2 PASS / COLLECTION OFF / NOT DEPLOYED.** Full B4 Windows V3 Local Verification and G0–G5 remain pending; not ready for collection from real participants. No infrastructure provisioning is claimed.
+Status: **B1/B2 + B3 SOURCE IMPLEMENTED; B4-H1-R1 ISOLATED WINDOWS CHROMIUM HARNESS PASS / COLLECTION OFF / NOT DEPLOYED.** The controlled-activity blocker is resolved in the isolated harness; standard SSR/Vinext/Worker and hosted verification remain separate boundaries. No infrastructure provisioning is claimed.
 
-Prepared: 2026-10-23, Europe/Prague. Audited source: `dev` at `fc8ac5520b7b49b442bedc47558c73f20ce2bea6`.
+Prepared: 2026-10-24, Europe/Prague. Verified R1 source: `b8fdde42e75398198cd10fe305048aa722a42c43`.
 
 The request called the development branch `next`. Authenticated GitHub reads show that `next` no longer exists and its branch endpoint redirects to protected `public`. Current `AGENTS.md` and `05_WORKFLOW/APU_PROJECT_RULES.md` identify `dev` as development. This package follows the requested **developers-only boundary** using `dev`; it must never be executed against the redirect or production branch. `main` is a legacy/reference branch.
+
+## Approved pilot capacity and tariff decision — 2026-10-24
+
+- **Maximum 50 pilot participants per day;** a participant may open multiple sessions, which remain part of the intended measurements.
+- **Cloudflare Workers Paid is the selected target plan** (indicative USD 5/account/month base, plus any usage over included allowances). The live subscription, balance and D1 quota usage remain **NOT VERIFIED** pending G0/G4.
+- **Preserve the approved P0 telemetry scope and existing same-DEV-Worker + dedicated-D1 architecture.** Do not trade away P0 metrics or collection fidelity merely to fit Workers Free.
+- Keep **30-day raw retention as the proposed default, subject to controller approval**; optional content/route/format metadata stays **OFF** pending G3. No unapproved free-text classification.
+- The historical 200-sessions/day load/resource benchmark remains a stress case, **not** a forecast or a limit of one session per participant.
+- This project decision **does not authorize** a plan upgrade, D1 creation/migration, secrets or bindings changes, deployment, real-user data collection or telemetry activation. Follow G0–G5.
 
 ## Read in this order
 
@@ -27,7 +36,7 @@ The original audit prompts were not implementation authorization. B1–B3 have s
 - Reuse the existing server-side AI usage/pricing ledger; add one request-scoped telemetry adapter, same-Worker collector and dedicated DEV D1 storage.
 - Avoid a new persistent browser user identifier. Proposed cross-visit key is cohort-scoped server HMAC of the already validated Access identity, subject to privacy gate G2. No raw email is added to telemetry.
 - Start with costs, activity, explicit workflow transitions and completion. Content classification is deferred; existing coarse route/format enums are optional, gate-controlled metadata.
-- Expected implementation: **48–72 engineering hours**, plus **4–8 operator hours** for separately authorized infrastructure/privacy/launch work. Pilot scope assumption: 20–100 participants, up to 200 sessions/day.
+- Expected implementation: **48–72 engineering hours**, plus **4–8 operator hours** for separately authorized infrastructure/privacy/launch work. Original engineering/load assumption (historical): 20–100 participants, up to 200 sessions/day. The current approved operating envelope is at most 50 participants/day, with repeat sessions permitted; the 200 sessions/day case remains a stress-test scenario.
 - Live Cloudflare Dashboard was inaccessible (sign-in wall). The exact deployed DEV source SHA, effective resources, plan headroom and current build integrations remain **NOT VERIFIED**. Repository and dated operator evidence are distinguished in the audit.
 - Gates G0–G5 in the roadmap distinguish source implementation, hosted synthetic verification and real-user collection. None silently authorize deployment.
 
