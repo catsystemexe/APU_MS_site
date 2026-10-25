@@ -36,7 +36,11 @@ export function validateReleaseContext(env, event, checkout) {
   // accept an arbitrary feature/fork PR or application changes via this path.
   const migration = (pr.head.ref === 'codex/production-branch-dev-compat' && pr.base.ref === 'dev') ||
     (pr.head.ref === 'codex/production-branch-compat' && ['next', 'public'].includes(pr.base.ref));
-  requireValue(release || migration, 'unsupported_pr_branches');
+  // Development verification is separate from production release eligibility.
+  // Reserve both exact migration names so they cannot bypass their scope guard.
+  const development = pr.base.ref === 'dev' && typeof pr.head.ref === 'string' && pr.head.ref.length > 0 &&
+    !['main', 'dev', 'next', 'public', 'codex/production-branch-dev-compat', 'codex/production-branch-compat'].includes(pr.head.ref);
+  requireValue(release || migration || development, 'unsupported_pr_branches');
   requireValue(sha(pr.head.sha) && sha(pr.base.sha), 'invalid_pr_source');
   requireValue(Array.isArray(checkout.parents) && checkout.parents.length === 2 &&
     checkout.parents[0] === pr.base.sha && checkout.parents[1] === pr.head.sha, 'unproven_merge_source');
@@ -49,7 +53,7 @@ export function validateReleaseContext(env, event, checkout) {
     !sha(pr.merge_commit_sha) ? 'invalid' : pr.merge_commit_sha === checkout.head ? 'matches' : 'differs';
   return { event: 'pull_request', sourceBranch: pr.head.ref, targetBranch: pr.base.ref,
     candidateSourceSha: pr.head.sha, testedCheckoutSha: checkout.head, baseSha: pr.base.sha, webhookMergeShaStatus,
-    ...(migration ? { verificationScope: 'migration-only' } : {}) };
+    ...(migration ? { verificationScope: 'migration-only' } : development ? { verificationScope: 'development' } : {}) };
 }
 
 async function main() {

@@ -1,3 +1,5 @@
+import { createPilot } from "../app/telemetry/pilot.ts";
+import { fetchWithPilot } from "../app/telemetry/fetch.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
@@ -31,6 +33,7 @@ function fixture(state, { epoch = 1, requestId = "request", currentRequest = tru
   let messages = [history, { id: "assistant", content: "", role: "assistant" }];
   const calls = [], phases = [];
   const context = {
+    pilot: createPilot({ enabled: false }), fetchWithPilot,
     assistantRequestRef: { current: currentRequest ? scope : null }, projectEpochRef: { current: epoch }, phase: "intake",
     compactNotepad, resolveDialogEvent, resolveTextDialogEvent,
     setPhase: value => phases.push(value),
@@ -93,5 +96,39 @@ test("actual shortcut accepts restored required information and ignores obsolete
     const obsolete = fixture(state, options); await obsolete.run();
     assert.deepEqual(obsolete.phases, []); assert.deepEqual(obsolete.calls, []);
     assert.equal(obsolete.messages()[1].dialogActions, undefined);
+  }
+});
+
+test("actual client request transmits bounded question state and Notebook, without a response ID or transcript", async () => {
+  const { collectChatDialogState } = await import("../app/chat-dialog-context.ts");
+  const scope = { requestId: "request", assistantId: "assistant", epoch: 1 };
+  const questions = [{ type: "SIDE", target: "context", question: "Při které činnosti?", required: false, options: [] }];
+  const history = [
+    { id: "older-user", role: "user", content: "DO_NOT_REPLAY_USER_HISTORY" },
+    { id: "older-assistant", role: "assistant", content: "DO_NOT_REPLAY_ASSISTANT_PROSE", dialogActions: questions, phaseLabel: "[FÁZE 1]" },
+  ];
+  for (const resumed of [false, true]) {
+    const messages = resumed ? [...history, { id: "current", role: "user", content: "Při společné práci." }, {
+      id: "later", role: "assistant", content: "Later response", dialogActions: [{ ...questions[0], question: "Later question?" }],
+    }] : history;
+    const state = notebook(true);
+    let request;
+    const context = {
+      pilot: createPilot({ enabled: false }), fetchWithPilot,
+      assistantRequestRef: { current: scope }, projectEpochRef: { current: 1 }, phase: "intake", messages,
+      compactNotepad, resolveDialogEvent, resolveTextDialogEvent, collectChatDialogState,
+      selectedModel: "auto", communicationProfile: "fixture", selectedHypothesisId: null, activeNeedId: null,
+      analysis: { hypotheses: [], needs: [], mode: "entry", mainUncertainty: null },
+      // Stop after observing the real request boundary; no simulated rendering needed.
+      fetch: async (url, init) => { request = { url, body: JSON.parse(init.body) }; throw new Error("captured-request"); },
+    };
+    const run = runInNewContext(`${functionSource}\nrequestAssistant;`, context);
+    await assert.rejects(run("Při společné práci.", "assistant", state, "current", "turn", "request"), /captured-request/);
+    assert.equal(request.url, "/api/chat");
+    assert.deepEqual(request.body.notebook, compactNotepad(state));
+    assert.deepEqual(request.body.intakeNotebook, compactNotepad(state));
+    assert.deepEqual(request.body.dialogContext, { lastQuestions: ["Při které činnosti?"] });
+    assert.equal(request.body.previousResponseId, undefined);
+    assert.doesNotMatch(JSON.stringify(request.body), /DO_NOT_REPLAY|Later question|Later response/);
   }
 });

@@ -1,4 +1,7 @@
 "use client";
+import { collectChatDialogState } from "./chat-dialog-context";
+import { PilotRulesBoundary, PilotRulesInformation } from "./pilot-rules-boundary";
+import { fetchPedagogical as fetch } from "./pilot-rules-client";
 
 import { createDocumentObserver } from "./telemetry/document-observer";
 import { usePilot } from "./telemetry/use-pilot";
@@ -356,7 +359,7 @@ function DeveloperHeaderControls({
 
 export default function ApuClient(props: ApuClientProps) {
   return <AccessSessionBoundary key={`${notebookOwnerId(props)}:${props.isDeveloper}`} identity={props}>
-    {controls => <ApuWorkspace {...props} {...controls} />}
+    {controls => <PilotRulesBoundary onLogout={() => controls.onLogout(false)}><ApuWorkspace {...props} {...controls} /></PilotRulesBoundary>}
   </AccessSessionBoundary>;
 }
 
@@ -371,7 +374,6 @@ function ApuWorkspace({ email, isDeveloper, onLogout, registerInvalidation, pilo
   const documentObserver = documentObserverRef.current;
   const [messages, setMessages] = useState<Message[]>([WELCOME]);
   const [input, setInput] = useState("");
-  const [responseId, setResponseId] = useState<string | null>(null);
   const [phase, setPhase] = useState<ConversationPhase>("intake");
   const [selectedModel, setSelectedModel] = useState<ModelSelection>(AUTO_MODEL_SELECTION);
   const [communicationProfile, setCommunicationProfile] = useState<CommunicationProfileId>(DEFAULT_COMMUNICATION_PROFILE_ID);
@@ -471,7 +473,7 @@ function ApuWorkspace({ email, isDeveloper, onLogout, registerInvalidation, pilo
       const sourceKey = latestSourceNeedKeyRef.current;
       let outcome: OperationOutcome = "failed";
       try {
-        const response = await fetchWithPilot(operation, "/api/need-route", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(routingInput) });
+        const response = await fetchWithPilot(operation, "/api/need-route", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(routingInput) }, fetch);
         const payload = await response.json().catch(() => null) as ({ decision?: unknown; error?: string } & ModelUsageRecordsResponse) | null;
         collectModelUsageRecords(payload, routerProjectEpoch);
         if (!response.ok || !payload?.decision) throw new Error(payload?.error || "Cíl potřeby se nepodařilo určit.");
@@ -1001,7 +1003,7 @@ function ApuWorkspace({ email, isDeveloper, onLogout, registerInvalidation, pilo
     let outcome: OperationOutcome = "failed";
     try {
       const buildRequest = createF2BuildRequest(f2Build, f2Situation(), selectedModel);
-      const response = await fetchWithPilot(operation, "/api/f2", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ operation: "build", model: selectedModel, build: buildRequest }) });
+      const response = await fetchWithPilot(operation, "/api/f2", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ operation: "build", model: selectedModel, build: buildRequest }) }, fetch);
       const payload = await response.json().catch(() => null) as ({ result?: unknown; error?: string } & ModelUsageRecordsResponse) | null;
       collectModelUsageRecords(payload, projectEpoch);
       if (!response.ok || !payload?.result) throw new Error(payload?.error || "Build se nepodařilo rozpracovat.");
@@ -1049,7 +1051,7 @@ function ApuWorkspace({ email, isDeveloper, onLogout, registerInvalidation, pilo
     const operation = pilot.begin("f2_component_generation", rozborGenerationStatus === "error" ? "retry" : "initial");
     let outcome: OperationOutcome = "failed";
     try {
-      const response = await fetchWithPilot(operation, "/api/f2", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ operation: "generate-rozbor-components", model: selectedModel, request }) });
+      const response = await fetchWithPilot(operation, "/api/f2", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ operation: "generate-rozbor-components", model: selectedModel, request }) }, fetch);
       const payload = await response.json().catch(() => null) as ({ components?: unknown; error?: string; diagnostic?: string } & ModelUsageRecordsResponse) | null;
       collectModelUsageRecords(payload, projectEpoch);
       if (!response.ok || !payload?.components) throw new Error(isDeveloper && payload?.diagnostic ? `${payload.error ?? "Rozbor se nepodařilo vytvořit."} ${payload.diagnostic}` : payload?.error || "Rozbor se nepodařilo vytvořit.");
@@ -1077,7 +1079,7 @@ function ApuWorkspace({ email, isDeveloper, onLogout, registerInvalidation, pilo
     let outcome: OperationOutcome = "failed";
     try {
       const snapshot = createF2PreviewSnapshot(f2Build);
-      const response = await fetchWithPilot(operation, "/api/f2", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ operation: "preview", model: selectedModel, snapshot }) });
+      const response = await fetchWithPilot(operation, "/api/f2", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ operation: "preview", model: selectedModel, snapshot }) }, fetch);
       const payload = await response.json().catch(() => null) as ({ result?: unknown; error?: string } & ModelUsageRecordsResponse) | null;
       collectModelUsageRecords(payload, projectEpoch);
       if (!response.ok || !payload?.result) throw new Error(payload?.error || "Preview se nepodařilo vytvořit.");
@@ -1115,7 +1117,7 @@ function ApuWorkspace({ email, isDeveloper, onLogout, registerInvalidation, pilo
     let outcome: OperationOutcome = "failed";
     try {
       const renderRequest = createF3RenderRequest(f3State, selectedModel);
-      const response = await fetchWithPilot(operation, "/api/f3", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(renderRequest) });
+      const response = await fetchWithPilot(operation, "/api/f3", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(renderRequest) }, fetch);
       const payload = await response.json().catch(() => null) as ({ result?: unknown; error?: string; diagnostic?: string } & ModelUsageRecordsResponse) | null;
       collectModelUsageRecords(payload, projectEpoch);
       if (!response.ok || !payload?.result) throw new Error(isDeveloper && payload?.diagnostic ? `${payload.error ?? "Finální výstup se nepodařilo vytvořit."} ${payload.diagnostic}` : payload?.error || "Finální výstup se nepodařilo vytvořit.");
@@ -1159,7 +1161,7 @@ function ApuWorkspace({ email, isDeveloper, onLogout, registerInvalidation, pilo
           canonicalNeed: resolvedNeed,
           ...(turnId ? { turnId } : {}),
         }),
-      });
+      }, fetch);
       const responseResult = await response.json().catch(() => null) as ({ analysis?: AnalysisState; diagnostics?: Diagnostics; telemetry?: Partial<SessionTelemetry>; error?: string } & ModelUsageRecordsResponse) | null;
       collectModelUsageRecords(responseResult, projectEpoch);
       if (!response.ok || !responseResult?.analysis) throw new Error(responseResult?.error || "Rozbor se nepodařilo aktualizovat.");
@@ -1344,14 +1346,7 @@ function ApuWorkspace({ email, isDeveloper, onLogout, registerInvalidation, pilo
       } : message));
       return;
     }
-    const pendingSide = [...messages].reverse()
-      .find((message) => message.role === "assistant" && message.dialogActions?.some((action) => action.type === "SIDE"))
-      ?.dialogActions?.find((action) => action.type === "SIDE");
-    const askedRefinementTargets = [...new Set(messages.flatMap((message) =>
-      message.role === "assistant"
-        ? (message.dialogActions ?? []).filter((action) => action.type === "SIDE").map((action) => action.target)
-        : [],
-    ))];
+    const { dialogContext, pendingSide, askedRefinementTargets } = collectChatDialogState(messages, phase, sourceMessageId);
     const functionalMapping = [...messages].reverse().find((message) => message.debugMapping)?.debugMapping;
     const operation = pilot.begin("main_chat", retry ? "retry" : "initial");
     let outcome: OperationOutcome = "failed";
@@ -1361,7 +1356,7 @@ function ApuWorkspace({ email, isDeveloper, onLogout, registerInvalidation, pilo
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message: rawText,
-          previousResponseId: responseId,
+          ...(dialogContext ? { dialogContext } : {}),
           model: selectedModel,
           communicationProfile,
           selectedHypothesisId,
@@ -1389,7 +1384,7 @@ function ApuWorkspace({ email, isDeveloper, onLogout, registerInvalidation, pilo
           requestId,
           turnId,
         }),
-      });
+      }, fetch);
 
       if (!isCurrentRequest()) { await request.body?.cancel().catch(() => {}); return; }
       if (!request.ok || !request.body) {
@@ -1442,7 +1437,6 @@ function ApuWorkspace({ email, isDeveloper, onLogout, registerInvalidation, pilo
           clearDialogActionsPreview(requestId);
           const separated = splitAssistantMetadata(completeText, { ensureDebug: true });
           completeText = separated.visibleContent;
-          if (event.responseId) setResponseId(event.responseId);
           if (event.phase) {
             const nextPhase = event.phase as ConversationPhase;
             completedPhase = nextPhase;
@@ -1589,9 +1583,7 @@ function ApuWorkspace({ email, isDeveloper, onLogout, registerInvalidation, pilo
       let extractionOperation: PilotOperation | undefined;
       let extractionOutcome: OperationOutcome = "failed";
       try {
-        const answersNeedQuestion = [...messages].reverse().find(
-          (message) => message.role === "assistant" && message.dialogActions?.length,
-        )?.dialogActions?.some((action) => action.type === "MAIN" && action.target === "teacher_need") ?? false;
+        const { dialogContext, answersNeedQuestion } = collectChatDialogState(messages, phase);
         extractionOperation = pilot.begin("extraction", options?.retry ? "retry" : "initial");
         const extractionRequest = await fetchWithPilot(extractionOperation, "/api/extract", {
           method: "POST",
@@ -1600,10 +1592,11 @@ function ApuWorkspace({ email, isDeveloper, onLogout, registerInvalidation, pilo
             message: rawText,
             notebook: compactNotepad(notepad),
             answersNeedQuestion,
+            ...(dialogContext ? { dialogContext } : {}),
             ...(options?.explicitNeed ? { explicitNeed: options.explicitNeed } : {}),
             turnId,
           }),
-        });
+        }, fetch);
 
         if (!extractionRequest.ok) {
           const detail = await extractionRequest.json().catch(() => null) as { error?: string } | null;
@@ -1735,7 +1728,6 @@ function ApuWorkspace({ email, isDeveloper, onLogout, registerInvalidation, pilo
     dictationFinalizedSessionRef.current = 0;
     setMessages(reset.messages);
     setNotepad(reset.notepad);
-    setResponseId(reset.responseId);
     setPhase(reset.phase);
     setActivePanel(reset.activePanel);
     setError(reset.error);
@@ -2150,6 +2142,7 @@ function ApuWorkspace({ email, isDeveloper, onLogout, registerInvalidation, pilo
           >
             <div className="diagnostics-drawer-content">
               <div className="diagnostics-drawer-body">
+                <section className="settings-section"><details className="pilot-rules-settings"><summary>Informace a pravidla</summary><PilotRulesInformation /></details></section>
                 <section className="settings-section" aria-labelledby="profile-settings-title">
                   <h2 id="profile-settings-title">Komunikační profil</h2>
                   <label className="sr-only" htmlFor="drawer-profile-select">Komunikační profil APU pro další odpověď</label>

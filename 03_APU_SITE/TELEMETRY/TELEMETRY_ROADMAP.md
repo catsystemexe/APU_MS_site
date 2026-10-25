@@ -161,3 +161,44 @@ H1 proves seeded F1–F3/default/regeneration/reset, cost/unknown/output associa
 158 preparation/B1 tests PASS, including the actual pinned Wrangler 4.150.0 applying unchanged telemetry SQL to disposable **local** Miniflare D1 from an unrelated cwd, exact schema reconciliation and once-only bookkeeping/zero rows. Typecheck, focused lint, canonical build/Worker validation and artifact isolation PASS. Production/template configs, SQL, package/lock and application modules are unchanged. B-07 stays OPEN, Known Issues unchanged.
 
 **G1-B handoff (updated after PR #78):** creation is complete; G1-B is **PARTIAL**, not PASS. The [operator runbook](G1_DEV_D1_RUNBOOK.md) separates completed creation, pending migration-only and deferred Worker integration. Reverify the existing exact name/UUID/account/EU jurisdiction, unchanged deployment, current schema and approved LF/CRLF SQL; do not recreate the D1. Migration listing may initialize bookkeeping and remains inside the authorized migration phase. The existing single-migration authorization does not permit secret publication, Worker binding/deployment, enrollment or activation. G0/G2/G4/G5 and B4/runtime/hosted gates remain independent. This source correction executes no remote operation.
+
+## G1-C5 — unified DEV source integration — 2026-10-25
+
+**SOURCE V3 PASS; hosted readiness BLOCKED; telemetry/metadata OFF/OFF.** Candidate branch `codex/g1c5-unified-dev-candidate` merges exact PR #81 `9690611428de84cc351825f9748f0231519c181d` into telemetry/evidence `e2eb49527689db76ed5bfb1a89cae93d03d29ece`. Their exact common ancestor is DEV `fc8ac5520b7b49b442bedc47558c73f20ce2bea6`; remote refs were rechecked without changes. The merge commit containing this record identifies the tested source; exact published SHA is in its stacked PR against `g1/evidence-migration-r2`. Earlier milestones below/above retain their original historical scopes; this section is the current integration state.
+
+Conflict resolutions preserve both histories and contracts:
+
+- Six AI routes combine pilot-rules guards with request-scoped sinks. Real JWT/rules denial tests cover all six, including missing/expired/other-account receipts, missing KV/TTL and unavailable storage: zero telemetry DB access, provider calls or exposed usage payloads.
+- Chat combines `store:false`/no previous_response_id/bounded dialogContext with the existing streaming pump, waitUntil, final usage, disconnect and concurrent ownership handling. Notebook remains canonical; Access/Notebook persistence modules are unchanged.
+- The client composes fetchWithPilot with fetchPedagogical explicitly at all eight call sites. **51 transport checks** execute those actual source expressions in OFF and synthetic enabled modes: one request, unchanged body/context headers, 428/503 notifications, abort propagation and header-failure fallback.
+- Shared F2/F3/server test fixtures retain both sets of dependencies; actual-client VM fixtures receive the real disabled coordinator/transport. Runtime and CHANGELOG conflicts retain historical evidence and distinguish this source PASS from hosted readiness.
+- The strict DEV preparer alone gains optional `pilotRules:{dedicatedDev:true,namespaceId,ttlSeconds}`. No default TTL; safe integer 60–31,536,000; fixed receipt binding; dedicated/non-production namespace checks and exact input/config validation. Existing mandatory DEV isolation guards, optional telemetry staging and future enabled-mode guards remain. No new live ID, approved operating TTL or secret is in Git. [Contract](../CURRENT/APU_SITE_RUNTIME_TECHNICAL_CURRENT.md#g1-c5--unified-dev-source-candidate-2026-10-25).
+
+V3 environment: Linux, Node **24.19.0**, locked Wrangler **4.150.0**, Chromium **151.0.7922.173**. Builds and timing-sensitive/runtime-heavy suites ran serially. Exact final commands/results:
+
+| Command | Result / actual scope |
+| --- | --- |
+| `npm run build` | PASS, canonical integrated application and standalone default.fetch artifact |
+| `node --test --test-concurrency=1 tests/*.test.mjs` | **1,505 PASS**, zero failures/skips; original pilot/telemetry B1–B3, config, ledger, concurrent routes, stream/reset and reporting/retention/deletion regressions included |
+| `node --test --test-concurrency=1 tests/browser/telemetry/harness.test.mjs` | **11 PASS**, zero failures/skips; real JWT/rules API/client/collector, SQLite/CSV, F1–F3/regeneration/return/reset, OFF/refusal, disconnect, exact 15,000ms activity/union/idle and new first-entry/two-turn/re-lock zero-row scenario |
+| `node tests/desktop-workspace-browser.mjs --pilot-rules-only` | PASS; unchecked entry/refusal/logout, acknowledgement, failures/retry/KV lag, two stateless turns, account GET/POST races, settings and 390/320px |
+| `node tests/desktop-workspace-browser.mjs --session-only` | PASS; Notebook ownership, account/logout/focus/offline/two-tab and stale continuation boundaries |
+| `node tests/desktop-workspace-browser.mjs --usage-isolation-only` | PASS; overlapping old/new projects, stale extraction/router/F3 and retained current-project usage |
+| `node tests/desktop-workspace-browser.mjs --f1-nav-only` | PASS; explicit phase navigation/readiness, sourced/manual Notebook, desktop/mobile and reset |
+| `node tests/desktop-workspace-browser.mjs --f1-preview-only` | PASS; actual streaming preview/final/error/retry/stale lifecycle |
+| `node tests/desktop-workspace-browser.mjs` | PASS; complete actual-client F1–F3 workflow, generated/baseline outputs, return/regeneration/adoption/reset, Settings, exports/PDF and responsive controls |
+| `node node_modules/typescript/bin/tsc --noEmit --incremental false` | PASS |
+| Focused ESLint command below | PASS; zero errors, **eight reproduced baseline warnings** (five client, two desktop fixture, one server test) |
+| `npm run validate:artifact` | PASS, standalone Worker |
+| `node tests/browser/telemetry/check-isolation.mjs` | PASS, 98 production modules / 19 artifacts, zero harness references |
+| `git diff --check` and `git diff --cached --check` | PASS; no unresolved conflict paths |
+
+```sh
+node node_modules/eslint/bin/eslint.js app/apu-client.tsx app/api/{analysis,chat,extract,f2,f3,need-route}/route.ts ops/dev/prepare-worker.mjs tests/{dev-worker-preparation,dialog-action,f1-nav-readiness,f2-need-route-api,f3-baseline-api,server-capabilities,pilot-telemetry-isolation,pilot-telemetry-transport,telemetry-browser-harness}.test.mjs tests/helpers/telemetry-browser-{fixture,server}.mjs tests/browser/telemetry/harness.test.mjs tests/desktop-workspace-browser.mjs
+```
+
+Initial failures were retained as diagnostic history, not PASS evidence. One old root assertion searched for direct extraction fetch rather than the instrumented call (corrected with explicit existence/order checks). Browser fixtures needed the approved Settings heading and observable unlocked-workspace readiness. The new real receipt POST scenario aligns both synthetic clocks before acceptance; no timestamp validation/tolerance was relaxed. Bounded bootstrap diagnostics then identified an independent receipt-seed bug: two clock reads produced **3,600,001ms** against **3,600,000ms** configured TTL. Seeding now captures one timestamp; a deterministic clock-advances-on-every-read regression verifies the real records. Production receipt/clock/activity semantics are unchanged. Only the final successful runs above establish V3 PASS.
+
+Isolation read-back: production/template Wrangler, package/lock, Core/AGENTS/workflow rules, Access/session/Notebook ownership modules, Worker, telemetry engine/collectors/SQL/reports/retention and migration-only tool are unchanged from telemetry baseline. Pilot rules/server/client/context modules and inherited CI-01 remain exact PR #81 versions. No CI guard was modified for this integration. The existing release workflow targets dev/next/public; this stacked evidence-base PR is not a hosted release check or deployment approval. Historical unsupported_pr_branches failures retain their original status.
+
+**Remaining gates:** no verified receipt namespace identity or approved operational TTL was supplied; hosted entry/AI therefore remains fail-closed. DEV D1 binding staging/publication, effective KV/Access/routing/deployed-source evidence, any secret publication/provider test, controller/privacy/retention approval (G2/G4), DRAFT/legal readiness and G5 deployment/activation authorization remain separate. G1-B EU/schema acceptance is reused from operator evidence; no fresh Cloudflare audit was run. Standard hosted/SSR/RSC and native Windows verification of this combined candidate are NOT VERIFIED. No Cloudflare resource operation, remote migration/KV write, provider call, deployment/version upload, secret/Access change or real-user enrollment/collection occurred. B-07 remains OPEN; stop after source publication.

@@ -205,7 +205,9 @@ test("F2 output navigation is handled before extraction/chat and chat rejects ou
     readFile(new URL("../app/apu-client.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/api/chat/route.ts", import.meta.url), "utf8"),
   ]);
-  assert.ok(client.indexOf("handleF2OutputNavigation(rawText") < client.indexOf('fetch("/api/extract"'));
+  const navigation = client.indexOf("handleF2OutputNavigation(rawText");
+  const extraction = client.indexOf('fetchWithPilot(extractionOperation, "/api/extract"');
+  assert.ok(navigation >= 0 && extraction >= 0 && navigation < extraction);
   assert.match(client, /current \?\? createF3State\(currentF2ToF3Source\.snapshot\)/);
   assert.match(client, /setPhase\("output"\)/);
   assert.match(route, /if \(phase === "output"\).*409/);

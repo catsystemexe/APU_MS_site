@@ -18,6 +18,7 @@ globalThis.__f3BaselineAPI = {
 };
 let code = await readFile(new URL("../app/api/f3/route.ts", import.meta.url), "utf8");
 code = code.replace(/import \{ createRequestTelemetrySink \} from [^;]+;/, "const createRequestTelemetrySink = async () => ({ sink() {} });")
+  .replace(/import \{ requirePilotRulesAcceptance \} from [^;]+;/, 'const requirePilotRulesAcceptance = async () => null;')
   .replace(/import \{ getAccessIdentity \} from [^;]+;/, 'const { getAccessIdentity } = globalThis.__f3BaselineAPI;')
   .replace(/import \{ callOpenAIResponses[^;]+;/, 'const { callOpenAIResponses, createRequestUsageCollector, modelUsagePayload, usageErrorPayload } = globalThis.__f3BaselineAPI;')
   .replace(/from "(\.\.\/\.\.\/[^";]+)"/g, (_, relative) => `from ${JSON.stringify(new URL(`../app/${relative.replace('../../', '')}.ts`, import.meta.url).href)}`)

@@ -12,7 +12,6 @@ export function createProjectResetState<Message>(welcomeMessage: Message) {
   return {
     messages: [welcomeMessage],
     notepad: EMPTY_NOTEPAD,
-    responseId: null,
     phase: "intake" as const,
     activePanel: null as WorkspacePanel,
     error: null,
