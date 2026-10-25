@@ -1,4 +1,28 @@
-# B4 prerequisite repair and testability assessment — 2026-10-23
+# B4-FINAL Windows V3 acceptance — 2026-10-25
+
+**PASS for SOURCE + LOCAL DEV V3 scope.** Exact source `cb48a9de19d5847b0ca68d097f8bb572e4e6992d` was tested in an isolated clean worktree. The canonical build, artifact validation, source isolation, typecheck, native Windows browser telemetry harness (11/11), focused telemetry/regression suite (110 pass, 0 fail, 2 Windows symlink-capability skips), and documented Windows `dev:local` UI smoke passed. The standard `npm.cmd run dev` command is POSIX-oriented and is not a Windows acceptance criterion; it remains preserved as historical diagnostics. `npm.cmd run validate` is not defined in this source candidate and is not used as a Windows acceptance gate. No Cloudflare mutation, provider request, deployment, or telemetry activation occurred.
+
+The Windows symlink skips remain **NOT VERIFIED**, not PASS. This local result does not authorize hosted work.
+
+## B4-FINAL executed evidence
+
+| Area | Result |
+| --- | --- |
+| Build / standalone Worker artifact | PASS |
+| Typecheck | PASS |
+| Browser telemetry UI → API → SQLite → SQL/CSV | 11 PASS, 0 fail, 0 skip |
+| Focused telemetry/isolation/transport/migration regressions | 110 PASS, 0 fail, 2 symlink-capability SKIP |
+| Standard `npm.cmd run dev` | NOT VERIFIED — Windows POSIX env assignment failure |
+| Documented `npm.cmd run dev:local` homepage smoke | PASS; homepage HTTP 200 |
+| `npm.cmd run validate` | NOT VERIFIED — package script absent |
+| Cloudflare/provider/deployment | NOT RUN |
+
+The synthetic harness covered default OFF, explicit refusal, opt-in collection, F1–F3, generated output, reset/reload, concurrent tabs, controlled activity/idle union, disconnect/retry and OFF/OFF re-lock. The focused suite covered pilot-rule denials, stateless transport, receipt/TTL boundaries, SQLite/reporting preparation and isolation checks. No real provider credentials or user data were used.
+
+## Historical assessment
+
+The sections below remain historical records for earlier repairs and Linux evidence. They are not overwritten by the Windows result above.
+
 
 > **Later B4-H1 supplement:** the isolated Chromium harness is now implemented and Linux V2 verified; see [B4-H1 evidence below](#b4-h1-synthetic-browser-harness--2026-10-23). The repair/audit sections immediately below describe checkpoint `9018512`, before H1 existed. They remain historical evidence; Windows B4 V3 and standard-launcher acceptance are still pending. No external operator record has been overwritten or adopted.
 
