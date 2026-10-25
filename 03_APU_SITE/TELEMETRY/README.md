@@ -1,5 +1,11 @@
 # APU pilot telemetry — implementation package
 
+## B4-FINAL Windows V3 acceptance — 2026-10-25
+
+**SOURCE + LOCAL DEV V3 PASS.** The exact PR #83 source passed canonical Windows build/artifact and source-isolation validation, typecheck, the native Chromium telemetry harness (11/11), the focused telemetry/regression suite (110 pass, 0 fail, 2 Windows symlink-capability skips), and the documented `dev:local` homepage/UI smoke. The POSIX-oriented `npm.cmd run dev` command is retained as historical diagnostics, not treated as a Windows acceptance criterion; `npm.cmd run validate` is not defined. Cloudflare and provider operations were not performed, and collection remains OFF/OFF.
+
+Local B1–B4 technical acceptance is complete for this source candidate. Hosted launch readiness, real-user collection and deployment authorization remain separate gates.
+
 Status: **B1/B2 + B3 SOURCE IMPLEMENTED; B4-H1-R1 ISOLATED WINDOWS CHROMIUM HARNESS PASS / COLLECTION OFF / NOT DEPLOYED.** The controlled-activity blocker is resolved in the isolated harness; standard SSR/Vinext/Worker and hosted verification remain separate boundaries. No infrastructure provisioning is claimed.
 
 Prepared: 2026-10-24, Europe/Prague. Verified R1 source: `b8fdde42e75398198cd10fe305048aa722a42c43`.

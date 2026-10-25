@@ -1,5 +1,13 @@
 # TELEMETRY_ROADMAP
 
+## B4-FINAL Windows V3 acceptance — 2026-10-25
+
+**PASS for SOURCE + LOCAL DEV V3 scope.** PR #83 source `cb48a9de19d5847b0ca68d097f8bb572e4e6992d` passed the Windows canonical build/artifact check, source isolation, typecheck, 11/11 browser telemetry scenarios, 110/110 focused telemetry/regression tests, and documented `dev:local` homepage/UI smoke. Two Windows symlink-capability checks were skipped as NOT VERIFIED. The standard `npm.cmd run dev` command is POSIX-oriented and is not a Windows acceptance criterion; `npm.cmd run validate` is absent and is not used as a Windows acceptance gate. No deployment, provider call, Cloudflare mutation or telemetry activation occurred.
+
+Hosted Access, Worker deployment, provider and real-user collection remain separately gated.
+
+**B-07 status:** local B1–B4 technical acceptance is complete for this source candidate; hosted launch readiness remains open under G0/G2/G4/G5.
+
 Status: **B1 FOUNDATION + B2 CORE METRICS + B3 REPORTING — local technical PASS; B4-H1-R1 native Windows Chromium harness PASS; G0 live DEV audit PARTIAL; collection disabled, not deployed.** Standard SSR/Vinext/Worker and hosted verification remain separate boundaries. Hosted activation / collection from real participants: **BLOCKED on explicit gates**, not authorized. Prepared 2026-10-24; verified R1 source `b8fdde42e75398198cd10fe305048aa722a42c43`. Workers Paid is **VERIFIED BY OPERATOR SCREENSHOT** at USD 5/month; independent billing read-back remains unavailable. Zero Trust Free Base is operator-reported (2/50 seats), not independently re-read. Usage/headroom, effective routes/Access policy and observability retention remain NOT VERIFIED.
 
 ## 0. Approved pilot capacity and tariff decision — 2026-10-24
