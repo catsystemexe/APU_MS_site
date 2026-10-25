@@ -61,3 +61,9 @@ Status: CURRENT — implemented and verified for POCHOPIT.
 Decision: The intended F2→F3 source is the current Rozbor substance, not a separate model-generated Preview/build packet.
 Reason: A second Preview layer duplicates F2 content and creates unnecessary state/version boundaries between analytical substance and materialization.
 Status: CURRENT PRODUCT DECISION — F2 POCHOPIT is implemented accordingly; immediate F3 source-contract migration remains pending and must not be represented as already implemented.
+
+
+13. CHAT IS TRANSIENT INPUT; NOTEBOOK OWNS DURABLE FACTS
+Decision: Chat collects and clarifies information for extraction into Zápisník. Main requests use current user input, the canonical Notebook and bounded transient question/routing context, with no provider response chain or routine transcript replay. Questions are orientation, never evidence of pupil facts. Current-session Chat remains visible; explicit developer Session JSON remains a diagnostic export under decision 6.
+Reason: Processing and future project continuity must not depend on retaining raw conversation. Source quotes already travel with extracted Notebook entries and do not require a saved transcript to remain readable.
+Status: CURRENT USER-APPROVED DECISION (2026-10-24); source implementation on the dedicated development branch, not a deployment claim. Future Save/Open projects must preserve canonical Notebook and required accepted derived state without raw chat or provider continuation IDs; Save/Open is not implemented by this batch. Supplier residual retention is outside this decision's current implementation scope.

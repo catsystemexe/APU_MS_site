@@ -120,11 +120,31 @@ source cleanup after migration, preserving required-check operation.
 
 ## Evidence and verification boundary
 
-The `Pilot release verification` workflow runs provider-free checks on pushes to `dev`
-and on release PR events targeting `public` (legacy `next` during migration). Its runtime
+The `Pilot release verification` workflow runs provider-free checks on pushes to `dev`,
+development PRs targeting `dev`, and release PR events targeting `public` (legacy `next` during migration). Its runtime
 guard accepts only this repository and proven source/merge parents. Normal release
 PRs must be `dev → public` or transitional `dev → next`. PR #60's stabilization branch is not
 a release source and is not repurposed or merged by this process.
+
+### Development PR verification — CI-01 (2026-10-24)
+
+Same-repository working branches may target `dev` for provider-free verification;
+the provenance record marks them `verificationScope: development`. Sources named
+`main`, `dev`, `next` or `public` cannot use this development path. Both exact migration
+source names remain reserved for their existing branch pairs and nonempty bounded
+CI/governance-file diff checks, including rejection of application/configuration changes.
+Development eligibility grants no production release eligibility: a working branch
+targeting `next` or `public` is still rejected. Forks, privileged events, unsupported
+actions, closed/merged PRs, malformed SHAs, head-only checkouts and wrong merge parents
+remain rejected. No workflow trigger, permission, action pin, regression selection,
+branch protection or integration/deployment authorization is changed by CI-01.
+
+Local CI-01 V2: **72/72 context/workflow tests** and the actual release runner
+**660/660 provider-free tests** plus inactive DEV/Preview configuration checks PASS.
+This source result does not replace a hosted check: read the new PR #81 run and its
+exact candidate, tested merge and ordered parents after publication. Earlier rejected
+feature-PR runs remain failures. Application/browser evidence from the unchanged
+combined candidate remains scoped to its recorded local checks.
 
 The job `Provider-free release checks` uses SHA-pinned checkout/setup-node, read-only
 contents permission and no persisted checkout credentials, deployment environment,

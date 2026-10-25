@@ -1,4 +1,5 @@
 import { createRequestTelemetrySink } from "../../telemetry/model-usage-adapter";
+import { requirePilotRulesAcceptance } from "../../pilot-rules-server";
 import type { ServerIdentity } from "../../server-capabilities";
 import { estimateCostUsd } from "../../model-config";
 import { F2_PATHS, locateSourceQuote, type F2Path } from "../../notepad-model";
@@ -31,6 +32,8 @@ import {
 } from "../../f1-extraction-contract";
 import intakeCore from "../../../apu-core/v1.6/02_OBSERVATION_AND_INTAKE.md?raw";
 import { cacheableF1Input } from "../../f1-request-cache";
+
+import { validateChatDialogContext, DIALOG_CONTEXT_RULES, type ChatDialogContext } from "../../chat-dialog-context";
 
 export const runtime = "edge";
 
@@ -132,6 +135,7 @@ async function verifyPrimaryGrounding(
   notebook: NotebookInput[],
   candidates: RawCandidate[],
   collector: RequestUsageCollector,
+  dialogContext?: ChatDialogContext,
 ) {
   if (!candidates.length) return { verdicts: null, observation: observeGrounding(EXTRACTION_MODEL, "skipped", null, undefined, null, "no_candidates") };
 
@@ -142,9 +146,10 @@ async function verifyPrimaryGrounding(
       payload: {
       model: EXTRACTION_MODEL,
       reasoning: { effort: PRODUCTION_EXTRACTION_REASONING },
-      ...cacheableF1Input(GROUNDING_INSTRUCTIONS, JSON.stringify({
+      ...cacheableF1Input(GROUNDING_INSTRUCTIONS + (dialogContext ? DIALOG_CONTEXT_RULES : ""), JSON.stringify({
         currentNotebook: notebook,
         newUserMessage: message,
+        ...(dialogContext ? { dialogContext } : {}),
         candidates: candidates.map((candidate, index) => ({ index, ...candidate })),
       })),
       text: {
@@ -184,8 +189,9 @@ async function verifyGrounding(
   notebook: NotebookInput[],
   candidates: RawCandidate[],
   collector: RequestUsageCollector,
+  dialogContext?: ChatDialogContext,
 ) {
-  const primary = await verifyPrimaryGrounding(apiKey, requestId, message, notebook, candidates, collector);
+  const primary = await verifyPrimaryGrounding(apiKey, requestId, message, notebook, candidates, collector, dialogContext);
   let rescueObservation = observeGrounding(PRODUCTION_GROUNDING_RESCUE_MODEL, "skipped", null, undefined, null,
     !candidates.length ? "no_candidates" : primary.observation.status === "failed" ? "primary_failed" : "no_explicit_rejections");
   const result = await applyMonotonicGroundingRescue(candidates, primary.verdicts, async (rescueCandidates) => {
@@ -198,9 +204,10 @@ async function verifyGrounding(
         payload: {
           model: PRODUCTION_GROUNDING_RESCUE_MODEL,
           reasoning: { effort: PRODUCTION_GROUNDING_RESCUE_REASONING },
-          ...cacheableF1Input(GROUNDING_RESCUE_INSTRUCTIONS, JSON.stringify({
+          ...cacheableF1Input(GROUNDING_RESCUE_INSTRUCTIONS + (dialogContext ? DIALOG_CONTEXT_RULES : ""), JSON.stringify({
             currentNotebook: notebook,
             newUserMessage: message,
+            ...(dialogContext ? { dialogContext } : {}),
             candidates: rescueCandidates.map((candidate, index) => ({ index, ...candidate })),
           })),
           text: {
@@ -249,8 +256,10 @@ export async function POST(request: Request) {
   const started = performance.now();
   const identity = await getAccessIdentity(request.headers);
   if (!identity) return jsonError("Chybí platná identita Cloudflare Access.", 401);
+  const rulesDenied = await requirePilotRulesAcceptance(identity);
+  if (rulesDenied) return rulesDenied;
 
-  let body: { message?: unknown; notebook?: unknown; answersNeedQuestion?: unknown; explicitNeed?: unknown; turnId?: unknown };
+  let body: { message?: unknown; notebook?: unknown; answersNeedQuestion?: unknown; explicitNeed?: unknown; turnId?: unknown; dialogContext?: unknown };
   try {
     body = await request.json();
   } catch {
@@ -260,6 +269,8 @@ export async function POST(request: Request) {
   if (typeof body.message !== "string" || !body.message.trim() || body.message.length > MAX_EXTRACTION_MESSAGE_LENGTH) {
     return jsonError("Zpráva je prázdná nebo příliš dlouhá.", 400);
   }
+  const dialogContext = validateChatDialogContext(body.dialogContext);
+  if (dialogContext === null) return jsonError("Neplatný kontext poslední otázky.", 400);
   const notebook = validateExtractionNotebook(body.notebook);
   if (!notebook) return jsonError("Neplatný obsah Zápisníku.", 400);
   if (body.answersNeedQuestion !== undefined && typeof body.answersNeedQuestion !== "boolean") {
@@ -306,9 +317,10 @@ export async function POST(request: Request) {
       payload: {
       model: EXTRACTION_MODEL,
       reasoning: { effort: PRODUCTION_EXTRACTION_REASONING },
-      ...cacheableF1Input(EXTRACTION_INSTRUCTIONS, JSON.stringify({
+      ...cacheableF1Input(EXTRACTION_INSTRUCTIONS + (dialogContext ? DIALOG_CONTEXT_RULES : ""), JSON.stringify({
         currentNotebook: notebook,
         newUserMessage: body.message,
+        ...(dialogContext ? { dialogContext } : {}),
       })),
       text: {
         format: {
@@ -343,7 +355,7 @@ export async function POST(request: Request) {
     (candidate) => candidate.action === "add" || candidate.action === "conflict",
   );
   const groundingStarted = performance.now();
-  const grounding = await verifyGrounding(apiKey, requestId, body.message as string, notebook, candidatesRequiringGrounding, collector);
+  const grounding = await verifyGrounding(apiKey, requestId, body.message as string, notebook, candidatesRequiringGrounding, collector, dialogContext);
   const groundingDuration = candidatesRequiringGrounding.length ? Math.round(performance.now() - groundingStarted) : null;
   const acceptedCandidateKeys = new Set(
     [...grounding.acceptedIndexes].map((index) => candidatesRequiringGrounding[index])

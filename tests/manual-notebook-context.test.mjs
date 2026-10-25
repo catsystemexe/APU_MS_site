@@ -1,3 +1,4 @@
+import { acceptedPilotRulesBindingsPlugin } from "./pilot-rules-fixture.mjs";
 import assert from "node:assert/strict";
 import test, { after } from "node:test";
 import { build } from "esbuild";
@@ -75,7 +76,7 @@ const handlers = {};
 for (const operation of ["extract", "chat", "analysis"]) {
   const outfile = join(artifacts, `${operation}.mjs`);
   await build({ entryPoints: [join(root, `app/api/${operation}/route.ts`)], outfile, bundle: true, platform: "node", format: "esm", logLevel: "silent",
-    plugins: [{ name: "mock-boundaries", setup(plugin) {
+    plugins: [acceptedPilotRulesBindingsPlugin, { name: "mock-boundaries", setup(plugin) {
       plugin.onResolve({ filter: /access-auth$/ }, () => ({ path: "auth", namespace: "unit" }));
       plugin.onLoad({ filter: /.*/, namespace: "unit" }, () => ({ contents: "export async function getAccessIdentity() { return {email:'fixture@example.invalid',role:'user'}; }", loader: "js" }));
       plugin.onResolve({ filter: /\.md\?raw$/ }, args => ({ path: join(dirname(args.importer), args.path.replace(/\?raw$/, "")), namespace: "raw" }));

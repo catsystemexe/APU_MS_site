@@ -1,6 +1,7 @@
 import { createPilot } from "../app/telemetry/pilot.ts";
 import { createDocumentObserver } from "../app/telemetry/document-observer.ts";
 import { EmulatedTelemetryD1 } from "./helpers/telemetry-sql.mjs";
+import { acceptedPilotRulesBindingsPlugin } from "./pilot-rules-fixture.mjs";
 import assert from "node:assert/strict";
 import test, { after } from "node:test";
 import { build } from "esbuild";
@@ -14,7 +15,7 @@ import { createF2BuildState, createF2BuildRequest, applyF2BuildResult, createF2P
 import { acceptF3Render, updateF3Config, createF3RenderRequest, createF3State } from "../app/f3-finalization-model.ts";
 
 // Actual server authentication, routes, validation and instrumentation. Only the
-// Next request-context import and provider/JWKS transport are test doubles.
+// Next request-context import, accepted-rules store and provider/JWKS transport are test doubles.
 const root = fileURLToPath(new URL("..", import.meta.url));
 const artifacts = await mkdtemp(join(tmpdir(), "apu-server-capabilities-"));
 after(() => rm(artifacts, { recursive: true, force: true }));
@@ -22,7 +23,7 @@ const handlers = {};
 for (const name of ["chat", "extract", "analysis", "need-route", "f2", "f3", "session"]) {
   const outfile = join(artifacts, name + ".mjs");
   await build({ stdin: { contents: `export * from './app/api/${name}/route.ts'; export * from './app/telemetry/runtime.ts'; export * from './app/telemetry/server.ts'; export {runWithExecutionContext} from 'vinext/shims/request-context';`, resolveDir: root, loader: "ts" }, outfile, bundle: true, platform: "node", format: "esm", logLevel: "silent",
-    plugins: [{ name: "provider-free-server-boundaries", setup(plugin) {
+    plugins: [acceptedPilotRulesBindingsPlugin, { name: "provider-free-server-boundaries", setup(plugin) {
       plugin.onResolve({ filter: /^next\/headers$/ }, () => ({ path: "headers", namespace: "fixture" }));
       plugin.onLoad({ filter: /.*/, namespace: "fixture" }, () => ({ contents: "export const headers=()=>{throw Error('No request-context bypass permitted')};", loader: "js" }));
       plugin.onResolve({ filter: /openai-responses-instrumentation$/ }, () => ({ path: "collector", namespace: "observe" }));

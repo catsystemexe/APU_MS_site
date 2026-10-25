@@ -20,8 +20,9 @@ async function waitFor(check, label) {
   while (performance.now() < deadline) { if (await check()) return; await delay(40); }
   throw Error("Timed out: " + label);
 }
-async function browserFixture(t, { enabled = true, seed = false } = {}) {
+async function browserFixture(t, { enabled = true, seed = false, rulesAccepted = true } = {}) {
   const h = await startHarness({ syntheticOnly: true, enabled });
+  if (!rulesAccepted) h.rules.receipts.clear();
   let context; const observation = evidence.scenarios.at(-1);
   t.after(async () => {
     try { try { await context?.close(); } finally { await h.close(); } assert.equal(existsSync(h.directory), false); }
@@ -38,7 +39,14 @@ async function browserFixture(t, { enabled = true, seed = false } = {}) {
   page.on("pageerror", error => errors.push(error.message));
   await page.clock.install({ time: new Date(h.now) });
   await page.goto(h.origin + (seed ? "/?seed=1" : "/"));
-  await page.locator("#message:enabled").waitFor();
+  try { await page.locator(rulesAccepted ? "#message:enabled" : ".pilot-rules-dialog").waitFor(); }
+  catch (error) {
+    const diagnostic = { server_ms: h.now, browser_ms: await page.evaluate(() => Date.now()),
+      receipts: [...h.rules.receipts.values()].map(raw => { const r = JSON.parse(raw); return { accepted_at: r.acceptedAt, expires_at: r.expiresAt }; }),
+      requests: h.requests.slice(-8).map(({ path, status }) => ({ path, status })),
+      boundary: (await page.locator('.pilot-rules-error, .pilot-rules-dialog [role=status], .access-card [role=status]').allTextContents()).slice(0, 3).map(text => text.slice(0, 180)) };
+    throw new Error('Synthetic bootstrap not ready: ' + JSON.stringify(diagnostic), { cause: error });
+  }
   return { h, context, page, errors, outbound,
     async tick(ms = 15000) { h.advance(ms); await page.clock.fastForward(ms); await delay(80); await h.drain(); },
     async settle() { for (let i = 0; i < 2; i++) { h.advance(15000); await page.clock.fastForward(15000); await delay(100); } await h.drain(); },
@@ -369,4 +377,45 @@ test("two actual browser tabs persist overlapping activity and B3 unions partici
   assert.equal(report.rows.summary[0].ai_count, 6);
   assert.equal(report.rows.summary[0].known_cost_nano_usd, 1344000);
   Object.assign(result, { status: "PASS", session_active_ms: [15000, 15000], participant_union_ms: 15000, ai_calls: 6, known_cost_nano_usd: 1344000, focus: "controlled CDP, not native OS acceptance" });
+});
+
+test('G1-C5 actual first-entry acceptance, two stateless turns and API re-lock preserve OFF/OFF zero writes', async t => {
+  const result = scenario('g1c5_rules_stateless_off');
+  const f = await browserFixture(t, { enabled: false, seed: true, rulesAccepted: false });
+  const { h, page } = f;
+  const proceed = page.getByRole('button', { name: 'Pokračovat do APU', exact: true });
+  assert.equal(await proceed.isDisabled(), true);
+  assert.equal(await page.locator('#message').isVisible(), false);
+  assert.equal(h.providerCalls.length, 0); assert.deepEqual(counts(h), [0, 0, 0]);
+  // Receipt validation intentionally rejects future timestamps. Align both
+  // synthetic clocks before the real POST, just as in controlled-activity tests.
+  const clocksBefore = { server: h.now, browser: await page.evaluate(() => Date.now()) };
+  const anchor = Math.max(clocksBefore.server, clocksBefore.browser) + 1000;
+  await page.clock.pauseAt(new Date(anchor)); h.freeze(anchor);
+  await page.getByRole('checkbox').check(); await proceed.click();
+  await page.locator('#message:enabled').waitFor();
+  assert.equal(h.rules.writes.length, 1);
+  assert.equal(Date.parse(JSON.parse(h.rules.writes[0].value).acceptedAt), anchor);
+  assert.equal(await page.evaluate(() => Date.now()), anchor);
+  assert.deepEqual(h.rules.writes[0].options, { expirationTtl: 3600 });
+  assert.doesNotMatch(JSON.stringify(h.rules.writes), /browser-a@|notebook|SYNTHETIC/);
+  for (const text of ['Synthetic first observation.', 'Synthetic second answer.']) await f.send(text);
+  const mains = h.providerPayloads.filter(payload => payload.stream);
+  assert.equal(mains.length, 2);
+  for (const payload of h.providerPayloads) {
+    assert.equal(payload.store, false);
+    assert.equal(Object.hasOwn(payload, 'previous_response_id'), false);
+  }
+  assert.ok(mains[1].instructions.includes('dialogContext'));
+  assert.ok(mains[1].instructions.includes('AKTUÁLNÍ ZÁPISNÍK'));
+  const before = h.providerCalls.length;
+  h.rules.receipts.clear();
+  await page.locator('#message').fill('Synthetic request after rules revocation.');
+  await page.getByRole('button', { name: 'Odeslat zprávu', exact: true }).click();
+  await page.locator('.pilot-rules-dialog').waitFor();
+  assert.equal(await page.getByRole('checkbox').isChecked(), false);
+  assert.equal(h.providerCalls.length, before);
+  await h.drain(); assert.deepEqual(counts(h), [0, 0, 0]);
+  assert.deepEqual(f.errors, []); assert.deepEqual(f.outbound, []); assert.deepEqual(h.blocked, []);
+  Object.assign(result, { status: 'PASS', stateless_main_calls: 2, receipt_writes: 1, clock_skew_before_ms: clocksBefore.server - clocksBefore.browser, aligned_clock_ms: anchor, rows: [0, 0, 0], provider_calls_after_denial: 0 });
 });

@@ -1,4 +1,5 @@
 import { createRequestTelemetrySink } from "../../telemetry/model-usage-adapter";
+import { requirePilotRulesAcceptance } from "../../pilot-rules-server";
 import { getAccessIdentity } from "../../access-auth";
 import { NEED_ROUTING_INSTRUCTIONS, NEED_ROUTING_SCHEMA, parseNeedRoutingDecision } from "../../f2-need-routing";
 import { callOpenAIResponses, createRequestUsageCollector, modelUsagePayload, usageErrorPayload } from "../../openai-responses-instrumentation";
@@ -8,6 +9,8 @@ export const runtime = "edge";
 export async function POST(request: Request) {
   const identity = await getAccessIdentity(request.headers);
   if (!identity) return Response.json({ error: "Chybí platná identita Cloudflare Access." }, { status: 401 });
+  const rulesDenied = await requirePilotRulesAcceptance(identity);
+  if (rulesDenied) return rulesDenied;
   let body: unknown;
   try { body = await request.json(); } catch { return Response.json({ error: "Neplatný formát požadavku." }, { status: 400 }); }
   const needText = body && typeof body === "object" ? (body as Record<string, unknown>).needText : null;

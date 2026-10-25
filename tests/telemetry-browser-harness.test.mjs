@@ -1,13 +1,31 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { existsSync } from "node:fs";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { get } from "node:http";
 import { startHarness } from "./helpers/telemetry-browser-server.mjs";
 import { createReport } from "../telemetry/reports/engine.ts";
-import { reportOptions } from "./helpers/telemetry-browser-fixture.mjs";
+import { reportOptions, bundleFixture, syntheticFixture, START } from "./helpers/telemetry-browser-fixture.mjs";
 
 const start = () => ({ action: "start", opt_in: true, notice_version: "h1", tab_id: crypto.randomUUID() });
 const count = h => ["telemetry_sessions", "telemetry_events", "telemetry_ai_calls"].map(n => h.db.rows(n).length);
+
+test("seeded real receipts stay within configured TTL even when the clock advances on every read", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "apu-receipt-clock-"));
+  let fixture;
+  try {
+    const { routes } = await bundleFixture(directory);
+    let ticks = 0;
+    Object.defineProperty(routes.testClock, "now", { get: () => START + ticks++ });
+    fixture = await syntheticFixture(directory, routes);
+    for (const raw of fixture.rules.receipts.values()) {
+      const receipt = JSON.parse(raw);
+      assert.equal(Date.parse(receipt.expiresAt) - Date.parse(receipt.acceptedAt), Number(fixture.bindings.PILOT_RULES_RECEIPT_TTL_SECONDS) * 1000);
+    }
+  } finally { if (fixture) await fixture.close(); await rm(directory, { recursive: true, force: true }); }
+});
 
 test("browser fixture requires explicit isolation, defaults OFF, uses actual Home/auth and removes its SQLite resources", async () => {
   await assert.rejects(startHarness(), /Explicit synthetic/);

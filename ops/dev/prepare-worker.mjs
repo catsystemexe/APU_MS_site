@@ -53,7 +53,7 @@ export function validateDevTemplate(template) {
 }
 export function validateDevInputs(inputs) {
   requireThat(object(inputs), "missing_dev_inputs");
-  equal(Object.keys(inputs).sort(), [...INPUT_KEYS, ...(Object.hasOwn(inputs, "telemetry") ? ["telemetry"] : [])].sort(), "unsupported_dev_input");
+  equal(Object.keys(inputs).sort(), [...INPUT_KEYS, ...["telemetry", "pilotRules"].filter(key => Object.hasOwn(inputs, key))].sort(), "unsupported_dev_input");
   if (Object.hasOwn(inputs, "telemetry")) validateTelemetry(inputs.telemetry);
   requireThat(typeof inputs.kvNamespaceId === "string" && /^[0-9a-f]{32}$/.test(inputs.kvNamespaceId) && !/^0+$/.test(inputs.kvNamespaceId), "missing_or_invalid_dev_kv");
   requireThat(!EXISTING_KV.includes(inputs.kvNamespaceId), "existing_kv_reuse_forbidden");
@@ -63,6 +63,17 @@ export function validateDevInputs(inputs) {
   requireThat(inputs.accessAudience !== EXISTING_AUD, "existing_access_audience_forbidden");
   equal(inputs.accessTeamDomain, DEV.issuer, "unapproved_dev_access_issuer");
   equal(inputs.operatorEmail, DEV.operator, "dev_operator_only");
+  if (Object.hasOwn(inputs, "pilotRules")) {
+    const receipt = inputs.pilotRules;
+    requireThat(object(receipt), "invalid_pilot_rules_input");
+    equal(Object.keys(receipt).sort(), ["dedicatedDev", "namespaceId", "ttlSeconds"].sort(), "invalid_pilot_rules_input");
+    requireThat(receipt.dedicatedDev === true, "dedicated_pilot_rules_dev_required");
+    requireThat(typeof receipt.namespaceId === "string" && /^[0-9a-f]{32}$/.test(receipt.namespaceId) && !/^0+$/.test(receipt.namespaceId), "invalid_pilot_rules_namespace");
+    requireThat(![inputs.kvNamespaceId, ...EXISTING_KV, inputs.accessApplicationId.replaceAll("-", ""),
+      EXISTING_ACCESS_APP.replaceAll("-", ""), inputs.telemetry?.databaseId?.replaceAll("-", "")].includes(receipt.namespaceId), "pilot_rules_resource_reuse_forbidden");
+    // Same finite bounds as the fail-closed server. No default or coercion of operator input.
+    requireThat(Number.isSafeInteger(receipt.ttlSeconds) && receipt.ttlSeconds >= 60 && receipt.ttlSeconds <= 31_536_000, "invalid_pilot_rules_ttl");
+  }
 }
 function materialize(template, inputs) {
   // Copy the reviewed DEV template, never production vars, bindings, secrets,
@@ -74,6 +85,10 @@ function materialize(template, inputs) {
   config.kv_namespaces = [{ binding: "DEV_LOG_STATE", id: inputs.kvNamespaceId }];
   config.vars = { APU_LOCAL_DEV_AUTH: "0", CF_ACCESS_TEAM_DOMAIN: inputs.accessTeamDomain,
     CF_ACCESS_AUD: inputs.accessAudience, APU_DEVELOPER_EMAILS: inputs.operatorEmail };
+  if (inputs.pilotRules) {
+    config.kv_namespaces.push({ binding: "PILOT_RULES_ACCEPTANCE", id: inputs.pilotRules.namespaceId });
+    config.vars.PILOT_RULES_RECEIPT_TTL_SECONDS = String(inputs.pilotRules.ttlSeconds);
+  }
   if (inputs.telemetry?.enabled === true || inputs.telemetry?.staged === true) {
     const t = inputs.telemetry;
     requireThat(t.databaseId !== inputs.accessApplicationId && t.databaseId !== EXISTING_ACCESS_APP &&
@@ -101,6 +116,19 @@ export function buildDevConfig(template, artifact, inputs) {
   equal(artifact.compatibility_date, CORE.compatibility_date, "unexpected_canonical_artifact");
   equal(artifact.compatibility_flags, CORE.compatibility_flags, "unexpected_canonical_artifact");
   equal(artifact.assets, { directory: "../client", binding: "ASSETS", not_found_handling: "none" }, "unexpected_canonical_artifact");
+  if (inputs.pilotRules) {
+    // Reject also namespaces discovered in the canonical artifact, rather than
+    // relying solely on the historical production/Preview denylist.
+    const inspect = value => {
+      if (!object(value)) return;
+      if (Object.hasOwn(value, "kv_namespaces")) {
+        requireThat(Array.isArray(value.kv_namespaces) && !value.kv_namespaces.some(namespace =>
+          namespace?.id === inputs.pilotRules.namespaceId || namespace?.preview_id === inputs.pilotRules.namespaceId), "production_pilot_rules_namespace_reuse_forbidden");
+      }
+      for (const nested of Object.values(value)) if (object(nested)) inspect(nested);
+    };
+    inspect(artifact);
+  }
   if (inputs.telemetry?.enabled === true || inputs.telemetry?.staged === true) {
     const productionDatabases = artifact.d1_databases ?? [];
     requireThat(Array.isArray(productionDatabases) && !productionDatabases.some(db => db?.database_id === inputs.telemetry.databaseId),

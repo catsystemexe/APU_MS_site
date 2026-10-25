@@ -18,6 +18,10 @@ export async function bundleFixture(directory) {
     export {POST as contextPOST} from './app/api/telemetry/context/route.ts';
     export {POST as eventsPOST} from './app/api/telemetry/events/route.ts';
     export {GET as sessionGET} from './app/api/session/route.ts';
+    export {GET as rulesGET, POST as rulesPOST} from './app/api/pilot-rules/route.ts';
+    export {configureWorkerBindings} from './app/worker-bindings.ts';
+    export {pilotRulesKey} from './app/pilot-rules-server.ts';
+    export {PILOT_RULES_VERSION, PILOT_INFORMATION_VERSION} from './app/pilot-rules.ts';
     ${["chat", "extract", "analysis", "need-route", "f2", "f3"].map((r, i) => `export {POST as route${i}} from './app/api/${r}/route.ts';`).join("\n")}
     export * from './app/telemetry/runtime.ts';
     export {participantId} from './app/telemetry/server.ts';
@@ -64,7 +68,21 @@ export async function syntheticFixture(directory, routes, { enabled = false } = 
   const issuer = "https://browser-auth.synthetic.invalid", audience = "browser-h1", kid = "ephemeral-h1";
   const key = await crypto.subtle.generateKey({ name: "RSASSA-PKCS1-v1_5", modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" }, true, ["sign", "verify"]);
   const jwk = { ...await crypto.subtle.exportKey("jwk", key.publicKey), kid, alg: "RS256" };
+  // Existing H1 scenarios start with rules accepted. Joint tests revoke/expire
+  // these real receipt records; the actual gate and API remain in the bundle.
+  const receipts = new Map(), receiptWrites = [];
+  const rules = { receipts, writes: receiptWrites, unavailable: false };
+  const receiptNamespace = {
+    async get(key) { if (rules.unavailable) throw Error("synthetic_rules_unavailable"); return receipts.get(key) ?? null; },
+    async put(key, value, options) { if (rules.unavailable) throw Error("synthetic_rules_unavailable"); receipts.set(key, value); receiptWrites.push({ key, value, options }); },
+  };
+  const receiptTime = routes.testClock.now;
+  for (const name of ["browser-a", "browser-b"]) receipts.set(await routes.pilotRulesKey({ email: name + "@synthetic.invalid" }), JSON.stringify({
+    rulesVersion: routes.PILOT_RULES_VERSION, informationVersion: routes.PILOT_INFORMATION_VERSION,
+    acceptedAt: new Date(receiptTime - 1000).toISOString(), expiresAt: new Date(receiptTime + 3_599_000).toISOString(),
+  }));
   const bindings = { TELEMETRY_DB: db, APU_TELEMETRY_ENV: "dev", APU_TELEMETRY_HOSTNAME: "127.0.0.1", APU_TELEMETRY_SYNTHETIC: "1",
+    PILOT_RULES_ACCEPTANCE: receiptNamespace, PILOT_RULES_RECEIPT_TTL_SECONDS: "3600",
     APU_TELEMETRY_COHORT: reportOptions.cohort, APU_TELEMETRY_KEY_VERSION: "h1", APU_TELEMETRY_NOTICE_VERSION: "h1",
     APU_TELEMETRY_NOTICE_TEXT: "Synthetic voluntary measurement. Test data only.",
     TELEMETRY_PSEUDONYM_KEY: randomBytes(32).toString("base64url"), TELEMETRY_CONTEXT_KEY: randomBytes(32).toString("base64url"),
@@ -78,13 +96,13 @@ export async function syntheticFixture(directory, routes, { enabled = false } = 
   let unavailable = false, unknownUsage = false, gate = null, replyGate = null;
   const now = () => routes.testClock.now;
   const held = new Set();
-  const providerCalls = [], blocked = [], lifetimes = new Set();
+  const providerCalls = [], providerPayloads = [], blocked = [], lifetimes = new Set();
   const batch = db.batch.bind(db);
   db.batch = async statements => { if (unavailable) throw Error("synthetic_store_unavailable"); return batch(statements); };
   routes.setTestTransport(async (url, init) => {
     if (String(url) === issuer + "/cdn-cgi/access/certs") return Response.json({ keys: [jwk] });
     if (String(url) !== "https://api.openai.com/v1/responses") { blocked.push("unexpected_outbound"); throw Error("Unexpected outbound test transport"); }
-    const p = JSON.parse(init.body); providerCalls.push({ stream: !!p.stream, format: p.text?.format?.name ?? null, model: p.model });
+    const p = JSON.parse(init.body); providerPayloads.push(p); providerCalls.push({ stream: !!p.stream, format: p.text?.format?.name ?? null, model: p.model });
     if (replyGate && p.text?.format?.name.endsWith(replyGate.suffix)) { const pending = replyGate; replyGate = null; await pending.promise; held.delete(pending); }
     const response = { id: "synthetic-" + providerCalls.length, status: "completed", model: p.model, service_tier: "default",
       ...(unknownUsage ? {} : { usage: { input_tokens: 100, output_tokens: 10, total_tokens: 110 } }) };
@@ -111,7 +129,7 @@ export async function syntheticFixture(directory, routes, { enabled = false } = 
     else throw Error("Unsupported synthetic provider format");
     return Response.json({ ...response, output_text: JSON.stringify(result) });
   });
-  return { db, bindings, providerCalls, blocked, lifetimes, fetch,
+  return { db, bindings, providerCalls, providerPayloads, blocked, lifetimes, fetch, rules,
     get now() { return now(); }, advance: ms => routes.testClock.advance(ms), freeze: at => routes.testClock.freeze(at), setUnavailable(v) { unavailable = v; }, setUnknownUsage(v) { unknownUsage = v; },
     holdStream() { if (gate) throw Error("Stream already held"); let release; const promise = new Promise(r => { release = r; }); gate = { promise, release }; held.add(gate); return release; },
     holdReply(suffix) { if (replyGate) throw Error("Reply already held"); let release; const promise = new Promise(r => { release = r; }); replyGate = { promise, release, suffix }; held.add(replyGate); return release; },

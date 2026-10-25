@@ -33,7 +33,8 @@ export async function startHarness({ syntheticOnly, enabled = false } = {}) {
           if (!file.startsWith(resolve(root, "public") + sep)) { res.writeHead(403).end(); return; }
           try { const bytes = await readFile(file); res.setHeader("Content-Type", file.endsWith("svg") ? "image/svg+xml" : "font/woff2"); res.end(bytes); } catch { res.writeHead(404).end(); } return;
         }
-        if (!(url.pathname === "/" && req.method === "GET") && (!handlers[url.pathname] || (url.pathname === "/api/session" ? req.method !== "GET" : req.method !== "POST"))) { res.writeHead(404).end(); return; }
+        const rulesRoute = url.pathname === "/api/pilot-rules" && ["GET", "POST"].includes(req.method);
+        if (!rulesRoute && !(url.pathname === "/" && req.method === "GET") && (!handlers[url.pathname] || (url.pathname === "/api/session" ? req.method !== "GET" : req.method !== "POST"))) { res.writeHead(404).end(); return; }
         const chunks = []; let size = 0;
         for await (const chunk of req) { size += chunk.length; if (size > 1024 * 1024) { res.writeHead(413).end(); return; } chunks.push(chunk); }
         const headers = new Headers();
@@ -42,7 +43,9 @@ export async function startHarness({ syntheticOnly, enabled = false } = {}) {
         const entry = { path: url.pathname, status: null };
         if (url.pathname === "/api/telemetry/events") { try { entry.body = JSON.parse(await request.clone().text()); } catch { /* Real handler validates malformed JSON. */ } }
         requests.push(entry);
+        r.configureWorkerBindings(fixture.bindings);
         const response = await r.requestScope.run(request, () => r.runWithTelemetryResources(fixture.bindings, () => r.runWithExecutionContext({ waitUntil: p => fixture.track(p) }, async () => {
+          if (rulesRoute) return (req.method === "GET" ? r.rulesGET : r.rulesPOST)(request);
           if (url.pathname !== "/") return handlers[url.pathname](request);
           const element = await r.Home();
           if (typeof element.props.email !== "string") return new Response("Verified synthetic Access identity required", { status: 401 });

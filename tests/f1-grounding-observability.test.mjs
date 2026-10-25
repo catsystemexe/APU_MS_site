@@ -1,3 +1,4 @@
+import { acceptedPilotRulesBindingsPlugin } from "./pilot-rules-fixture.mjs";
 import assert from "node:assert/strict";
 import test, { after } from "node:test";
 import { build } from "esbuild";
@@ -14,7 +15,7 @@ const bundle = join(artifactRoot, "extract.mjs");
 await build({
   entryPoints: [join(projectRoot, "app/api/extract/route.ts")], outfile: bundle,
   bundle: true, platform: "node", format: "esm", logLevel: "silent",
-  plugins: [{
+  plugins: [acceptedPilotRulesBindingsPlugin, {
     name: "synthetic-unit-boundaries",
     setup(plugin) {
       plugin.onResolve({ filter: /access-auth$/ }, () => ({ path: "unit-auth", namespace: "unit" }));

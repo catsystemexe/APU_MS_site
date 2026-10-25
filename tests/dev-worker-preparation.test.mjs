@@ -378,3 +378,75 @@ test("G1 operator bootstrap config is schema-valid without a fake pre-creation U
   const Ajv = require("ajv"), validate = new Ajv({ strict: false, logger: false }).compile(schema);
   assert.equal(validate({ name: DEV.worker, account_id: DEV.account, send_metrics: false }), true, JSON.stringify(validate.errors));
 });
+
+// Synthetic receipt identities and TTLs are validation fixtures, never operator approvals.
+const receiptInputs = () => ({ dedicatedDev: true, namespaceId: 'abcdef0123456789abcdef0123456789', ttlSeconds: 3600 });
+test('G1-C5 receipt KV is separate, finite, schema-valid and composes with staged OFF/OFF D1', async () => {
+  const value = { ...inputs(), telemetry: stagedTelemetry(), pilotRules: receiptInputs() };
+  const config = buildDevConfig(template, artifact, value);
+  validateDevConfig(config, template, value);
+  assert.deepEqual(config.kv_namespaces, [{ binding: 'DEV_LOG_STATE', id: value.kvNamespaceId }, { binding: 'PILOT_RULES_ACCEPTANCE', id: value.pilotRules.namespaceId }]);
+  assert.equal(config.vars.PILOT_RULES_RECEIPT_TTL_SECONDS, '3600');
+  assert.equal(config.vars.APU_TELEMETRY_ENABLED, '0');
+  assert.equal(config.vars.APU_TELEMETRY_METADATA_ENABLED, '0');
+  assert.equal(config.vars.APU_TELEMETRY_ELIGIBLE, undefined);
+  assert.equal(config.vars.APU_TELEMETRY_PRIVACY_APPROVED, undefined);
+  const Ajv = require('ajv'), schema = JSON.parse(await readFile(new URL('../node_modules/wrangler/config-schema.json', import.meta.url), 'utf8'));
+  const validate = new Ajv({ strict: false, logger: false }).compile(schema);
+  assert.equal(validate(config), true, JSON.stringify(validate.errors));
+  const missing = buildDevConfig(template, artifact, inputs());
+  assert.equal(missing.vars.PILOT_RULES_RECEIPT_TTL_SECONDS, undefined);
+  assert.equal(missing.kv_namespaces.length, 1, 'missing receipt config has no default binding/TTL');
+  for (const field of ['kvNamespaceId', 'accessApplicationId', 'accessAudience', 'accessTeamDomain', 'operatorEmail']) {
+    const incomplete = { ...value }; delete incomplete[field];
+    assert.throws(() => buildDevConfig(template, artifact, incomplete));
+  }
+});
+for (const ttlSeconds of [60, 31_536_000]) test(`G1-C5 accepts explicit server TTL boundary ${ttlSeconds}`, () => {
+  const config = buildDevConfig(template, artifact, { ...inputs(), pilotRules: { ...receiptInputs(), ttlSeconds } });
+  assert.equal(config.vars.PILOT_RULES_RECEIPT_TTL_SECONDS, String(ttlSeconds));
+});
+for (const ttlSeconds of [undefined, null, '', '3600', 'Infinity', Infinity, NaN, 59, 31_536_001, 60.5, 0, -1]) test(`G1-C5 rejects absent/nonfinite/noninteger/out-of-range TTL ${String(ttlSeconds)}`, () => {
+  const pilotRules = { ...receiptInputs(), ttlSeconds };
+  assert.throws(() => buildDevConfig(template, artifact, { ...inputs(), pilotRules }));
+});
+for (const [label, change] of [
+  ['missing identity', r => delete r.namespaceId], ['null identity', r => r.namespaceId = null],
+  ['zero identity', r => r.namespaceId = '0'.repeat(32)], ['malformed identity', r => r.namespaceId = 'not-an-id'],
+  ['missing dedication', r => delete r.dedicatedDev], ['false dedication', r => r.dedicatedDev = false],
+  ['unknown field', r => r.binding = 'DEV_LOG_STATE'], ['secret', r => r.secret = 'SYNTHETIC_FORBIDDEN'],
+]) test(`G1-C5 receipt input rejects ${label}`, () => {
+  const pilotRules = receiptInputs(); change(pilotRules);
+  assert.throws(() => buildDevConfig(template, artifact, { ...inputs(), pilotRules }));
+});
+for (const namespaceId of [inputs().kvNamespaceId, inputs().accessApplicationId.replaceAll('-', ''), stagedTelemetry().databaseId.replaceAll('-', ''),
+  ...production.kv_namespaces.flatMap(kv => [kv.id, kv.preview_id]), ...production.previews.kv_namespaces.map(kv => kv.id)]) test(`G1-C5 receipt namespace cannot reuse existing resource ${namespaceId}`, () => {
+  assert.throws(() => buildDevConfig(template, artifact, { ...inputs(), telemetry: stagedTelemetry(), pilotRules: { ...receiptInputs(), namespaceId } }));
+});
+for (const place of ['root', 'preview', 'env']) test(`G1-C5 rejects receipt namespace discovered in canonical ${place} artifact`, () => {
+  const source = structuredClone(artifact), kv_namespaces = [{ binding: 'UNRELATED', id: receiptInputs().namespaceId }];
+  if (place === 'root') source.kv_namespaces = kv_namespaces;
+  else if (place === 'preview') source.previews = { kv_namespaces };
+  else source.env = { production: { kv_namespaces } };
+  assert.throws(() => buildDevConfig(template, source, { ...inputs(), pilotRules: receiptInputs() }), { code: 'production_pilot_rules_namespace_reuse_forbidden' });
+});
+for (const mutate of [c => c.kv_namespaces[1].binding = 'DEV_LOG_STATE', c => c.kv_namespaces[1].id = inputs().kvNamespaceId,
+  c => delete c.vars.PILOT_RULES_RECEIPT_TTL_SECONDS, c => c.vars.PILOT_RULES_RECEIPT_TTL_SECONDS = '0']) test('G1-C5 rejects post-preparation receipt config substitution', () => {
+  const value = { ...inputs(), pilotRules: receiptInputs() }, config = buildDevConfig(template, artifact, value);
+  mutate(config); assert.throws(() => validateDevConfig(config, template, value));
+});
+test('G1-C5 offline CLI stages the reviewed receipt contract without secrets or remote execution', async () => {
+  const f = await isolated(stagedTelemetry());
+  try {
+    const value = { ...inputs(), telemetry: stagedTelemetry(), pilotRules: receiptInputs() };
+    await writeFile(f.inputsPath, JSON.stringify(value));
+    const result = f.invoke(['--prepare-config', '--target', DEV.worker, '--inputs', f.inputsPath]);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(JSON.parse(result.stdout).deploymentAuthorized, false);
+    const config = JSON.parse(await readFile(join(f.directory, 'dist/dev-worker/wrangler.json'), 'utf8'));
+    validateDevConfig(config, template, value);
+    assert.equal(config.vars.PILOT_RULES_RECEIPT_TTL_SECONDS, '3600');
+    assert.equal(config.kv_namespaces[1].binding, 'PILOT_RULES_ACCEPTANCE');
+    assert.doesNotMatch(JSON.stringify(config), /PRIVATE_PRODUCTION_KEY|PRIVATE_VECTOR|TELEMETRY_CONTEXT_KEY|APU_TELEMETRY_ELIGIBLE/);
+  } finally { await rm(f.directory, { recursive: true, force: true }); }
+});

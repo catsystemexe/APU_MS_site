@@ -25,7 +25,7 @@ const pr = () => ({ env: { GITHUB_REPOSITORY: repository.full_name, GITHUB_EVENT
   checkout: { head: merge, parents: [base, source] } });
 const validate = f => validateReleaseContext(f.env, f.event, f.checkout);
 
-test('DEV pushes and bounded migration/release PR events trigger one read-only, non-environment job', () => {
+test('DEV pushes and development/migration/release PR events trigger one read-only, non-environment job', () => {
   assert.deepEqual(Object.keys(workflow).sort(), ['jobs', 'name', 'on', 'permissions']);
   assert.deepEqual(workflow.on, { push: { branches: ['dev'] }, pull_request: { branches: ['dev', 'next', 'public'], types: ['opened', 'synchronize', 'reopened'] } });
   assert.deepEqual(workflow.permissions, { contents: 'read' });
@@ -96,6 +96,46 @@ test('migration source names are exact and may not target a different branch', (
     const f = pr(); f.event.pull_request.head.ref = branch; f.event.pull_request.base.ref = target;
     f.checkout.changedFiles = ['ops/release/verify-context.mjs'];
     assert.throws(() => validate(f), { message: 'unsupported_pr_branches' });
+  }
+});
+for (const branch of ['feat/pilot-readiness-integration', 'fix/ci-context', 'docs/legal-readiness', 'codex/another-task']) {
+  test(`same-repository development PR ${branch} records source and proven merge separately`, () => {
+    const f = pr(); f.event.pull_request.head.ref = branch; f.event.pull_request.base.ref = 'dev';
+    f.checkout.changedFiles = ['app/apu-client.tsx'];
+    assert.deepEqual(validate(f), { event: 'pull_request', sourceBranch: branch, targetBranch: 'dev',
+      candidateSourceSha: source, testedCheckoutSha: merge, baseSha: base, webhookMergeShaStatus: 'matches', verificationScope: 'development' });
+    for (const target of ['next', 'public', 'main']) {
+      const rejected = structuredClone(f); rejected.event.pull_request.base.ref = target;
+      assert.throws(() => validate(rejected), { message: 'unsupported_pr_branches' });
+    }
+  });
+}
+test('development PRs retain repository, event, source SHA and ordered merge checks', () => {
+  const f = pr(); f.event.pull_request.head.ref = 'feat/pilot-readiness-integration'; f.event.pull_request.base.ref = 'dev';
+  for (const mutate of [
+    f => f.env.GITHUB_REPOSITORY = 'fork/APU_MS_site',
+    f => f.event.repository = { full_name: 'fork/APU_MS_site' },
+    f => f.event.pull_request.head.repo = { full_name: 'fork/APU_MS_site' },
+    f => f.event.pull_request.base.repo = { full_name: 'fork/APU_MS_site' },
+    f => f.env.GITHUB_EVENT_NAME = 'pull_request_target',
+    f => f.event.action = 'closed',
+    f => f.event.pull_request.state = 'closed',
+    f => f.event.pull_request.merged = true,
+    f => f.env.GITHUB_REF = 'refs/heads/feat/pilot-readiness-integration',
+    f => f.event.pull_request.head.sha = 'invalid',
+    f => f.event.pull_request.base.sha = '0'.repeat(40),
+    f => f.checkout.head = source,
+    f => f.checkout.parents = [source],
+    f => f.checkout.parents.reverse(),
+    f => f.checkout.parents[0] = merge,
+    f => f.checkout.parents[1] = merge,
+    f => f.checkout.parents.push(source),
+  ]) {
+    const rejected = structuredClone(f); mutate(rejected); assert.throws(() => validate(rejected));
+  }
+  for (const branch of ['main', 'dev', 'next', 'public', '', undefined, null, 42]) {
+    const rejected = structuredClone(f); rejected.event.pull_request.head.ref = branch;
+    assert.throws(() => validate(rejected), { message: 'unsupported_pr_branches' });
   }
 });
 test('full DEV retains every existing regression and both offline isolation checks', async () => {
