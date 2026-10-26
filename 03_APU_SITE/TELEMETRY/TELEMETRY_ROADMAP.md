@@ -22,6 +22,8 @@ Final restore explicitly reinstated the Access issuer/audience variables and ori
 
 This was a bounded telemetry smoke, not full acceptance. The scoped SQL cleanup and D1 zero-count read-back passed, but the required SQL/CSV snapshot/report procedure was **NOT PERFORMED** because no protected pre-test snapshot was created. CSV status is therefore NOT PERFORMED, not PASS or PENDING.
 
+Authentication follow-up: the active DEV version remained `747d661f-72c5-4ce2-9d6c-c22526d5dfed` at 100% traffic. A new standard operator-session GET `/api/session` returned HTTP 401 (`Přihlášení není platné`). The short filtered non-persistent tail produced no allowlisted validation reason, and Wrangler did not provide historical per-version runtime variable values. The rejection cause and exact hosted baseline/current value comparison therefore remain NOT VERIFIED; no additional configuration change was made.
+
 | Item | Source/local result | Remaining hosted boundary |
 | --- | --- | --- |
 | Environment readiness | Fixed DEV/PUBLIC HTTPS host pairs; wrong/missing env/host/config rejected. Local synthetic exception is DEV-only; PUBLIC needs synthetic=0 and privacy approval. All identity/enrollment/notice/opt-in/key guards preserved. | Verify separate physical DEV/PUBLIC D1, keys, cohorts, key versions, correct host and effective configuration before any future activation. PUBLIC host must be re-read before release. |
