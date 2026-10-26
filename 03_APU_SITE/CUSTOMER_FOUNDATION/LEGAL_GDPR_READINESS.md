@@ -285,7 +285,9 @@ Bez doplnění hranatých polí **nejde o úplnou informaci podle čl. 13 GDPR a
 
 ### 10.1 Právní role: minimum bez právnické osoby
 
-- **VERIFIED — rozhodnutí vlastníka:** APU připravují dvě fyzické osoby; **Michal Roupec** je určenou odpovědnou kontaktní osobou pro pilot.
+- **OWNER-REPORTED — doplnění 2026-10-26:** APU připravují **Michal Roupec** a **Zdeněk Vilímek — metodik APU**. Michal Roupec je určenou odpovědnou kontaktní osobou pro pilot; podle jeho sdělení jsou Cloudflare/OpenAI účty a administrátorské přístupy vedeny u něj. Nejde o nový autentizovaný read-back účtů ani o ověření smluvní protistrany.
+- **OWNER-PROVIDED CONTACT:** `catsytem.exe@gmail.com`, přesně podle zadání. Správnost zápisu a funkční doručování **NOT VERIFIED**; žádná testovací zpráva nebyla odeslána. Před publikací notice potvrdit přesný zápis a funkčnost kanálu.
+- **P-MIN-01 REMAINS OPEN:** metodická role Zdeňka ani držení účtů Michalem samy neuzavírají právní role. Zbývá doložit, kdo skutečně rozhoduje o účelech a podstatných prostředcích zpracování a zda se na nich Zdeněk podílí.
 - **OWNER DECISION REQUIRED:** osoba, která určuje účely a podstatné prostředky každého zpracování (registrace učitele/Access, AI požadavky, rules receipt, bezpečnostní metadata), je skutečným správcem; fyzická osoba jím být může (GDPR čl. 4 odst. 7). Pouhý interní název „odpovědná osoba“ roli jediného správce nedokazuje.
 - **OWNER DECISION REQUIRED:** pokud oba nezávisle společně určují účely a podstatné prostředky, jde o potenciální **společné správce**. Pro tento případ písemně rozdělit odpovědnost za čl. 13 informování, práva subjektů, incidenty a kontakt; podstatu ujednání zpřístupnit učitelům (čl. 26). Případný jiný skutečný vztah zdůvodnit. Neoznačovat Michala za formální DPO bez samostatného posouzení.
 - **PILOT MINIMUM:** správce či společní správci uvedení jménem/jmény a funkčním kontaktem v dokumentu pro učitele; obchodní společnost a komerční smluvní schéma patří do Stage 1, **nikoliv** určení aktuálního správce.
@@ -319,7 +321,7 @@ Retenční lhůty **nebyly nově vymyšleny ani schváleny**; seznam výše je p
 
 ### 10.4 Minimum rights / incident SOP — interní pracovní karta
 
-**Vlastník operativy:** Michal Roupec; doručovací kanál **NOT VERIFIED, DOPLNIT**. Není automaticky DPO.
+**Vlastník operativy:** Michal Roupec; vlastníkem sdělený pilotní kontakt `catsytem.exe@gmail.com` (2026-10-26). Přesný zápis a funkčnost doručování **NOT VERIFIED**; nejde o provedený test kontaktní cesty. Není automaticky DPO.
 
 1. **Příjem žádosti:** uchovat minimálně datum přijetí, typ žádosti, ověřenou identitu tazatele a rozhodnutí; žádný přepis pedagogického obsahu do incident/DSR evidence. Při žádosti o přístup/výmaz rozlišit údaje ovládané APU a lokální soubory/exporty účastníka. Standardní lhůty a případná prodloužení posoudit podle čl. 12 GDPR, nikoli automaticky slíbit okamžitý výmaz.
 2. **Omylem zadané žákovské údaje:** ihned přestat daný obsah rozpracovávat. Vyhodnotit, zda vznikla kopie v Zápisníku, prohlížeči, externím API či exportu; u každé doložit možný postup výmazu/omezení. Neodesílat obsah podruhé při hlášení. Přenos nepovažovat automaticky za „incident ohlašovaný ÚOOÚ“; nejprve posoudit narušení bezpečnosti a riziko.
@@ -346,8 +348,8 @@ Retenční lhůty **nebyly nově vymyšleny ani schváleny**; seznam výše je p
 
 | ID | Gate / příslušná osoba | Stav 2026-10-26 | Nejmenší důkaz pro uzavření |
 |---|---|---|---|
-| P-MIN-01 | Správce/společní správci: Michal + druhá fyzická osoba | **OWNER DECISION REQUIRED** | Jméno/role druhé osoby a popis, kdo rozhoduje o účelu a prostředcích, případně čl. 26 ujednání |
-| P-MIN-02 | Kontaktní kanál a čl. 13 notice | **OWNER DECISION REQUIRED** | Funkční e-mail/kanál, konkrétní identita správce, účely a čl. 6 tituly, publikovatelný notice bez placeholderů |
+| P-MIN-01 | Právní role: Michal Roupec + Zdeněk Vilímek (metodik APU) | **PARTIAL — PERSONS / ACCOUNT HOLDER OWNER-REPORTED; LEGAL ROLES OPEN** | Zbývá popis skutečného rozhodování o účelech a podstatných prostředcích; podle výsledku určit právní role a případně čl. 26 ujednání |
+| P-MIN-02 | Kontaktní kanál a čl. 13 notice | **PARTIAL — CONTACT PROVIDED; SPELLING / DELIVERY NOT VERIFIED; NOTICE OPEN** | Potvrdit přesný zápis a funkčnost `catsytem.exe@gmail.com`; doplnit právního správce, účely a čl. 6 tituly, publikovatelný notice bez placeholderů |
 | P-MIN-03 | Cloudflare/OpenAI dokumenty a účetní podmínky | **PUBLIC VENDOR DOCS VERIFIED; APU ACCOUNT NOT VERIFIED** | Průkazná krátká mapa skutečných provider/contracting terms, přenosů, hlavních log/retention nastavení, žádné raw secrets |
 | P-MIN-04 | PUBLIC/pilot receipt TTL + mazání | **OWNER DECISION REQUIRED** | Výslovná lhůta a odůvodnění, version/re-acceptance policy, přístup a DSR výmaz SOP |
 | P-MIN-05 | Logy, DSR, incident a DPIA screening | **SOP DRAFT; ACCOUNT SETTINGS / FINAL DPIA NOT VERIFIED** | Krátká operátorská evidence, funkční kontaktní cesta, podpis/rozhodnutí o DPIA |
