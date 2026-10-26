@@ -4,6 +4,16 @@ Status: CURRENT SOURCE/RUNTIME CONTRACT
 
 Purpose: describe the current repository/runtime contract. Deployment state is recorded only when independently verified; this document must not infer production state from repository contents alone.
 
+## G1-D4 — hosted DEV deployment evidence (2026-10-26)
+
+**HOSTED DEV DEPLOYMENT PASS / HOSTED CONFIG PASS / RECEIPT READ-REHYDRATION PASS / G1-D4 PARTIAL.** Application source SHA `cb48a9de19d5847b0ca68d097f8bb572e4e6992d` is distinct from the deployed Worker version. The one-time deployment targeted Worker `apu-ms-site-dev`, replacing version `cba179ae-6f82-4c0e-bdac-5727d197cc85` with `895e443e-3322-4b2d-91f0-9523220a9bbf`; 100% traffic allocation was confirmed. PUBLIC was unchanged.
+
+The verified DEV configuration contains `DEV_LOG_STATE`, `TELEMETRY_DB`, `PILOT_RULES_ACCEPTANCE` and `ASSETS`; the receipt TTL is 86400 seconds, `APU_LOCAL_DEV_AUTH=0`, and telemetry/metadata are OFF/OFF. Access protection PASS. This records the deployed Worker version, not a merge of PR #83/#84 and not a production deployment.
+
+G1-D4 initial acceptance remains historical: deployment/config PASS, then the first rules confirmation showed an error, hosted smoke was stopped, and overall acceptance was FAIL. G1-D4-R1 verified `GET /api/pilot-rules` HTTP 200, a valid receipt PRESENT and matching rules/information versions; the original POST response/status was unavailable and the root cause remains NOT VERIFIED. G1-D4-R2 verified authenticated DEV UI reload and receipt rehydration PASS: the rules overlay disappeared, Notebook/Chat/Output were available, no browser page errors occurred, and no new POST or provider call was made.
+
+**Hosted limits:** receipt read/rehydration is verified, but first-acceptance reliability is NOT VERIFIED. Telemetry enabled=0 and metadata enabled=0; post-smoke read-only D1 counts were sessions=0, events=0 and ai_calls=0. No pre-smoke D1 snapshot exists, so no exact delta is claimed. Active hosted telemetry collection and actual AI/provider calls were not tested. G2/G4/G5 remain open; B-07 remains OPEN.
+
 ## G1-C5 — unified DEV source candidate (2026-10-25)
 
 **SOURCE V3 PASS / TELEMETRY OFF/OFF / HOSTED READINESS BLOCKED / NOT DEPLOYED.** This integration preserves telemetry baseline `e2eb49527689db76ed5bfb1a89cae93d03d29ece` and exact pilot PR #81 HEAD `9690611428de84cc351825f9748f0231519c181d`, with common ancestor `fc8ac5520b7b49b442bedc47558c73f20ce2bea6`. The candidate is the merge commit containing this record, on `codex/g1c5-unified-dev-candidate`, stacked against `g1/evidence-migration-r2`; its exact published SHA is recorded in the PR. Neither original feature branch nor dev/public is merged or rewritten.

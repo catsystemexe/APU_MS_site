@@ -1,5 +1,14 @@
 # TELEMETRY_ROADMAP
 
+## G1-D4 — hosted DEV deployment and limited acceptance (2026-10-26)
+
+**HOSTED DEV DEPLOYMENT PASS / HOSTED CONFIG PASS / HOSTED RECEIPT READ/REHYDRATION PASS / FIRST-ACCEPTANCE RELIABILITY NOT VERIFIED / OVERALL G1-D4 PARTIAL.** Source `cb48a9de19d5847b0ca68d097f8bb572e4e6992d` was deployed once to `apu-ms-site-dev`; Worker version changed from `cba179ae-6f82-4c0e-bdac-5727d197cc85` to `895e443e-3322-4b2d-91f0-9523220a9bbf`, with confirmed 100% allocation. `DEV_LOG_STATE`, `TELEMETRY_DB`, `PILOT_RULES_ACCEPTANCE` and `ASSETS` were present; receipt TTL 86400, `APU_LOCAL_DEV_AUTH=0`, telemetry/metadata OFF/OFF, Access PASS, PUBLIC unchanged.
+
+- **Initial:** deployment/config PASS; first rules confirmation showed an error; hosted smoke stopped; overall FAIL.
+- **R1:** `GET /api/pilot-rules` HTTP 200, valid receipt PRESENT, rules/information versions MATCH; original POST response/status unavailable; root cause NOT VERIFIED.
+- **R2:** authenticated DEV UI reload PASS and receipt rehydration PASS; overlay disappeared; Notebook/Chat/Output available; no browser page errors; no new POST or provider call.
+- **Telemetry boundary:** post-smoke read-only D1 counts were sessions=0, events=0, ai_calls=0. No pre-smoke snapshot exists, so no exact delta is claimed. Active hosted collection and real AI/provider calls were not tested. G2/G4/G5 and B-07 remain open.
+
 ## B4-FINAL Windows V3 acceptance — 2026-10-25
 
 **PASS for SOURCE + LOCAL DEV V3 scope.** PR #83 source `cb48a9de19d5847b0ca68d097f8bb572e4e6992d` passed the Windows canonical build/artifact check, source isolation, typecheck, 11/11 browser telemetry scenarios, 110/110 focused telemetry/regression tests, and documented `dev:local` homepage/UI smoke. Two Windows symlink-capability checks were skipped as NOT VERIFIED. The standard `npm.cmd run dev` command is POSIX-oriented and is not a Windows acceptance criterion; `npm.cmd run validate` is absent and is not used as a Windows acceptance gate. No deployment, provider call, Cloudflare mutation or telemetry activation occurred.
