@@ -23,6 +23,8 @@ The Access browser login callback ended in `invalid state` and did not return to
 
 Follow-up login attempt (2026-10-26 20:55 UTC) used a new DEV browser session and did not reuse the prior callback URL. The SSO navigation ended at the Cloudflare Dashboard login page rather than returning to the Access callback or DEV application; no `/api/session` request or HTTP application response was obtained. This observed behavior is distinct from, and does not establish a cause for, the earlier `invalid state`. The test stopped at this point.
 
+Subsequent operator login completed in a new DEV session, but read-only `GET /api/session` returned `isDeveloper:true`, not tester role. The DEV UI also displayed Developer mode. No role, Access policy or bypass was changed; the T2 test stopped before receipt or telemetry.
+
 [Next operator handoff](../TELEMETRY/G1_DEV_D1_RUNBOOK.md#pilot-tech-r1--subsequent-isolated-dev-test-not-executed) covers first POST evidence, synthetic events → D1 → SQL/CSV, refusal/withdrawal, forbidden fields and cleanup. Actual configuration remains OFF/OFF; no metadata/schema/metric, authentication, Core, stateless Chat, Notebook, CI/workflow, provisioning or deployment changes. B-07 remains OPEN. No real provider request, hosted telemetry write, secret operation, enrollment, activation or merge occurred; the authorized DEV deployment is recorded above.
 
 ## G1-C5 — unified DEV source candidate (2026-10-25)

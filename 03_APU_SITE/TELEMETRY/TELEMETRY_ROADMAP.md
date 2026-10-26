@@ -14,6 +14,8 @@ The required Access login callback ended in `invalid state`; no authenticated DE
 
 Follow-up login attempt at 2026-10-26 20:55 UTC used a new DEV browser session and did not reuse the prior callback URL. SSO ended at the Cloudflare Dashboard login page; no `/api/session` response was obtained. This is observed navigation behavior only, not a verified root cause and not a repeat of the earlier `invalid state`. The test stopped without receipt or telemetry activity.
 
+The subsequent successful DEV return was read-only verified through `/api/session` as `isDeveloper:true`; the UI showed Developer mode. This is not an eligible tester session for T2. No role or Access policy was changed, and receipt/telemetry testing remains blocked.
+
 | Item | Source/local result | Remaining hosted boundary |
 | --- | --- | --- |
 | Environment readiness | Fixed DEV/PUBLIC HTTPS host pairs; wrong/missing env/host/config rejected. Local synthetic exception is DEV-only; PUBLIC needs synthetic=0 and privacy approval. All identity/enrollment/notice/opt-in/key guards preserved. | Verify separate physical DEV/PUBLIC D1, keys, cohorts, key versions, correct host and effective configuration before any future activation. PUBLIC host must be re-read before release. |
