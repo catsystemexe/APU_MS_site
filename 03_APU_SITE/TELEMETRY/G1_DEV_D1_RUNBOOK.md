@@ -1,6 +1,6 @@
 # G1 — existing EU D1 migration-only handoff
 
-## PILOT-TECH-R1 — subsequent isolated DEV test (T2 deployment executed; acceptance blocked)
+## PILOT-TECH-R1 — subsequent isolated DEV test (T2 deployment and receipt rehydration completed; telemetry acceptance blocked)
 
 **T2 deployment executed; receipt and telemetry acceptance blocked.** Source candidate `d706a55c7ff80b1439079badfda88c9baa5807c4` was built and deployed only to existing `apu-ms-site-dev` / `https://apu-ms-site-dev.catsystem-exe.workers.dev` as version `732bf950-30cf-444a-90fc-8927d9c8b16c`, with 100% traffic. No migration or resource creation occurred. The Access login callback ended in `invalid state`, so no authenticated application test was attempted. PUBLIC was not changed.
 
@@ -8,7 +8,9 @@ The required continuation remains authorized only after a valid operator-control
 
 Follow-up attempt, 2026-10-26 20:55 UTC: a new DEV browser session was started without the prior callback URL. SSO navigated to the Cloudflare Dashboard login page instead of returning to Access/DEV; no `/api/session` response was available. Stop here. This observed navigation does not prove a cause and is separate from the earlier `invalid state`.
 
-The next operator login returned to DEV successfully. Read-only `GET /api/session` reported `isDeveloper:true`, and the UI showed Developer mode rather than tester role. Stop before receipt or telemetry; do not alter roles, policy or bypass authentication.
+The next operator login returned to DEV successfully. Read-only `GET /api/session` reported `isDeveloper:true`, and the UI showed Developer mode rather than tester role. Under the separately authorized temporary DEV-only configuration, `APU_DEVELOPER_EMAILS` was explicitly empty in deployment `e7429915-9f43-42d2-98c6-d41813b5cbca`; the same session then returned HTTP 200 with `isDeveloper:false`. Existing draft-2 receipt GET returned HTTP 200 with matching versions and `acceptedAt`/`expiresAt` exactly 86400 seconds apart; UI reload remained available. First acceptance was not repeated. The original developer configuration was restored in deployment `401e5cd2-e9ea-4e6a-ac8e-6c9d0b7ae4f3`, and `/api/session` again returned `isDeveloper:true`.
+
+No telemetry window was enabled: explicit enrollment and opt-in were not established, so refusal/opt-in/withdrawal, D1 deltas, forbidden-field inspection, SQL/CSV reconciliation and cleanup acceptance remain BLOCKED/PENDING. Final DEV telemetry/metadata stayed OFF/OFF and D1 counts stayed sessions/events/ai_calls `0/0/0`.
 
 Reused evidence: PR #85 at `1729fce641fab5015407acdd5be06fe8941ed58c` records DEV deployment of #83, config/Access and receipt GET/rehydration PASS, telemetry/metadata OFF/OFF, receipt test TTL **86400**. First-acceptance POST status/body were unavailable; its root cause remains unknown. The new local lag/retry and lost-response reproductions do not establish that hosted cause. No fresh Cloudflare audit is requested here; recheck only the dynamic target/source/config/identity required for this next operation.
 

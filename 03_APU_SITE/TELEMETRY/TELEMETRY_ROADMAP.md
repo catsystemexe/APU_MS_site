@@ -1,6 +1,6 @@
 # TELEMETRY_ROADMAP
 
-Status: **B1 FOUNDATION + B2 CORE METRICS + B3 REPORTING — local technical PASS; B4-H1-R1 native Windows Chromium harness PASS; G0 live DEV audit PARTIAL; PILOT-TECH-T2 deployment PASS, receipt/telemetry BLOCKED.** Standard SSR/Vinext/Worker and hosted verification remain separate boundaries. Hosted activation / collection from real participants: **BLOCKED on explicit gates**, not authorized. Prepared 2026-10-24; verified R1 source `b8fdde42e75398198cd10fe305048aa722a42c43`. Workers Paid is **VERIFIED BY OPERATOR SCREENSHOT** at USD 5/month; independent billing read-back remains unavailable. Zero Trust Free Base is operator-reported (2/50 seats), not independently re-read. Usage/headroom, effective routes/Access policy and observability retention remain NOT VERIFIED.
+Status: **B1 FOUNDATION + B2 CORE METRICS + B3 REPORTING — local technical PASS; B4-H1-R1 native Windows Chromium harness PASS; G0 live DEV audit PARTIAL; PILOT-TECH-T2 DEV deployment/role/receipt rehydration PASS, telemetry acceptance BLOCKED.** Standard SSR/Vinext/Worker and hosted verification remain separate boundaries. Hosted activation / collection from real participants: **BLOCKED on explicit gates**, not authorized. Prepared 2026-10-24; verified R1 source `b8fdde42e75398198cd10fe305048aa722a42c43`. Workers Paid is **VERIFIED BY OPERATOR SCREENSHOT** at USD 5/month; independent billing read-back remains unavailable. Zero Trust Free Base is operator-reported (2/50 seats), not independently re-read. Usage/headroom, effective routes/Access policy and observability retention remain NOT VERIFIED.
 
 ## PILOT-TECH-R1 — DEV source and next verification (2026-10-26)
 
@@ -8,13 +8,13 @@ Status: **B1 FOUNDATION + B2 CORE METRICS + B3 REPORTING — local technical PAS
 
 ### PILOT-TECH-T2 hosted result — 2026-10-26
 
-**DEPLOYMENT PASS / RECEIPT BLOCKED / TELEMETRY BLOCKED.** Candidate `d706a55c7ff80b1439079badfda88c9baa5807c4` was deployed to `apu-ms-site-dev` as version `732bf950-30cf-444a-90fc-8927d9c8b16c`, replacing `895e443e-3322-4b2d-91f0-9523220a9bbf`; traffic was 100%. Existing DEV bindings and D1 `apu-ms-site-dev-telemetry` were read back, with telemetry/metadata `0/0` and receipt TTL `86400`. PUBLIC was unchanged.
+**DEPLOYMENT PASS / TEMPORARY ROLE GATE PASS / RECEIPT REHYDRATION PASS / TELEMETRY BLOCKED.** Candidate `d706a55c7ff80b1439079badfda88c9baa5807c4` was deployed to `apu-ms-site-dev` as version `732bf950-30cf-444a-90fc-8927d9c8b16c`, followed by authorized temporary role deployment `e7429915-9f43-42d2-98c6-d41813b5cbca` and restoration deployment `401e5cd2-e9ea-4e6a-ac8e-6c9d0b7ae4f3`; each had 100% traffic. Existing DEV bindings and D1 `apu-ms-site-dev-telemetry` were read back, with telemetry/metadata `0/0` and receipt TTL `86400`. PUBLIC was unchanged.
 
 The required Access login callback ended in `invalid state`; no authenticated DEV application session was established. First POST → GET → UI/reload, refusal, opt-in, D1 deltas, withdrawal, SQL/CSV reconciliation and cleanup were therefore **BLOCKED/PENDING**, not attempted. No telemetry setting was enabled, no D1 rows were written, and no AI/provider request occurred. The remaining prerequisite is a valid operator-controlled tester Access session; B-07 remains OPEN.
 
 Follow-up login attempt at 2026-10-26 20:55 UTC used a new DEV browser session and did not reuse the prior callback URL. SSO ended at the Cloudflare Dashboard login page; no `/api/session` response was obtained. This is observed navigation behavior only, not a verified root cause and not a repeat of the earlier `invalid state`. The test stopped without receipt or telemetry activity.
 
-The subsequent successful DEV return was read-only verified through `/api/session` as `isDeveloper:true`; the UI showed Developer mode. This is not an eligible tester session for T2. No role or Access policy was changed, and receipt/telemetry testing remains blocked.
+The subsequent successful DEV return was read-only verified through `/api/session` as `isDeveloper:true`; the UI showed Developer mode. Under the authorized temporary DEV-only configuration, `APU_DEVELOPER_EMAILS` was explicitly empty and the same authenticated session returned HTTP 200 with `isDeveloper:false`. Existing draft-2 receipt GET returned HTTP 200 with matching versions and an exact 86400-second lifetime; the UI remained available after reload. The original developer role was then restored and `/api/session` returned HTTP 200 with `isDeveloper:true`. D1 remained sessions/events/ai_calls `0/0/0`. No telemetry window was enabled because enrollment and explicit opt-in were not established; B-07 remains OPEN.
 
 | Item | Source/local result | Remaining hosted boundary |
 | --- | --- | --- |
