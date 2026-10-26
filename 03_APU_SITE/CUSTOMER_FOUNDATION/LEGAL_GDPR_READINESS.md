@@ -203,8 +203,8 @@ Konkrétní procesy odpovědí na žádosti subjektů údajů, řešení chybné
 
 | Prvek | Rozhodnutí / stav |
 |---|---|
-| Typ služby | Neplacený/experimentální **omezený pilot**; komerční Stage 1 oddělená. Bez tvrzení o konkrétním smluvním tarifu nebo nutné bezplatnosti všech dodavatelských služeb. |
-| Účastníci | **Maximálně 48 učitelů**. Pozvánkový/omezený přístup; před onboardingem ověřit skutečné Access seat limity a náklady. |
+| Typ služby | **Omezený experimentální pilot**; komerční Stage 1 je oddělená. Platební režim pilotu ani tarify nebyly v tomto rozhodnutí specifikovány. |
+| Účastníci | **Maximálně 48 učitelů**. Doporučen pozvánkový/omezený přístup; před onboardingem ověřit skutečné Access seat limity a náklady. |
 | Odpovědná osoba za práci s daty | **Michal Roupec** — určený interní vlastník a kontaktní osoba pro pilotní privacy/incident agendu. |
 | Provozovatelé | Podle uživatele **dvě fyzické osoby**, nikoli založená společnost. Právnická osoba pro pilot není nutnou podmínkou. |
 | Právní správce GDPR | **PENDING ROLE DETERMINATION:** Michal jako odpovědný kontakt neznamená automaticky, že je jediným správcem nebo jmenovaným DPO. Zjistit, zda druhá osoba samostatně/společně určuje účely a podstatné prostředky. Při společném správcovství stručně písemně rozdělit odpovědnosti a sdělit podstatu ujednání účastníkům (čl. 26). |
