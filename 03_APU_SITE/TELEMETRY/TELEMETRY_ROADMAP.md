@@ -18,7 +18,9 @@ The subsequent successful DEV return was read-only verified through `/api/sessio
 
 The subsequent bounded enrollment/telemetry window was executed with one DEV tester cohort, `synthetic=0`, `privacy_approved=1`, metadata `0`, and dedicated DEV HMAC keys. Refusal produced zero rows. Explicit UI opt-in produced one scoped `tester` session and one `workflow_started` event; `ai_calls` stayed `0`. Withdrawal stopped the session, the forbidden-key SQL check found zero hits, and only the test cohort rows were deleted. Temporary secrets and enrollment material were removed. Final D1 counts are `0/0/0`; telemetry is OFF/OFF.
 
-Final restore explicitly reinstated the Access issuer/audience variables and original developer list. The existing browser session returned HTTP 401 (`Přihlášení není platné`) after the restore, so the final `isDeveloper:true` read-back is NOT VERIFIED for that stale session. This is recorded as a restore verification limitation, not treated as an Access-policy change or bypass.
+Final restore explicitly reinstated the Access issuer/audience variables and original developer list. A new standard operator login was attempted in the continuing DEV browser session, but the application returned HTTP 401 (`Přihlášení není platné`). The cause is NOT VERIFIED; this is recorded as an authentication verification limitation, not treated as an Access-policy change or bypass. The baseline-versus-current inventory found no intended difference in bindings, provider secret names, relevant Worker settings, OFF/OFF, TTL 86400 or PUBLIC state.
+
+This was a bounded telemetry smoke, not full acceptance. The scoped SQL cleanup and D1 zero-count read-back passed, but the required SQL/CSV snapshot/report procedure was **NOT PERFORMED** because no protected pre-test snapshot was created. CSV status is therefore NOT PERFORMED, not PASS or PENDING.
 
 | Item | Source/local result | Remaining hosted boundary |
 | --- | --- | --- |

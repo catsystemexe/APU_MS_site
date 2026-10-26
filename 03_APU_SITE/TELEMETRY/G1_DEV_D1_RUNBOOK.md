@@ -14,7 +14,9 @@ No telemetry window was enabled: explicit enrollment and opt-in were not establi
 
 Follow-up bounded window result: dedicated DEV HMAC keys and one enrolled tester pseudonym were prepared privately with `synthetic=0`, `privacy_approved=1`, metadata `0`, and a unique cohort. Refusal produced no rows. Explicit UI opt-in produced one `tester` session and one `workflow_started` event; no AI/provider call occurred. Withdrawal set `stopped_at`; the scoped SQL check found zero prohibited-key hits; the single test session/event was deleted after evidence capture. Temporary secrets and private enrollment material were removed. Final D1 counts are `0/0/0`.
 
-Final restore explicitly reinstated the Access issuer/audience variables, original developer email, OFF/OFF and TTL 86400. The continuing browser session returned HTTP 401 (`Přihlášení není platné`), so final `isDeveloper:true` is NOT VERIFIED in that stale session. Do not retry or bypass Access as part of this evidence batch.
+Final restore explicitly reinstated the Access issuer/audience variables, original developer email, OFF/OFF and TTL 86400. A new standard operator login was attempted in the continuing browser session, but `/api/session` still returned HTTP 401 (`Přihlášení není platné`). The cause is NOT VERIFIED. Do not bypass Access or infer a cause from this result.
+
+The bounded telemetry result is a smoke only. The scoped SQL cleanup and final zero-count check were performed; the required protected pre-test SQL snapshot and SQL/CSV report procedure were **NOT PERFORMED**.
 
 Reused evidence: PR #85 at `1729fce641fab5015407acdd5be06fe8941ed58c` records DEV deployment of #83, config/Access and receipt GET/rehydration PASS, telemetry/metadata OFF/OFF, receipt test TTL **86400**. First-acceptance POST status/body were unavailable; its root cause remains unknown. The new local lag/retry and lost-response reproductions do not establish that hosted cause. No fresh Cloudflare audit is requested here; recheck only the dynamic target/source/config/identity required for this next operation.
 
