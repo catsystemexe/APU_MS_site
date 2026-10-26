@@ -4,6 +4,12 @@ Status: CURRENT
 
 Records significant verified product/runtime/project changes. It is not a complete Git log. Historical Sites-era entries are retained where they remain useful; current deployment state must not be inferred from a changelog entry alone.
 
+## 2026-10-26 — G1-D4 hosted DEV deployment and limited receipt recovery
+
+- Recorded the verified one-time deployment of application source `cb48a9de19d5847b0ca68d097f8bb572e4e6992d` to `apu-ms-site-dev`, version `895e443e-3322-4b2d-91f0-9523220a9bbf` replacing `cba179ae-6f82-4c0e-bdac-5727d197cc85`, with 100% allocation, expected DEV bindings, receipt TTL 86400, Access PASS, `APU_LOCAL_DEV_AUTH=0`, and telemetry/metadata OFF/OFF. PUBLIC was unchanged.
+- Hosted R1/R2 read and rehydration checks passed, including matching rules/information versions and authenticated UI availability. The original first-confirmation FAIL is retained; the original POST response/status and root cause remain unavailable/NOT VERIFIED. No new POST or provider call was made.
+- Post-smoke read-only D1 counts were sessions=0, events=0, ai_calls=0; no pre-smoke snapshot exists, so no exact delta is claimed. Hosted collection, real-user collection and G2/G4/G5 remain open; B-07 remains OPEN.
+
 ## 2026-10-25 — G1-C5 unified DEV source candidate
 
 - Integrated exact pilot PR #81 above telemetry/evidence baseline, preserving both histories and resolving 12 shared-file conflicts. Stateless Notebook-based Chat and first-entry rules now compose with request-scoped telemetry/stream lifetime and all eight instrumented client transports.

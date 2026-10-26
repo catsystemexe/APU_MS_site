@@ -1,5 +1,9 @@
 # APU pilot telemetry — implementation package
 
+## Current hosted DEV status — G1-D4 (2026-10-26)
+
+The current DEV candidate is deployed to `apu-ms-site-dev` and is no longer source-only. Hosted deployment/configuration and receipt read/rehydration passed, with telemetry and metadata still OFF/OFF. The initial first-acceptance failure and unavailable POST root cause remain historical and unresolved; see the [roadmap](TELEMETRY_ROADMAP.md#g1-d4--hosted-dev-deployment-and-limited-acceptance-2026-10-26). Hosted telemetry collection, real-user collection and provider-backed calls remain untested and unauthorized.
+
 ## B4-FINAL Windows V3 acceptance — 2026-10-25
 
 **SOURCE + LOCAL DEV V3 PASS.** The exact PR #83 source passed canonical Windows build/artifact and source-isolation validation, typecheck, the native Chromium telemetry harness (11/11), the focused telemetry/regression suite (110 pass, 0 fail, 2 Windows symlink-capability skips), and the documented `dev:local` homepage/UI smoke. The POSIX-oriented `npm.cmd run dev` command is retained as historical diagnostics, not treated as a Windows acceptance criterion; `npm.cmd run validate` is not defined. Cloudflare and provider operations were not performed, and collection remains OFF/OFF.
