@@ -3,6 +3,16 @@
 **Datum zdrojového auditu:** 2026-10-24. **Dokumentační status:** SOURCE-BACKED CURRENT + APPROVED FUTURE PLANS; zdrojové tvrzení není automaticky tvrzením o nasazeném runtime.
 
 
+## PILOT MINIMUM — rozhodnutý rozsah a otevřené podmínky (2026-10-26)
+
+**Aktuální limit: maximálně 48 učitelů** (nahrazuje historický předběžný limit „≤ 50“ uvedený dále v auditu z 2026-10-24; nejde o ověřené aktuální obsazení ani limit Access licencí). Uživatel výslovně určil **Michala Roupce** jako odpovědnou osobu za zpracování dat v pilotu. APU připravují **dvě fyzické osoby**; druhá osoba a přesná GDPR role obou (samostatný/společný správce versus jiný vztah) zůstávají k určení. Michal je prozatím **určený provozní vlastník/kontaktní osoba**, nikoli automaticky jediný právní správce nebo formální DPO.
+
+**Provozní hranice:** dovolena skutečná pedagogická potřeba a pozorování bez přímo či nepřímo identifikovatelného žáka; zakázány skutečné i modelové diagnózy a zdravotní/poradenské zprávy. Žádné serverově trvale ukládané projekty, telemetry DEV OFF/OFF. Aktuální potvrzení pravidel má v DEV testovací TTL 24 h; PUBLIC retence rozhodnuta není.
+
+**Podklad:** [LEGAL_GDPR_READINESS.md §9 — PILOT MINIMUM](LEGAL_GDPR_READINESS.md#9-pilot-minimum--omezeny-pilot-do-48-ucitelu-navrh-2026-10-26). Obsahuje krátký návrh pravidel pro učitele, šablonu čl. 13 informace, minimální incident/výmazový postup, DPIA screening a jasné rozlišení PILOT vs Stage 1.
+
+**STAV:** dokumentační DRAFT připraven. **Externí onboarding do 48 účastníků dosud NENÍ schválen**, protože chybí identita právního správce/společných správců, funkční kontakt, právní tituly, aktuální dodavatelské/DPA/přenosové skutečnosti, publikační retenční údaje, DPIA screening a minimální proces práv/incidentů. Před přizváním osob tyto úzce vymezené body uzavřít; rozsáhlá Stage 1 customer-auth/Projects/billing agenda může zůstat odložená. G2/G4/G5 a PUBLIC deployment jsou samostatně NOT AUTHORIZED.
+
 ## LEGAL-P0-R1 — aktuální DEV/LEGAL evidence reconciliation (2026-10-26)
 
 **Tento dodatek aktualizuje stav DEV po auditu z 2026-10-24; historický baseline v částech A–D nepřepisuje. PUBLIC není v této dávce nově ověřen ani změněn.** Approval-ready dokumentační návrh je v [LEGAL_GDPR_READINESS.md, §8](LEGAL_GDPR_READINESS.md#8-legal-p0-r1--podklad-pro-schvaleni-2026-10-26).
