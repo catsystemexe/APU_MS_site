@@ -195,16 +195,18 @@ Konkrétní procesy odpovědí na žádosti subjektů údajů, řešení chybné
 
 ---
 
-## 9. PILOT MINIMUM — omezený pilot do 48 učitelů (návrh 2026-10-26)
+## 9. PILOT MINIMUM — omezený pilot do 50 uživatelů (aktualizace 2026-10-26)
 
-**Status: PRODUCT SCOPE APPROVED BY PROJECT OWNER (2026-10-26) / LEGAL AND OPERATIONS PENDING / EXTERNAL ONBOARDING NOT YET APPROVED.** Tato sekce zužuje schvalovací rozsah §8 pro aktuální neveřejně nabízený, pozvánkový pilot; nenahrazuje minimální GDPR povinnosti a nepřenáší je do Stage 1. Údaj „48“ znamená **nejvýše 48 učitelů v pilotní skupině**, nikoli ověřenou kapacitu Cloudflare Access, počet již pozvaných lidí nebo výjimku z GDPR.
+**Status: PRODUCT SCOPE APPROVED BY PROJECT OWNER (2026-10-26) / LEGAL AND OPERATIONS PENDING / EXTERNAL ONBOARDING NOT YET APPROVED.** Tato sekce zužuje schvalovací rozsah §8 pro aktuální neveřejně nabízený, pozvánkový pilot; nenahrazuje minimální GDPR povinnosti a nepřenáší je do Stage 1. **Novější upřesnění vlastníka (2026-10-26): pilot má otevřený časový konec a limit 50 uživatelů.** Tím se nahrazuje starší formulace „max. 48 učitelů“ jako hlavní vymezení rozsahu. Limit se eviduje jako **50 uživatelů celkem**, nikoli automaticky 50 externích učitelů navíc k interním účtům. Při dvou interních uživatelích zbývá nejvýše 48 míst pro externí účastníky; skutečný počet interních identit a licenční obsazení se ověří před onboardingem. Není to důkaz kapacity Cloudflare ani počet již pozvaných lidí.
 
 ### 9.1 Rozhodnuté parametry a role
 
 | Prvek | Rozhodnutí / stav |
 |---|---|
 | Typ služby | **Omezený experimentální pilot**; komerční Stage 1 je oddělená. Platební režim pilotu ani tarify nebyly v tomto rozhodnutí specifikovány. |
-| Účastníci | **Maximálně 48 učitelů**. Doporučen pozvánkový/omezený přístup; před onboardingem ověřit skutečné Access seat limity a náklady. |
+| Účastníci | **Maximálně 50 uživatelů celkem**, se započtením interních uživatelů do celkového limitu; počet externích učitelů závisí na zbývající kapacitě. Před onboardingem ověřit skutečné Access seat limity a obsazení. |
+| Trvání | **Otevřený časový konec**, bez nyní stanoveného data ukončení. Stage 1 není automatickým pokračováním stejného datového režimu. |
+| Produktový cíl | Získat data a zpětnou vazbu o použitelnosti APU a vytvořit čas pro přípravu Stage 1. Konkrétní rozsah, kanál a retence feedbacku ještě nejsou schváleny. Tento cíl neaktivuje telemetrii ani sběr chatu/Zápisníku; čas pro vývoj není samostatným účelem zpracování osobních údajů. |
 | Odpovědná osoba za práci s daty | **Michal Roupec** — určený interní vlastník a kontaktní osoba pro pilotní privacy/incident agendu. |
 | Provozovatelé | Podle uživatele **dvě fyzické osoby**, nikoli založená společnost. Právnická osoba pro pilot není nutnou podmínkou. |
 | Právní správce GDPR | **PENDING ROLE DETERMINATION:** Michal jako odpovědný kontakt neznamená automaticky, že je jediným správcem nebo jmenovaným DPO. Zjistit, zda druhá osoba samostatně/společně určuje účely a podstatné prostředky. Při společném správcovství stručně písemně rozdělit odpovědnosti a sdělit podstatu ujednání účastníkům (čl. 26). |
@@ -229,7 +231,7 @@ Tento text je věcně připravený, nikoli právně/provozně schválený pro pu
 
 ### 9.3 Stručná informace o osobních údajích účastníků (šablona k doplnění před pozváním)
 
-> **Ochrana osobních údajů — omezený pilot APU (max. 48 učitelů)**
+> **Ochrana osobních údajů — omezený pilot APU (max. 50 uživatelů celkem)**
 >
 > **Kdo odpovídá:** Michal Roupec je určenou kontaktní a odpovědnou osobou pilotu. **[PŘED PUBLIKACÍ: označit právního správce/správce společné, případně obě fyzické osoby a podstatu ujednání, uvést funkční kontakt]**.
 >
@@ -261,7 +263,7 @@ Bez doplnění hranatých polí **nejde o úplnou informaci podle čl. 13 GDPR a
 
 ### 9.5 Co uzavřít nyní a co zakonzervovat pro Stage 1
 
-| Povinnost/rozhodnutí | PILOT max. 48 — před přizváním externích učitelů | STAGE 1 |
+| Povinnost/rozhodnutí | PILOT max. 50 uživatelů celkem — před přizváním externích učitelů | STAGE 1 |
 |---|---|---|
 | Určení skutečného správce a druhé osoby | **REQUIRED** — stručná dokumentovaná role, Michal kontakt | Nová právnická osoba / komerční organizační struktura, pokud vznikne |
 | Funkční e-mail/kontakt a informace dle čl. 13 | **REQUIRED** — stručná úplná verze pro současné účely | Plná zákaznická dokumentace/obchodní podmínky pro nové účely |
@@ -273,15 +275,15 @@ Bez doplnění hranatých polí **nejde o úplnou informaci podle čl. 13 GDPR a
 | Spolehlivost prvního potvrzení | **TECHNICAL FOLLOW-UP** před deklarací hladkého onboardingu; nyní R1/R2 read/rehydration PASS, původní POST příčina NOT VERIFIED | — |
 | Clerk, serverové projekty, ukládání chat historie, placené tarify | **OUT OF SCOPE** | Samostatný Stage 1 design + legal/technical gates |
 
-**STOP condition pro pozvání externích učitelů:** chybí-li identita správce nebo kontakt, správný účel/titul, faktický aktuální dodavatelský/retention základ, úplná privacy information, vyhodnocení DPIA anebo minimální incident/DSR proces, status zůstává **PILOT MINIMUM — DRAFT / ONBOARDING BLOCKED**. Limit 48 a zákaz identifikace žáků tyto povinnosti neruší. Pro interní vývoj se syntetickými nebo neidentifikujícími daty tímto dokumentem nevyhlašujeme zákaz práce.
+**STOP condition pro pozvání externích učitelů:** chybí-li identita správce nebo kontakt, správný účel/titul, faktický aktuální dodavatelský/retention základ, úplná privacy information, vyhodnocení DPIA anebo minimální incident/DSR proces, status zůstává **PILOT MINIMUM — DRAFT / ONBOARDING BLOCKED**. Limit 50 uživatelů a zákaz identifikace žáků tyto povinnosti neruší. Pro interní vývoj se syntetickými nebo neidentifikujícími daty tímto dokumentem nevyhlašujeme zákaz práce.
 
-**Dokumentační výsledek:** product owner schválil minimalistický pilotní rámec (max. 48 učitelů, Michal Roupec jako odpovědná kontaktní osoba a navržená pravidla neidentifikujících vstupů). To **neprokazuje doplnění** údajů podle čl. 13 GDPR, finální určení správce, audit dodavatelů, rozhodnutí o retenci ani právní review; externí onboarding zůstává blokován. LEGAL-P0-MIN legal approval / PUBLIC deployment / telemetry activation = **NOT AUTHORIZED**.
+**Dokumentační výsledek:** product owner schválil minimalistický pilotní rámec (po novějším upřesnění max. 50 uživatelů celkem, otevřený časový konec, Michal Roupec jako odpovědná kontaktní osoba a pravidla neidentifikujících vstupů). To **neprokazuje doplnění** údajů podle čl. 13 GDPR, finální určení správce, audit dodavatelů, rozhodnutí o retenci ani právní review; externí onboarding zůstává blokován. LEGAL-P0-MIN legal approval / PUBLIC deployment / telemetry activation = **NOT AUTHORIZED**.
 
 ---
 
 ## 10. LEGAL-P0-MIN-CLOSE — ověření minimálních podmínek pilotu (2026-10-26)
 
-**Verdikt: PILOT MINIMUM DOCUMENTATION READY / EXTERNAL ONBOARDING BLOCKED.** Produktový rozsah (nejvýše 48 učitelů, Michal Roupec jako odpovědná kontaktní osoba, neidentifikující pedagogické situace, zákaz skutečných i modelových diagnóz, telemetry OFF/OFF) je **PRODUCT APPROVED**. Schválení **není** důkazem faktického obsazení skupiny, finální právní role, zvoleného zákonného titulu, vyřešeného smluvního režimu dodavatelů ani povolením nasazení/pozvánek. Tento zápis uzavírá jen dokumentační průchod, nikoli právní povinnosti.
+**Verdikt: PILOT MINIMUM DOCUMENTATION READY / EXTERNAL ONBOARDING BLOCKED.** Produktový rozsah (nově upřesněný limit 50 uživatelů celkem, otevřený časový konec, Michal Roupec jako odpovědná kontaktní osoba, neidentifikující pedagogické situace, zákaz skutečných i modelových diagnóz, telemetry OFF/OFF) je **PRODUCT APPROVED**. Schválení **není** důkazem faktického obsazení skupiny, finální právní role, zvoleného zákonného titulu, vyřešeného smluvního režimu dodavatelů ani povolením nasazení/pozvánek. Tento zápis uzavírá jen dokumentační průchod, nikoli právní povinnosti.
 
 ### 10.1 Právní role: společné rozhodování dvou fyzických osob
 
@@ -293,7 +295,7 @@ Bez doplnění hranatých polí **nejde o úplnou informaci podle čl. 13 GDPR a
 
 #### 10.1.1 Minimální ujednání společných správců — NÁVRH K PŘIJETÍ OBOUMA OSOBAMI
 
-**Strany a rozsah:** Michal Roupec a Zdeněk Vilímek pro omezený pilot APU do 48 učitelů, v rozsahu společně určovaného provozu, autentizace, AI zpracování, potvrzení pravidel a související bezpečnosti. Pilot nepovoluje přímo ani nepřímo identifikovatelné žáky, skutečné ani modelové diagnózy a zdravotní/poradenské zprávy. Aktivní telemetrie zůstává mimo povolený rozsah (OFF/OFF).
+**Strany a rozsah:** Michal Roupec a Zdeněk Vilímek pro omezený pilot APU do 50 uživatelů celkem s otevřeným časovým koncem, v rozsahu společně určovaného provozu, autentizace, AI zpracování, potvrzení pravidel a související bezpečnosti. Pilot nepovoluje přímo ani nepřímo identifikovatelné žáky, skutečné ani modelové diagnózy a zdravotní/poradenské zprávy. Aktivní telemetrie zůstává mimo povolený rozsah (OFF/OFF).
 
 | Odpovědnost | Navržené rozdělení |
 |---|---|
@@ -341,6 +343,22 @@ Oba si bezodkladně předávají nezbytné informace a zachovávají důvěrnost
 
 Retenční lhůty **nebyly nově vymyšleny ani schváleny**; seznam výše je přímá podmínka pro doplnění čl. 13 informace. Odhlášení ani konec chat session nezaručuje smazání všech kopií.
 
+#### 10.3.1 Otevřený konec pilotu — návrh receipt policy, NENÍ SCHVÁLENO ANI IMPLEMENTOVÁNO
+
+**OWNER-CONFIRMED:** datum ukončení pilotu není určeno. To samo neurčuje dobu uchování jednotlivých záznamů. Osobní údaje mají být uchovávány podle nezbytnosti pro konkrétní účel (GDPR čl. 5 odst. 1 písm. e), nikoli automaticky po celé potenciálně neomezené trvání pilotu.
+
+**Doporučená produktová volba:** pro jediný aktuální záznam přijetí pravidel **90 dní od výslovného přijetí** (`7 776 000 s`). Účelem je po omezenou dobu doložit aktuální přijetí a nevyžadovat je při každém přihlášení. Devadesát dní je navržený praktický kompromis; není zákonnou lhůtou ani tvrzením o nasazeném nastavení.
+
+- TTL se neprodlužuje pouhým přihlášením nebo používáním. Po expiraci před další prací vyžádat nové přijetí; novým přijetím nahradit aktuální záznam, bez samostatného archivu starých receiptů.
+- Podstatná změna pravidel nebo informací vyžaduje před další prací nové potvrzení i před uplynutím 90 dní. Pro stávající verzační kontrakt navrhnout zvýšení `rulesVersion` a odpovídající `informationVersion`; samotná změna `informationVersion` podle zdrojové evidence nové přijetí nevynucuje. Drobná oprava bez změny povinností/podmínek nevyžaduje sama o sobě re-acceptance.
+- Při ukončení účasti nebo celého pilotu aktuální receipt odstranit v offboarding postupu. Žádosti o výmaz posoudit podle schváleného titulu a SOP; nezaměňovat výmaz receipt s výmazem logů, exportů a dat u dodavatelů.
+- Omezení se týká **jen potvrzení pravidel**. Cloudflare/OpenAI logy, lokální Zápisník, exporty a případný feedback mají vlastní retenční pravidla; navržených 90 dní se na ně nepřenáší.
+- Přechod na Stage 1 vyžaduje posouzení změněných účelů a podmínek; pilotní potvrzení ho automaticky nepokrývá.
+
+**Alternativy:** 30 dní znamená častější opakované potvrzování; uchování do neurčeného konce pilotu vyžaduje jiné omezení a spolehlivý offboarding. Pro malé pilotní minimum doporučen pevný 90denní interval bez automatického prodlužování. Právní titul a přiměřenost musí být zahrnuty ve finálním notice/screeningu.
+
+**P-MIN-04 REMAINS OPEN.** Návrh potřebuje rozhodnutí správců a následnou cílenou implementaci/ověření. **Současný DEV receipt zůstává 86 400 s; konfigurace se nemění.**
+
 ### 10.4 Minimum rights / incident SOP — interní pracovní karta
 
 **Vlastník operativy:** Michal Roupec; vlastníkem opravený a potvrzený pilotní kontakt `catsystem.exe@gmail.com` (2026-10-26). Funkčnost doručování **NOT VERIFIED**; nejde o provedený test kontaktní cesty. Rozdělení odpovědností společných správců je navrženo v §10.1.1 a čeká na přijetí oběma. Michal není automaticky DPO.
@@ -360,7 +378,7 @@ Retenční lhůty **nebyly nově vymyšleny ani schváleny**; seznam výše je p
 | Nová/AI technologie | **ANO** — textové generativní AI API | Posoudit nespolehlivý výstup, vendor přenosy, neúmyslně citlivé vstupy; uživatel posuzuje Rozbor/Výstup |
 | Děti a potenciálně zranitelní lidé | **RIZIKO NEPŘÍMÉ IDENTIFIKACE** — APU se týká pedagogických situací | Zakázat identifikující kontext, diagnózy, zdravotní zprávy; pravidla a první-gate; absence technického automatického anonymizéru |
 | Zvláštní kategorie | **NENÍ ZAMÝŠLENO**, ale volný text může rizikově obsahovat | Instrukce, omezení vstupů, možnost zastavit zpracování; popsat risk of accidental inclusion |
-| Škálování / systematické monitorování | **NEPROKÁZÁNO** — uzavřený limit max. 48, telemetry OFF/OFF | Udržet pozvánkový režim a bez dalšího schválení neměnit telemetry scope |
+| Škálování / systematické monitorování | **NEPROKÁZÁNO** — limit max. 50 uživatelů celkem, otevřený časový konec, telemetry OFF/OFF | Udržet pozvánkový režim a bez dalšího schválení neměnit telemetry scope |
 | Automatizovaná rozhodnutí s významným právním účinkem | **NEPLÁNOVÁNA** — výsledky jsou návrhy pro učitele | Nepoužívat APU jako automatické rozhodování o dítěti bez dalšího samostatného review |
 | Únik, neoprávněný přístup, kopie | **REÁLNÁ HROZBA** u autentizace, browser storage, exportu a dodavatelských dat | Access/owner isolation, neidentifikující vstupy, výmaz SOP, omezení přístupu, transparentní vendor notice |
 
@@ -373,10 +391,10 @@ Retenční lhůty **nebyly nově vymyšleny ani schváleny**; seznam výše je p
 | P-MIN-01 | Společné správcovství: Michal Roupec + Zdeněk Vilímek | **PARTIAL — JOINT DECISION-MAKING CONFIRMED; ARTICLE 26 ARRANGEMENT DRAFT** | Přijetí konkrétního rozdělení odpovědností oběma správci a zpřístupnění podstaty učitelům; návrh §10.1.1–2 |
 | P-MIN-02 | Kontaktní kanál a čl. 13 notice | **PARTIAL — CONTACT SPELLING CONFIRMED; DELIVERY NOT VERIFIED; NOTICE OPEN** | Ověřit funkčnost `catsystem.exe@gmail.com`; dokončit údaje společných správců, účely a čl. 6 tituly, publikovatelný notice bez placeholderů |
 | P-MIN-03 | Cloudflare/OpenAI dokumenty a účetní podmínky | **PUBLIC VENDOR DOCS VERIFIED; APU ACCOUNT NOT VERIFIED** | Průkazná krátká mapa skutečných provider/contracting terms, přenosů, hlavních log/retention nastavení, žádné raw secrets |
-| P-MIN-04 | PUBLIC/pilot receipt TTL + mazání | **OWNER DECISION REQUIRED** | Výslovná lhůta a odůvodnění, version/re-acceptance policy, přístup a DSR výmaz SOP |
+| P-MIN-04 | PUBLIC/pilot receipt TTL + mazání | **PROPOSAL READY — 90 DAYS; OWNER APPROVAL PENDING** | Rozhodnout o návrhu §10.3.1 (TTL, výmaz, opětovné potvrzení); poté ověřit implementaci. DEV má nadále pouze testovací TTL 24 h |
 | P-MIN-05 | Logy, DSR, incident a DPIA screening | **SOP DRAFT; ACCOUNT SETTINGS / FINAL DPIA NOT VERIFIED** | Krátká operátorská evidence, funkční kontaktní cesta, podpis/rozhodnutí o DPIA |
 | P-MIN-06 | Technické první potvrzení po změně pravidel | **PARTIAL** | Odděleně schválený kontrolovaný DEV acceptance test se zachycením HTTP odpovědi (bez reálné AI) |
-| P-MIN-07 | Externí onboarding max. 48 / PUBLIC release | **NOT AUTHORIZED** | P-MIN-01 až 05 PASS, nutné UI/DEV ověření + oddělené provozní a deployment schválení |
+| P-MIN-07 | Externí onboarding v rámci 50 uživatelů celkem / PUBLIC release | **NOT AUTHORIZED** | P-MIN-01 až 05 PASS, nutné UI/DEV ověření + oddělené provozní a deployment schválení |
 | Stage 1 | Clerk/Projects/billing/rozšířené kontrakty | **DEFERRED** | Není podmínkou aktuálního omezeného pilotu; nové účely budou mít vlastní privacy gate |
 | Telemetry G2/G4/G5 | Aktivní pilotní metriky | **OFF/OFF — NOT AUTHORIZED** | Samostatné účel/titul, notice, retenční/operátorské rozhodnutí a hostované testy |
 
