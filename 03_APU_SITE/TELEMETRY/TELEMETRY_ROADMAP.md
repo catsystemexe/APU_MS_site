@@ -2,6 +2,12 @@
 
 Status: **B1 FOUNDATION + B2 CORE METRICS + B3 REPORTING — local technical PASS; B4-H1-R1 native Windows Chromium harness PASS; G0 live DEV audit PARTIAL; PILOT-TECH-T2 DEV deployment/role/receipt rehydration PASS, telemetry acceptance BLOCKED.** Standard SSR/Vinext/Worker and hosted verification remain separate boundaries. Hosted activation / collection from real participants: **BLOCKED on explicit gates**, not authorized. Prepared 2026-10-24; verified R1 source `b8fdde42e75398198cd10fe305048aa722a42c43`. Workers Paid is **VERIFIED BY OPERATOR SCREENSHOT** at USD 5/month; independent billing read-back remains unavailable. Zero Trust Free Base is operator-reported (2/50 seats), not independently re-read. Usage/headroom, effective routes/Access policy and observability retention remain NOT VERIFIED.
 
+### Latest DEV rollback verification — 2026-10-26
+
+The explicit rollback to protected version `732bf950-30cf-444a-90fc-8927d9c8b16c` succeeded at **100% traffic**, replacing `747d661f-72c5-4ce2-9d6c-c22526d5dfed`. Version preflight confirmed the original developer list, Access configuration, OFF/OFF, receipt TTL `86400`, expected KV/D1/ASSETS bindings and no incompatible schema change was indicated by the available metadata. Read-only D1 counts are `telemetry_sessions=0`, `telemetry_events=0`, `telemetry_ai_calls=0`. A standard authenticated DEV session returned HTTP 200 from `/api/session` with `isDeveloper:true`.
+
+This restores the known-working DEV baseline; it does not establish full hosted telemetry acceptance. No telemetry activation, provider call, role change, Access-policy change or PUBLIC operation was performed. The earlier HTTP 401 was observed before rollback and its cause remains **NOT VERIFIED**.
+
 ## PILOT-TECH-R1 — DEV source and next verification (2026-10-26)
 
 **SOURCE / LOCAL V3 PASS; HOSTED NOT VERIFIED; B-07 OPEN.** Exact source base: PR #83 `cb48a9de19d5847b0ca68d097f8bb572e4e6992d`. Approved technical input: PR #86 `7e45f8736b8c8cea76bd4a221539c2cdac656b8e` §11.3. Candidate `codex/pilot-tech-r1` targets that development source branch; PUBLIC is a later release stage. No merge into `dev`/`public` or hosted action is authorized here.

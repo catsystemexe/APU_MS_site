@@ -1,5 +1,11 @@
 # G1 — existing EU D1 migration-only handoff
 
+## PILOT-TECH-T2 — verified baseline rollback (2026-10-26)
+
+The authorized restore used `wrangler versions view` followed by an explicit rollback to `732bf950-30cf-444a-90fc-8927d9c8b16c`. The protected version metadata confirmed the expected DEV bindings, original developer list, Access configuration, `APU_LOCAL_DEV_AUTH=0`, telemetry/metadata `0/0` and receipt TTL `86400`. Rollback completed at 100% traffic, replacing `747d661f-72c5-4ce2-9d6c-c22526d5dfed`.
+
+Read-only D1 counts after rollback were `telemetry_sessions=0`, `telemetry_events=0`, `telemetry_ai_calls=0`. The standard DEV browser session then returned HTTP 200 and `isDeveloper:true` from `/api/session`. No telemetry, provider call, role change, Access-policy change or PUBLIC operation was performed. The pre-rollback HTTP 401 remains retained as historical evidence; cause **NOT VERIFIED**.
+
 ## PILOT-TECH-R1 — subsequent isolated DEV test (T2 deployment and receipt rehydration completed; telemetry acceptance blocked)
 
 **T2 deployment executed; receipt and telemetry acceptance blocked.** Source candidate `d706a55c7ff80b1439079badfda88c9baa5807c4` was built and deployed only to existing `apu-ms-site-dev` / `https://apu-ms-site-dev.catsystem-exe.workers.dev` as version `732bf950-30cf-444a-90fc-8927d9c8b16c`, with 100% traffic. No migration or resource creation occurred. The Access login callback ended in `invalid state`, so no authenticated application test was attempted. PUBLIC was not changed.

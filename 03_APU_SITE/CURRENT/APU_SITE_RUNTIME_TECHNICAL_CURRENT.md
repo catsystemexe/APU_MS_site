@@ -4,6 +4,12 @@ Status: CURRENT SOURCE/RUNTIME CONTRACT
 
 Purpose: describe the current repository/runtime contract. Deployment state is recorded only when independently verified; this document must not infer production state from repository contents alone.
 
+## PILOT-TECH-T2 — verified DEV baseline rollback (2026-10-26)
+
+The authorized rollback was executed with explicit Worker Version ID `732bf950-30cf-444a-90fc-8927d9c8b16c` using a target-only Wrangler configuration. `wrangler versions view` confirmed the protected version identity, original plain `APU_DEVELOPER_EMAILS` value, `APU_LOCAL_DEV_AUTH=0`, telemetry/metadata **0/0**, receipt TTL **86400**, Access configuration, `DEV_LOG_STATE`, `PILOT_RULES_ACCEPTANCE`, `TELEMETRY_DB` and `ASSETS`. No vars, secrets or PUBLIC scope were supplied to the rollback command.
+
+The rollback completed successfully and set `apu-ms-site-dev` to **100%** on `732bf950-30cf-444a-90fc-8927d9c8b16c`, replacing the active `747d661f-72c5-4ce2-9d6c-c22526d5dfed`. Read-only D1 verification returned `telemetry_sessions=0`, `telemetry_events=0` and `telemetry_ai_calls=0`. In the standard DEV browser session, `GET /api/session` returned HTTP 200 with `isDeveloper:true`. No telemetry test, provider call, role change, Access-policy change or PUBLIC operation followed the rollback. The earlier HTTP 401 remains historical evidence for the pre-rollback version; its cause remains **NOT VERIFIED**.
+
 ## PILOT-TECH-R1 — DEV source implementation (2026-10-26)
 
 **SOURCE / LOCAL PROVIDER-FREE V3 PASS; HOSTED DEV DEPLOYMENT PASS; T2 ACCEPTANCE PARTIAL.** Branch `codex/pilot-tech-r1` starts at exact PR #83 `cb48a9de19d5847b0ca68d097f8bb572e4e6992d` and targets `codex/g1c5-unified-dev-candidate` as a draft PR. Approved requirements are PR #86 at `7e45f8736b8c8cea76bd4a221539c2cdac656b8e`, LEGAL_GDPR_READINESS §11.3, narrowed by the current DEV implementation instruction. This is a development-line candidate for future PUBLIC compatibility, not integration into `dev` or a PUBLIC release.
