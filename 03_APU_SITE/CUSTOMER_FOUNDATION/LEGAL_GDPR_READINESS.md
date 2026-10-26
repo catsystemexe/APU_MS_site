@@ -392,7 +392,7 @@ Oba si bezodkladně předávají nezbytné informace a zachovávají důvěrnost
 |---|---|---|---|
 | P-MIN-01 | Společné správcovství: Michal Roupec + Zdeněk Vilímek | **PARTIAL — JOINT DECISION-MAKING CONFIRMED; ARTICLE 26 ARRANGEMENT DRAFT** | Přijetí konkrétního rozdělení odpovědností oběma správci a zpřístupnění podstaty učitelům; návrh §10.1.1–2 |
 | P-MIN-02 | Kontaktní kanál a čl. 13 notice | **PARTIAL — CONTACT SPELLING CONFIRMED; DELIVERY NOT VERIFIED; NOTICE OPEN** | Ověřit funkčnost `catsystem.exe@gmail.com`; dokončit údaje společných správců, účely a čl. 6 tituly, publikovatelný notice bez placeholderů |
-| P-MIN-03 | Cloudflare/OpenAI dokumenty a účetní podmínky | **PUBLIC VENDOR DOCS VERIFIED; APU ACCOUNT NOT VERIFIED** | Průkazná krátká mapa skutečných provider/contracting terms, přenosů, hlavních log/retention nastavení, žádné raw secrets |
+| P-MIN-03 | Cloudflare/OpenAI dokumenty a účetní podmínky | **NOT VERIFIED — ACCESS BLOCKED (OPERATOR-REPORTED); PUBLIC DOCS EVIDENCE RETAINED** | Přihlášený read-only přístup a krátká mapa skutečných provider/contracting terms, přenosů, hlavních log/retention nastavení; souhrn pokusu a další krok v §10.7 |
 | P-MIN-04 | PUBLIC/pilot receipt TTL + mazání | **PARTIAL — 90-DAY POLICY APPROVED BY MICHAL; IMPLEMENTATION / LEGAL CLOSURE PENDING** | Doplnit právní titul/notice a proveditelný výmaz SOP; poté samostatně zadaná implementace a ověření §10.3.1. Ujednání obou správců je v P-MIN-01 otevřené. DEV má nadále pouze testovací TTL 24 h |
 | P-MIN-05 | Logy, DSR, incident a DPIA screening | **SOP DRAFT; ACCOUNT SETTINGS / FINAL DPIA NOT VERIFIED** | Krátká operátorská evidence, funkční kontaktní cesta, podpis/rozhodnutí o DPIA |
 | P-MIN-06 | Technické první potvrzení po změně pravidel | **PARTIAL** | Odděleně schválený kontrolovaný DEV acceptance test se zachycením HTTP odpovědi (bez reálné AI) |
@@ -404,5 +404,29 @@ Oba si bezodkladně předávají nezbytné informace a zachovávají důvěrnost
 
 **Sources:** [GDPR v českém znění](https://eur-lex.europa.eu/legal-content/cs/TXT/?uri=CELEX%3A32016R0679), [ÚOOÚ DPIA](https://uoou.gov.cz/profesional/posouzeni-vlivu-na-ochranu-osobnich-udaju-dpia), [Cloudflare DPA](https://www.cloudflare.com/cloudflare-customer-dpa/), [Cloudflare Access logs](https://developers.cloudflare.com/cloudflare-one/insights/logs/), [Cloudflare KV data location](https://developers.cloudflare.com/kv/reference/data-location/), [Cloudflare subprocessors](https://www.cloudflare.com/gdpr/subprocessors/cloudflare-services/), [OpenAI DPA](https://openai.com/en-GB/policies/data-processing-addendum/), [OpenAI API data controls](https://developers.openai.com/api/docs/guides/your-data).
 
-**Documentation & Tracking:** Documentation Impact: LEGAL/PILOT OPERATIONS (this file only); Changelog **NO**; Backlog **NONE**; Known Issues **NONE**. Deployment Authorization: **NOT AUTHORIZED**.
+### 10.7 P-MIN-03 — dodaný operátorský report: přihlášení nedostupné (2026-10-26)
+
+**Výsledek: ACCOUNT SETTINGS NOT VERIFIED — ACCESS BLOCKED.** Operátor dodal do navazujícího APU chatu report „P-MIN-03 ACCOUNT EVIDENCE — READ-ONLY REPORT“ s uvedeným časem přibližně **26. 10. 2026, 17:55–17:56 Europe/Prague**. Podle reportu oba dostupné prohlížeče zobrazily přihlašovací stránky Cloudflare/OpenAI. Tento zápis je vyhodnocením dodaného reportu, nikoli vlastním autentizovaným dashboard read-backem. Raw browser evidence ani výstupy všech příkazů nejsou přiloženy.
+
+**Co pokus doložil a co nezměnil:**
+
+- **OPERATOR-REPORTED:** z použité prohlížečové relace nebylo dostupné přihlášené nastavení účtů. To neprokazuje, že přihlášení chybí v běžném prohlížeči operátora nebo že účet nemá požadovaná nastavení.
+- **NO NEW ACCOUNT EVIDENCE:** smluvní zákazník, použitelnost smluv/DPA, skutečné tarify/obsazení, logování/exporty a jejich retence, OpenAI organization/project mapping, data controls a metadata vector stores/files zůstávají nedoložené.
+- **OWNER-REPORTED FACTS RETAINED:** Michal dříve uvedl, že účty a administrátorské přístupy jsou u něj. Neúspěšný dashboard přístup toto sdělení nevyvrací; nadále není ověřen smluvní zákazník ani bezpečné mapování běžících prostředí.
+- **REUSED EVIDENCE:** G1-D4 z PR #85 @ `1729fce641fab5015407acdd5be06fe8941ed58c` zůstává použitelný v původním DEV rozsahu (§8.1). Není to nové ověření PUBLIC/účtů. Historické tarifní/seat údaje z reportu bez přesného původního data/ref se nepropagují na aktuální account PASS.
+- **SOURCE FINDINGS LIMITED:** report uvádí auth logger s validačními důvody a provider/file-search routes, ale neudává přesný commit každého kontrolovaného zdroje. Jde o předběžnou zdrojovou poznámku; z ní nelze potvrdit nasazený DEV/PUBLIC logovací kontrakt ani absenci pedagogického obsahu v hosted logách.
+- **NO MUTATIONS REPORTED:** podle operátora nebyly čteny/použity API credentials ani secret hodnoty a nebyl upraven checkout, účet, infrastruktura či resource; žádný commit/deployment. Toto vyhodnocení mění pouze právní dokumentaci a přehled stavu v PR #86.
+
+Runtime verze, read/rehydration, nulové D1 counts a zdrojové SHA nejsou náhradou account-level privacy evidence ani samy obsahem určeným do učitelského notice. P-MIN-03/P-MIN-05 zůstávají otevřené; telemetry OFF/OFF, DEV receipt 24 h, produktově schválená 90denní receipt politika není nasazena.
+
+**Nejmenší další krok — přístup a základní Cloudflare scope:**
+
+1. Operátor otevře svůj běžný přihlášený Cloudflare prohlížeč. Neopakovat stejný automatizovaný běh v nepřihlášené relaci.
+2. Ve vybraném účtu potvrdí, zda vidí **oba Workers `apu-ms-site` a `apu-ms-site-dev`**. Do reportu stačí „stejný účet ANO/NE/NEOVĚŘENO“, bezpečný vlastní alias účtu, cesta zobrazení a čas; žádný secret ani výpis osob.
+3. Ze skutečně dostupných obrazovek opíše Workers tarif, Zero Trust tarif a pouze agregované využité/dostupné seats. Pokud hodnota není dostupná, uvést konkrétní chybějící obrazovku; nevymýšlet přesnou navigaci.
+4. Teprve s tímto přístupem pokračovat v přímých nastaveních logů a OpenAI. Přístup neověřovat změnou auth, tvorbou klíče, použitím API credential ani prvním AI požadavkem.
+
+**Oprava navigačního předpokladu:** dřívější zadání uvedlo „Account → Legal / Agreements / DPA“ jako cestu bez ověřené dostupnosti v tomto účtu/UI. Nejde o doloženou existenci menu. Nehledat tuto položku naslepo; smluvní vazbu ověřit dostupným konkrétním dokladem a mechanismem dle §10.2. Pokud nic dostupné není, ponechat NOT VERIFIED, nevyvozovat, že DPA neplatí.
+
+**Documentation & Tracking:** Documentation Impact: LEGAL/PILOT OPERATIONS (this file and CURRENT_STATE_AND_TARGETS.md); Changelog **NO**; Backlog **NONE**; Known Issues **NONE**. Deployment Authorization: **NOT AUTHORIZED**.
 
