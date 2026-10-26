@@ -2,6 +2,36 @@
 
 Status: **B1 FOUNDATION + B2 CORE METRICS + B3 REPORTING — local technical PASS; B4-H1-R1 native Windows Chromium harness PASS; G0 live DEV audit PARTIAL; collection disabled, not deployed.** Standard SSR/Vinext/Worker and hosted verification remain separate boundaries. Hosted activation / collection from real participants: **BLOCKED on explicit gates**, not authorized. Prepared 2026-10-24; verified R1 source `b8fdde42e75398198cd10fe305048aa722a42c43`. Workers Paid is **VERIFIED BY OPERATOR SCREENSHOT** at USD 5/month; independent billing read-back remains unavailable. Zero Trust Free Base is operator-reported (2/50 seats), not independently re-read. Usage/headroom, effective routes/Access policy and observability retention remain NOT VERIFIED.
 
+## PILOT-TECH-R1 — DEV source and next verification (2026-10-26)
+
+**SOURCE / LOCAL V3 PASS; HOSTED NOT VERIFIED; B-07 OPEN.** Exact source base: PR #83 `cb48a9de19d5847b0ca68d097f8bb572e4e6992d`. Approved technical input: PR #86 `7e45f8736b8c8cea76bd4a221539c2cdac656b8e` §11.3. Candidate `codex/pilot-tech-r1` targets that development source branch; PUBLIC is a later release stage. No merge into `dev`/`public` or hosted action is authorized here.
+
+| Item | Source/local result | Remaining hosted boundary |
+| --- | --- | --- |
+| Environment readiness | Fixed DEV/PUBLIC HTTPS host pairs; wrong/missing env/host/config rejected. Local synthetic exception is DEV-only; PUBLIC needs synthetic=0 and privacy approval. All identity/enrollment/notice/opt-in/key guards preserved. | Verify separate physical DEV/PUBLIC D1, keys, cohorts, key versions, correct host and effective configuration before any future activation. PUBLIC host must be re-read before release. |
+| Cross-environment association | Separate PUBLIC HMAC domains for participant derivation and context signatures; legacy DEV bytes preserved; copied DEV enrollment/context rejected even with copied keys/store. | Domain separation is additional defense, not permission to reuse actual resources or secrets. |
+| First receipt | Deterministic actual HTTP/browser reproductions and fixes for lost confirmed-write state after KV lag/GET errors, and misleading POST-timeout save-failure text. GET-only recovery, no optimistic API unlock or automatic POST retry. | Capture the **first POST status/body** and subsequent GET/UI on newly deployed reviewed DEV source. Historical G1-D4 cause is still unknown. |
+| Receipt policy / notice | Explicit future 7776000-second constant; no runtime default or TTL deployment. Reads do not renew expiry. Both material-change DRAFT versions updated, previous keys rejected; known names/contact/input limits and separate voluntary telemetry visible. | Hosted DEV retains reported 86400-second test TTL. Operational/legal notice completion, verified contact delivery, approved offboarding and separately authorized TTL publication remain distinct. |
+| Active telemetry proof | 21 actual-route Chromium cases include consent/refusal/OFF, request/identity/stream/disconnect isolation, synthetic SQLite → existing SQL/CSV and receipt races. All 1510 root tests, typecheck/build/artifact/isolation/focused lint PASS; actual-client rules mode PASS. | No live D1 event delta or actual-provider usage result. Follow [the bounded operator handoff](G1_DEV_D1_RUNBOOK.md#pilot-tech-r1--subsequent-isolated-dev-test-not-executed); do not repeat unchanged Windows audits. |
+
+The inherited 50-per-day planning wording below is historical. PR #86's approved pilot envelope is **50 users total**, open-ended duration; no capacity or metric redesign is implemented here. Workers Paid and Zero Trust Free plan facts are reused, not re-audited. The owner's 90-day receipt choice is not approval of other retention domains. In particular **30-day raw telemetry retention remains a proposal, not a production retention approval**. Controller/legal finalization remains open; Zdeněk's acceptance is not required for this technical batch or its synthetic source tests.
+
+Verification commands actually completed on Linux / Node 24.19.0 / pinned dependencies:
+
+```sh
+node node_modules/typescript/bin/tsc --noEmit --incremental false
+npm run build
+node --test --test-concurrency=1 tests/*.test.mjs
+node --test --test-concurrency=1 tests/browser/telemetry/harness.test.mjs
+node tests/desktop-workspace-browser.mjs --pilot-rules-only
+npm run validate:artifact
+node tests/browser/telemetry/check-isolation.mjs
+node node_modules/eslint/bin/eslint.js app/telemetry/server.ts app/pilot-rules.ts app/pilot-rules-boundary.tsx tests/telemetry.test.mjs tests/pilot-rules.test.mjs tests/pilot-rules-browser-scenarios.mjs tests/helpers/telemetry-browser-fixture.mjs tests/browser/telemetry/harness.test.mjs
+git diff --check
+```
+
+Runtime-heavy checks were serialized. Two targeted pre-fix Chromium failures reproduced the local defects; they are not counted as passing evidence. The final complete runs above passed with zero failures/skips. Fixtures use synthetic JWTs/KV/SQLite and intercepted provider responses; no actual AI request or user collection. Existing isolation check reports zero harness references in production source/artifacts. CI policies and dependencies were not changed to obtain PASS. Historical evidence remains scoped to its source/environment; G2/G4/G5, hosted test and focused PUBLIC release/rollback remain separate tasks.
+
 ## 0. Approved pilot capacity and tariff decision — 2026-10-24
 
 - **Operating envelope:** at most **50 pilot participants per day**; this is a participant count, **not** a one-session-per-person/day limit. Repeat visits and sessions are expected and remain measurable.

@@ -18,6 +18,10 @@ export async function runPilotRulesScenarios({call,evaluate,waitFor,capture}) {
   assert.match(await evaluate('document.querySelector(".pilot-rules-dialog").innerText'),/skutečnou situaci.*vynech identitu/);
   assert.match(await evaluate('document.querySelector(".pilot-rules-dialog").innerText'),/skutečné ani modelové/);
   assert.match(await evaluate('document.querySelector(".pilot-rules-dialog").innerText'),/není souhlasem za dítě/);
+  const information = await evaluate('document.querySelector(".pilot-rules-information").textContent');
+  assert.match(information, /Michal Roupec/); assert.match(information, /Zdeněk Vilímek/);
+  assert.match(information, /Dobrovolné měření.*samostatná volba/);
+  assert.equal(await evaluate('document.querySelector(".pilot-rules-information a").getAttribute("href")'), 'mailto:catsystem.exe@gmail.com');
   await key('Escape',27);assert.equal(await evaluate('Boolean(document.querySelector(".pilot-rules-dialog"))'),true);
   await evaluate('document.querySelector(".pilot-rules-dialog").focus()');await key('Tab',9);
   assert.equal(await evaluate('document.activeElement.tagName'),'SUMMARY');
@@ -35,9 +39,10 @@ export async function runPilotRulesScenarios({call,evaluate,waitFor,capture}) {
 
   await check();await evaluate('window.rules.failPost=true');await proceed();
   await waitFor('document.querySelector(".pilot-rules-error")');
-  assert.match(await evaluate('document.querySelector(".pilot-rules-error").textContent'),/nepodařilo uložit/);
+  assert.match(await evaluate('document.querySelector(".pilot-rules-error").textContent'),/Výsledek uložení.*ověřit/);
   assert.equal(await evaluate('document.querySelector(".chat-card").getBoundingClientRect().width'),0);
-  await evaluate('window.rules.failPost=false;window.rules.deferNextPost=true;window.rules.lag=true');
+  await evaluate('window.rules.failPost=false;[...document.querySelectorAll(".pilot-rules-actions button")].find(b=>b.textContent==="Ověřit znovu").click()');await required();
+  await evaluate('window.rules.deferNextPost=true;window.rules.lag=true');
   const before=await evaluate('window.rules.calls.filter(c=>c.method==="POST").length');
   await proceed();await waitFor('window.rules.pending.length===1');await proceed();
   assert.equal(await evaluate('window.rules.calls.filter(c=>c.method==="POST").length'),before+1);
@@ -69,6 +74,7 @@ export async function runPilotRulesScenarios({call,evaluate,waitFor,capture}) {
   await click('[aria-label="Otevřít nastavení"]');
   await waitFor('document.querySelector(".diagnostics-drawer.is-open .pilot-rules-information")');
   assert.match(await evaluate('document.querySelector(".pilot-rules-receipt").textContent'),/Přijatá verze: pilot-rules/);
+  assert.match(await evaluate('document.querySelector(".pilot-rules-receipt").textContent'),/Platí do:/);
   await click('.pilot-rules-settings > summary');
   await evaluate('document.querySelector(".diagnostics-drawer-content").scrollTop=0');
   assert.equal(await evaluate('document.querySelector(".pilot-rules-settings").open'),true);

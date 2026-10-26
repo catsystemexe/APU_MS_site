@@ -144,6 +144,93 @@ test("context budget is atomic and cohort/pseudonym scoped", async t => {
   assert.ok(results.filter(r => r.status === "rejected").every(r => r.reason.code === "rate_limited"));
   await f.start(b); assert.equal(f.db.rows("telemetry_sessions").length, 31);
 });
+test("PILOT-TECH-R1 exact env/host matrix keeps PUBLIC explicit and confines synthetic exceptions to DEV", async t => {
+  const f = await fixture(t);
+  const configured = { ...f.config, APU_TELEMETRY_SYNTHETIC: "0", APU_TELEMETRY_PRIVACY_APPROVED: "1", APU_TELEMETRY_METADATA_ENABLED: "0" };
+  const dev = "apu-ms-site-dev.catsystem-exe.workers.dev", pub = "apu.catsystem.ai";
+  for (const environment of ["dev", "public", "PUBLIC", "production", "", undefined]) {
+    for (const host of [dev, pub, "apu-ms-site.catsystem-exe.workers.dev", "localhost", "127.0.0.1", "apu.catsystem.ai.evil.invalid"]) {
+      for (const protocol of ["https:", "http:"]) {
+        const config = { ...configured, APU_TELEMETRY_ENV: environment, APU_TELEMETRY_HOSTNAME: host };
+        const ready = m.readiness(new Request(`${protocol}//${host}/api/telemetry/context`), { ...f.resources, config });
+        const expected = protocol === "https:" && ((environment === "dev" && host === dev) || (environment === "public" && host === pub));
+        assert.equal(ready.code, expected ? "ready" : "not_ready", `${environment} ${protocol}//${host}`);
+        if (expected) { assert.equal(ready.policy.environment, environment); assert.equal(ready.policy.metadata, false); }
+      }
+    }
+  }
+  for (const environment of ["dev", "public"]) for (const hostname of [dev, pub]) {
+    const config = { ...configured, APU_TELEMETRY_ENV: environment, APU_TELEMETRY_HOSTNAME: hostname === dev ? pub : dev };
+    assert.equal(m.readiness(new Request(`https://${hostname}/`), { ...f.resources, config }).code, "not_ready");
+  }
+  for (const environment of ["dev", "public"]) for (const synthetic of ["0", "1", undefined]) {
+    const config = { ...configured, APU_TELEMETRY_ENV: environment, APU_TELEMETRY_HOSTNAME: "localhost", APU_TELEMETRY_SYNTHETIC: synthetic, APU_TELEMETRY_PRIVACY_APPROVED: "0" };
+    assert.equal(m.readiness(new Request("http://localhost:5173/"), { ...f.resources, config }).code,
+      environment === "dev" && synthetic === "1" ? "ready" : "not_ready");
+  }
+  for (const synthetic of ["1", undefined, "true"]) {
+    const config = { ...configured, APU_TELEMETRY_ENV: "public", APU_TELEMETRY_HOSTNAME: pub, APU_TELEMETRY_SYNTHETIC: synthetic };
+    assert.equal(m.readiness(new Request(`https://${pub}/`), { ...f.resources, config }).code, "not_ready");
+  }
+  assert.equal(m.readiness(new Request(`https://${pub}:8443/`), { ...f.resources, config: { ...configured, APU_TELEMETRY_ENV: "public", APU_TELEMETRY_HOSTNAME: pub } }).code, "not_ready");
+  for (const environment of ["dev", "public"]) {
+    const config = { ...configured, APU_TELEMETRY_ENV: environment, APU_TELEMETRY_ENABLED: "0" };
+    assert.equal(m.readiness(new Request(`https://${pub}/`), { ...f.resources, config }).code, "disabled");
+  }
+});
+
+test("PILOT-TECH-R1 PUBLIC retains privacy, binding, keys, enrollment, notice and no-preconsent-write guards", async t => {
+  const f = await fixture(t), hostname = "apu.catsystem.ai";
+  const config = { ...f.config, APU_TELEMETRY_ENV: "public", APU_TELEMETRY_HOSTNAME: hostname,
+    APU_TELEMETRY_SYNTHETIC: "0", APU_TELEMETRY_PRIVACY_APPROVED: "1", APU_TELEMETRY_METADATA_ENABLED: "0", APU_TELEMETRY_NOTICE_TEXT: "Synthetic test notice only." };
+  const participant = await m.participantId(a, { environment: "public", cohort: config.APU_TELEMETRY_COHORT, pseudonymKey: config.TELEMETRY_PSEUDONYM_KEY });
+  config.APU_TELEMETRY_ELIGIBLE = participant;
+  const db = new EmulatedD1(); t.after(() => db.db.close());
+  const resources = { config, store: new m.D1TelemetryStore(db) };
+  const req = body => new Request(`https://${hostname}/api/telemetry/context`, { method: "POST", headers: { Origin: `https://${hostname}`, "Content-Type": "application/json", "Sec-Fetch-Site": "same-origin" }, body: JSON.stringify(body) });
+  const body = { action: "start", opt_in: true, notice_version: config.APU_TELEMETRY_NOTICE_VERSION, tab_id: id() };
+  for (const [field, value] of [["APU_TELEMETRY_PRIVACY_APPROVED", "0"], ["APU_TELEMETRY_PRIVACY_APPROVED", undefined],
+    ["TELEMETRY_PSEUDONYM_KEY", "short"], ["TELEMETRY_CONTEXT_KEY", undefined], ["TELEMETRY_CONTEXT_KEY", config.TELEMETRY_PSEUDONYM_KEY],
+    ["APU_TELEMETRY_COHORT", "bad/cohort"], ["APU_TELEMETRY_KEY_VERSION", ""], ["APU_TELEMETRY_NOTICE_VERSION", undefined],
+    ["APU_TELEMETRY_ELIGIBLE", ""], ["APU_TELEMETRY_ELIGIBLE", "teacher@example.invalid"]]) {
+    const changed = { ...resources, config: { ...config, [field]: value } };
+    assert.equal(m.readiness(req(body), changed).code, "not_ready", field);
+    await assert.rejects(m.handleContext(req(body), a, changed, NOW), code("not_ready"));
+  }
+  assert.equal(m.readiness(req(body), { config }).code, "not_ready");
+  assert.deepEqual(await m.pilotAvailability(req(body), a, resources), { enabled: true, noticeVersion: config.APU_TELEMETRY_NOTICE_VERSION, noticeText: config.APU_TELEMETRY_NOTICE_TEXT });
+  assert.deepEqual(await m.pilotAvailability(req(body), a, { ...resources, config: { ...config, APU_TELEMETRY_NOTICE_TEXT: "" } }), { enabled: false });
+  for (const identity of [null, { ...a, role: "developer" }, b]) await assert.rejects(m.handleContext(req(body), identity, resources, NOW));
+  for (const change of [{ opt_in: false }, { notice_version: "old-notice" }]) await assert.rejects(m.handleContext(req({ ...body, ...change }), a, resources, NOW), code("consent_required"));
+  assert.equal(db.rows("telemetry_sessions").length, 0, "availability/refusal/denials never write");
+  const context = await m.handleContext(req(body), a, resources, NOW);
+  assert.equal(context.metadata_enabled, false);
+  assert.equal(db.rows("telemetry_sessions").length, 1);
+  assert.equal(f.db.rows("telemetry_sessions").length, 1, "PUBLIC writes do not enter the separate DEV store");
+  assert.doesNotMatch(JSON.stringify(db.rows("telemetry_sessions")), /@|email|notice_text/i);
+  const event = f.event({ session_id: context.session_id, tab_id: context.tab_id });
+  const eventsRequest = new Request(`https://${hostname}/api/telemetry/events`, { method: "POST", headers: { Origin: `https://${hostname}`, "Content-Type": "application/json" }, body: JSON.stringify({ context: context.context, events: [event], sent_elapsed_ms: 0 }) });
+  assert.equal((await m.handleEvents(eventsRequest, a, resources, NOW)).acknowledged.length, 1);
+  await m.handleContext(req({ action: "stop", context: context.context }), a, resources, NOW + 1);
+  const late = new Request(eventsRequest.url, { method: "POST", headers: eventsRequest.headers, body: JSON.stringify({ context: context.context, events: [event], sent_elapsed_ms: 2 }) });
+  await assert.rejects(m.handleEvents(late, a, resources, NOW + 2), code("invalid_context"));
+  assert.equal(db.rows("telemetry_events").length, 1);
+});
+
+test("PILOT-TECH-R1 environment HMAC domains reject copied enrollment and context even with accidentally copied keys/store", async t => {
+  const f = await fixture(t), dev = m.readiness(request("context", {}), f.resources).policy;
+  const pub = { ...dev, environment: "public" };
+  const publicId = await m.participantId(a, pub);
+  assert.notEqual(publicId, f.participants[0]);
+  assert.notEqual(publicId, await m.participantId({ ...a, email: `${pub.cohort}\0${a.email}` }, { ...dev, cohort: "apu-public" }), "domain separator cannot collide with legacy tag/email framing");
+  await assert.rejects(m.eligibleParticipant(a, { ...pub, synthetic: false }), code("ineligible"));
+  const session = f.db.rows("telemetry_sessions")[0];
+  const publicToken = await m.signContext(session, pub);
+  await assert.rejects(m.resolveContext(f.context.context, f.participants[0], pub, f.resources, NOW), code("invalid_context"));
+  await assert.rejects(m.resolveContext(publicToken, f.participants[0], dev, f.resources, NOW), code("invalid_context"));
+  assert.equal((await m.resolveContext(f.context.context, f.participants[0], dev, f.resources, NOW)).session_id, session.session_id);
+});
+
 test("HMAC cohort isolation, signed token ownership, tab binding and explicit consent", async t => {
   const f = await fixture(t);
   assert.notEqual(f.participants[0], f.participants[1]);

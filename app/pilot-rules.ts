@@ -1,6 +1,9 @@
 // Development draft. A version change is a deliberate operator/legal decision.
-export const PILOT_RULES_VERSION = "pilot-rules-2026-10-24-draft-1";
-export const PILOT_INFORMATION_VERSION = "pilot-information-2026-10-24-draft-1";
+export const PILOT_RULES_VERSION = "pilot-rules-2026-10-26-draft-2";
+export const PILOT_INFORMATION_VERSION = "pilot-information-2026-10-26-draft-2";
+// Approved future pilot policy, never a runtime default. Current hosted DEV
+// test TTL (86400) is unchanged; deployment/retention approval is separate.
+export const PILOT_RULES_APPROVED_TTL_SECONDS = 7_776_000;
 export const PILOT_RULES_EVENT = "apu:pilot-rules-required";
 export type PilotRulesReceipt = {
   rulesVersion: string;

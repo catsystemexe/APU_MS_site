@@ -71,9 +71,9 @@ export async function syntheticFixture(directory, routes, { enabled = false } = 
   // Existing H1 scenarios start with rules accepted. Joint tests revoke/expire
   // these real receipt records; the actual gate and API remain in the bundle.
   const receipts = new Map(), receiptWrites = [];
-  const rules = { receipts, writes: receiptWrites, unavailable: false };
+  const rules = { receipts, writes: receiptWrites, unavailable: false, failReads: false, readLag: false };
   const receiptNamespace = {
-    async get(key) { if (rules.unavailable) throw Error("synthetic_rules_unavailable"); return receipts.get(key) ?? null; },
+    async get(key) { if (rules.unavailable || rules.failReads) throw Error("synthetic_rules_unavailable"); return rules.readLag ? null : receipts.get(key) ?? null; },
     async put(key, value, options) { if (rules.unavailable) throw Error("synthetic_rules_unavailable"); receipts.set(key, value); receiptWrites.push({ key, value, options }); },
   };
   const receiptTime = routes.testClock.now;

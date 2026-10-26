@@ -20,8 +20,10 @@ export function PilotRulesInformation({ idPrefix = "settings" }: { idPrefix?: st
     <details><summary>Jak se údaje zpracovávají</summary>
       <p>Při AI operacích se zadaný text a potřebný pracovní kontext předávají přes server APU do OpenAI API. Hosting a ochranu přístupu zajišťuje Cloudflare.</p>
       <p>Nový projekt ani odhlášení nejsou výmazem všech kopií u dodavatelů. Kopírování, tisk a stažené soubory vytvářejí další kopie. Diktování nemusí zpracovávat zvuk pouze v zařízení.</p>
-      <p>Úplné informace o správci, právních základech, retenčních lhůtách, právech a funkčním kontaktu musí být doplněny a schváleny před PUBLIC nasazením této funkce.</p>
-      <p>Při omylem vložených osobních údajích dál případ nerozvíjej. Kontaktuj provozovatele známým kanálem pro pilot; do hlášení nekopíruj znovu celý případ.</p>
+      <p>O účelech a podstatných prostředcích pilotu společně rozhodují Michal Roupec a Zdeněk Vilímek. Rozdělení odpovědností společných správců a konečné informace o zpracování se dokončují. Kontaktní osobou je Michal Roupec: <a href="mailto:catsystem.exe@gmail.com">catsystem.exe@gmail.com</a>.</p>
+      <p>Právní základy, retenční lhůty jednotlivých datových toků a úplné informace o právech čekají na dokončení a schválení před PUBLIC vydáním. Tento návrh nepotvrzuje splnění všech právních povinností.</p>
+      <p>Platnost potvrzení je omezená a běžné používání ji neprodlužuje. Po vypršení nebo podstatné změně pravidel či informací je potřeba nové přijetí.</p>
+      <p>Při omylem vložených osobních údajích dál případ nerozvíjej. Kontaktuj Michala na uvedeném e-mailu; do hlášení nekopíruj znovu celý případ.</p>
     </details>
     <details><summary>Krátký průvodce APU</summary>
       <ol>
@@ -31,8 +33,9 @@ export function PilotRulesInformation({ idPrefix = "settings" }: { idPrefix?: st
       </ol>
     </details>
     <p className="pilot-rules-ack-note">Potvrzení pravidel není souhlasem za dítě nebo rodiče ani oprávněním školy předávat osobní údaje.</p>
+    <p>Dobrovolné měření používání APU je samostatná volba. Přijetí pravidel měření nezapíná a jeho odmítnutí ani zastavení nebrání práci s APU.</p>
     {idPrefix === "settings" && <p className="pilot-rules-receipt">{receipt
-      ? `Přijatá verze: ${receipt.rulesVersion}. Potvrzeno: ${new Date(receipt.acceptedAt).toLocaleString("cs-CZ")}.`
+      ? `Přijatá verze: ${receipt.rulesVersion}. Potvrzeno: ${new Date(receipt.acceptedAt).toLocaleString("cs-CZ")}. Platí do: ${new Date(receipt.expiresAt).toLocaleString("cs-CZ")}.`
       : "Potvrzení pravidel zatím není dostupné."}</p>}
   </section>;
 }
@@ -46,9 +49,12 @@ export function PilotRulesBoundary({ children, onLogout }: { children: ReactNode
   const panel = useRef<HTMLElement>(null);
   const generation = useRef({ value: 0 });
   const pending = useRef<AbortController | null>(null);
+  // A confirmed POST remains a confirmed write across failed/lagging GETs.
+  // Only a fresh server GET may unlock work; this is never an API bypass.
+  const awaitingVisibility = useRef<PilotRulesReceipt | null>(null);
   const reloadStatus = useRef<() => void>(() => {});
 
-  async function requestStatus(afterSave = false) {
+  async function requestStatus() {
     const current = ++generation.current.value;
     pending.current?.abort();
     const controller = new AbortController(); pending.current = controller;
@@ -58,10 +64,11 @@ export function PilotRulesBoundary({ children, onLogout }: { children: ReactNode
       if (!response.ok) throw new Error("unavailable");
       const data = await response.json() as { rulesVersion?: unknown; informationVersion?: unknown; receipt?: unknown };
       if (generation.current.value !== current) return;
-      if (data.rulesVersion !== PILOT_RULES_VERSION || data.informationVersion !== PILOT_INFORMATION_VERSION) { setStatus("outdated"); return; }
+      if (data.rulesVersion !== PILOT_RULES_VERSION || data.informationVersion !== PILOT_INFORMATION_VERSION) { awaitingVisibility.current = null; setReceipt(null); setStatus("outdated"); return; }
       const accepted = parsePilotRulesReceipt(data.receipt);
       if (data.receipt !== null && !accepted) throw new Error("invalid receipt");
-      setError(null); setReceipt(accepted); setStatus(accepted ? "accepted" : afterSave ? "verifying" : "required");
+      awaitingVisibility.current = accepted ? null : parsePilotRulesReceipt(awaitingVisibility.current);
+      setError(null); setReceipt(accepted); setStatus(accepted ? "accepted" : awaitingVisibility.current ? "verifying" : "required");
     } catch {
       if (generation.current.value === current) { setStatus("unavailable"); setError("Potvrzení pravidel nyní nelze ověřit. Pracovní obsah zůstává uzamčený; zkus ověření znovu."); }
     } finally { window.clearTimeout(timeout); if (pending.current === controller) pending.current = null; }
@@ -88,12 +95,14 @@ export function PilotRulesBoundary({ children, onLogout }: { children: ReactNode
         headers: { "Content-Type": "application/json" }, body: JSON.stringify({ accepted: true, rulesVersion: PILOT_RULES_VERSION, informationVersion: PILOT_INFORMATION_VERSION }) });
       const data = await response.json() as { rulesVersion?: unknown; informationVersion?: unknown; receipt?: unknown };
       if (generation.current.value !== current) return;
-      if (response.status === 409) { setStatus("outdated"); return; }
-      if (!response.ok || !parsePilotRulesReceipt(data.receipt)) throw new Error("save failed");
+      if (response.status === 409 || (response.ok && (data.rulesVersion !== PILOT_RULES_VERSION || data.informationVersion !== PILOT_INFORMATION_VERSION))) { awaitingVisibility.current = null; setStatus("outdated"); return; }
+      const saved = parsePilotRulesReceipt(data.receipt);
+      if (!response.ok || !saved || saved.informationVersion !== PILOT_INFORMATION_VERSION) throw new Error("unconfirmed save");
+      awaitingVisibility.current = saved;
       // A successful write is not a guarantee of KV propagation to the next AI request.
-      await requestStatus(true);
+      await requestStatus();
     } catch {
-      if (generation.current.value === current) { setStatus("required"); setError("Potvrzení se nepodařilo uložit. Zkus to znovu."); }
+      if (generation.current.value === current) { setStatus("unavailable"); setError("Výsledek uložení se nepodařilo ověřit. Ověř potvrzení znovu; pracovní obsah zůstává uzamčený."); }
     } finally { window.clearTimeout(timeout); if (pending.current === controller) pending.current = null; }
   }
 
@@ -120,7 +129,7 @@ export function PilotRulesBoundary({ children, onLogout }: { children: ReactNode
         </label>
         <div className="pilot-rules-actions">
           <button type="button" disabled={!checked || status !== "required"} onClick={() => void accept()}>{status === "saving" ? "Ukládám potvrzení…" : "Pokračovat do APU"}</button>
-          {(status === "unavailable" || status === "verifying") && <button type="button" onClick={() => { setStatus("checking"); setError(null); void requestStatus(status === "verifying"); }}>Ověřit znovu</button>}
+          {(status === "unavailable" || status === "verifying") && <button type="button" onClick={() => { setStatus("checking"); setError(null); void requestStatus(); }}>Ověřit znovu</button>}
           {status === "outdated" && <button type="button" onClick={() => window.location.reload()}>Načíst aktuální pravidla</button>}
           <button type="button" onClick={() => { ++generation.current.value; pending.current?.abort(); onLogout(); }}>Odhlásit se</button>
         </div>
