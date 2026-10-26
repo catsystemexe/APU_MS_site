@@ -2,6 +2,58 @@
 
 **Datum zdrojového auditu:** 2026-10-24. **Dokumentační status:** SOURCE-BACKED CURRENT + APPROVED FUTURE PLANS; zdrojové tvrzení není automaticky tvrzením o nasazeném runtime.
 
+
+## AKTUÁLNÍ PRIORITA — technicky připravit GDPR + telemetry pro PUBLIC (2026-10-26)
+
+Uživatel upřesnil cíl: **nasazení pilotních GDPR funkcí a telemetrie do PUBLIC**, primárně implementace a funkčnost. **Zdeňkovo přijetí návrhu nyní není podmínkou technické práce.** Starší právní gate evidence níže zůstává zachována; není prohlášením, že před technickou implementací/syntetickým testem musí být uzavřeno celé P-MIN-01 až 05.
+
+**Nová evidence:** dodané screenshoty Workeru `apu-ms-site-dev` ukazují Workers Logs a Workers Traces **Disabled** a D1 `TELEMETRY_DB` binding. Neprokazují aktivní D1 sběr ani stav PUBLIC; označení „Production“ je prostředím DEV Workeru.
+
+**Konkrétní zdrojová překážka PUBLIC:** `app/telemetry/server.ts::readiness` @ PR #83 `cb48a9de...` má pevný ENV=dev a DEV hostname guard. Nestačí zapnout flag; je třeba explicitní bezpečná PUBLIC podpora. Receipt first-acceptance root cause a hosted sběr zůstávají NOT VERIFIED.
+
+**Pořadí:** T1 Codex source → T2 izolovaný hosted DEV test (receipt + D1/report/cleanup) → T3 omezený PUBLIC release kandidát a deployment dávka. PUBLIC `284c108d...` a kandidát #83 jsou diverged (28 ahead / 3 behind); blanket merge není release plán. Přesné zadání T1: **LEGAL_GDPR_READINESS.md §11.3 — PILOT-PUBLIC-TECH-R1**.
+
+Žádná aplikační/Cloudflare mutace v tomto kroku; telemetry nadále OFF/OFF. Retenční schválení receipt 90 dní zůstává platné, RAW telemetry 30 dní je stále návrhem. G2/G4/G5 a B-07 zůstávají otevřené; zdrojová příprava je neuzavírá.
+
+## PILOT MINIMUM — rozhodnutý rozsah a otevřené podmínky (2026-10-26)
+
+**Aktuální upřesnění vlastníka (2026-10-26): maximálně 50 uživatelů celkem, otevřený časový konec.** Nahrazuje starší hlavní formulaci „48 učitelů“; interní uživatelé se započítávají do celkového limitu. Při dvou interních uživatelích zbývá nejvýše 48 externích míst; skutečné obsazení a licenční kapacita nejsou nově ověřeny. Uživatel výslovně určil **Michala Roupce** jako odpovědnou osobu za zpracování dat v pilotu. APU připravují **Michal Roupec** a **Zdeněk Vilímek — metodik APU**. Podle sdělení Michala z 2026-10-26 jsou Cloudflare/OpenAI účty a administrátorské přístupy vedeny u něj; nejde o nový autentizovaný read-back ani ověření smluv. Michal následně výslovně potvrdil **společné rozhodování o zpracování**. Pracovní kvalifikace je proto **společné správcovství** v rozsahu společně určovaných zpracování pilotu; minimální návrh rozdělení odpovědností podle čl. 26 je v LEGAL_GDPR_READINESS.md §10.1.1 a čeká na přijetí oběma a zpřístupnění podstaty učitelům. Michal zůstává **hlavní provozní/kontaktní osoba**, nikoli automaticky formální DPO.
+
+**Infrastruktura — OWNER-CONFIRMED Michalem 2026-10-26:** **Workers Paid**, zvolený kvůli telemetrii; **Zero Trust Free**, záměrně ponechaný pro limitovaný pilot do **50 uživatelů celkem**. Potřeba širšího rozsahu má vést k přechodu na jinou autentizační službu, pravděpodobně **Clerk**. Finální poskytovatel/tarif ani migrace nejsou touto větou schváleny. Workers Paid neznamená aktivní telemetrii; ta nadále zůstává OFF/OFF. Potvrzené tarify nejsou požadovány znovu jen kvůli změně relace; skutečné seat využití zůstává neověřené a kontroluje se před onboardingem.
+
+**Produktový cíl pilotu:** získat data a zpětnou vazbu o použitelnosti APU a vytvořit čas pro přípravu Stage 1. Konkrétní sběr/kanál, právní titul a retence feedbacku ještě nejsou schváleny. Tento cíl neautorizuje aktivaci telemetrie ani sběr pracovního chatu/Zápisníku. Přechod na Stage 1 není automaticky pokryt pilotním režimem.
+
+**Pilotní kontakt — OWNER-CORRECTED / SPELLING CONFIRMED 2026-10-26:** `catsystem.exe@gmail.com`. Tento zápis nahrazuje původní překlep. Funkčnost doručování **NOT VERIFIED**; žádná testovací zpráva nebyla odeslána. P-MIN-01 a P-MIN-02 jsou pouze částečně doplněné, nikoli PASS. Aktuální rozlišení faktů a otevřených bodů: [LEGAL_GDPR_READINESS.md §10](LEGAL_GDPR_READINESS.md#10-legal-p0-min-close--ověření-minimálních-podmínek-pilotu-2026-10-26).
+
+**Provozní hranice:** dovolena skutečná pedagogická potřeba a pozorování bez přímo či nepřímo identifikovatelného žáka; zakázány skutečné i modelové diagnózy a zdravotní/poradenské zprávy. Žádné serverově trvale ukládané projekty, telemetry DEV OFF/OFF. Aktuální potvrzení pravidel má v DEV testovací TTL 24 h; Pro pilot/PUBLIC **Michal Roupec dne 2026-10-26 schválil produktovou politiku 90denního TTL receipt**, bez automatického prodlužování, s novým přijetím po expiraci/podstatné změně a výmazem při offboardingu (§10.3.1 právního podkladu). **Není implementována ani nasazena.** P-MIN-04 je PARTIAL; právní titul/notice, provozní výmaz a implementační ověření zůstávají otevřené. Schválení nedokládá přijetí ujednání Zdeňkem a nemění retence logů, Zápisníku, feedbacku ani dodavatelských dat.
+
+**Podklad:** [LEGAL_GDPR_READINESS.md §9 — PILOT MINIMUM](LEGAL_GDPR_READINESS.md#9-pilot-minimum--omezený-pilot-do-50-uživatelů-aktualizace-2026-10-26). Obsahuje krátký návrh pravidel pro učitele, šablonu čl. 13 informace, minimální incident/výmazový postup, DPIA screening a jasné rozlišení PILOT vs Stage 1.
+
+**STAV:** schválený produktový rozsah PILOT MINIMUM (potvrzení uživatele 2026-10-26); provozní a právní údaje zbývá doplnit. Externí onboarding zůstává NOT AUTHORIZED. **Externí onboarding v rámci celkového limitu 50 uživatelů dosud NENÍ schválen**, protože zbývá přijetí rozdělení odpovědností společných správců oběma a zpřístupnění jeho podstaty, ověření funkčnosti kontaktu, právní tituly, aktuální dodavatelské/DPA/přenosové skutečnosti, publikační retenční údaje, DPIA screening a minimální proces práv/incidentů. Před přizváním osob tyto úzce vymezené body uzavřít; rozsáhlá Stage 1 customer-auth/Projects/billing agenda může zůstat odložená. G2/G4/G5 a PUBLIC deployment jsou samostatně NOT AUTHORIZED.
+
+## P-MIN-03 — pokus bez přihlášení a následné potvrzení tarifů (2026-10-26)
+
+**AKTUÁLNĚ PARTIAL — PLANS OWNER-CONFIRMED; CONTRACTS / DATA SETTINGS NOT VERIFIED.** Workers Paid a Zero Trust Free následně potvrdil Michal; příslušná část chybějících údajů je tím doplněna jako OWNER-CONFIRMED. **Historický pokus: ACCESS BLOCKED (OPERATOR-REPORTED).** Dodaný report uvádí login stránky Cloudflare/OpenAI v dostupné relaci, přibližně 17:55–17:56 Europe/Prague. Nebyla získána nová account-specific evidence; nejde o FAIL konfigurace služby ani důkaz absence přihlášení v běžném prohlížeči operátora. Podle operátora neproběhly mutace, použití API credentials nebo čtení secret hodnot.
+
+Dřívější sdělení Michala o účtech/přístupech a původní G1-D4 DEV evidence se zachovávají ve svém rozsahu. Zdrojové poznámky o loggeru/provider routes nemají v reportu přesný kontrolovaný ref, proto nepotvrzují aktuální nasazené logování. P-MIN-03/P-MIN-05 se neuzavírají. Podrobný souhrn a nejmenší další krok jsou v **LEGAL_GDPR_READINESS.md §10.7**: v přihlášeném Cloudflare prohlížeči doplnit vazbu účtu a chybějící log/retention/export a smluvní nastavení, poté OpenAI data controls/projekt. Dotaz na již potvrzené tarify neopakovat; aktuální seat využití kontrolovat před přidáním účastníků. Neopakovat nepřihlášený audit; nevyhledávat naslepo neověřené menu Legal/Agreements/DPA.
+
+## LEGAL-P0-R1 — aktuální DEV/LEGAL evidence reconciliation (2026-10-26)
+
+**Tento dodatek aktualizuje stav DEV po auditu z 2026-10-24; historický baseline v částech A–D nepřepisuje. PUBLIC není v této dávce nově ověřen ani změněn.** Approval-ready dokumentační návrh je v [LEGAL_GDPR_READINESS.md, §8](LEGAL_GDPR_READINESS.md#8-legal-p0-r1--podklad-pro-schvaleni-2026-10-26).
+
+| Oblast | Stav doložený přesným zdrojem/evidencí | Nevyvozovat |
+|---|---|---|
+| Git/source versus hosting | `dev` je stále `fc8ac5520b7b49b442bedc47558c73f20ce2bea6`; aplikace PR #83 `cb48a9de19d5847b0ca68d097f8bb572e4e6992d` byla samostatně nasazena do DEV Workeru dle PR #85 `1729fce641fab5015407acdd5be06fe8941ed58c`, jako Worker version `895e443e-3322-4b2d-91f0-9523220a9bbf` se 100% traffic | Neznamená merge PR #83 ani PUBLIC release |
+| DEV KV a pravidla | Receipt KV `PILOT_RULES_ACCEPTANCE`, TTL 86 400 sekund, omezený DEV operátor; Access ochrana PASS | 24 hodin je pouze DEV-test retention, nikoliv PUBLIC politika; samotný receipt není souhlas za žáka |
+| První přijetí pravidel | První hosted pokus zobrazil chybu; pozdější GET 200/PRESENT a reload UI PASS, původní POST HTTP evidence neexistuje | Neoznačovat first-acceptance reliability za vyřešenou |
+| Statelesness / browser | MAIN request používá `store:false`, aktuální Zápisník/omezený dialogový kontext; `app/notebook-storage.ts` zachovává owner-scoped lokální data (developer `localStorage`, tester `sessionStorage`) | Není doložena nulová retence u poskytovatelů ani úplný výmaz všech kopií pouhým logout/resetem |
+| Telemetry | Nasazený DEV má D1 binding, avšak enabled=0 a metadata=0; po kontrolovaném smoke 0 sessions/events/ai_calls, bez pre-smoke snapshotu | Není ověřen aktivní hosted sběr, přesná delta ani G2/G4/G5 |
+| PUBLIC / GDPR | PUBLIC zůstává dle posledního ověřeného podkladu beze změny; LEGAL-P0-R1 připravuje texty a approval matrix | Není doložen nový PUBLIC audit, právní schválení nebo povolení reálných žákovských dat |
+
+**Hranice povolených vstupů navržená ke schválení:** učitel může formulovat skutečnou pedagogickou potřebu, pozorované projevy a nezbytný kontext, ale konkrétní žák nesmí být identifikovatelný ani kombinací údajů; nevkládat skutečné ani modelové diagnózy, zprávy či kontakty. Pravidla jsou preventivní kontrolou, ne automatickým důkazem anonymizace.
+
+**Otevřené approval gates:** controller/processor role individuální učitel × škola, správce a kontakt, účely/právní tituly podle domény, DPA/subprocesory/přenosy, retence/výmaz/logy, DPIA screening, PUBLIC informační text a receipt TTL. DEV first-acceptance POST test potřebuje vlastní bezpečně instrumentované schválení. Telemetry G2/G4/G5 a PUBLIC deployment zůstávají NOT AUTHORIZED.
+
 ## A. PUBLIC Pilot — současný stav a záměr
 
 **Zdrojové/operátorské podklady**
@@ -40,7 +92,7 @@
 
 | Vrstva | Cíl Stage 1 | Co ještě rozhodnout |
 |---|---|---|
-| Auth | Clerk Pro + stabilní interní app ID | MFA policy, session expiry, invite/open registration, provider legal gate |
+| Auth | Pravděpodobný kandidát Clerk + stabilní interní app ID; novější upřesnění vlastníka při potřebě překročit 50 uživatelů pilotu | Finální poskytovatel a tarif (starší Clerk Pro není touto dávkou potvrzen), MFA policy, session expiry, invite/open registration, provider legal gate |
 | Projects | D1-backed, tenant/owner isolation; Save/Open/rename/duplicate/delete/export | Schéma, snapshots, limitační kvóty, přílohy mimo scope |
 | Monetizace | Minimálně jeden placený tarif, schema připravené pro pozdější více tarifů | Ceny, VAT/daň, fakturační řešení CZK, entitlement grace/suspension |
 | AI | Server-side autorizace + per-user budget/concurrency guard | Bezpečné limity podle skutečné pilotní spotřeby |
