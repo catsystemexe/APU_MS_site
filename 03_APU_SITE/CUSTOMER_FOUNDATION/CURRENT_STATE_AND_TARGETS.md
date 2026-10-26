@@ -11,7 +11,7 @@
 
 **Podklad:** [LEGAL_GDPR_READINESS.md §9 — PILOT MINIMUM](LEGAL_GDPR_READINESS.md#9-pilot-minimum--omezeny-pilot-do-48-ucitelu-navrh-2026-10-26). Obsahuje krátký návrh pravidel pro učitele, šablonu čl. 13 informace, minimální incident/výmazový postup, DPIA screening a jasné rozlišení PILOT vs Stage 1.
 
-**STAV:** dokumentační DRAFT připraven. **Externí onboarding do 48 účastníků dosud NENÍ schválen**, protože chybí identita právního správce/společných správců, funkční kontakt, právní tituly, aktuální dodavatelské/DPA/přenosové skutečnosti, publikační retenční údaje, DPIA screening a minimální proces práv/incidentů. Před přizváním osob tyto úzce vymezené body uzavřít; rozsáhlá Stage 1 customer-auth/Projects/billing agenda může zůstat odložená. G2/G4/G5 a PUBLIC deployment jsou samostatně NOT AUTHORIZED.
+**STAV:** schválený produktový rozsah PILOT MINIMUM (potvrzení uživatele 2026-10-26); provozní a právní údaje zbývá doplnit. Externí onboarding zůstává NOT AUTHORIZED. **Externí onboarding do 48 účastníků dosud NENÍ schválen**, protože chybí identita právního správce/společných správců, funkční kontakt, právní tituly, aktuální dodavatelské/DPA/přenosové skutečnosti, publikační retenční údaje, DPIA screening a minimální proces práv/incidentů. Před přizváním osob tyto úzce vymezené body uzavřít; rozsáhlá Stage 1 customer-auth/Projects/billing agenda může zůstat odložená. G2/G4/G5 a PUBLIC deployment jsou samostatně NOT AUTHORIZED.
 
 ## LEGAL-P0-R1 — aktuální DEV/LEGAL evidence reconciliation (2026-10-26)
 
