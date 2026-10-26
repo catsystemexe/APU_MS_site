@@ -12,6 +12,10 @@ The next operator login returned to DEV successfully. Read-only `GET /api/sessio
 
 No telemetry window was enabled: explicit enrollment and opt-in were not established, so refusal/opt-in/withdrawal, D1 deltas, forbidden-field inspection, SQL/CSV reconciliation and cleanup acceptance remain BLOCKED/PENDING. Final DEV telemetry/metadata stayed OFF/OFF and D1 counts stayed sessions/events/ai_calls `0/0/0`.
 
+Follow-up bounded window result: dedicated DEV HMAC keys and one enrolled tester pseudonym were prepared privately with `synthetic=0`, `privacy_approved=1`, metadata `0`, and a unique cohort. Refusal produced no rows. Explicit UI opt-in produced one `tester` session and one `workflow_started` event; no AI/provider call occurred. Withdrawal set `stopped_at`; the scoped SQL check found zero prohibited-key hits; the single test session/event was deleted after evidence capture. Temporary secrets and private enrollment material were removed. Final D1 counts are `0/0/0`.
+
+Final restore explicitly reinstated the Access issuer/audience variables, original developer email, OFF/OFF and TTL 86400. The continuing browser session returned HTTP 401 (`Přihlášení není platné`), so final `isDeveloper:true` is NOT VERIFIED in that stale session. Do not retry or bypass Access as part of this evidence batch.
+
 Reused evidence: PR #85 at `1729fce641fab5015407acdd5be06fe8941ed58c` records DEV deployment of #83, config/Access and receipt GET/rehydration PASS, telemetry/metadata OFF/OFF, receipt test TTL **86400**. First-acceptance POST status/body were unavailable; its root cause remains unknown. The new local lag/retry and lost-response reproductions do not establish that hosted cause. No fresh Cloudflare audit is requested here; recheck only the dynamic target/source/config/identity required for this next operation.
 
 Required inputs, kept in restricted operator evidence (names only in Git):
