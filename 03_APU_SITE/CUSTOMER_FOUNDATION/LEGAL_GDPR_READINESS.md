@@ -197,7 +197,7 @@ Konkrétní procesy odpovědí na žádosti subjektů údajů, řešení chybné
 
 ## 9. PILOT MINIMUM — omezený pilot do 48 učitelů (návrh 2026-10-26)
 
-**Status: DRAFT — MINIMUM PREPARED, EXTERNAL ONBOARDING NOT YET APPROVED.** Tato sekce zužuje schvalovací rozsah §8 pro aktuální neveřejně nabízený, pozvánkový pilot; nenahrazuje minimální GDPR povinnosti a nepřenáší je do Stage 1. Údaj „48“ znamená **nejvýše 48 učitelů v pilotní skupině**, nikoli ověřenou kapacitu Cloudflare Access, počet již pozvaných lidí nebo výjimku z GDPR.
+**Status: PRODUCT SCOPE APPROVED BY PROJECT OWNER (2026-10-26) / LEGAL AND OPERATIONS PENDING / EXTERNAL ONBOARDING NOT YET APPROVED.** Tato sekce zužuje schvalovací rozsah §8 pro aktuální neveřejně nabízený, pozvánkový pilot; nenahrazuje minimální GDPR povinnosti a nepřenáší je do Stage 1. Údaj „48“ znamená **nejvýše 48 učitelů v pilotní skupině**, nikoli ověřenou kapacitu Cloudflare Access, počet již pozvaných lidí nebo výjimku z GDPR.
 
 ### 9.1 Rozhodnuté parametry a role
 
@@ -275,5 +275,5 @@ Bez doplnění hranatých polí **nejde o úplnou informaci podle čl. 13 GDPR a
 
 **STOP condition pro pozvání externích učitelů:** chybí-li identita správce nebo kontakt, správný účel/titul, faktický aktuální dodavatelský/retention základ, úplná privacy information, vyhodnocení DPIA anebo minimální incident/DSR proces, status zůstává **PILOT MINIMUM — DRAFT / ONBOARDING BLOCKED**. Limit 48 a zákaz identifikace žáků tyto povinnosti neruší. Pro interní vývoj se syntetickými nebo neidentifikujícími daty tímto dokumentem nevyhlašujeme zákaz práce.
 
-**Dokumentační výsledek:** nachystat podklady a vymezit přesné zbývající důkazy, nikoli tvrdit, že byly doplněny. LEGAL-P0-MIN legal approval / PUBLIC deployment / telemetry activation = **NOT AUTHORIZED**.
+**Dokumentační výsledek:** product owner schválil minimalistický pilotní rámec (max. 48 učitelů, Michal Roupec jako odpovědná kontaktní osoba a navržená pravidla neidentifikujících vstupů). To **neprokazuje doplnění** údajů podle čl. 13 GDPR, finální určení správce, audit dodavatelů, rozhodnutí o retenci ani právní review; externí onboarding zůstává blokován. LEGAL-P0-MIN legal approval / PUBLIC deployment / telemetry activation = **NOT AUTHORIZED**.
 
