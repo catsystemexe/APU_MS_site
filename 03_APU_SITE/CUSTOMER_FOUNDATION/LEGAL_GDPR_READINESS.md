@@ -283,14 +283,36 @@ Bez doplnění hranatých polí **nejde o úplnou informaci podle čl. 13 GDPR a
 
 **Verdikt: PILOT MINIMUM DOCUMENTATION READY / EXTERNAL ONBOARDING BLOCKED.** Produktový rozsah (nejvýše 48 učitelů, Michal Roupec jako odpovědná kontaktní osoba, neidentifikující pedagogické situace, zákaz skutečných i modelových diagnóz, telemetry OFF/OFF) je **PRODUCT APPROVED**. Schválení **není** důkazem faktického obsazení skupiny, finální právní role, zvoleného zákonného titulu, vyřešeného smluvního režimu dodavatelů ani povolením nasazení/pozvánek. Tento zápis uzavírá jen dokumentační průchod, nikoli právní povinnosti.
 
-### 10.1 Právní role: minimum bez právnické osoby
+### 10.1 Právní role: společné rozhodování dvou fyzických osob
 
-- **OWNER-REPORTED — doplnění 2026-10-26:** APU připravují **Michal Roupec** a **Zdeněk Vilímek — metodik APU**. Michal Roupec je určenou odpovědnou kontaktní osobou pro pilot; podle jeho sdělení jsou Cloudflare/OpenAI účty a administrátorské přístupy vedeny u něj. Nejde o nový autentizovaný read-back účtů ani o ověření smluvní protistrany.
-- **OWNER-PROVIDED CONTACT:** `catsytem.exe@gmail.com`, přesně podle zadání. Správnost zápisu a funkční doručování **NOT VERIFIED**; žádná testovací zpráva nebyla odeslána. Před publikací notice potvrdit přesný zápis a funkčnost kanálu.
-- **P-MIN-01 REMAINS OPEN:** metodická role Zdeňka ani držení účtů Michalem samy neuzavírají právní role. Zbývá doložit, kdo skutečně rozhoduje o účelech a podstatných prostředcích zpracování a zda se na nich Zdeněk podílí.
-- **OWNER DECISION REQUIRED:** osoba, která určuje účely a podstatné prostředky každého zpracování (registrace učitele/Access, AI požadavky, rules receipt, bezpečnostní metadata), je skutečným správcem; fyzická osoba jím být může (GDPR čl. 4 odst. 7). Pouhý interní název „odpovědná osoba“ roli jediného správce nedokazuje.
-- **OWNER DECISION REQUIRED:** pokud oba nezávisle společně určují účely a podstatné prostředky, jde o potenciální **společné správce**. Pro tento případ písemně rozdělit odpovědnost za čl. 13 informování, práva subjektů, incidenty a kontakt; podstatu ujednání zpřístupnit učitelům (čl. 26). Případný jiný skutečný vztah zdůvodnit. Neoznačovat Michala za formální DPO bez samostatného posouzení.
-- **PILOT MINIMUM:** správce či společní správci uvedení jménem/jmény a funkčním kontaktem v dokumentu pro učitele; obchodní společnost a komerční smluvní schéma patří do Stage 1, **nikoliv** určení aktuálního správce.
+- **OWNER-CONFIRMED — 2026-10-26:** APU připravují **Michal Roupec** a **Zdeněk Vilímek — metodik APU**. Michal výslovně potvrdil, že oba spolurozhodují i v odpovědi na otázku o zpracovávaných údajích, dodavatelích a uchování dat.
+- **OWNER-REPORTED:** Cloudflare/OpenAI účty a administrátorské přístupy jsou u Michala Roupce. Nejde o nový autentizovaný read-back ani ověření smluvní protistrany.
+- **OWNER-CORRECTED CONTACT:** **`catsystem.exe@gmail.com`**. Vlastník opravil původní překlep; tento zápis je potvrzený. Funkční doručování **NOT VERIFIED**; žádná testovací zpráva nebyla odeslána.
+- **PRACOVNÍ PRÁVNÍ KVALIFIKACE:** sdělenému společnému určování účelů a podstatných prostředků odpovídá společné správcovství Michala Roupce a Zdeňka Vilímka podle čl. 26 GDPR, v rozsahu takto společně určovaných zpracování pilotu. Jde o závěr odvozený z potvrzených skutečností, nikoli o doložené přijetí níže uvedeného ujednání oběma osobami nebo potvrzení celkové GDPR compliance. Držení účtu jen Michalem tento závěr samo nemění.
+- **P-MIN-01 PARTIAL:** identita a podklad pro společné správcovství jsou doplněny; zbývá přijmout rozdělení odpovědností oběma správci a zpřístupnit jeho podstatu učitelům spolu s finálními informacemi o zpracování. Nevyžaduje to založení společnosti ani Stage 1 infrastrukturu. Michal je hlavní kontaktní osoba, nikoli tím automaticky formální DPO.
+
+#### 10.1.1 Minimální ujednání společných správců — NÁVRH K PŘIJETÍ OBOUMA OSOBAMI
+
+**Strany a rozsah:** Michal Roupec a Zdeněk Vilímek pro omezený pilot APU do 48 učitelů, v rozsahu společně určovaného provozu, autentizace, AI zpracování, potvrzení pravidel a související bezpečnosti. Pilot nepovoluje přímo ani nepřímo identifikovatelné žáky, skutečné ani modelové diagnózy a zdravotní/poradenské zprávy. Aktivní telemetrie zůstává mimo povolený rozsah (OFF/OFF).
+
+| Odpovědnost | Navržené rozdělení |
+|---|---|
+| Informování učitelů a kontakt | Michal spravuje kontakt `catsystem.exe@gmail.com`, dostupnost a aktualizaci schválené informace podle čl. 13 a podstaty tohoto ujednání; Zdeněk kontroluje srozumitelnost metodických pravidel. |
+| Žádosti o práva a výmaz | Michal koordinuje příjem, přiměřené ověření identity, vyřízení a technické/dodavatelské kroky; Zdeněk bezodkladně předává přijaté žádosti a poskytuje součinnost. |
+| Účty, zabezpečení a dodavatelé | Michal provádí správu přístupů, ověření smluvního režimu, logů, retence a výmazu. Podstatné změny dat, účelů, dodavatelů a uchování schvalují oba. |
+| Metodická prevence | Zdeněk připravuje pravidla bezpečného pedagogického popisu, omezení použití výstupů a pokyny pro učitele; oba řeší zjištěné rizikové použití. |
+| Incidenty | Michal vede technické omezení následků, evidenci a včasné posouzení/oznámení podle čl. 33–34; Zdeněk ihned předává zjištění a pomáhá posoudit dopady. Společné rozhodování nesmí zdržet povinné ochranné kroky a lhůty. |
+| Risk/DPIA a ukončení pilotu | Oba posoudí a přijmou zdůvodněný závěr screeningu a retenční pravidla; Michal provede technický offboarding, Zdeněk zajistí metodickou součinnost a pokyny účastníkům. |
+
+Oba si bezodkladně předávají nezbytné informace a zachovávají důvěrnost. Učitel může uplatnit práva vůči kterémukoli ze správců; interní rozdělení jeho práva neomezuje. Tento návrh sám neschvaluje právní tituly, konkrétní retence, dodavatelské podmínky ani onboarding.
+
+**Evidence přijetí: PENDING — Michal Roupec / Zdeněk Vilímek / datum / přijatá verze.** Nedokládat souhlas Zdeňka pouze souhlasem Michala. Po přijetí uchovat průkaznou evidenci a podstatu ujednání zpřístupnit učitelům.
+
+#### 10.1.2 Podstata ujednání pro učitele — DRAFT, součást budoucí informace
+
+> Společnými správci osobních údajů v rozsahu společně provozovaného pilotu APU jsou Michal Roupec a Zdeněk Vilímek. Michal zajišťuje technický provoz, informování, vyřizování žádostí a koordinaci incidentů; Zdeněk odpovídá za metodická pravidla a součinnost při jejich plnění. Hlavní kontakt je catsystem.exe@gmail.com. Svá práva můžeš uplatnit vůči kterémukoli z nich.
+
+**NEPUBLIKOVAT samostatně jako úplnou čl. 13 informaci:** jde jen o návrh podstaty ujednání; nejprve přijetí oběma a dokončení zbylých informací P-MIN-02 až 05. Právní základ: [GDPR čl. 26](https://eur-lex.europa.eu/legal-content/CS/ALL/?uri=CELEX%3A32016R0679).
 
 ### 10.2 Ověřená veřejná dodavatelská dokumentace vs. stav účtů APU
 
@@ -321,7 +343,7 @@ Retenční lhůty **nebyly nově vymyšleny ani schváleny**; seznam výše je p
 
 ### 10.4 Minimum rights / incident SOP — interní pracovní karta
 
-**Vlastník operativy:** Michal Roupec; vlastníkem sdělený pilotní kontakt `catsytem.exe@gmail.com` (2026-10-26). Přesný zápis a funkčnost doručování **NOT VERIFIED**; nejde o provedený test kontaktní cesty. Není automaticky DPO.
+**Vlastník operativy:** Michal Roupec; vlastníkem opravený a potvrzený pilotní kontakt `catsystem.exe@gmail.com` (2026-10-26). Funkčnost doručování **NOT VERIFIED**; nejde o provedený test kontaktní cesty. Rozdělení odpovědností společných správců je navrženo v §10.1.1 a čeká na přijetí oběma. Michal není automaticky DPO.
 
 1. **Příjem žádosti:** uchovat minimálně datum přijetí, typ žádosti, ověřenou identitu tazatele a rozhodnutí; žádný přepis pedagogického obsahu do incident/DSR evidence. Při žádosti o přístup/výmaz rozlišit údaje ovládané APU a lokální soubory/exporty účastníka. Standardní lhůty a případná prodloužení posoudit podle čl. 12 GDPR, nikoli automaticky slíbit okamžitý výmaz.
 2. **Omylem zadané žákovské údaje:** ihned přestat daný obsah rozpracovávat. Vyhodnotit, zda vznikla kopie v Zápisníku, prohlížeči, externím API či exportu; u každé doložit možný postup výmazu/omezení. Neodesílat obsah podruhé při hlášení. Přenos nepovažovat automaticky za „incident ohlašovaný ÚOOÚ“; nejprve posoudit narušení bezpečnosti a riziko.
@@ -348,8 +370,8 @@ Retenční lhůty **nebyly nově vymyšleny ani schváleny**; seznam výše je p
 
 | ID | Gate / příslušná osoba | Stav 2026-10-26 | Nejmenší důkaz pro uzavření |
 |---|---|---|---|
-| P-MIN-01 | Právní role: Michal Roupec + Zdeněk Vilímek (metodik APU) | **PARTIAL — PERSONS / ACCOUNT HOLDER OWNER-REPORTED; LEGAL ROLES OPEN** | Zbývá popis skutečného rozhodování o účelech a podstatných prostředcích; podle výsledku určit právní role a případně čl. 26 ujednání |
-| P-MIN-02 | Kontaktní kanál a čl. 13 notice | **PARTIAL — CONTACT PROVIDED; SPELLING / DELIVERY NOT VERIFIED; NOTICE OPEN** | Potvrdit přesný zápis a funkčnost `catsytem.exe@gmail.com`; doplnit právního správce, účely a čl. 6 tituly, publikovatelný notice bez placeholderů |
+| P-MIN-01 | Společné správcovství: Michal Roupec + Zdeněk Vilímek | **PARTIAL — JOINT DECISION-MAKING CONFIRMED; ARTICLE 26 ARRANGEMENT DRAFT** | Přijetí konkrétního rozdělení odpovědností oběma správci a zpřístupnění podstaty učitelům; návrh §10.1.1–2 |
+| P-MIN-02 | Kontaktní kanál a čl. 13 notice | **PARTIAL — CONTACT SPELLING CONFIRMED; DELIVERY NOT VERIFIED; NOTICE OPEN** | Ověřit funkčnost `catsystem.exe@gmail.com`; dokončit údaje společných správců, účely a čl. 6 tituly, publikovatelný notice bez placeholderů |
 | P-MIN-03 | Cloudflare/OpenAI dokumenty a účetní podmínky | **PUBLIC VENDOR DOCS VERIFIED; APU ACCOUNT NOT VERIFIED** | Průkazná krátká mapa skutečných provider/contracting terms, přenosů, hlavních log/retention nastavení, žádné raw secrets |
 | P-MIN-04 | PUBLIC/pilot receipt TTL + mazání | **OWNER DECISION REQUIRED** | Výslovná lhůta a odůvodnění, version/re-acceptance policy, přístup a DSR výmaz SOP |
 | P-MIN-05 | Logy, DSR, incident a DPIA screening | **SOP DRAFT; ACCOUNT SETTINGS / FINAL DPIA NOT VERIFIED** | Krátká operátorská evidence, funkční kontaktní cesta, podpis/rozhodnutí o DPIA |
