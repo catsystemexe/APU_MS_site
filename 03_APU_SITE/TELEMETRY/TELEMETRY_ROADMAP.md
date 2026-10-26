@@ -1,10 +1,16 @@
 # TELEMETRY_ROADMAP
 
-Status: **B1 FOUNDATION + B2 CORE METRICS + B3 REPORTING — local technical PASS; B4-H1-R1 native Windows Chromium harness PASS; G0 live DEV audit PARTIAL; collection disabled, not deployed.** Standard SSR/Vinext/Worker and hosted verification remain separate boundaries. Hosted activation / collection from real participants: **BLOCKED on explicit gates**, not authorized. Prepared 2026-10-24; verified R1 source `b8fdde42e75398198cd10fe305048aa722a42c43`. Workers Paid is **VERIFIED BY OPERATOR SCREENSHOT** at USD 5/month; independent billing read-back remains unavailable. Zero Trust Free Base is operator-reported (2/50 seats), not independently re-read. Usage/headroom, effective routes/Access policy and observability retention remain NOT VERIFIED.
+Status: **B1 FOUNDATION + B2 CORE METRICS + B3 REPORTING — local technical PASS; B4-H1-R1 native Windows Chromium harness PASS; G0 live DEV audit PARTIAL; PILOT-TECH-T2 deployment PASS, receipt/telemetry BLOCKED.** Standard SSR/Vinext/Worker and hosted verification remain separate boundaries. Hosted activation / collection from real participants: **BLOCKED on explicit gates**, not authorized. Prepared 2026-10-24; verified R1 source `b8fdde42e75398198cd10fe305048aa722a42c43`. Workers Paid is **VERIFIED BY OPERATOR SCREENSHOT** at USD 5/month; independent billing read-back remains unavailable. Zero Trust Free Base is operator-reported (2/50 seats), not independently re-read. Usage/headroom, effective routes/Access policy and observability retention remain NOT VERIFIED.
 
 ## PILOT-TECH-R1 — DEV source and next verification (2026-10-26)
 
 **SOURCE / LOCAL V3 PASS; HOSTED NOT VERIFIED; B-07 OPEN.** Exact source base: PR #83 `cb48a9de19d5847b0ca68d097f8bb572e4e6992d`. Approved technical input: PR #86 `7e45f8736b8c8cea76bd4a221539c2cdac656b8e` §11.3. Candidate `codex/pilot-tech-r1` targets that development source branch; PUBLIC is a later release stage. No merge into `dev`/`public` or hosted action is authorized here.
+
+### PILOT-TECH-T2 hosted result — 2026-10-26
+
+**DEPLOYMENT PASS / RECEIPT BLOCKED / TELEMETRY BLOCKED.** Candidate `d706a55c7ff80b1439079badfda88c9baa5807c4` was deployed to `apu-ms-site-dev` as version `732bf950-30cf-444a-90fc-8927d9c8b16c`, replacing `895e443e-3322-4b2d-91f0-9523220a9bbf`; traffic was 100%. Existing DEV bindings and D1 `apu-ms-site-dev-telemetry` were read back, with telemetry/metadata `0/0` and receipt TTL `86400`. PUBLIC was unchanged.
+
+The required Access login callback ended in `invalid state`; no authenticated DEV application session was established. First POST → GET → UI/reload, refusal, opt-in, D1 deltas, withdrawal, SQL/CSV reconciliation and cleanup were therefore **BLOCKED/PENDING**, not attempted. No telemetry setting was enabled, no D1 rows were written, and no AI/provider request occurred. The remaining prerequisite is a valid operator-controlled tester Access session; B-07 remains OPEN.
 
 | Item | Source/local result | Remaining hosted boundary |
 | --- | --- | --- |

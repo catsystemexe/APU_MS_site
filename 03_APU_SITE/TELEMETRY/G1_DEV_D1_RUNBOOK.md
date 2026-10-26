@@ -1,8 +1,10 @@
 # G1 — existing EU D1 migration-only handoff
 
-## PILOT-TECH-R1 — subsequent isolated DEV test (not executed)
+## PILOT-TECH-R1 — subsequent isolated DEV test (T2 deployment executed; acceptance blocked)
 
-**HANDOFF ONLY; separate operator authorization required for hosted deployment/configuration/test/cleanup.** Source base is exact PR #83 `cb48a9de19d5847b0ca68d097f8bb572e4e6992d`; use the reviewed full PILOT-TECH-R1 source SHA from its draft PR/completion report, not the moving branch name. Target only existing `apu-ms-site-dev` / `https://apu-ms-site-dev.catsystem-exe.workers.dev`. PUBLIC is a later stage. Do not repeat historical migration steps A–C below: G1-B acceptance and PR #85 G1-D4 are later evidence. This source task ran no command in this hosted procedure.
+**T2 deployment executed; receipt and telemetry acceptance blocked.** Source candidate `d706a55c7ff80b1439079badfda88c9baa5807c4` was built and deployed only to existing `apu-ms-site-dev` / `https://apu-ms-site-dev.catsystem-exe.workers.dev` as version `732bf950-30cf-444a-90fc-8927d9c8b16c`, with 100% traffic. No migration or resource creation occurred. The Access login callback ended in `invalid state`, so no authenticated application test was attempted. PUBLIC was not changed.
+
+The required continuation remains authorized only after a valid operator-controlled tester session is established. Keep telemetry/metadata OFF/OFF until then; do not retry receipt or telemetry blindly.
 
 Reused evidence: PR #85 at `1729fce641fab5015407acdd5be06fe8941ed58c` records DEV deployment of #83, config/Access and receipt GET/rehydration PASS, telemetry/metadata OFF/OFF, receipt test TTL **86400**. First-acceptance POST status/body were unavailable; its root cause remains unknown. The new local lag/retry and lost-response reproductions do not establish that hosted cause. No fresh Cloudflare audit is requested here; recheck only the dynamic target/source/config/identity required for this next operation.
 
