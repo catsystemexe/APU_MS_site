@@ -2,6 +2,24 @@
 
 **Datum zdrojového auditu:** 2026-10-24. **Dokumentační status:** SOURCE-BACKED CURRENT + APPROVED FUTURE PLANS; zdrojové tvrzení není automaticky tvrzením o nasazeném runtime.
 
+
+## LEGAL-P0-R1 — aktuální DEV/LEGAL evidence reconciliation (2026-10-26)
+
+**Tento dodatek aktualizuje stav DEV po auditu z 2026-10-24; historický baseline v částech A–D nepřepisuje. PUBLIC není v této dávce nově ověřen ani změněn.** Approval-ready dokumentační návrh je v [LEGAL_GDPR_READINESS.md, §8](LEGAL_GDPR_READINESS.md#8-legal-p0-r1--podklad-pro-schvaleni-2026-10-26).
+
+| Oblast | Stav doložený přesným zdrojem/evidencí | Nevyvozovat |
+|---|---|---|
+| Git/source versus hosting | `dev` je stále `fc8ac5520b7b49b442bedc47558c73f20ce2bea6`; aplikace PR #83 `cb48a9de19d5847b0ca68d097f8bb572e4e6992d` byla samostatně nasazena do DEV Workeru dle PR #85 `1729fce641fab5015407acdd5be06fe8941ed58c`, jako Worker version `895e443e-3322-4b2d-91f0-9523220a9bbf` se 100% traffic | Neznamená merge PR #83 ani PUBLIC release |
+| DEV KV a pravidla | Receipt KV `PILOT_RULES_ACCEPTANCE`, TTL 86 400 sekund, omezený DEV operátor; Access ochrana PASS | 24 hodin je pouze DEV-test retention, nikoliv PUBLIC politika; samotný receipt není souhlas za žáka |
+| První přijetí pravidel | První hosted pokus zobrazil chybu; pozdější GET 200/PRESENT a reload UI PASS, původní POST HTTP evidence neexistuje | Neoznačovat first-acceptance reliability za vyřešenou |
+| Statelesness / browser | MAIN request používá `store:false`, aktuální Zápisník/omezený dialogový kontext; `app/notebook-storage.ts` zachovává owner-scoped lokální data (developer `localStorage`, tester `sessionStorage`) | Není doložena nulová retence u poskytovatelů ani úplný výmaz všech kopií pouhým logout/resetem |
+| Telemetry | Nasazený DEV má D1 binding, avšak enabled=0 a metadata=0; po kontrolovaném smoke 0 sessions/events/ai_calls, bez pre-smoke snapshotu | Není ověřen aktivní hosted sběr, přesná delta ani G2/G4/G5 |
+| PUBLIC / GDPR | PUBLIC zůstává dle posledního ověřeného podkladu beze změny; LEGAL-P0-R1 připravuje texty a approval matrix | Není doložen nový PUBLIC audit, právní schválení nebo povolení reálných žákovských dat |
+
+**Hranice povolených vstupů navržená ke schválení:** učitel může formulovat skutečnou pedagogickou potřebu, pozorované projevy a nezbytný kontext, ale konkrétní žák nesmí být identifikovatelný ani kombinací údajů; nevkládat skutečné ani modelové diagnózy, zprávy či kontakty. Pravidla jsou preventivní kontrolou, ne automatickým důkazem anonymizace.
+
+**Otevřené approval gates:** controller/processor role individuální učitel × škola, správce a kontakt, účely/právní tituly podle domény, DPA/subprocesory/přenosy, retence/výmaz/logy, DPIA screening, PUBLIC informační text a receipt TTL. DEV first-acceptance POST test potřebuje vlastní bezpečně instrumentované schválení. Telemetry G2/G4/G5 a PUBLIC deployment zůstávají NOT AUTHORIZED.
+
 ## A. PUBLIC Pilot — současný stav a záměr
 
 **Zdrojové/operátorské podklady**
