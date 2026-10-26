@@ -12,6 +12,8 @@ Status: **B1 FOUNDATION + B2 CORE METRICS + B3 REPORTING — local technical PAS
 
 The required Access login callback ended in `invalid state`; no authenticated DEV application session was established. First POST → GET → UI/reload, refusal, opt-in, D1 deltas, withdrawal, SQL/CSV reconciliation and cleanup were therefore **BLOCKED/PENDING**, not attempted. No telemetry setting was enabled, no D1 rows were written, and no AI/provider request occurred. The remaining prerequisite is a valid operator-controlled tester Access session; B-07 remains OPEN.
 
+Follow-up login attempt at 2026-10-26 20:55 UTC used a new DEV browser session and did not reuse the prior callback URL. SSO ended at the Cloudflare Dashboard login page; no `/api/session` response was obtained. This is observed navigation behavior only, not a verified root cause and not a repeat of the earlier `invalid state`. The test stopped without receipt or telemetry activity.
+
 | Item | Source/local result | Remaining hosted boundary |
 | --- | --- | --- |
 | Environment readiness | Fixed DEV/PUBLIC HTTPS host pairs; wrong/missing env/host/config rejected. Local synthetic exception is DEV-only; PUBLIC needs synthetic=0 and privacy approval. All identity/enrollment/notice/opt-in/key guards preserved. | Verify separate physical DEV/PUBLIC D1, keys, cohorts, key versions, correct host and effective configuration before any future activation. PUBLIC host must be re-read before release. |

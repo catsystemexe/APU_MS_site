@@ -21,6 +21,8 @@ Historical hosted evidence is reused from PR #85 `1729fce641fab5015407acdd5be06f
 
 The Access browser login callback ended in `invalid state` and did not return to the DEV application. Therefore no first `POST /api/pilot-rules`, GET, UI unlock/reload, refusal, opt-in, D1 write, withdrawal or report was attempted. No AI/provider request occurred, no telemetry setting was enabled, no migration or resource change was made, and the final DEV state remains OFF/OFF. Receipt and telemetry acceptance are BLOCKED on a valid operator-controlled tester Access session; B-07 remains OPEN.
 
+Follow-up login attempt (2026-10-26 20:55 UTC) used a new DEV browser session and did not reuse the prior callback URL. The SSO navigation ended at the Cloudflare Dashboard login page rather than returning to the Access callback or DEV application; no `/api/session` request or HTTP application response was obtained. This observed behavior is distinct from, and does not establish a cause for, the earlier `invalid state`. The test stopped at this point.
+
 [Next operator handoff](../TELEMETRY/G1_DEV_D1_RUNBOOK.md#pilot-tech-r1--subsequent-isolated-dev-test-not-executed) covers first POST evidence, synthetic events → D1 → SQL/CSV, refusal/withdrawal, forbidden fields and cleanup. Actual configuration remains OFF/OFF; no metadata/schema/metric, authentication, Core, stateless Chat, Notebook, CI/workflow, provisioning or deployment changes. B-07 remains OPEN. No real provider request, hosted telemetry write, secret operation, enrollment, activation or merge occurred; the authorized DEV deployment is recorded above.
 
 ## G1-C5 — unified DEV source candidate (2026-10-25)

@@ -6,6 +6,8 @@
 
 The required continuation remains authorized only after a valid operator-controlled tester session is established. Keep telemetry/metadata OFF/OFF until then; do not retry receipt or telemetry blindly.
 
+Follow-up attempt, 2026-10-26 20:55 UTC: a new DEV browser session was started without the prior callback URL. SSO navigated to the Cloudflare Dashboard login page instead of returning to Access/DEV; no `/api/session` response was available. Stop here. This observed navigation does not prove a cause and is separate from the earlier `invalid state`.
+
 Reused evidence: PR #85 at `1729fce641fab5015407acdd5be06fe8941ed58c` records DEV deployment of #83, config/Access and receipt GET/rehydration PASS, telemetry/metadata OFF/OFF, receipt test TTL **86400**. First-acceptance POST status/body were unavailable; its root cause remains unknown. The new local lag/retry and lost-response reproductions do not establish that hosted cause. No fresh Cloudflare audit is requested here; recheck only the dynamic target/source/config/identity required for this next operation.
 
 Required inputs, kept in restricted operator evidence (names only in Git):
