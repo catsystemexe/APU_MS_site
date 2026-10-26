@@ -203,7 +203,9 @@ Konkrétní procesy odpovědí na žádosti subjektů údajů, řešení chybné
 
 | Prvek | Rozhodnutí / stav |
 |---|---|
-| Typ služby | **Omezený experimentální pilot**; komerční Stage 1 je oddělená. Platební režim pilotu ani tarify nebyly v tomto rozhodnutí specifikovány. |
+| Typ služby | **Omezený experimentální pilot**; komerční Stage 1 je oddělená. Platební režim pro účastníky nebyl specifikován; infrastrukturní tarify níže potvrdil vlastník. |
+| Infrastrukturní tarify | **OWNER-CONFIRMED 2026-10-26:** Workers Paid a Zero Trust Free. Workers Paid byl zvolen kvůli plánované telemetrii; toto sdělení neprokazuje technickou nutnost Paid pro každý typ telemetrie a neaktivuje sběr. |
+| Hranice škálování autentizace | Záměrně ponechat Zero Trust Free a pilot omezit na **50 uživatelů celkem**. Při potřebě překročit tento rozsah připravit přechod na jinou autentizační službu; **Clerk je pravděpodobný kandidát**, nikoli v této dávce definitivně zvolená služba/tarif nebo autorizovaná migrace. |
 | Účastníci | **Maximálně 50 uživatelů celkem**, se započtením interních uživatelů do celkového limitu; počet externích učitelů závisí na zbývající kapacitě. Před onboardingem ověřit skutečné Access seat limity a obsazení. |
 | Trvání | **Otevřený časový konec**, bez nyní stanoveného data ukončení. Stage 1 není automatickým pokračováním stejného datového režimu. |
 | Produktový cíl | Získat data a zpětnou vazbu o použitelnosti APU a vytvořit čas pro přípravu Stage 1. Konkrétní rozsah, kanál a retence feedbacku ještě nejsou schváleny. Tento cíl neaktivuje telemetrii ani sběr chatu/Zápisníku; čas pro vývoj není samostatným účelem zpracování osobních údajů. |
@@ -322,7 +324,7 @@ Oba si bezodkladně předávají nezbytné informace a zachovávají důvěrnost
 |---|---|---|
 | **Cloudflare DPA** | Veřejně dostupné **Cloudflare DPA v6.4, effective 2026-04-03** uvádí smluvní vazbu na Main Agreement a účinnost při podpisu/odsouhlasení. [Dokument](https://www.cloudflare.com/cloudflare-customer-dpa/). | **NOT VERIFIED:** konkrétní strana smlouvy, přijetí/účinnost pro účet APU, použitelný rozsah služeb a případné transfery |
 | **Cloudflare subprocesory** | [Veřejný seznam pro Cloudflare services](https://www.cloudflare.com/gdpr/subprocessors/cloudflare-services/) uvádí relevantní dodavatele a umístění; seznam není potvrzením konkrétní konfigurace účtu. | **NOT VERIFIED:** konkrétní využívané služby / přenosy / případné logpush/export cesty |
-| **Cloudflare Access logy** | [Zero Trust log retention](https://developers.cloudflare.com/cloudflare-one/insights/logs/) uvádí pro **Free** Access authentication logs **24 hodin** a admin logs **18 měsíců**; jiné plány/datové typy se liší. [Access auth logy](https://developers.cloudflare.com/cloudflare-one/insights/logs/dashboard-logs/access-authentication-logs/) zahrnují identity a pokusy přihlášení. | **NOT VERIFIED:** definitivní Zero Trust tarif konkrétního účtu, nastavení exportů a dalších logů, retention pro Workers analytics/observability; žádný nový Dashboard audit v této dávce |
+| **Cloudflare Access logy** | [Zero Trust log retention](https://developers.cloudflare.com/cloudflare-one/insights/logs/) uvádí pro **Free** Access authentication logs **24 hodin** a admin logs **18 měsíců**; jiné plány/datové typy se liší. [Access auth logy](https://developers.cloudflare.com/cloudflare-one/insights/logs/dashboard-logs/access-authentication-logs/) zahrnují identity a pokusy přihlášení. | **OWNER-CONFIRMED 2026-10-26:** Zero Trust Free (Workers samostatně Paid). **NOT VERIFIED:** skutečná retence/logovací rozsah, exporty a přístupy; žádný nový autentizovaný Dashboard audit. Tarif není nutné znovu potvrzovat pouze kvůli nové relaci |
 | **Cloudflare EU Workers KV** | [Jurisdiction KV](https://developers.cloudflare.com/kv/reference/data-location/) omezuje **durable storage** na EU, ale KV může být globálně přístupné a cache může existovat mimo EU. | **VERIFIED podle předchozí operátorské evidence:** DEV receipt KV má EU jurisdiction a 24h TTL; **NEVYVOZOVAT** tím globální rezidenci celé služby, PUBLIC retenci ani přístupovou politiku všech kopií |
 | **OpenAI API DPA** | [OpenAI DPA](https://openai.com/en-GB/policies/data-processing-addendum/) uvádí pro zákazníky z EHP smluvní protistranu OpenAI Ireland Ltd. a rámec zpracování a přenosů dle podmínek. | **NOT VERIFIED:** konkrétní account contracting entity, účinnost smluvního režimu APU, detail subprocesorů/transferů a datových kontrol |
 | **OpenAI API retence** | [API Data controls](https://developers.openai.com/api/docs/guides/your-data) uvádějí, že API data se standardně nepoužívají k trénování bez opt-in, ale **abuse-monitoring logy mohou zahrnovat prompty/odpovědi a standardně jsou uchovávány až 30 dní**, s uvedenými výjimkami. Responses API `store:false` omezuje application-state storage, nikoli automaticky abuse-monitoring logy. Vector-store/files mají samostatný životní cyklus. | **VERIFIED ve zdroji**: MAIN a další instrumentované AI trasy pracují s `store:false` podle kontrolovaných implementací. **NOT VERIFIED**: konkrétní datové kontroly, vektorové úložiště, logy a skutečná retence účtu. Zbytková OpenAI retence dříve vědomě odložená pro technické práce; před externím pilotem ji **pravdivě popsat jako výchozí podmínku a nepotvrzenou konfiguraci**, nikoli tvrdit „bez uložení“ nebo „Zero Data Retention“ |
@@ -392,7 +394,7 @@ Oba si bezodkladně předávají nezbytné informace a zachovávají důvěrnost
 |---|---|---|---|
 | P-MIN-01 | Společné správcovství: Michal Roupec + Zdeněk Vilímek | **PARTIAL — JOINT DECISION-MAKING CONFIRMED; ARTICLE 26 ARRANGEMENT DRAFT** | Přijetí konkrétního rozdělení odpovědností oběma správci a zpřístupnění podstaty učitelům; návrh §10.1.1–2 |
 | P-MIN-02 | Kontaktní kanál a čl. 13 notice | **PARTIAL — CONTACT SPELLING CONFIRMED; DELIVERY NOT VERIFIED; NOTICE OPEN** | Ověřit funkčnost `catsystem.exe@gmail.com`; dokončit údaje společných správců, účely a čl. 6 tituly, publikovatelný notice bez placeholderů |
-| P-MIN-03 | Cloudflare/OpenAI dokumenty a účetní podmínky | **NOT VERIFIED — ACCESS BLOCKED (OPERATOR-REPORTED); PUBLIC DOCS EVIDENCE RETAINED** | Přihlášený read-only přístup a krátká mapa skutečných provider/contracting terms, přenosů, hlavních log/retention nastavení; souhrn pokusu a další krok v §10.7 |
+| P-MIN-03 | Cloudflare/OpenAI dokumenty a účetní podmínky | **PARTIAL — PLANS OWNER-CONFIRMED; CONTRACTS / DATA SETTINGS NOT VERIFIED** | Doplnit smluvní vazbu, přenosy, log/retention nastavení a OpenAI projekt/data controls. Tarify znovu nepotvrzovat bez změny/rozporu; následné upřesnění vlastníka v §10.7 |
 | P-MIN-04 | PUBLIC/pilot receipt TTL + mazání | **PARTIAL — 90-DAY POLICY APPROVED BY MICHAL; IMPLEMENTATION / LEGAL CLOSURE PENDING** | Doplnit právní titul/notice a proveditelný výmaz SOP; poté samostatně zadaná implementace a ověření §10.3.1. Ujednání obou správců je v P-MIN-01 otevřené. DEV má nadále pouze testovací TTL 24 h |
 | P-MIN-05 | Logy, DSR, incident a DPIA screening | **SOP DRAFT; ACCOUNT SETTINGS / FINAL DPIA NOT VERIFIED** | Krátká operátorská evidence, funkční kontaktní cesta, podpis/rozhodnutí o DPIA |
 | P-MIN-06 | Technické první potvrzení po změně pravidel | **PARTIAL** | Odděleně schválený kontrolovaný DEV acceptance test se zachycením HTTP odpovědi (bez reálné AI) |
@@ -419,12 +421,23 @@ Oba si bezodkladně předávají nezbytné informace a zachovávají důvěrnost
 
 Runtime verze, read/rehydration, nulové D1 counts a zdrojové SHA nejsou náhradou account-level privacy evidence ani samy obsahem určeným do učitelského notice. P-MIN-03/P-MIN-05 zůstávají otevřené; telemetry OFF/OFF, DEV receipt 24 h, produktově schválená 90denní receipt politika není nasazena.
 
-**Nejmenší další krok — přístup a základní Cloudflare scope:**
+**Následné upřesnění vlastníka — 2026-10-26, novější než výše uvedený report:**
 
-1. Operátor otevře svůj běžný přihlášený Cloudflare prohlížeč. Neopakovat stejný automatizovaný běh v nepřihlášené relaci.
-2. Ve vybraném účtu potvrdí, zda vidí **oba Workers `apu-ms-site` a `apu-ms-site-dev`**. Do reportu stačí „stejný účet ANO/NE/NEOVĚŘENO“, bezpečný vlastní alias účtu, cesta zobrazení a čas; žádný secret ani výpis osob.
-3. Ze skutečně dostupných obrazovek opíše Workers tarif, Zero Trust tarif a pouze agregované využité/dostupné seats. Pokud hodnota není dostupná, uvést konkrétní chybějící obrazovku; nevymýšlet přesnou navigaci.
-4. Teprve s tímto přístupem pokračovat v přímých nastaveních logů a OpenAI. Přístup neověřovat změnou auth, tvorbou klíče, použitím API credential ani prvním AI požadavkem.
+| Skutečnost / rozhodnutí | Aktuální podklad a rozsah |
+|---|---|
+| Workers tarif | **Workers Paid — OWNER-CONFIRMED Michalem.** Zvolen kvůli přípravě/použití telemetrie; nejde o důkaz aktivního sběru. |
+| Zero Trust tarif | **Zero Trust Free — OWNER-CONFIRMED Michalem.** Záměrně ponechaná varianta pro omezený pilot. |
+| Kapacita pilotu | **50 uživatelů celkem — PRODUCT APPROVED.** Podle vlastníka je limit navázán na zvolený Zero Trust Free režim. To není nový read-back skutečně využitých seats ani samostatně ověřená aktuální licenční definice „uživatele“. |
+| Překročení rozsahu | Směr je přechod na jinou autentizační službu, **pravděpodobně Clerk**; nikoli automatický upgrade Zero Trust. Finální poskytovatel, tarif a migrace vyžadují vlastní rozhodnutí a zadání. |
+
+Tato nová sdělení doplňují report a nahrazují jeho stav „tarify neověřené“ na úrovni **OWNER-CONFIRMED**. Autentizované nastavení účtu tím nebylo přečteno. V souladu s workflow tarify znovu neověřovat jen kvůli změně agenta nebo relace; přezkoumat při změně tarifu, rozporu nebo konkrétní potřebě release/onboardingu. Počet skutečně využitých seats zůstává dynamickou veličinou a kontroluje se před přidáním účastníků.
+
+**Nejmenší další krok — pouze dosud chybějící nastavení:**
+
+1. V běžném přihlášeném prohlížeči operátora potvrdit dostupnost nastavení pro oba Workers; vazbu DEV/PUBLIC na účet zatím neodvozovat jen z názvu.
+2. Doplnit logování/retenci/exporty a použitelný smluvní režim Cloudflare. Neopakovat dotaz na Workers/Zero Trust tarif.
+3. U OpenAI doplnit organizaci/projekt, data controls, smluvní režim a metadata použitých trvalých prostředků v původně zadaném read-only rozsahu.
+4. Žádná změna autentizace, migrace na Clerk, API credentials, první AI request ani aktivace telemetrie. G2/G4/G5 a B-07 zůstávají otevřené.
 
 **Oprava navigačního předpokladu:** dřívější zadání uvedlo „Account → Legal / Agreements / DPA“ jako cestu bez ověřené dostupnosti v tomto účtu/UI. Nejde o doloženou existenci menu. Nehledat tuto položku naslepo; smluvní vazbu ověřit dostupným konkrétním dokladem a mechanismem dle §10.2. Pokud nic dostupné není, ponechat NOT VERIFIED, nevyvozovat, že DPA neplatí.
 
