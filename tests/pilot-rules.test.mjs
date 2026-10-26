@@ -5,7 +5,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { PILOT_RULES_VERSION, PILOT_INFORMATION_VERSION, parsePilotRulesReceipt } from "../app/pilot-rules.ts";
+import { PILOT_RULES_VERSION, PILOT_INFORMATION_VERSION, PILOT_RULES_APPROVED_TTL_SECONDS, parsePilotRulesReceipt } from "../app/pilot-rules.ts";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const artifacts = await mkdtemp(join(tmpdir(), "apu-pilot-rules-"));
@@ -57,6 +57,50 @@ test("first entry, versioned acceptance and another device use server identity/t
   assert.deepEqual((await (await routes["pilot-rules"].GET(request("pilot-rules"))).json()).receipt,result.receipt, "no browser storage or device identity is needed");
   assert.equal((await (await routes["pilot-rules"].GET(request("pilot-rules", {email:other}))).json()).receipt,null);
   assert.equal(await routes["pilot-rules"].pilotRulesKey(identity), await routes["pilot-rules"].pilotRulesKey({...identity,email:" TEACHER@EXAMPLE.INVALID "}));
+});
+
+test("PILOT-TECH-R1 explicit 90-day contract expires without read renewal; DEV test TTL and missing-config denial remain", async t => {
+  assert.equal(PILOT_RULES_APPROVED_TTL_SECONDS, 7_776_000);
+  const start = Date.parse("2026-10-26T12:00:00Z"); let now = start;
+  t.mock.method(Date, "now", () => now);
+  const kv = store(); configure(kv, String(PILOT_RULES_APPROVED_TTL_SECONDS));
+  const response = await routes["pilot-rules"].POST(request("pilot-rules", { method: "POST" }));
+  assert.equal(response.status, 200);
+  const saved = (await response.json()).receipt;
+  assert.equal(Date.parse(saved.expiresAt) - Date.parse(saved.acceptedAt), 7_776_000_000);
+  assert.deepEqual(kv.writes[0].options, { expirationTtl: 7_776_000 });
+  for (const elapsed of [1, 86_400_000, 7_776_000_000 - 1]) {
+    now = start + elapsed;
+    assert.deepEqual((await (await routes["pilot-rules"].GET(request("pilot-rules"))).json()).receipt, saved);
+    assert.equal(kv.writes.length, 1, "ordinary reads cannot renew expiry");
+  }
+  now = Date.parse(saved.expiresAt);
+  assert.equal((await (await routes["pilot-rules"].GET(request("pilot-rules"))).json()).receipt, null);
+  assert.equal((await routes.chat.POST(request("chat", { method: "POST" }))).status, 428);
+  const renewed = (await (await routes["pilot-rules"].POST(request("pilot-rules", { method: "POST" }))).json()).receipt;
+  assert.equal(Date.parse(renewed.acceptedAt), now);
+  assert.equal(Date.parse(renewed.expiresAt), now + 7_776_000_000);
+  configure(kv, "86400");
+  const dev = (await (await routes["pilot-rules"].POST(request("pilot-rules", { method: "POST" }))).json()).receipt;
+  assert.equal(Date.parse(dev.expiresAt) - Date.parse(dev.acceptedAt), 86_400_000);
+  assert.equal(kv.writes.at(-1).options.expirationTtl, 86400);
+  configure(kv, "");
+  assert.equal((await routes["pilot-rules"].POST(request("pilot-rules", { method: "POST" }))).status, 503);
+  assert.equal(kv.writes.length, 3, "approved policy never becomes a missing-config default");
+});
+
+test("PILOT-TECH-R1 prior version keys cannot unlock current rules and GET never rewrites versioned receipts", async () => {
+  const kv = store(); configure(kv);
+  const currentKey = await routes["pilot-rules"].pilotRulesKey(identity);
+  const oldVersion = "pilot-rules-2026-10-24-draft-1";
+  const oldKey = currentKey.replace(PILOT_RULES_VERSION, oldVersion);
+  kv.values.set(oldKey, JSON.stringify(receipt({ rulesVersion: oldVersion })));
+  assert.equal((await (await routes["pilot-rules"].GET(request("pilot-rules"))).json()).receipt, null);
+  assert.equal(kv.writes.length, 0);
+  await routes["pilot-rules"].POST(request("pilot-rules", { method: "POST" }));
+  assert.equal(kv.writes.length, 1);
+  assert.equal(kv.writes[0].key, currentKey);
+  assert.equal(kv.values.has(oldKey), true, "old keys expire by their original KV TTL; offboarding must cover all versions");
 });
 
 test("identity, origin, explicit acknowledgement and both displayed versions are mandatory", async () => {

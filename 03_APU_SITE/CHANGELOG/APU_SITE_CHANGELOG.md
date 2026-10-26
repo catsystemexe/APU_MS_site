@@ -4,6 +4,14 @@ Status: CURRENT
 
 Records significant verified product/runtime/project changes. It is not a complete Git log. Historical Sites-era entries are retained where they remain useful; current deployment state must not be inferred from a changelog entry alone.
 
+## 2026-10-26 — PILOT-TECH-R1 DEV source implementation
+
+- Dedicated candidate from exact PR #83 `cb48a9de19d5847b0ca68d097f8bb572e4e6992d`, for draft PR against `codex/g1c5-unified-dev-candidate`; not merged into `dev`/`public` and not deployed.
+- Added exact DEV/PUBLIC telemetry env/host checks, explicit non-synthetic PUBLIC privacy gating and separate PUBLIC HMAC domains without changing DEV enrollment/token bytes. Wrong/missing configuration and existing identity/enrollment/notice/opt-in/key checks remain fail-closed; actual configs, collection and metadata remain OFF/OFF. No schema, metric or transport redesign.
+- Reproduced/fixed receipt UI losing a confirmed write after KV-lag/GET-failure/retry, and claiming save failure after a committed POST response was lost. Work stays locked until a valid GET; recovery never automatically repeats POST. Historical hosted G1-D4 root cause remains NOT VERIFIED.
+- Prepared explicit future receipt TTL 7776000 seconds without an implicit default or changing hosted DEV test TTL 86400. Both DRAFT versions advanced for the material information revision; known controller/contact/input rules, independent voluntary telemetry and actual receipt expiry shown. Legal approval/compliance not claimed. Documented all-version KV erasure and a separately authorized hosted synthetic DEV handoff.
+- V3: 1510/1510 root + 21/21 actual-route Chromium checks PASS, zero skips/failures; actual-client rules mode, typecheck, build, standalone artifact, focused lint and fixture isolation PASS. Updated requested runtime/roadmap/runbook, changelog and B-07 (OPEN); Known Issues unchanged. No hosted inspection/mutation, secret, real provider request, enrollment, activation, merge, deployment or unchanged Windows audit.
+
 ## 2026-10-25 — G1-C5 unified DEV source candidate
 
 - Integrated exact pilot PR #81 above telemetry/evidence baseline, preserving both histories and resolving 12 shared-file conflicts. Stateless Notebook-based Chat and first-entry rules now compose with request-scoped telemetry/stream lifetime and all eight instrumented client transports.

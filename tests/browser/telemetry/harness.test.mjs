@@ -379,6 +379,152 @@ test("two actual browser tabs persist overlapping activity and B3 unions partici
   Object.assign(result, { status: "PASS", session_active_ms: [15000, 15000], participant_union_ms: 15000, ai_calls: 6, known_cost_nano_usd: 1344000, focus: "controlled CDP, not native OS acceptance" });
 });
 
+test('PILOT-TECH-R1 confirmed POST survives KV lag, verification failure and repeated GET without another acceptance', async t => {
+  const result = scenario('pilot_r1_saved_receipt_verification');
+  const f = await browserFixture(t, { enabled: false, rulesAccepted: false });
+  const { h, page } = f;
+  const anchor = Math.max(h.now, await page.evaluate(() => Date.now())) + 1000;
+  await page.clock.pauseAt(new Date(anchor)); h.freeze(anchor);
+  h.rules.readLag = true;
+  const post = page.waitForResponse(r => new URL(r.url()).pathname === '/api/pilot-rules' && r.request().method() === 'POST');
+  await page.getByRole('checkbox').check();
+  await page.getByRole('button', { name: 'Pokračovat do APU', exact: true }).click();
+  const saved = await post;
+  assert.equal(saved.status(), 200);
+  assert.equal((await saved.json()).receipt.acceptedAt, new Date(anchor).toISOString());
+  await page.getByRole('status').filter({ hasText: 'Potvrzení bylo uloženo' }).waitFor();
+  assert.equal(await page.locator('#message').isVisible(), false);
+  h.rules.failReads = true;
+  await page.getByRole('button', { name: 'Ověřit znovu', exact: true }).click();
+  await page.locator('.pilot-rules-error').waitFor();
+  h.rules.failReads = false;
+  await page.getByRole('button', { name: 'Ověřit znovu', exact: true }).click();
+  await page.getByRole('status').filter({ hasText: 'Potvrzení bylo uloženo' }).waitFor();
+  assert.equal(await page.getByRole('checkbox').isDisabled(), true);
+  assert.equal(h.rules.writes.length, 1);
+  let releaseGet;
+  const heldGet = new Promise(resolve => { releaseGet = resolve; });
+  t.after(() => releaseGet());
+  let getHeld = false;
+  await page.route('**/api/pilot-rules', async route => {
+    if (route.request().method() !== 'GET') return route.continue();
+    const response = await route.fetch(); getHeld = true;
+    await heldGet;
+    try { await route.fulfill({ response }); } catch { /* Timed-out reader is gone. */ }
+  }, { times: 1 });
+  await page.getByRole('button', { name: 'Ověřit znovu', exact: true }).click();
+  await waitFor(() => getHeld, 'verification GET is held');
+  h.advance(10001); await page.clock.fastForward(10001);
+  await page.locator('.pilot-rules-error').waitFor();
+  assert.doesNotMatch(await page.locator('.pilot-rules-error').innerText(), /nepodařilo uložit/);
+  await page.getByRole('button', { name: 'Ověřit znovu', exact: true }).click();
+  await page.getByRole('status').filter({ hasText: 'Potvrzení bylo uloženo' }).waitFor();
+  h.rules.readLag = false;
+  await page.getByRole('button', { name: 'Ověřit znovu', exact: true }).click();
+  await page.locator('#message:enabled').waitFor();
+  releaseGet();
+  assert.equal(h.rules.writes.length, 1);
+  assert.deepEqual(counts(h), [0, 0, 0]);
+  assert.equal(h.providerCalls.length, 0);
+  assert.deepEqual(f.errors, []); assert.deepEqual(f.outbound, []);
+  Object.assign(result, { status: 'PASS', receipt_writes: 1, rows: [0, 0, 0] });
+});
+
+test('PILOT-TECH-R1 lost POST response is an unknown result and safe GET recovers the real receipt', async t => {
+  const result = scenario('pilot_r1_post_timeout');
+  const f = await browserFixture(t, { enabled: false, rulesAccepted: false });
+  const { h, page } = f;
+  const anchor = Math.max(h.now, await page.evaluate(() => Date.now())) + 1000;
+  await page.clock.pauseAt(new Date(anchor)); h.freeze(anchor);
+  let release;
+  const held = new Promise(resolve => { release = resolve; });
+  t.after(() => release());
+  await page.route('**/api/pilot-rules', async route => {
+    if (route.request().method() !== 'POST') return route.continue();
+    const response = await route.fetch();
+    await held;
+    try { await route.fulfill({ response }); } catch { /* Timed-out caller is gone. */ }
+  });
+  await page.getByRole('checkbox').check();
+  await page.getByRole('button', { name: 'Pokračovat do APU', exact: true }).click();
+  await waitFor(() => h.rules.writes.length === 1, 'real POST committed before client timeout');
+  h.advance(10001); await page.clock.fastForward(10001);
+  await page.locator('.pilot-rules-error').waitFor();
+  assert.match(await page.locator('.pilot-rules-error').innerText(), /Výsledek uložení.*ověřit/);
+  assert.equal(await page.locator('#message').isVisible(), false);
+  await page.getByRole('button', { name: 'Ověřit znovu', exact: true }).click();
+  await page.locator('#message:enabled').waitFor();
+  release();
+  assert.equal(h.rules.writes.length, 1);
+  assert.equal(h.providerCalls.length, 0); assert.deepEqual(counts(h), [0, 0, 0]);
+  Object.assign(result, { status: 'PASS', receipt_writes: 1, recovery: 'GET only', rows: [0, 0, 0] });
+});
+
+test('PILOT-TECH-R1 inconsistent POST replies never unlock or silently accept a changed version', async t => {
+  for (const kind of ['version', 'information', 'malformed', 'missing-receipt']) await t.test(kind, async sub => {
+    const result = scenario('pilot_r1_inconsistent_post_' + kind);
+    const f = await browserFixture(sub, { enabled: false, rulesAccepted: false });
+    const { h, page } = f;
+    const anchor = Math.max(h.now, await page.evaluate(() => Date.now())) + 1000;
+    await page.clock.pauseAt(new Date(anchor)); h.freeze(anchor);
+    await page.route('**/api/pilot-rules', async route => {
+      if (route.request().method() !== 'POST') return route.continue();
+      const response = await route.fetch();
+      const data = await response.json();
+      if (kind === 'version') data.rulesVersion = 'new-rules';
+      if (kind === 'information') data.informationVersion = 'new-information';
+      if (kind === 'missing-receipt') data.receipt = null;
+      await route.fulfill({ status: 200, contentType: 'application/json', body: kind === 'malformed' ? '{broken' : JSON.stringify(data) });
+    });
+    await page.getByRole('checkbox').check();
+    await page.getByRole('button', { name: 'Pokračovat do APU', exact: true }).click();
+    if (kind === 'version' || kind === 'information') await page.getByRole('alert').filter({ hasText: 'Pravidla se změnila' }).waitFor();
+    else await page.locator('.pilot-rules-error').waitFor();
+    assert.equal(await page.locator('#message').isVisible(), false);
+    assert.equal(await page.getByRole('button', { name: 'Pokračovat do APU', exact: true }).isDisabled(), true);
+    assert.equal(h.rules.writes.length, 1);
+    assert.equal(h.providerCalls.length, 0); assert.deepEqual(counts(h), [0, 0, 0]);
+    Object.assign(result, { status: 'PASS', receipt_writes: 1, rows: [0, 0, 0] });
+  });
+});
+
+test('PILOT-TECH-R1 logout or account change during POST discards the old UI continuation', async t => {
+  for (const action of ['logout', 'identity-change']) await t.test(action, async sub => {
+    const result = scenario('pilot_r1_pending_' + action);
+    const f = await browserFixture(sub, { enabled: false, rulesAccepted: false });
+    const { h, page, context } = f;
+    const anchor = Math.max(h.now, await page.evaluate(() => Date.now())) + 1000;
+    await page.clock.pauseAt(new Date(anchor)); h.freeze(anchor);
+    let release;
+    const held = new Promise(resolve => { release = resolve; });
+    sub.after(() => release());
+    await page.route('**/api/pilot-rules', async route => {
+      if (route.request().method() !== 'POST') return route.continue();
+      const response = await route.fetch(); await held;
+      try { await route.fulfill({ response }); } catch { /* Old account/page was invalidated. */ }
+    });
+    await page.getByRole('checkbox').check();
+    await page.getByRole('button', { name: 'Pokračovat do APU', exact: true }).click();
+    await waitFor(() => h.rules.writes.length === 1, 'old identity POST reaches real KV');
+    if (action === 'logout') {
+      await page.route('**/cdn-cgi/access/logout', route => route.fulfill({ contentType: 'text/html', body: '<p id="logout-fixture">Synthetic logout destination</p>' }));
+      await page.getByRole('button', { name: 'Odhlásit se', exact: true }).click();
+      await page.locator('#logout-fixture').waitFor();
+    } else {
+      await context.setExtraHTTPHeaders({ 'cf-access-jwt-assertion': await h.token({ email: 'browser-b@synthetic.invalid' }) });
+      await page.goto(h.origin);
+      await page.locator('.pilot-rules-dialog').waitFor();
+      assert.equal(await page.getByRole('checkbox').isChecked(), false);
+    }
+    release(); await delay(80);
+    assert.equal(await page.locator('#message').isVisible(), false);
+    assert.equal(h.rules.writes.length, 1);
+    assert.equal(h.providerCalls.length, 0); assert.deepEqual(counts(h), [0, 0, 0]);
+    assert.deepEqual(f.errors, []); assert.deepEqual(f.outbound, []);
+    Object.assign(result, { status: 'PASS', old_identity_receipt_writes: 1, rows: [0, 0, 0] });
+  });
+});
+
 test('G1-C5 actual first-entry acceptance, two stateless turns and API re-lock preserve OFF/OFF zero writes', async t => {
   const result = scenario('g1c5_rules_stateless_off');
   const f = await browserFixture(t, { enabled: false, seed: true, rulesAccepted: false });

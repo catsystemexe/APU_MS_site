@@ -2,18 +2,26 @@ import { check, keys, object, uuid, integer, LIMITS, MEASUREMENT_VERSION, Teleme
 import { ownerOf, type Session } from "./store.ts";
 import type { TelemetryResources } from "./runtime.ts";
 import type { AccessIdentity } from "../access-auth.ts";
-export type Policy = { cohort: string; keyVersion: string; notice: string; pseudonymKey: string; contextKey: string;
+export type Policy = { environment: "dev" | "public"; cohort: string; keyVersion: string; notice: string; pseudonymKey: string; contextKey: string;
   eligible: Set<string>; synthetic: boolean; metadata: boolean };
 const tag = (v: unknown): v is string => typeof v === "string" && /^[a-zA-Z0-9_-]{1,64}$/.test(v);
 const hash = (v: unknown): v is string => typeof v === "string" && /^[a-zA-Z0-9_-]{43}$/.test(v);
 const secret = (v: unknown): v is string => typeof v === "string" && v.length >= 32 && v.length <= 512;
+// DEV messages start with a tag/base64 character; the leading NUL makes the
+// PUBLIC domain disjoint even for a malformed identity containing a NUL.
+const PUBLIC_HMAC_DOMAIN = "\0apu-public\0";
 export function readiness(request: Request, r: TelemetryResources): { code: Health; policy?: Policy } {
   const c = r.config;
   if (c.APU_TELEMETRY_ENABLED !== "1") return { code: "disabled" };
   const url = new URL(request.url);
-  if (c.APU_TELEMETRY_ENV !== "dev" || c.APU_TELEMETRY_HOSTNAME !== url.hostname ||
-    !((url.protocol === "https:" && url.hostname === "apu-ms-site-dev.catsystem-exe.workers.dev") ||
-      (c.APU_TELEMETRY_SYNTHETIC === "1" && ["localhost", "127.0.0.1"].includes(url.hostname)))) return { code: "not_ready" };
+  const environment = c.APU_TELEMETRY_ENV;
+  if (environment !== "dev" && environment !== "public") return { code: "not_ready" };
+  const hostedName = environment === "dev" ? "apu-ms-site-dev.catsystem-exe.workers.dev" : "apu.catsystem.ai";
+  const localSynthetic = environment === "dev" && c.APU_TELEMETRY_SYNTHETIC === "1" &&
+    ["http:", "https:"].includes(url.protocol) && ["localhost", "127.0.0.1"].includes(url.hostname);
+  if (c.APU_TELEMETRY_HOSTNAME !== url.hostname ||
+    !((url.protocol === "https:" && !url.port && url.hostname === hostedName) || localSynthetic) ||
+    (environment === "public" && c.APU_TELEMETRY_SYNTHETIC !== "0")) return { code: "not_ready" };
   const synthetic = c.APU_TELEMETRY_SYNTHETIC === "1";
   if ((!synthetic && c.APU_TELEMETRY_PRIVACY_APPROVED !== "1") || !r.store || !tag(c.APU_TELEMETRY_COHORT) ||
     !tag(c.APU_TELEMETRY_KEY_VERSION) || !tag(c.APU_TELEMETRY_NOTICE_VERSION) ||
@@ -21,16 +29,19 @@ export function readiness(request: Request, r: TelemetryResources): { code: Heal
     return { code: "not_ready" };
   const eligible = typeof c.APU_TELEMETRY_ELIGIBLE === "string" ? c.APU_TELEMETRY_ELIGIBLE.split(",").filter(Boolean) : [];
   if (!eligible.length || eligible.length > 1000 || !eligible.every(hash)) return { code: "not_ready" };
-  return { code: "ready", policy: { cohort: c.APU_TELEMETRY_COHORT, keyVersion: c.APU_TELEMETRY_KEY_VERSION,
+  return { code: "ready", policy: { environment, cohort: c.APU_TELEMETRY_COHORT, keyVersion: c.APU_TELEMETRY_KEY_VERSION,
     notice: c.APU_TELEMETRY_NOTICE_VERSION, pseudonymKey: c.TELEMETRY_PSEUDONYM_KEY, contextKey: c.TELEMETRY_CONTEXT_KEY,
     eligible: new Set(eligible), synthetic, metadata: c.APU_TELEMETRY_METADATA_ENABLED === "1" } };
 }
 function encode(value: Uint8Array) { return btoa(String.fromCharCode(...value)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); }
 function decode(value: string) { return Uint8Array.from(atob(value.replace(/-/g, "+").replace(/_/g, "/")), c => c.charCodeAt(0)); }
 async function key(secretValue: string) { return crypto.subtle.importKey("raw", new TextEncoder().encode(secretValue), { name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"]); }
-export async function participantId(identity: AccessIdentity, policy: Pick<Policy, "cohort" | "pseudonymKey">) {
+export async function participantId(identity: AccessIdentity, policy: Pick<Policy, "cohort" | "pseudonymKey"> & Partial<Pick<Policy, "environment">>) {
+  // Preserve existing DEV enrollment; PUBLIC has a disjoint HMAC domain even if
+  // an operator accidentally copies DEV key material. Separate D1/keys are still required.
+  const domain = policy.environment === "public" ? PUBLIC_HMAC_DOMAIN : "";
   return encode(new Uint8Array(await crypto.subtle.sign("HMAC", await key(policy.pseudonymKey),
-    new TextEncoder().encode(`${policy.cohort}\0${identity.email.trim().toLocaleLowerCase("en-US")}`))));
+    new TextEncoder().encode(`${domain}${policy.cohort}\0${identity.email.trim().toLocaleLowerCase("en-US")}`))));
 }
 export async function eligibleParticipant(identity: AccessIdentity | null, policy: Policy) {
   check(identity, "unauthorized");
@@ -63,16 +74,19 @@ export async function readJson(request: Request): Promise<unknown> {
   } catch { throw new TelemetryError("invalid_request"); }
   finally { reader.releaseLock(); }
 }
+function contextMessage(body: string, policy: Policy) {
+  return new TextEncoder().encode(`${policy.environment === "public" ? PUBLIC_HMAC_DOMAIN : ""}${body}`);
+}
 export async function signContext(session: Session, policy: Policy) {
   // Opaque server lookup ID only; participant pseudonym is never sent to the browser.
   const body = encode(new TextEncoder().encode(JSON.stringify({ v: 1, id: session.session_id, exp: session.expires_at, key: session.key_version })));
-  return `${body}.${encode(new Uint8Array(await crypto.subtle.sign("HMAC", await key(policy.contextKey), new TextEncoder().encode(body))))}`;
+  return `${body}.${encode(new Uint8Array(await crypto.subtle.sign("HMAC", await key(policy.contextKey), contextMessage(body, policy))))}`;
 }
 export async function resolveContext(token: unknown, participant: string, policy: Policy, r: TelemetryResources, now: number, allowStopped = false) {
   try {
     check(typeof token === "string" && token.length <= 1024, "invalid_context");
     const parts = token.split("."); check(parts.length === 2 && parts.every(p => /^[A-Za-z0-9_-]+$/.test(p)), "invalid_context");
-    check(await crypto.subtle.verify("HMAC", await key(policy.contextKey), decode(parts[1]), new TextEncoder().encode(parts[0])), "invalid_context");
+    check(await crypto.subtle.verify("HMAC", await key(policy.contextKey), decode(parts[1]), contextMessage(parts[0], policy)), "invalid_context");
     const claims: unknown = JSON.parse(new TextDecoder().decode(decode(parts[0])));
     keys(claims, ["v", "id", "exp", "key"]); check(claims.v === 1 && uuid(claims.id) && integer(claims.exp) && claims.exp > now && claims.key === policy.keyVersion, "invalid_context");
     const session = await r.store!.getSession(claims.id);
