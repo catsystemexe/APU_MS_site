@@ -3,6 +3,18 @@
 **Datum zdrojového auditu:** 2026-10-24. **Dokumentační status:** SOURCE-BACKED CURRENT + APPROVED FUTURE PLANS; zdrojové tvrzení není automaticky tvrzením o nasazeném runtime.
 
 
+## AKTUÁLNÍ PRIORITA — technicky připravit GDPR + telemetry pro PUBLIC (2026-10-26)
+
+Uživatel upřesnil cíl: **nasazení pilotních GDPR funkcí a telemetrie do PUBLIC**, primárně implementace a funkčnost. **Zdeňkovo přijetí návrhu nyní není podmínkou technické práce.** Starší právní gate evidence níže zůstává zachována; není prohlášením, že před technickou implementací/syntetickým testem musí být uzavřeno celé P-MIN-01 až 05.
+
+**Nová evidence:** dodané screenshoty Workeru `apu-ms-site-dev` ukazují Workers Logs a Workers Traces **Disabled** a D1 `TELEMETRY_DB` binding. Neprokazují aktivní D1 sběr ani stav PUBLIC; označení „Production“ je prostředím DEV Workeru.
+
+**Konkrétní zdrojová překážka PUBLIC:** `app/telemetry/server.ts::readiness` @ PR #83 `cb48a9de...` má pevný ENV=dev a DEV hostname guard. Nestačí zapnout flag; je třeba explicitní bezpečná PUBLIC podpora. Receipt first-acceptance root cause a hosted sběr zůstávají NOT VERIFIED.
+
+**Pořadí:** T1 Codex source → T2 izolovaný hosted DEV test (receipt + D1/report/cleanup) → T3 omezený PUBLIC release kandidát a deployment dávka. PUBLIC `284c108d...` a kandidát #83 jsou diverged (28 ahead / 3 behind); blanket merge není release plán. Přesné zadání T1: **LEGAL_GDPR_READINESS.md §11.3 — PILOT-PUBLIC-TECH-R1**.
+
+Žádná aplikační/Cloudflare mutace v tomto kroku; telemetry nadále OFF/OFF. Retenční schválení receipt 90 dní zůstává platné, RAW telemetry 30 dní je stále návrhem. G2/G4/G5 a B-07 zůstávají otevřené; zdrojová příprava je neuzavírá.
+
 ## PILOT MINIMUM — rozhodnutý rozsah a otevřené podmínky (2026-10-26)
 
 **Aktuální upřesnění vlastníka (2026-10-26): maximálně 50 uživatelů celkem, otevřený časový konec.** Nahrazuje starší hlavní formulaci „48 učitelů“; interní uživatelé se započítávají do celkového limitu. Při dvou interních uživatelích zbývá nejvýše 48 externích míst; skutečné obsazení a licenční kapacita nejsou nově ověřeny. Uživatel výslovně určil **Michala Roupce** jako odpovědnou osobu za zpracování dat v pilotu. APU připravují **Michal Roupec** a **Zdeněk Vilímek — metodik APU**. Podle sdělení Michala z 2026-10-26 jsou Cloudflare/OpenAI účty a administrátorské přístupy vedeny u něj; nejde o nový autentizovaný read-back ani ověření smluv. Michal následně výslovně potvrdil **společné rozhodování o zpracování**. Pracovní kvalifikace je proto **společné správcovství** v rozsahu společně určovaných zpracování pilotu; minimální návrh rozdělení odpovědností podle čl. 26 je v LEGAL_GDPR_READINESS.md §10.1.1 a čeká na přijetí oběma a zpřístupnění podstaty učitelům. Michal zůstává **hlavní provozní/kontaktní osoba**, nikoli automaticky formální DPO.
