@@ -17,6 +17,12 @@
 
 **STAV:** schválený produktový rozsah PILOT MINIMUM (potvrzení uživatele 2026-10-26); provozní a právní údaje zbývá doplnit. Externí onboarding zůstává NOT AUTHORIZED. **Externí onboarding v rámci celkového limitu 50 uživatelů dosud NENÍ schválen**, protože zbývá přijetí rozdělení odpovědností společných správců oběma a zpřístupnění jeho podstaty, ověření funkčnosti kontaktu, právní tituly, aktuální dodavatelské/DPA/přenosové skutečnosti, publikační retenční údaje, DPIA screening a minimální proces práv/incidentů. Před přizváním osob tyto úzce vymezené body uzavřít; rozsáhlá Stage 1 customer-auth/Projects/billing agenda může zůstat odložená. G2/G4/G5 a PUBLIC deployment jsou samostatně NOT AUTHORIZED.
 
+## P-MIN-03 — operátorský pokus bez přihlášených relací (2026-10-26)
+
+**ACCOUNT SETTINGS NOT VERIFIED — ACCESS BLOCKED (OPERATOR-REPORTED).** Dodaný report uvádí login stránky Cloudflare/OpenAI v dostupné relaci, přibližně 17:55–17:56 Europe/Prague. Nebyla získána nová account-specific evidence; nejde o FAIL konfigurace služby ani důkaz absence přihlášení v běžném prohlížeči operátora. Podle operátora neproběhly mutace, použití API credentials nebo čtení secret hodnot.
+
+Dřívější sdělení Michala o účtech/přístupech a původní G1-D4 DEV evidence se zachovávají ve svém rozsahu. Zdrojové poznámky o loggeru/provider routes nemají v reportu přesný kontrolovaný ref, proto nepotvrzují aktuální nasazené logování. P-MIN-03/P-MIN-05 se neuzavírají. Podrobný souhrn a nejmenší další krok jsou v **LEGAL_GDPR_READINESS.md §10.7**: ručně potvrdit v přihlášeném Cloudflare prohlížeči oba Workers ve stejném/jiném účtu, skutečné tarify a agregované seat využití. Neopakovat nepřihlášený audit; nevyhledávat naslepo neověřené menu Legal/Agreements/DPA.
+
 ## LEGAL-P0-R1 — aktuální DEV/LEGAL evidence reconciliation (2026-10-26)
 
 **Tento dodatek aktualizuje stav DEV po auditu z 2026-10-24; historický baseline v částech A–D nepřepisuje. PUBLIC není v této dávce nově ověřen ani změněn.** Approval-ready dokumentační návrh je v [LEGAL_GDPR_READINESS.md, §8](LEGAL_GDPR_READINESS.md#8-legal-p0-r1--podklad-pro-schvaleni-2026-10-26).
