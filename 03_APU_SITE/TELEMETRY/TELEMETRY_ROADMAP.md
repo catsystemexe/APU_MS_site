@@ -8,6 +8,12 @@ The explicit rollback to protected version `732bf950-30cf-444a-90fc-8927d9c8b16c
 
 This restores the known-working DEV baseline; it does not establish full hosted telemetry acceptance. No telemetry activation, provider call, role change, Access-policy change or PUBLIC operation was performed. The earlier HTTP 401 was observed before rollback and its cause remains **NOT VERIFIED**.
 
+### PILOT-TECH-T3 hosted telemetry result — 2026-10-26
+
+**BOUNDED DEV TELEMETRY ACCEPTANCE PASS / FULL B-07 STILL OPEN.** A single authorized tester cohort ran with `synthetic=0`, `privacy_approved=1`, metadata `0`, exact `participantId()` enrollment and no provider calls. The protected pre-snapshot was zero-row. UI refusal produced zero rows; explicit UI opt-in produced one `tester` session and five real `activity_interval` events with the browser visible and focused. Withdrawal set `stopped_at`; further ordinary interaction produced no new rows. `ai_calls=0` throughout. Restricted JSON structure inspection found zero forbidden-key/value matches. The final three-table snapshot imported and passed offline integrity checks with sessions=1, events=5, ai_calls=0.
+
+The collection interval stayed below 30 minutes. Collection and metadata were disabled before cleanup; only the exact tester cohort was deleted, leaving D1 sessions/events/ai_calls `0/0/0`. Temporary telemetry secrets were removed. The exact rollback version `732bf950-30cf-444a-90fc-8927d9c8b16c` is active at 100%, with OFF/OFF, TTL 86400, original developer role and `/api/session` HTTP 200 `isDeveloper:true`. The Europe/Prague day was not complete, so the CSV report is **PENDING** and the protected snapshot is retained locally. First receipt POST, provider E2E and PUBLIC readiness remain unverified; B-07 stays **OPEN**.
+
 ## PILOT-TECH-R1 — DEV source and next verification (2026-10-26)
 
 **SOURCE / LOCAL V3 PASS; HOSTED NOT VERIFIED; B-07 OPEN.** Exact source base: PR #83 `cb48a9de19d5847b0ca68d097f8bb572e4e6992d`. Approved technical input: PR #86 `7e45f8736b8c8cea76bd4a221539c2cdac656b8e` §11.3. Candidate `codex/pilot-tech-r1` targets that development source branch; PUBLIC is a later release stage. No merge into `dev`/`public` or hosted action is authorized here.

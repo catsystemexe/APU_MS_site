@@ -6,6 +6,14 @@ The authorized restore used `wrangler versions view` followed by an explicit rol
 
 Read-only D1 counts after rollback were `telemetry_sessions=0`, `telemetry_events=0`, `telemetry_ai_calls=0`. The standard DEV browser session then returned HTTP 200 and `isDeveloper:true` from `/api/session`. No telemetry, provider call, role change, Access-policy change or PUBLIC operation was performed. The pre-rollback HTTP 401 remains retained as historical evidence; cause **NOT VERIFIED**.
 
+## PILOT-TECH-T3 — bounded hosted telemetry acceptance (2026-10-26)
+
+T3 completed one isolated DEV collection window using one normal authenticated tester identity, one cohort, `synthetic=0`, `privacy_approved=1` and metadata `0`. The existing receipt was retained and verified through GET/UI rehydration; first acceptance POST was intentionally not repeated. The pre-test three-table snapshot was zero-row and the final snapshot was exported before cleanup, imported offline and integrity-checked at sessions=1, events=5, ai_calls=0. The CSV report is **PENDING** because the Europe/Prague civil date was not closed at test completion.
+
+The UI refusal path produced zero rows. Explicit UI opt-in created one tester session and five actual activity intervals while visibility/focus were verified. Withdrawal acknowledgement was reflected by `stopped_at`; subsequent normal interaction produced no new rows. Restricted JSON inspection covered event, projection and identity trees without publishing raw rows and found zero forbidden content/identity key or value matches. No AI/provider request was made.
+
+Collection was disabled before scoped child-before-parent cleanup. The exact cohort/test-class rows were removed and D1 returned to zero. Temporary telemetry secrets were deleted. Final direct rollback to `732bf950-30cf-444a-90fc-8927d9c8b16c` restored 100% traffic, OFF/OFF, TTL 86400, original developer configuration and `/api/session` HTTP 200 with `isDeveloper:true`. The protected local snapshot/sidecar remain restricted operator evidence; no raw rows, pseudonym or key material belongs in Git. First receipt POST, provider E2E and PUBLIC readiness remain separate gates.
+
 ## PILOT-TECH-R1 — subsequent isolated DEV test (T2 deployment and receipt rehydration completed; telemetry acceptance blocked)
 
 **T2 deployment executed; receipt and telemetry acceptance blocked.** Source candidate `d706a55c7ff80b1439079badfda88c9baa5807c4` was built and deployed only to existing `apu-ms-site-dev` / `https://apu-ms-site-dev.catsystem-exe.workers.dev` as version `732bf950-30cf-444a-90fc-8927d9c8b16c`, with 100% traffic. No migration or resource creation occurred. The Access login callback ended in `invalid state`, so no authenticated application test was attempted. PUBLIC was not changed.
