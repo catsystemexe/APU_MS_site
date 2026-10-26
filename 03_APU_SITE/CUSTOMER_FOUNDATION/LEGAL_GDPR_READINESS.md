@@ -213,7 +213,7 @@ Konkrétní procesy odpovědí na žádosti subjektů údajů, řešení chybné
 | Data žáků | Pouze **skutečné pedagogické potřeby/pozorování v neidentifikující podobě**; nelze rozpoznat dítě ani kombinací detailů. **Nezadávat skutečné ani modelové diagnózy** ani zdravotnické/poradenské zprávy. Preventivní pravidlo nezaručuje anonymitu volného textu. |
 | Serverové projekty/konverzace | Současný pilot nemá perzistentní serverové APU Projects; kanonický Zápisník je v browseru podle role, Chat je přenosový/odvozovací prostředek. \`store:false\` na AI requestu nevylučuje veškeré dodavatelské logy/retenci. |
 | Telemetrie | **OFF/OFF** na DEV. Reálné měření není součástí tohoto pilotního minima; samostatné gates G2/G4/G5 před aktivací. |
-| DEV rules receipt | Testovací TTL **24 h**, pouze DEV. Doba receipt pro externí pilot/PUBLIC zatím **PENDING**. |
+| Rules receipt | DEV má nadále testovací TTL **24 h**. Pro externí pilot/PUBLIC Michal schválil **90 dní od výslovného přijetí**, bez automatického prodlužování, s novým přijetím po expiraci/podstatné změně a výmazem při offboardingu (§10.3.1). Politika není implementována ani nasazena. |
 
 ### 9.2 Krátké pilotní pravidlo — text pro uživatele (DRAFT)
 
@@ -335,29 +335,31 @@ Oba si bezodkladně předávají nezbytné informace a zachovávají důvěrnost
 |---|---|---|
 | Učitelská identita a Cloudflare Access | Access používá e-mail/JWT; vendor default **Free Access logy 24 h**, jiné audity/provozní logy déle; účetně NOT VERIFIED | Uvést účel, přístup, typy záznamů, skutečný tarif/exporty, retenci či kritéria a postup zrušení přístupu |
 | Pracovní Zápisník / session | V DEV kontraktu developer `localStorage`, tester `sessionStorage`, vlastník podle účtu; logout invalidace a mazání jsou best-effort; není serverové Projects | Popsat lokální uložení podle role, kdy se pracovní data resetují a že exporty/kopie a dodavatelská data se nevymažou automaticky; posoudit data na sdílených zařízeních |
-| Pilot rules receipt | Server KV ukládá pseudonymizovaný identifikátor/verzi a `acceptedAt/expiresAt`; **DEV TEST 86 400 s** | **OWNER DECISION REQUIRED:** explicitní PUBLIC/pilot TTL podle účelu, postup výmazu na žádost, změna verze pravidel a případná nutnost re-acknowledgement. Testovací TTL automaticky nepřenášet |
+| Pilot rules receipt | Server KV ukládá pseudonymizovaný identifikátor/verzi a `acceptedAt/expiresAt`; **DEV TEST 86 400 s** | **PRODUCT POLICY APPROVED BY MICHAL:** 90 dní, bez automatického prodlužování, re-acceptance a offboarding výmaz dle §10.3.1. Právní/provozní uzavření a implementace PENDING; testovací konfiguraci tato dokumentace nemění |
 | OpenAI AI input/response a dokumentové zdroje | `store:false` není ZDR; veřejné abuse-monitoring default až 30 dnů plus výjimky, vector-store lifecycle odděleně | Přesný ověřený popis příjemců a omezení zpracování. Nepředstírat nulové logy, neuvádět ničím nedoloženou přesnou account retenci |
 | App/edge/diagnostické logy | Skutečná Cloudflare observability a logpush nastavení nejsou revidována; telemetry D1 OFF/OFF | Krátký read-only log/retention inventory, zda neobsahují pedagogické prompty nebo tokeny; určit oprávněné osoby a rozumnou dobu/objektivní kritéria |
 | Telemetry D1 | V hosted DEV OFF/OFF, post-smoke 0 řádků; aktivní sběr neověřen | **NONE pro PILOT MINIMUM**, ponechat OFF; 30denní raw retention pouze neschválený plán pro G2/G4/G5 |
 | Exporty, incident evidence, backup | Žádný univerzální výmaz všech kopií neověřen | Krátký DSR/erasure SOP: správcem ovladatelné kopie, účty, KV, případné dodavatelské žádosti, předání a ověření provedení; auditní záznam bez detailního případu |
 
-Retenční lhůty **nebyly nově vymyšleny ani schváleny**; seznam výše je přímá podmínka pro doplnění čl. 13 informace. Odhlášení ani konec chat session nezaručuje smazání všech kopií.
+**Novější produktové rozhodnutí vlastníka:** Michal schválil 90denní režim pro potvrzení pravidel dle §10.3.1; ostatní zde uvedené retenční domény tím nejsou schváleny ani změněny. Seznam zůstává podkladem pro doplnění čl. 13 informace. Odhlášení ani konec chat session nezaručuje smazání všech kopií.
 
-#### 10.3.1 Otevřený konec pilotu — návrh receipt policy, NENÍ SCHVÁLENO ANI IMPLEMENTOVÁNO
+#### 10.3.1 Otevřený konec pilotu — receipt policy, PRODUCT APPROVED BY MICHAL / NOT IMPLEMENTED
 
 **OWNER-CONFIRMED:** datum ukončení pilotu není určeno. To samo neurčuje dobu uchování jednotlivých záznamů. Osobní údaje mají být uchovávány podle nezbytnosti pro konkrétní účel (GDPR čl. 5 odst. 1 písm. e), nikoli automaticky po celé potenciálně neomezené trvání pilotu.
 
-**Doporučená produktová volba:** pro jediný aktuální záznam přijetí pravidel **90 dní od výslovného přijetí** (`7 776 000 s`). Účelem je po omezenou dobu doložit aktuální přijetí a nevyžadovat je při každém přihlášení. Devadesát dní je navržený praktický kompromis; není zákonnou lhůtou ani tvrzením o nasazeném nastavení.
+**Schválení vlastníka — Michal Roupec, 2026-10-26:** výslovným „ano“ přijal předložený 90denní režim včetně neprodlužování používáním, nového přijetí po expiraci/podstatné změně a výmazu při offboardingu. Nejde o doklad souhlasu Zdeňka s ujednáním podle čl. 26, právní schválení zpracování, autorizaci změny aplikace ani deploymentu.
+
+**Schválená produktová politika:** pro jediný aktuální záznam přijetí pravidel **90 dní od výslovného přijetí** (`7 776 000 s`). Účelem je po omezenou dobu doložit aktuální přijetí a nevyžadovat je při každém přihlášení. Devadesát dní je zvolený praktický kompromis; není zákonnou lhůtou ani tvrzením o nasazeném nastavení.
 
 - TTL se neprodlužuje pouhým přihlášením nebo používáním. Po expiraci před další prací vyžádat nové přijetí; novým přijetím nahradit aktuální záznam, bez samostatného archivu starých receiptů.
-- Podstatná změna pravidel nebo informací vyžaduje před další prací nové potvrzení i před uplynutím 90 dní. Pro stávající verzační kontrakt navrhnout zvýšení `rulesVersion` a odpovídající `informationVersion`; samotná změna `informationVersion` podle zdrojové evidence nové přijetí nevynucuje. Drobná oprava bez změny povinností/podmínek nevyžaduje sama o sobě re-acceptance.
+- Podstatná změna pravidel nebo informací vyžaduje před další prací nové potvrzení i před uplynutím 90 dní. Pro následnou implementaci ve stávajícím verzačním kontraktu zvýšit `rulesVersion` a odpovídající `informationVersion`; samotná změna `informationVersion` podle zdrojové evidence nové přijetí nevynucuje. Drobná oprava bez změny povinností/podmínek nevyžaduje sama o sobě re-acceptance.
 - Při ukončení účasti nebo celého pilotu aktuální receipt odstranit v offboarding postupu. Žádosti o výmaz posoudit podle schváleného titulu a SOP; nezaměňovat výmaz receipt s výmazem logů, exportů a dat u dodavatelů.
-- Omezení se týká **jen potvrzení pravidel**. Cloudflare/OpenAI logy, lokální Zápisník, exporty a případný feedback mají vlastní retenční pravidla; navržených 90 dní se na ně nepřenáší.
+- Omezení se týká **jen potvrzení pravidel**. Cloudflare/OpenAI logy, lokální Zápisník, exporty a případný feedback mají vlastní retenční pravidla; schválených 90 dní se na ně nepřenáší.
 - Přechod na Stage 1 vyžaduje posouzení změněných účelů a podmínek; pilotní potvrzení ho automaticky nepokrývá.
 
-**Alternativy:** 30 dní znamená častější opakované potvrzování; uchování do neurčeného konce pilotu vyžaduje jiné omezení a spolehlivý offboarding. Pro malé pilotní minimum doporučen pevný 90denní interval bez automatického prodlužování. Právní titul a přiměřenost musí být zahrnuty ve finálním notice/screeningu.
+**Alternativy:** 30 dní znamená častější opakované potvrzování; uchování do neurčeného konce pilotu vyžaduje jiné omezení a spolehlivý offboarding. Pro malé pilotní minimum byl zvolen pevný 90denní interval bez automatického prodlužování. Právní titul a přiměřenost musí být zahrnuty ve finálním notice/screeningu.
 
-**P-MIN-04 REMAINS OPEN.** Návrh potřebuje rozhodnutí správců a následnou cílenou implementaci/ověření. **Současný DEV receipt zůstává 86 400 s; konfigurace se nemění.**
+**P-MIN-04 PARTIAL — PRODUCT POLICY APPROVED BY MICHAL; NOT IMPLEMENTED / NOT LEGALLY CLOSED.** Otevřené zůstává společné ujednání P-MIN-01, právní titul a finální notice, proveditelný výmazový SOP a následná samostatně zadaná cílená implementace/ověření. Uživatele znovu nežádat o stejné produktové rozhodnutí. **Současný DEV receipt zůstává 86 400 s; konfigurace se nemění.**
 
 ### 10.4 Minimum rights / incident SOP — interní pracovní karta
 
@@ -391,7 +393,7 @@ Retenční lhůty **nebyly nově vymyšleny ani schváleny**; seznam výše je p
 | P-MIN-01 | Společné správcovství: Michal Roupec + Zdeněk Vilímek | **PARTIAL — JOINT DECISION-MAKING CONFIRMED; ARTICLE 26 ARRANGEMENT DRAFT** | Přijetí konkrétního rozdělení odpovědností oběma správci a zpřístupnění podstaty učitelům; návrh §10.1.1–2 |
 | P-MIN-02 | Kontaktní kanál a čl. 13 notice | **PARTIAL — CONTACT SPELLING CONFIRMED; DELIVERY NOT VERIFIED; NOTICE OPEN** | Ověřit funkčnost `catsystem.exe@gmail.com`; dokončit údaje společných správců, účely a čl. 6 tituly, publikovatelný notice bez placeholderů |
 | P-MIN-03 | Cloudflare/OpenAI dokumenty a účetní podmínky | **PUBLIC VENDOR DOCS VERIFIED; APU ACCOUNT NOT VERIFIED** | Průkazná krátká mapa skutečných provider/contracting terms, přenosů, hlavních log/retention nastavení, žádné raw secrets |
-| P-MIN-04 | PUBLIC/pilot receipt TTL + mazání | **PROPOSAL READY — 90 DAYS; OWNER APPROVAL PENDING** | Rozhodnout o návrhu §10.3.1 (TTL, výmaz, opětovné potvrzení); poté ověřit implementaci. DEV má nadále pouze testovací TTL 24 h |
+| P-MIN-04 | PUBLIC/pilot receipt TTL + mazání | **PARTIAL — 90-DAY POLICY APPROVED BY MICHAL; IMPLEMENTATION / LEGAL CLOSURE PENDING** | Doplnit právní titul/notice a proveditelný výmaz SOP; poté samostatně zadaná implementace a ověření §10.3.1. Ujednání obou správců je v P-MIN-01 otevřené. DEV má nadále pouze testovací TTL 24 h |
 | P-MIN-05 | Logy, DSR, incident a DPIA screening | **SOP DRAFT; ACCOUNT SETTINGS / FINAL DPIA NOT VERIFIED** | Krátká operátorská evidence, funkční kontaktní cesta, podpis/rozhodnutí o DPIA |
 | P-MIN-06 | Technické první potvrzení po změně pravidel | **PARTIAL** | Odděleně schválený kontrolovaný DEV acceptance test se zachycením HTTP odpovědi (bez reálné AI) |
 | P-MIN-07 | Externí onboarding v rámci 50 uživatelů celkem / PUBLIC release | **NOT AUTHORIZED** | P-MIN-01 až 05 PASS, nutné UI/DEV ověření + oddělené provozní a deployment schválení |
