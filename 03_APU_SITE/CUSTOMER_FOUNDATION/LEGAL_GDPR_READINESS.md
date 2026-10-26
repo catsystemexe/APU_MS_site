@@ -390,6 +390,8 @@ Oba si bezodkladně předávají nezbytné informace a zachovávají důvěrnost
 
 ### 10.6 Jednostránkový release blocker matrix (pouze aktuální pilot)
 
+**Novější instrukce vlastníka v §11:** tato matice neblokuje technickou implementaci ani syntetické testování jako celek. Přijetí ujednání Zdeňkem je pro nynější technickou práci odloženo; není tím deklarováno právní uzavření.
+
 | ID | Gate / příslušná osoba | Stav 2026-10-26 | Nejmenší důkaz pro uzavření |
 |---|---|---|---|
 | P-MIN-01 | Společné správcovství: Michal Roupec + Zdeněk Vilímek | **PARTIAL — JOINT DECISION-MAKING CONFIRMED; ARTICLE 26 ARRANGEMENT DRAFT** | Přijetí konkrétního rozdělení odpovědností oběma správci a zpřístupnění podstaty učitelům; návrh §10.1.1–2 |
@@ -442,4 +444,166 @@ Tato nová sdělení doplňují report a nahrazují jeho stav „tarify neověř
 **Oprava navigačního předpokladu:** dřívější zadání uvedlo „Account → Legal / Agreements / DPA“ jako cestu bez ověřené dostupnosti v tomto účtu/UI. Nejde o doloženou existenci menu. Nehledat tuto položku naslepo; smluvní vazbu ověřit dostupným konkrétním dokladem a mechanismem dle §10.2. Pokud nic dostupné není, ponechat NOT VERIFIED, nevyvozovat, že DPA neplatí.
 
 **Documentation & Tracking:** Documentation Impact: LEGAL/PILOT OPERATIONS (this file and CURRENT_STATE_AND_TARGETS.md); Changelog **NO**; Backlog **NONE**; Known Issues **NONE**. Deployment Authorization: **NOT AUTHORIZED**.
+
+
+## 11. PUBLIC GDPR + TELEMETRY — technická priorita (2026-10-26)
+
+**Novější instrukce vlastníka:** cílem je nasadit pilotní GDPR funkce a telemetrii do PUBLIC, primárně vyřešit implementaci a funkčnost. Přijetí návrhu ujednání Zdeňkem **nyní není podmínkou technické práce**. Právní stav se tím automaticky neuzavírá; §10 zůstává evidencí otevřených skutečností, nikoli pořadníkem blokujícím implementaci a syntetické testování.
+
+### 11.1 Nová screenshotová a zdrojová evidence
+
+- **USER SCREENSHOT:** `image(20261026-185835).png` a `image(20261026-190047).png`, dodané 2026-10-26, zobrazují Overview Workeru `apu-ms-site-dev` v Cloudflare účtu. Viditelné **Workers Logs = Disabled**, **Workers Traces = Disabled**; binding D1 `TELEMETRY_DB`, assets a dvě KV položky (jedna s uříznutým názvem `PILOT_RULES_A...`). Nejde o přečtení všech parametrů ani připojených resource identities. Originály jsou v přiložených snímcích v APU chatu.
+- Cloudflare označení **Production** patří prostředí Workeru `apu-ms-site-dev`; **není** důkazem nasazení APU PUBLIC. Stav Access/audit/export logů a PUBLIC z těchto obrázků neodvozovat.
+- Vypnuté Workers Logs/Traces nejsou vypnutím či testem aplikační telemetrie do D1. Skutečný sběr zůstává podle G1-D4 OFF/OFF a hosted aktivní collection **NOT VERIFIED**.
+- **SOURCE-VERIFIED @ PR #83 `cb48a9de19d5847b0ca68d097f8bb572e4e6992d`:** `app/telemetry/server.ts::readiness` dovoluje jen `APU_TELEMETRY_ENV="dev"` a pevný DEV hostname (případně lokální synthetic). Pro PUBLIC nestačí přepnout enable flag; musí vzniknout bezpečný explicitní PUBLIC kontrakt.
+- **SOURCE-VERIFIED:** receipt server používá konečné TTL z konfigurace bez defaultu a KV key obsahuje rulesVersion. UI provádí POST a následný ověřovací GET; historickou příčinu chyby prvního potvrzení to samo neprokazuje.
+- **GITHUB READ-BACK:** PR #83/#84/#85/#86 OPEN/DRAFT; PUBLIC HEAD `284c108d4ae053335a524bacc773a2af5c3a4779`. Compare proti kandidátu #83 je **diverged: 28 ahead / 3 behind**. Žádný merge/deployment neproběhl.
+
+### 11.2 Pořadí technických kroků
+
+| Krok | Výsledek |
+|---|---|
+| T1 — Codex source | PUBLIC-ready telemetry guards, receipt/opt-in technické kontroly, případné reprodukované opravy, konfigurace a test handoff |
+| T2 — Local Windows / operátor | Přesně instrumentované první DEV potvrzení a izolovaný syntetický hosted sběr do D1, report reconciliation, odmítnutí/výmaz/cleanup; následně samostatný skutečný AI usage smoke podle konkrétního testovacího zadání |
+| T3 — PUBLIC release | Sestavit omezený release kandidát proti aktuálnímu PUBLIC se zachováním PUBLIC-only oprav; určit produkční D1/KV/keys, finální texty a parametry, ověřit release a rollback postup, teprve poté provést konkrétní deployment dávku |
+
+T1 nečeká na P-MIN-01 až 05 jako celek. Neověřené právní či account údaje se nesmějí vydávat za schválené ani doplňovat pouhým odstraněním DRAFT. Rozhodnutí o aktivním sběru skutečných účastníků, jeho retenci a informování zůstává samostatné od syntetických testů. B-07/G2/G4/G5 se touto přípravou neuzavírají. Neopakovat obecný GDPR discovery ani již platné lokální V3/Windows výsledky bez příslušné změny.
+
+### 11.3 Zadání T1 — PILOT-PUBLIC-TECH-R1
+
+```text
+IMPLEMENTATION PROFILE
+Mode: Work
+Execution environment: Codex Cloud
+Recommended model: GPT-6.1 Sol
+Reasoning effort: High
+Change radius: R3
+Verification: V3
+Reason: Rozšíření dosud DEV-only telemetrie pro PUBLIC a ověření vstupního receipt toku zasahuje ochrany prostředí a související integrační testy.
+
+Task: PILOT-PUBLIC-TECH-R1 — source readiness
+
+Goal
+Připravit zdrojového kandidáta GDPR/pilotních pravidel a telemetrie pro následné ověření a nasazení do PUBLIC. Tato dávka dokončuje technickou přípravu zdroje; neprovádí hosted změny.
+
+Scope
+Repository catsystemexe/APU_MS_site.
+Dedikovaná větev od přesného PR #83 source:
+cb48a9de19d5847b0ca68d097f8bb572e4e6992d.
+Navržený název: feat/pilot-public-tech-r1.
+PR proti codex/g1c5-unified-dev-candidate; bez merge.
+
+Aktuální technické zadání: LEGAL_GDPR_READINESS.md §11 v PR #86.
+Historickou hosted/Windows evidenci převzít z PR #85 @
+1729fce641fab5015407acdd5be06fe8941ed58c, úvod G1-D4.
+Nevyžadovat přijetí ujednání Zdeňkem pro tuto zdrojovou práci.
+
+Non-scope
+Migrace na Clerk, nové metriky nebo metadata, redesign, právní discovery,
+obecná modernizace. Žádné změny účtů, secrets, remote D1/KV,
+aktivace sběru, provider requests, merge ani deployment.
+Neměnit pravidla 05_WORKFLOW ani přenášet jejich rozdíly na PUBLIC.
+
+Required changes
+1. PUBLIC telemetry readiness
+V app/telemetry/server.ts readiness nyní vyžaduje ENV=dev a pevný
+DEV hostname. Doplň explicitní PUBLIC kontrakt při zachování přísných
+ochran, nikoli odstraněním kontrol.
+- Vymez odděleně dev/public a přesné povolené hosty. PUBLIC host
+  apu.catsystem.ai vychází z existujícího release kontraktu; před
+  budoucím deploymentem se ověří jeho aktuálnost.
+- Konfigurace pro jiné prostředí/host, neznámé prostředí nebo chybějící
+  parametry musejí zůstat not_ready/disabled.
+- Localhost syntetický režim nesmí vytvořit bypass pro PUBLIC.
+- Zachovej identity/enrollment, samostatný opt-in, notice, HMAC klíče,
+  request isolation a provoz bez závislosti výsledku APU na sběru.
+- Obě prostředí zůstávají v reálné konfiguraci OFF/OFF; žádné
+  automatické nastavení PRIVACY_APPROVED nebo synthetic na PUBLIC.
+- Metadata zůstávají OFF. DEV/PUBLIC data a keys se nesmějí sdílet.
+
+2. First acceptance
+Cíleně projdi app/pilot-rules-boundary.tsx, pilot-rules-server.ts,
+pilot-rules.ts a app/api/pilot-rules/route.ts.
+Ověř skutečný POST → receipt → následný GET → odemčení UI.
+Pokryj zpožděnou viditelnost KV, chybové/nekonzistentní odpovědi,
+timeout, verze, dvojklik a logout/změnu identity během ukládání.
+Neodvozuj příčinu historické hosted chyby bez důkazu. Oprav jen
+reprodukovanou závadu; nerozšiřuj opravu spekulativně.
+Při zpožděném KV neukazuj nepravdivý „save failed“ po doloženém
+úspěchu, ale zachovej fail-closed API a bezpečný opakovaný GET.
+Pokud závadu nereprodukuješ, dolož rozsah testu a přesný chybějící
+HTTP záznam pro hosted následný krok; netvrď root-cause PASS.
+
+3. Schválený receipt kontrakt
+Pro budoucí pilotní konfiguraci připrav 90 dní = 7776000 sekund.
+TTL se neprodlužuje běžným používáním; po expiraci/podstatné změně
+nové přijetí. Rozliš rulesVersion/informationVersion a ověř chování
+starého potvrzení. Popiš technický výmaz verzovaných KV klíčů,
+aby se nearchivovaly neomezeně. DEV testovací TTL 86400 neměň
+touto zdrojovou dávkou; nesmí vzniknout implicitní retenční default.
+
+4. Texty a hranice údajů
+Doplň známé fakty do odpovídajících UI informací: Michal Roupec,
+Zdeněk Vilímek, kontakt catsystem.exe@gmail.com, zákaz identifikace
+žáka a skutečných/modelových diagnóz. Zachovej Zápisník jako
+kanonický obsah a stateless chat.
+Přijetí pravidel a dobrovolnou telemetrii drž odděleně.
+Chybějící právní/retention fakta nevymýšlej a neoznačuj text za
+právně schválený. Před veřejným vydáním se publikační text uzavře
+samostatně; tato dávka řeší funkční UI a datové kontroly.
+
+5. Hosted a release handoff
+Připrav konkrétní krátký postup pro následující Local Windows /
+operátorskou dávku:
+- zachycení prvního DEV POST statusu a bezpečného body;
+- izolovaný syntetický DEV sběr → D1 → stávající SQL/CSV report;
+- odmítnutí/odvolání opt-in a ověření nulových nových zápisů;
+- kontrola nepřítomnosti zakázaných obsahových polí;
+- samostatný případ pro budoucí skutečný provider usage test,
+  který se v této dávce nespouští;
+- cleanup/retention a návrat testovací konfigurace do OFF/OFF.
+Pojmenuj potřebné bindings/parametry, ne skutečné secret hodnoty.
+30denní raw telemetry retention je dosud návrh, nikoli schválená
+produkční hodnota. Pro syntetická data jasně odděl testovací režim.
+
+Acceptance criteria
+- PUBLIC podpora je testovaná, se zachovaným odmítáním chybné
+  konfigurace a všech stávajících bezpečnostních podmínek.
+- Rules gate nelze obejít a opt-in není vynucen přijetím pravidel.
+- Receipt tok má deterministické regrese a pravdivé UI stavy.
+- Je přesně rozlišeno SOURCE PASS / LOCAL PASS / HOSTED NOT VERIFIED.
+- Existuje proveditelný následný hosted test a release handoff.
+
+Verification
+Provider-free V3: env/host/config matice, receipt API a browser flow,
+consent/refusal/OFF, identity isolation a telemetry transport.
+Použij stávající testy; nové testy jen pro nové nebo opravené chování.
+Jednou spusť relevantní integrační regrese, typecheck, build a
+artifact validation. Širší běh zdůvodňuje změna produkčních guardů;
+bez opakovaného Windows auditu v Cloud.
+Zachovej výchozí funkčnost F1→F2→F3 a stream/disconnect ochrany.
+
+Release boundary
+Aktuální public @ 284c108d4ae053335a524bacc773a2af5c3a4779 a PR #83
+jsou diverged (kandidát 28 ahead / 3 behind při přípravě zadání).
+Neprováděj blanket merge DEV/kandidáta do public. Připrav seznam
+nutných feature změn a požadavek zachovat všechny PUBLIC-only opravy.
+Samotné sestavení finálního PUBLIC release kandidáta bude další dávka.
+
+Documentation & Tracking
+Documentation Impact:
+Type: TECHNICAL READINESS
+Documents:
+- 03_APU_SITE/CURRENT/APU_SITE_RUNTIME_TECHNICAL_CURRENT.md
+- 03_APU_SITE/TELEMETRY/TELEMETRY_ROADMAP.md
+- 03_APU_SITE/TELEMETRY/G1_DEV_D1_RUNBOOK.md
+Changelog: YES — pouze skutečně implementované změny
+Backlog: UPDATE — B-07, ponechat OPEN do hosted ověření
+Known Issues: NONE
+
+Deployment Authorization
+NOT AUTHORIZED
+```
+
+**Tato dokumentační aktualizace:** žádné aplikační nebo hosted změny, žádný merge, žádná aktivace sběru. Documentation Impact LEGAL/PILOT TECHNICAL READINESS; dva stávající dokumenty tohoto PR; Changelog NO; Backlog NONE; Known Issues NONE. Deployment Authorization této dávky: NOT AUTHORIZED.
 
