@@ -277,3 +277,88 @@ Bez doplnění hranatých polí **nejde o úplnou informaci podle čl. 13 GDPR a
 
 **Dokumentační výsledek:** product owner schválil minimalistický pilotní rámec (max. 48 učitelů, Michal Roupec jako odpovědná kontaktní osoba a navržená pravidla neidentifikujících vstupů). To **neprokazuje doplnění** údajů podle čl. 13 GDPR, finální určení správce, audit dodavatelů, rozhodnutí o retenci ani právní review; externí onboarding zůstává blokován. LEGAL-P0-MIN legal approval / PUBLIC deployment / telemetry activation = **NOT AUTHORIZED**.
 
+---
+
+## 10. LEGAL-P0-MIN-CLOSE — ověření minimálních podmínek pilotu (2026-10-26)
+
+**Verdikt: PILOT MINIMUM DOCUMENTATION READY / EXTERNAL ONBOARDING BLOCKED.** Produktový rozsah (nejvýše 48 učitelů, Michal Roupec jako odpovědná kontaktní osoba, neidentifikující pedagogické situace, zákaz skutečných i modelových diagnóz, telemetry OFF/OFF) je **PRODUCT APPROVED**. Schválení **není** důkazem faktického obsazení skupiny, finální právní role, zvoleného zákonného titulu, vyřešeného smluvního režimu dodavatelů ani povolením nasazení/pozvánek. Tento zápis uzavírá jen dokumentační průchod, nikoli právní povinnosti.
+
+### 10.1 Právní role: minimum bez právnické osoby
+
+- **VERIFIED — rozhodnutí vlastníka:** APU připravují dvě fyzické osoby; **Michal Roupec** je určenou odpovědnou kontaktní osobou pro pilot.
+- **OWNER DECISION REQUIRED:** osoba, která určuje účely a podstatné prostředky každého zpracování (registrace učitele/Access, AI požadavky, rules receipt, bezpečnostní metadata), je skutečným správcem; fyzická osoba jím být může (GDPR čl. 4 odst. 7). Pouhý interní název „odpovědná osoba“ roli jediného správce nedokazuje.
+- **OWNER DECISION REQUIRED:** pokud oba nezávisle společně určují účely a podstatné prostředky, jde o potenciální **společné správce**. Pro tento případ písemně rozdělit odpovědnost za čl. 13 informování, práva subjektů, incidenty a kontakt; podstatu ujednání zpřístupnit učitelům (čl. 26). Případný jiný skutečný vztah zdůvodnit. Neoznačovat Michala za formální DPO bez samostatného posouzení.
+- **PILOT MINIMUM:** správce či společní správci uvedení jménem/jmény a funkčním kontaktem v dokumentu pro učitele; obchodní společnost a komerční smluvní schéma patří do Stage 1, **nikoliv** určení aktuálního správce.
+
+### 10.2 Ověřená veřejná dodavatelská dokumentace vs. stav účtů APU
+
+| Kontrola | Zjištění z aktuální dokumentace dodavatele | APU-specific stav |
+|---|---|---|
+| **Cloudflare DPA** | Veřejně dostupné **Cloudflare DPA v6.4, effective 2026-04-03** uvádí smluvní vazbu na Main Agreement a účinnost při podpisu/odsouhlasení. [Dokument](https://www.cloudflare.com/cloudflare-customer-dpa/). | **NOT VERIFIED:** konkrétní strana smlouvy, přijetí/účinnost pro účet APU, použitelný rozsah služeb a případné transfery |
+| **Cloudflare subprocesory** | [Veřejný seznam pro Cloudflare services](https://www.cloudflare.com/gdpr/subprocessors/cloudflare-services/) uvádí relevantní dodavatele a umístění; seznam není potvrzením konkrétní konfigurace účtu. | **NOT VERIFIED:** konkrétní využívané služby / přenosy / případné logpush/export cesty |
+| **Cloudflare Access logy** | [Zero Trust log retention](https://developers.cloudflare.com/cloudflare-one/insights/logs/) uvádí pro **Free** Access authentication logs **24 hodin** a admin logs **18 měsíců**; jiné plány/datové typy se liší. [Access auth logy](https://developers.cloudflare.com/cloudflare-one/insights/logs/dashboard-logs/access-authentication-logs/) zahrnují identity a pokusy přihlášení. | **NOT VERIFIED:** definitivní Zero Trust tarif konkrétního účtu, nastavení exportů a dalších logů, retention pro Workers analytics/observability; žádný nový Dashboard audit v této dávce |
+| **Cloudflare EU Workers KV** | [Jurisdiction KV](https://developers.cloudflare.com/kv/reference/data-location/) omezuje **durable storage** na EU, ale KV může být globálně přístupné a cache může existovat mimo EU. | **VERIFIED podle předchozí operátorské evidence:** DEV receipt KV má EU jurisdiction a 24h TTL; **NEVYVOZOVAT** tím globální rezidenci celé služby, PUBLIC retenci ani přístupovou politiku všech kopií |
+| **OpenAI API DPA** | [OpenAI DPA](https://openai.com/en-GB/policies/data-processing-addendum/) uvádí pro zákazníky z EHP smluvní protistranu OpenAI Ireland Ltd. a rámec zpracování a přenosů dle podmínek. | **NOT VERIFIED:** konkrétní account contracting entity, účinnost smluvního režimu APU, detail subprocesorů/transferů a datových kontrol |
+| **OpenAI API retence** | [API Data controls](https://developers.openai.com/api/docs/guides/your-data) uvádějí, že API data se standardně nepoužívají k trénování bez opt-in, ale **abuse-monitoring logy mohou zahrnovat prompty/odpovědi a standardně jsou uchovávány až 30 dní**, s uvedenými výjimkami. Responses API \`store:false\` omezuje application-state storage, nikoli automaticky abuse-monitoring logy. Vector-store/files mají samostatný životní cyklus. | **VERIFIED ve zdroji**: MAIN a další instrumentované AI trasy pracují s \`store:false\` podle kontrolovaných implementací. **NOT VERIFIED**: konkrétní datové kontroly, vektorové úložiště, logy a skutečná retence účtu. Zbytková OpenAI retence dříve vědomě odložená pro technické práce; před externím pilotem ji **pravdivě popsat jako výchozí podmínku a nepotvrzenou konfiguraci**, nikoli tvrdit „bez uložení“ nebo „Zero Data Retention“ |
+
+**PILOT MINIMUM decision:** stačí **jednou** ověřit a zapsat účetně použitelné smluvní podmínky Cloudflare/OpenAI, povahu aktuálně používaných služeb, relevantní přenosy a odpovídající informační formulaci. Nepřipravovat plošný procurement audit a nepožadovat nasazení zero-retention produktu, pokud není potřebné pro konkrétně schválený právní/rizikový režim. Nevyřešená fakta o skutečných službách však nezamlčovat.
+
+### 10.3 Minimální retenční a výmazová rozhodnutí (rozdělit podle datové domény)
+
+| Údaj | Aktuální důkaz / výchozí podklad | Minimální rozhodnutí před onboardingem |
+|---|---|---|
+| Učitelská identita a Cloudflare Access | Access používá e-mail/JWT; vendor default **Free Access logy 24 h**, jiné audity/provozní logy déle; účetně NOT VERIFIED | Uvést účel, přístup, typy záznamů, skutečný tarif/exporty, retenci či kritéria a postup zrušení přístupu |
+| Pracovní Zápisník / session | V DEV kontraktu developer \`localStorage\`, tester \`sessionStorage\`, vlastník podle účtu; logout invalidace a mazání jsou best-effort; není serverové Projects | Popsat lokální uložení podle role, kdy se pracovní data resetují a že exporty/kopie a dodavatelská data se nevymažou automaticky; posoudit data na sdílených zařízeních |
+| Pilot rules receipt | Server KV ukládá pseudonymizovaný identifikátor/verzi a \`acceptedAt/expiresAt\`; **DEV TEST 86 400 s** | **OWNER DECISION REQUIRED:** explicitní PUBLIC/pilot TTL podle účelu, postup výmazu na žádost, změna verze pravidel a případná nutnost re-acknowledgement. Testovací TTL automaticky nepřenášet |
+| OpenAI AI input/response a dokumentové zdroje | \`store:false\` není ZDR; veřejné abuse-monitoring default až 30 dnů plus výjimky, vector-store lifecycle odděleně | Přesný ověřený popis příjemců a omezení zpracování. Nepředstírat nulové logy, neuvádět ničím nedoloženou přesnou account retenci |
+| App/edge/diagnostické logy | Skutečná Cloudflare observability a logpush nastavení nejsou revidována; telemetry D1 OFF/OFF | Krátký read-only log/retention inventory, zda neobsahují pedagogické prompty nebo tokeny; určit oprávněné osoby a rozumnou dobu/objektivní kritéria |
+| Telemetry D1 | V hosted DEV OFF/OFF, post-smoke 0 řádků; aktivní sběr neověřen | **NONE pro PILOT MINIMUM**, ponechat OFF; 30denní raw retention pouze neschválený plán pro G2/G4/G5 |
+| Exporty, incident evidence, backup | Žádný univerzální výmaz všech kopií neověřen | Krátký DSR/erasure SOP: správcem ovladatelné kopie, účty, KV, případné dodavatelské žádosti, předání a ověření provedení; auditní záznam bez detailního případu |
+
+Retenční lhůty **nebyly nově vymyšleny ani schváleny**; seznam výše je přímá podmínka pro doplnění čl. 13 informace. Odhlášení ani konec chat session nezaručuje smazání všech kopií.
+
+### 10.4 Minimum rights / incident SOP — interní pracovní karta
+
+**Vlastník operativy:** Michal Roupec; doručovací kanál **NOT VERIFIED, DOPLNIT**. Není automaticky DPO.
+
+1. **Příjem žádosti:** uchovat minimálně datum přijetí, typ žádosti, ověřenou identitu tazatele a rozhodnutí; žádný přepis pedagogického obsahu do incident/DSR evidence. Při žádosti o přístup/výmaz rozlišit údaje ovládané APU a lokální soubory/exporty účastníka. Standardní lhůty a případná prodloužení posoudit podle čl. 12 GDPR, nikoli automaticky slíbit okamžitý výmaz.
+2. **Omylem zadané žákovské údaje:** ihned přestat daný obsah rozpracovávat. Vyhodnotit, zda vznikla kopie v Zápisníku, prohlížeči, externím API či exportu; u každé doložit možný postup výmazu/omezení. Neodesílat obsah podruhé při hlášení. Přenos nepovažovat automaticky za „incident ohlašovaný ÚOOÚ“; nejprve posoudit narušení bezpečnosti a riziko.
+3. **Security/privacy incident:** zaznamenat čas zjištění, kategorii, rozsah a opatření bez zachycení citlivého obsahu. U skutečného porušení zabezpečení vyhodnotit čl. 33 GDPR: oznamovat ÚOOÚ bez zbytečného odkladu, pokud riziko pro práva a svobody **není nepravděpodobné**, a pokud možno do 72 hodin. Při vysokém riziku posoudit informování dotčených osob podle čl. 34. Uchovat záznam a zdůvodnění i v případě bez hlášení.
+4. **Pilot offboarding:** deaktivovat Access účet podle skutečného provozního postupu, podle doloženého retention policy ukončit nebo odstranit KV receipt a vlastní exporty/diagnostiku; informovat učitele o tom, co si musí sám odstranit ze zařízení.
+5. **Minimální kontrola:** funkční kontakt ověřený testovací zprávou; vlastník má přístup k procesům, kde lze údaje vyhledat, omezit a odstranit. Není třeba komerční SLA/ticketing Stage 1.
+
+### 10.5 DPIA / risk screening — předběžný pracovní výsledek, nikoli konečný verdikt
+
+**Plná DPIA nyní není automaticky prokázána jako povinná ani jako zbytečná.** Čl. 35 GDPR a [ÚOOÚ metodika](https://uoou.gov.cz/profesional/posouzeni-vlivu-na-ochranu-osobnich-udaju-dpia) vyžadují doložit závěr podle skutečného rizika.
+
+| Kritérium | Hodnocení v zamýšleném pilotu | Riziko / kontrola |
+|---|---|---|
+| Nová/AI technologie | **ANO** — textové generativní AI API | Posoudit nespolehlivý výstup, vendor přenosy, neúmyslně citlivé vstupy; uživatel posuzuje Rozbor/Výstup |
+| Děti a potenciálně zranitelní lidé | **RIZIKO NEPŘÍMÉ IDENTIFIKACE** — APU se týká pedagogických situací | Zakázat identifikující kontext, diagnózy, zdravotní zprávy; pravidla a první-gate; absence technického automatického anonymizéru |
+| Zvláštní kategorie | **NENÍ ZAMÝŠLENO**, ale volný text může rizikově obsahovat | Instrukce, omezení vstupů, možnost zastavit zpracování; popsat risk of accidental inclusion |
+| Škálování / systematické monitorování | **NEPROKÁZÁNO** — uzavřený limit max. 48, telemetry OFF/OFF | Udržet pozvánkový režim a bez dalšího schválení neměnit telemetry scope |
+| Automatizovaná rozhodnutí s významným právním účinkem | **NEPLÁNOVÁNA** — výsledky jsou návrhy pro učitele | Nepoužívat APU jako automatické rozhodování o dítěti bez dalšího samostatného review |
+| Únik, neoprávněný přístup, kopie | **REÁLNÁ HROZBA** u autentizace, browser storage, exportu a dodavatelských dat | Access/owner isolation, neidentifikující vstupy, výmaz SOP, omezení přístupu, transparentní vendor notice |
+
+**Preliminary: SCREENING DOCUMENTED; FINAL DECISION PENDING OWNER/LEGAL REVIEW.** Riziko lze snížit hlavně vyloučením identifikovatelných žákovských údajů, diagnóz a aktivní telemetrie, ale textový zákaz sám není důkazem anonymizace. Před onboardingem odpovědná osoba písemně rozhodne **DPIA REQUIRED / NOT REQUIRED + proč** a doloží vhodnost kontrol. Pokud zhodnocení ukáže pravděpodobné vysoké riziko, plnou DPIA provést před příslušným zpracováním; jinak založit krátký risk-screening a revidovat při změně účelu, dat nebo poskytovatelů.
+
+### 10.6 Jednostránkový release blocker matrix (pouze aktuální pilot)
+
+| ID | Gate / příslušná osoba | Stav 2026-10-26 | Nejmenší důkaz pro uzavření |
+|---|---|---|---|
+| P-MIN-01 | Správce/společní správci: Michal + druhá fyzická osoba | **OWNER DECISION REQUIRED** | Jméno/role druhé osoby a popis, kdo rozhoduje o účelu a prostředcích, případně čl. 26 ujednání |
+| P-MIN-02 | Kontaktní kanál a čl. 13 notice | **OWNER DECISION REQUIRED** | Funkční e-mail/kanál, konkrétní identita správce, účely a čl. 6 tituly, publikovatelný notice bez placeholderů |
+| P-MIN-03 | Cloudflare/OpenAI dokumenty a účetní podmínky | **PUBLIC VENDOR DOCS VERIFIED; APU ACCOUNT NOT VERIFIED** | Průkazná krátká mapa skutečných provider/contracting terms, přenosů, hlavních log/retention nastavení, žádné raw secrets |
+| P-MIN-04 | PUBLIC/pilot receipt TTL + mazání | **OWNER DECISION REQUIRED** | Výslovná lhůta a odůvodnění, version/re-acceptance policy, přístup a DSR výmaz SOP |
+| P-MIN-05 | Logy, DSR, incident a DPIA screening | **SOP DRAFT; ACCOUNT SETTINGS / FINAL DPIA NOT VERIFIED** | Krátká operátorská evidence, funkční kontaktní cesta, podpis/rozhodnutí o DPIA |
+| P-MIN-06 | Technické první potvrzení po změně pravidel | **PARTIAL** | Odděleně schválený kontrolovaný DEV acceptance test se zachycením HTTP odpovědi (bez reálné AI) |
+| P-MIN-07 | Externí onboarding max. 48 / PUBLIC release | **NOT AUTHORIZED** | P-MIN-01 až 05 PASS, nutné UI/DEV ověření + oddělené provozní a deployment schválení |
+| Stage 1 | Clerk/Projects/billing/rozšířené kontrakty | **DEFERRED** | Není podmínkou aktuálního omezeného pilotu; nové účely budou mít vlastní privacy gate |
+| Telemetry G2/G4/G5 | Aktivní pilotní metriky | **OFF/OFF — NOT AUTHORIZED** | Samostatné účel/titul, notice, retenční/operátorské rozhodnutí a hostované testy |
+
+**Výsledek LEGAL-P0-MIN-CLOSE:** **DOCUMENTATION V1 PASS / EXTERNAL ONBOARDING BLOCKED**. Důvody jsou konkrétní P-MIN-01–05; ne kvůli absenci budoucí společnosti nebo Stage 1 komerčních funkcí. Ani tento zápis nezakládá schválení PUBLIC UI, přidání uživatelů, aktivace telemetrie nebo deploymentu.
+
+**Sources:** [GDPR v českém znění](https://eur-lex.europa.eu/legal-content/cs/TXT/?uri=CELEX%3A32016R0679), [ÚOOÚ DPIA](https://uoou.gov.cz/profesional/posouzeni-vlivu-na-ochranu-osobnich-udaju-dpia), [Cloudflare DPA](https://www.cloudflare.com/cloudflare-customer-dpa/), [Cloudflare Access logs](https://developers.cloudflare.com/cloudflare-one/insights/logs/), [Cloudflare KV data location](https://developers.cloudflare.com/kv/reference/data-location/), [Cloudflare subprocessors](https://www.cloudflare.com/gdpr/subprocessors/cloudflare-services/), [OpenAI DPA](https://openai.com/en-GB/policies/data-processing-addendum/), [OpenAI API data controls](https://developers.openai.com/api/docs/guides/your-data).
+
+**Documentation & Tracking:** Documentation Impact: LEGAL/PILOT OPERATIONS (this file only); Changelog **NO**; Backlog **NONE**; Known Issues **NONE**. Deployment Authorization: **NOT AUTHORIZED**.
+
