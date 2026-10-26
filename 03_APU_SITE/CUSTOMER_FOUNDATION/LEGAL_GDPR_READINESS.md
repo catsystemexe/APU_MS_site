@@ -192,3 +192,88 @@ Konkrétní procesy odpovědí na žádosti subjektů údajů, řešení chybné
 **Externí orientační normativní podklady (ne potvrzení konkrétního souladu):** [GDPR, čl. 5–6, 9, 12–14, 28, 32, 35](https://eur-lex.europa.eu/legal-content/cs/TXT/?uri=CELEX%3A32016R0679); [ÚOOÚ — informační povinnost a odlišení právních titulů](https://uoou.gov.cz/profesional/metodiky-a-doporuceni-pro-spravce/metodika-k-plneni-informacni-povinnosti-a-k-souvisejicim-ujednanim-vuci-zakaznikum); [EDPB — controller/processor](https://www.edpb.europa.eu/documents/guideline/guidelines-072020-on-the-concepts-of-controller-and-processor-in-the-gdpr_en); [OpenAI API data controls](https://developers.openai.com/api/docs/guides/your-data); [Cloudflare KV jurisdikce](https://developers.cloudflare.com/kv/reference/data-location/).
 
 **Documentation & Tracking (LEGAL-P0-R1):** Documentation Impact: LEGAL/PRIVACY DRAFT; Changelog NO; Backlog NONE; Known Issues NONE. Deployment Authorization: **NOT AUTHORIZED**.
+
+---
+
+## 9. PILOT MINIMUM — omezený pilot do 48 učitelů (návrh 2026-10-26)
+
+**Status: DRAFT — MINIMUM PREPARED, EXTERNAL ONBOARDING NOT YET APPROVED.** Tato sekce zužuje schvalovací rozsah §8 pro aktuální neveřejně nabízený, pozvánkový pilot; nenahrazuje minimální GDPR povinnosti a nepřenáší je do Stage 1. Údaj „48“ znamená **nejvýše 48 učitelů v pilotní skupině**, nikoli ověřenou kapacitu Cloudflare Access, počet již pozvaných lidí nebo výjimku z GDPR.
+
+### 9.1 Rozhodnuté parametry a role
+
+| Prvek | Rozhodnutí / stav |
+|---|---|
+| Typ služby | Neplacený/experimentální **omezený pilot**; komerční Stage 1 oddělená. Bez tvrzení o konkrétním smluvním tarifu nebo nutné bezplatnosti všech dodavatelských služeb. |
+| Účastníci | **Maximálně 48 učitelů**. Pozvánkový/omezený přístup; před onboardingem ověřit skutečné Access seat limity a náklady. |
+| Odpovědná osoba za práci s daty | **Michal Roupec** — určený interní vlastník a kontaktní osoba pro pilotní privacy/incident agendu. |
+| Provozovatelé | Podle uživatele **dvě fyzické osoby**, nikoli založená společnost. Právnická osoba pro pilot není nutnou podmínkou. |
+| Právní správce GDPR | **PENDING ROLE DETERMINATION:** Michal jako odpovědný kontakt neznamená automaticky, že je jediným správcem nebo jmenovaným DPO. Zjistit, zda druhá osoba samostatně/společně určuje účely a podstatné prostředky. Při společném správcovství stručně písemně rozdělit odpovědnosti a sdělit podstatu ujednání účastníkům (čl. 26). |
+| Data žáků | Pouze **skutečné pedagogické potřeby/pozorování v neidentifikující podobě**; nelze rozpoznat dítě ani kombinací detailů. **Nezadávat skutečné ani modelové diagnózy** ani zdravotnické/poradenské zprávy. Preventivní pravidlo nezaručuje anonymitu volného textu. |
+| Serverové projekty/konverzace | Současný pilot nemá perzistentní serverové APU Projects; kanonický Zápisník je v browseru podle role, Chat je přenosový/odvozovací prostředek. \`store:false\` na AI requestu nevylučuje veškeré dodavatelské logy/retenci. |
+| Telemetrie | **OFF/OFF** na DEV. Reálné měření není součástí tohoto pilotního minima; samostatné gates G2/G4/G5 před aktivací. |
+| DEV rules receipt | Testovací TTL **24 h**, pouze DEV. Doba receipt pro externí pilot/PUBLIC zatím **PENDING**. |
+
+### 9.2 Krátké pilotní pravidlo — text pro uživatele (DRAFT)
+
+> **APU — pravidla omezeného pilotu**
+>
+> APU je experimentální pomůcka pro učitele. Můžete popsat skutečnou pedagogickou potřebu, pozorované projevy a kontext nezbytný pro návrh podpory. Neuvádějte identitu žáka: jména, kontakty, přesnou školu/třídu, data událostí ani kombinace okolností, podle nichž lze konkrétní dítě určit. Nepoužívejte ani skutečné, ani modelové diagnózy; nevkládejte zdravotní a poradenské zprávy.
+>
+> Zápisník zachycuje pracovní informace; Rozbor a Výstup jsou návrhy k odbornému posouzení učitelem. Vybrané požadavky jsou zpracovávány přes server APU a OpenAI API. Obsah může mít kopie v prohlížeči, exportech a podle dodavatelských pravidel; odhlášení proto samo nezaručuje výmaz všech kopií.
+>
+> Pokud omylem vložíte osobní údaje o dítěti, nepokračujte v jejich rozpracování a kontaktujte osobu uvedenou v informacích o zpracování, aniž byste celý případ znovu posílali. Odkaz na úplné pilotní informace: **[SCHVÁLENÁ URL]**.
+>
+> Checkbox: **„Seznámil/a jsem se s pravidly používání APU a přijímám je.“** Toto potvrzení **není souhlasem za žáka nebo rodiče ani náhradou právního titulu podle GDPR**.
+
+Tento text je věcně připravený, nikoli právně/provozně schválený pro publikaci. Povinný text pravidel a případný samostatný souhlas/opt-in s budoucí telemetrií musí zůstat oddělené.
+
+### 9.3 Stručná informace o osobních údajích účastníků (šablona k doplnění před pozváním)
+
+> **Ochrana osobních údajů — omezený pilot APU (max. 48 učitelů)**
+>
+> **Kdo odpovídá:** Michal Roupec je určenou kontaktní a odpovědnou osobou pilotu. **[PŘED PUBLIKACÍ: označit právního správce/správce společné, případně obě fyzické osoby a podstatu ujednání, uvést funkční kontakt]**.
+>
+> **Jaké údaje:** přihlašovací identita učitele, technické/bezpečnostní údaje související s Cloudflare Access, verze a čas potvrzení pravidel; podle používání také obsah pracovního Zápisníku v browseru a text potřebný pro konkrétní AI požadavek. Nevkládejte identifikovatelné údaje o žácích ani diagnózy.
+>
+> **Proč a na jakém právním základě:** umožnění vstupu do omezeného pilotu, poskytnutí zvolených funkcí, doložení přijetí pravidel a bezpečné provozování služby. **[PŘED PUBLIKACÍ: doplnit konkrétní čl. 6 titul u každého účelu; při oprávněném zájmu zdokumentovat test nezbytnosti/převážení práv; souhlas pro některé samostatné účely nenahrazovat checkboxem pravidel]**.
+>
+> **Kdo data zpracovává:** při přihlášení/hostingu Cloudflare, při vyvolaných AI úlohách OpenAI API; **[PŘED PUBLIKACÍ: ověřené smluvní role, aktuální dodavatelská dokumentace, případní další příjemci/subzpracovatelé, mezinárodní přenosy a záruky]**.
+>
+> **Jak dlouho a kde:** Zápisník se ukládá v tomto prohlížeči podle role a lokálního životního cyklu; exporty zůstávají tam, kam si je uložíte. Verzované potvrzení pravidel může být uchováno v serverovém KV; **24 h platí nyní jen pro DEV test a není schválenou PUBLIC lhůtou**. **[PŘED PUBLIKACÍ: skutečná doba/objektivní kritéria pro pilotní receipt, Access/edge logy, diagnostiku, dodavatelská AI data a postup výmazu; neuvádět neověřenou nulovou retenci]**.
+>
+> **Vaše práva:** podle okolností můžete požadovat přístup, opravu, výmaz, omezení zpracování, vznést námitku a případně využít přenositelnost nebo odvolat skutečně udělený souhlas; můžete podat stížnost u ÚOOÚ. **[PŘED PUBLIKACÍ: funkční kontaktní kanál a způsob ověření žadatele]**.
+>
+> **Dobrovolnost:** účast v pilotu je dobrovolná, pro přístup však potřebujete určenou autentizační identitu a seznámení s pravidly. **[PŘED PUBLIKACÍ: doplnit důsledky neposkytnutí a informaci o případném automatizovaném rozhodování, pokud se vyskytuje]**.
+>
+> **Datum a verze:** **[DOPLNIT SCHVÁLENÉ RULES/INFORMATION VERSION, DATUM ÚČINNOSTI A ADRESU]**.
+
+Bez doplnění hranatých polí **nejde o úplnou informaci podle čl. 13 GDPR a nesmí být předložena externím učitelům jako schválená**. Právní kvalifikace účelů a dodavatelských vztahů musí odpovídat skutečnému provozu, nikoli jen zamýšlenému použití.
+
+### 9.4 Minimální provozní postup — jeden vlastník, žádná nová infrastruktura
+
+**Kontaktní osoba:** Michal Roupec, konkrétní dostupný pilotní kanál **[DOPLNIT A OTESTOVAT]**. Nepotvrzovat automaticky roli formálního DPO.
+
+1. **Žádost učitele / výmaz:** zaregistrovat datum a rozsah žádosti bez vkládání pedagogického případu do ticketu. Ověřit totožnost přiměřeným způsobem; odděleně posoudit browser kopie, Access identitu, receipt KV, provozní logy, data u dodavatelů a exporty, které APU nemůže smazat. Odpověď v zákonné lhůtě, není-li relevantní výjimka.
+2. **Chybné vložení údaje o žákovi:** zastavit další AI operace s obsahem, vymezit dotčená místa/kopie, provést jen doložitelný lokální reset a případný vyžádaný provider postup; neslibovat úplný výmaz bez potvrzení.
+3. **Bezpečnostní incident:** zaznamenat čas zjištění, domény a dopady bez kopie pedagogického obsahu; zajistit přístup, posoudit riziko a případnou notifikaci ÚOOÚ bez zbytečného odkladu, je-li vyžadována zpravidla do 72 h od zjištění, a informování dotčených osob při vysokém riziku. Evidovat rozhodnutí i když notifikace není potřebná.
+4. **Přístup a retenční minimum:** pouze pozvaní učitelé, žádné sdílené testovací účty; před zahájením ověřit Access allowlist/seat limit a skutečné provider/log retention. Když provozní lhůta není doložená, označit NOT VERIFIED, nevybírat ji náhodně.
+5. **DPIA screening:** do jedné stránky zaznamenat povahu/účely/kategorie/datové subjekty/poskytovatele, riziko neúmyslného vložení dat dítěte, generativní AI, ochranné kontroly a rozhodnutí **DPIA REQUIRED / NOT REQUIRED + zdůvodnění**. Při vysokém riziku plné DPIA před odpovídajícím zpracováním; absence plného DPIA není automaticky protiprávní.
+
+### 9.5 Co uzavřít nyní a co zakonzervovat pro Stage 1
+
+| Povinnost/rozhodnutí | PILOT max. 48 — před přizváním externích učitelů | STAGE 1 |
+|---|---|---|
+| Určení skutečného správce a druhé osoby | **REQUIRED** — stručná dokumentovaná role, Michal kontakt | Nová právnická osoba / komerční organizační struktura, pokud vznikne |
+| Funkční e-mail/kontakt a informace dle čl. 13 | **REQUIRED** — stručná úplná verze pro současné účely | Plná zákaznická dokumentace/obchodní podmínky pro nové účely |
+| Právní titul pro Access, pilotní AI a receipt | **REQUIRED** u skutečných operací | Nové účely: customer auth, Projects, billing |
+| Cloudflare/OpenAI současný DPA/role/přenosy | **REQUIRED** ověřit přiměřený podklad pro skutečně používané služby | Širší supplier register/nové providery a komplexní governance |
+| Retence receipt/logů/AI a výmaz/incident | **REQUIRED** minimum dle skutečného provozu; PUBLIC TTL se musí určit před publikací receipt gate | Plán záloh, uložených projektů, billingových a komerčních dat |
+| Jednostránkový DPIA screening | **REQUIRED** před rozšířením, závěr musí být odůvodněn | Nový screening při rozšíření účelů/rizik |
+| Active telemetry G2/G4/G5 | **NOT IN PILOT MINIMUM** — ponechat OFF/OFF | Zvláštní schválená etapa, nemusí čekat na komerční Stage 1 |
+| Spolehlivost prvního potvrzení | **TECHNICAL FOLLOW-UP** před deklarací hladkého onboardingu; nyní R1/R2 read/rehydration PASS, původní POST příčina NOT VERIFIED | — |
+| Clerk, serverové projekty, ukládání chat historie, placené tarify | **OUT OF SCOPE** | Samostatný Stage 1 design + legal/technical gates |
+
+**STOP condition pro pozvání externích učitelů:** chybí-li identita správce nebo kontakt, správný účel/titul, faktický aktuální dodavatelský/retention základ, úplná privacy information, vyhodnocení DPIA anebo minimální incident/DSR proces, status zůstává **PILOT MINIMUM — DRAFT / ONBOARDING BLOCKED**. Limit 48 a zákaz identifikace žáků tyto povinnosti neruší. Pro interní vývoj se syntetickými nebo neidentifikujícími daty tímto dokumentem nevyhlašujeme zákaz práce.
+
+**Dokumentační výsledek:** nachystat podklady a vymezit přesné zbývající důkazy, nikoli tvrdit, že byly doplněny. LEGAL-P0-MIN legal approval / PUBLIC deployment / telemetry activation = **NOT AUTHORIZED**.
+
