@@ -18,12 +18,14 @@ T3 refusal/opt-in/events/D1/SQL/CSV/withdrawal/cleanup jsou podle uvedené evide
 
 ## 2. PowerShell — pouze read-only DEV preflight
 
-Spustit v čistém checkoutu tohoto T4 dokumentu, s již instalovaným Wranglerem 4.150.0 a již funkčním oprávněním ke čtení DEV. **Jediný vstup od operátora** je absolutní cesta k existujícímu target-only JSON configu použitému při T2/T3. Má obsahovat jen přesné `name`, `account_id` a volitelně `send_metrics:false`. Cesta není v Git evidenci: agent ji nesmí odhadnout, hledat credentials ani config vytvářet/upravovat. Neznámá cesta, jiné schéma nebo chybějící oprávnění = BLOCKED. Nepoužívat šablonu `wrangler.dev.json`, produkční config ani generated deployment config.
+Spustit v čistém checkoutu tohoto T4 dokumentu, s již instalovaným Wranglerem 4.150.0 a již funkčním oprávněním ke čtení DEV. Dřívější target-only `.jsonc` configy T2/T3 byly dočasné a po použití se mazaly; žádný existující config ani cestu od operátora nevyžadujeme. Blok vytvoří vlastní jedinečný dočasný `.json` v systémovém temp adresáři **mimo repo**, pouze s pevným `name`, `account_id` a `send_metrics:false`. Vytvoření pomocí `CreateNew` nepřepíše existující soubor; `finally` odstraní pouze soubor vytvořený tímto spuštěním. Nelze-li bezpečně vytvořit či odstranit tento soubor nebo chybí oprávnění ke čtení DEV, výsledek je BLOCKED. Nepoužívat šablonu `wrangler.dev.json`, produkční config ani generated deployment config; žádné vars, bindings ani secrets do dočasného configu nepřidávat.
 
 Celý blok zkopírovat beze změn. Nevypisuje surové version JSON, developer seznam, Access audience ani secret údaje. CLI chyby jsou záměrně nahrazeny pevnou zprávou; žádný login/install/config repair jako fallback. Dočasné proměnné `CI`/`WRANGLER_SEND_METRICS` patří jen lokálnímu CLI a v `finally` se vracejí, nejsou to Worker vars.
 
 ```powershell
-$DevConfig = Read-Host 'Absolutni cesta k existujicimu T2/T3 target-only DEV .json configu'
+$DevConfig = $null
+$CreatedDevConfig = $false
+$PreflightVerified = $false
 $OldCI = $env:CI
 $OldMetrics = $env:WRANGLER_SEND_METRICS
 try {
@@ -44,12 +46,17 @@ try {
     $Wrangler = Join-Path $Repo 'node_modules\.bin\wrangler.cmd'
     $Package = Get-Content -Raw -LiteralPath (Join-Path $Repo 'node_modules\wrangler\package.json') -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
     if (!(Test-Path -LiteralPath $Wrangler -PathType Leaf) -or $Package.version -cne '4.150.0') { throw 'BLOCKED: existing pinned Wrangler required; do not install' }
-    if (![IO.Path]::IsPathRooted($DevConfig) -or [IO.Path]::GetExtension($DevConfig) -cne '.json') { throw 'BLOCKED: existing absolute JSON config required' }
-    $Config = Get-Content -Raw -LiteralPath $DevConfig -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
-    if (@($Config.PSObject.Properties.Name | Where-Object { $_ -cnotin @('name','account_id','send_metrics') }).Count -or
-        $Config.name -cne 'apu-ms-site-dev' -or $Config.account_id -cne '4638092f63fa7fe58bcb9d2d041b7855' -or
-        ($Config.PSObject.Properties.Name -ccontains 'send_metrics' -and $Config.send_metrics -ne $false)) { throw 'BLOCKED: target-only DEV config mismatch; do not edit it' }
-    if ($env:CLOUDFLARE_ACCOUNT_ID -and $env:CLOUDFLARE_ACCOUNT_ID -cne $Config.account_id) { throw 'BLOCKED: conflicting account; do not change credentials' }
+    if ($env:CLOUDFLARE_ACCOUNT_ID -and $env:CLOUDFLARE_ACCOUNT_ID -cne '4638092f63fa7fe58bcb9d2d041b7855') { throw 'BLOCKED: conflicting account; do not change credentials' }
+    $TempRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
+    $RepoRoot = [IO.Path]::GetFullPath($Repo).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+    $DevConfig = Join-Path $TempRoot ('apu-t4-' + [Guid]::NewGuid().ToString('N') + '.json')
+    if ($DevConfig.StartsWith($RepoRoot + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) { throw 'BLOCKED: temporary config must be outside repository' }
+    $ConfigStream = [IO.File]::Open($DevConfig, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
+    $CreatedDevConfig = $true
+    try {
+        $ConfigBytes = [Text.Encoding]::UTF8.GetBytes('{"name":"apu-ms-site-dev","account_id":"4638092f63fa7fe58bcb9d2d041b7855","send_metrics":false}')
+        $ConfigStream.Write($ConfigBytes, 0, $ConfigBytes.Length)
+    } finally { $ConfigStream.Dispose() }
     $env:CI = 'true'
     $env:WRANGLER_SEND_METRICS = 'false'
     function Read-T4Json([string[]]$Arguments) {
@@ -77,7 +84,7 @@ try {
         if ($Binding.Count -ne 1 -or $Binding[0].type -cne 'plain_text' -or $null -eq $Binding[0].text) { throw 'BLOCKED: required plain-text binding not verifiable' }
         if ($Binding[0].text -cne $Expected[$Name]) { throw 'FAIL: DEV OFF/OFF/TTL/auth contract mismatch; no repair' }
     }
-    [pscustomobject]@{ result='PREFLIGHT_PASS'; worker='apu-ms-site-dev'; version=$ExpectedVersion; traffic=100; telemetry='0'; metadata='0'; receipt_ttl_seconds=86400; checked_at_utc=[DateTimeOffset]::UtcNow.ToString('o') } | ConvertTo-Json -Compress
+    $PreflightVerified = $true
 }
 catch {
     if ($_.Exception.Message -match '^(FAIL|BLOCKED):') { throw $_.Exception.Message }
@@ -86,6 +93,13 @@ catch {
 finally {
     if ($null -eq $OldCI) { Remove-Item Env:CI -ErrorAction SilentlyContinue } else { $env:CI = $OldCI }
     if ($null -eq $OldMetrics) { Remove-Item Env:WRANGLER_SEND_METRICS -ErrorAction SilentlyContinue } else { $env:WRANGLER_SEND_METRICS = $OldMetrics }
+    if ($CreatedDevConfig) {
+        try { Remove-Item -LiteralPath $DevConfig -ErrorAction Stop }
+        catch { throw 'BLOCKED: temporary config cleanup failed; STOP without browser test' }
+    }
+    if ($PreflightVerified) {
+        [pscustomobject]@{ result='PREFLIGHT_PASS'; worker='apu-ms-site-dev'; version=$ExpectedVersion; traffic=100; telemetry='0'; metadata='0'; receipt_ttl_seconds=86400; checked_at_utc=[DateTimeOffset]::UtcNow.ToString('o') } | ConvertTo-Json -Compress
+    }
 }
 ```
 
