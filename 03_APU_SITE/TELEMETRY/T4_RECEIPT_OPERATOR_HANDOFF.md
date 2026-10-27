@@ -18,7 +18,11 @@ T3 refusal/opt-in/events/D1/SQL/CSV/withdrawal/cleanup jsou podle uvedené evide
 
 ## 2. PowerShell — pouze read-only DEV preflight
 
-Spustit v čistém checkoutu tohoto T4 dokumentu, s již instalovaným Wranglerem 4.150.0 a již funkčním oprávněním ke čtení DEV. Dřívější target-only `.jsonc` configy T2/T3 byly dočasné a po použití se mazaly; žádný existující config ani cestu od operátora nevyžadujeme. Blok vytvoří vlastní jedinečný dočasný `.json` v systémovém temp adresáři **mimo repo**, pouze s pevným `name`, `account_id` a `send_metrics:false`. Vytvoření pomocí `CreateNew` nepřepíše existující soubor; `finally` odstraní pouze soubor vytvořený tímto spuštěním. Nelze-li bezpečně vytvořit či odstranit tento soubor nebo chybí oprávnění ke čtení DEV, výsledek je BLOCKED. Nepoužívat šablonu `wrangler.dev.json`, produkční config ani generated deployment config; žádné vars, bindings ani secrets do dočasného configu nepřidávat.
+**Zdroj postupu:** operátor otevře `03_APU_SITE/TELEMETRY/T4_RECEIPT_OPERATOR_HANDOFF.md` na GitHubu přes permalink s plným 40znakovým SHA nového reviewovaného commitu předaného v handoffu PR #89. Z tohoto přesného commitu přečte celý postup a zkopíruje blok beze změn; nepoužije pohyblivý branch odkaz ani lokální kopii runbooku. Chybí-li takový permalink/reviewované SHA, BLOCKED / STOP. Kvůli načtení postupu se lokální checkout nijak neupravuje ani nepřepíná.
+
+Spustit z adresáře uvnitř existujícího repo, s již instalovaným Wranglerem 4.150.0 a již funkčním oprávněním ke čtení DEV. Repo root slouží k nalezení instalovaného Wrangleru a jeho package verze, dále jen k ochraně umístění dočasného souboru mimo repo. Čistota pracovního stromu, lokální HEAD/ancestry ani shoda lokální aplikace se source nejsou podmínkou: lokální aplikace se nebuilduje, nenasazuje ani nevydává za ověřený aplikační source. Aplikační source v §1 označuje převzatou hosted evidenci PR #88, nikoli lokální checkout. Žádné čištění, stash, reset, změny ignore pravidel, instalace ani úpravy checkoutu.
+
+Dřívější target-only `.jsonc` configy T2/T3 byly dočasné a po použití se mazaly; žádný existující config ani cestu od operátora nevyžadujeme. Blok vytvoří vlastní jedinečný dočasný `.json` v systémovém temp adresáři **mimo repo**, pouze s pevným `name`, `account_id` a `send_metrics:false`. Vytvoření pomocí `CreateNew` nepřepíše existující soubor; `finally` odstraní pouze soubor vytvořený tímto spuštěním. Nelze-li bezpečně vytvořit či odstranit tento soubor nebo chybí oprávnění ke čtení DEV, výsledek je BLOCKED. Nepoužívat šablonu `wrangler.dev.json`, produkční config ani generated deployment config; žádné vars, bindings ani secrets do dočasného configu nepřidávat.
 
 Celý blok zkopírovat beze změn. Nevypisuje surové version JSON, developer seznam, Access audience ani secret údaje. CLI chyby jsou záměrně nahrazeny pevnou zprávou; žádný login/install/config repair jako fallback. Dočasné proměnné `CI`/`WRANGLER_SEND_METRICS` patří jen lokálnímu CLI a v `finally` se vracejí, nejsou to Worker vars.
 
@@ -29,20 +33,9 @@ $PreflightVerified = $false
 $OldCI = $env:CI
 $OldMetrics = $env:WRANGLER_SEND_METRICS
 try {
-    $Source = 'd706a55c7ff80b1439079badfda88c9baa5807c4'
-    $Evidence = 'b6caa1249c6460eb399cf2778c31573fec5beee8'
     $ExpectedVersion = '732bf950-30cf-444a-90fc-8927d9c8b16c'
     $Repo = (git rev-parse --show-toplevel 2>$null | Out-String).Trim()
     if ($LASTEXITCODE -ne 0 -or !$Repo) { throw 'BLOCKED: repository unavailable' }
-    $Dirty = (git -C $Repo status --porcelain | Out-String).Trim()
-    if ($LASTEXITCODE -ne 0 -or $Dirty) { throw 'BLOCKED: preserve working changes; no reset/clean' }
-    git -C $Repo merge-base --is-ancestor $Evidence HEAD
-    if ($LASTEXITCODE -ne 0) { throw 'BLOCKED: checkout is not derived from pinned PR88 evidence' }
-    $Changed = @(git -C $Repo diff --name-only $Source HEAD)
-    if ($LASTEXITCODE -ne 0) { throw 'BLOCKED: source comparison unavailable' }
-    if (@($Changed | Where-Object { $_ -cnotlike '03_APU_SITE/*.md' }).Count) {
-        throw 'FAIL: application/non-documentation differs from verified source'
-    }
     $Wrangler = Join-Path $Repo 'node_modules\.bin\wrangler.cmd'
     $Package = Get-Content -Raw -LiteralPath (Join-Path $Repo 'node_modules\wrangler\package.json') -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
     if (!(Test-Path -LiteralPath $Wrangler -PathType Leaf) -or $Package.version -cne '4.150.0') { throw 'BLOCKED: existing pinned Wrangler required; do not install' }
