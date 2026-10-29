@@ -1,22 +1,22 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { readFileSync, mkdtempSync, writeFileSync, rmSync, realpathSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { createHmac } from 'node:crypto';
-import { prepare, sql, verify, snapshot, T5 } from '../scripts/telemetry/t5-evidence.mjs';
+import { prepare, sql, verify, snapshot, artifactPaths, restorePlan, boundedRestore, windowDecision, T5 } from '../scripts/telemetry/t5-evidence.mjs';
 import { createModelUsageRecord, finalizeModelUsageRecord } from '../app/usage-ledger.ts';
 
 const id = () => crypto.randomUUID();
-function fixture(groundingCount = 0, inputTokens = 100) {
-  const plan = prepare(), session = id(), tab = id(), workflow = id();
+function fixture(groundingCount = 0, inputTokens = 100, plan = prepare()) {
+  const session = id(), tab = id(), workflow = id();
   const db = new DatabaseSync(':memory:'); db.exec(readFileSync(new URL('../telemetry/migrations/0001_pilot_v1.sql', import.meta.url), 'utf8'));
   const owner = { session_id: session, tab_id: tab, participant_id: plan.participant, cohort_id: plan.cohort, key_version: 't5-v1' };
   db.prepare('INSERT INTO telemetry_sessions(session_id,tab_id,participant_id,cohort_id,key_version,test_class,notice_version,measurement_version,opened_at,last_interaction_at,expires_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)').run(session, tab, plan.participant, plan.cohort, 't5-v1', 'tester', 't5-v1', 'pilot-v1', 1000, 1000, 100000);
-  const evidence = { provider_basis: 'independent-provider-request-metadata', ui_accepted: true, browser_paths: ['/api/extract', '/api/need-route', '/api/analysis'], pending_call_ids: [], calls: [] };
+  const evidence = { provider_basis: 'response-boundary-trace-v1', ui_accepted: true, browser_paths: ['/api/extract', '/api/need-route', '/api/analysis'], lifecycle_observations: [], calls: [] };
   let seq = 0, groundingIndex = 0, primaryId; const extractionTicket = { operationId: id(), requestId: id() };
   for (const operation of ['extraction', ...Array(groundingCount).fill('grounding'), 'need_routing', 'analysis']) {
     const { operationId, requestId } = ['extraction', 'grounding'].includes(operation) ? extractionTicket : { operationId: id(), requestId: id() }; const callId = id();
@@ -30,7 +30,7 @@ function fixture(groundingCount = 0, inputTokens = 100) {
     const projection = { schema_version: 1, measurement_version: 'pilot-v1', source: 'server', event_name: 'ai_call_finalized', state: 'final', call_id: callId, request_id: requestId, workflow_id: workflow, operation_instance_id: operationId, phase, operation, attempt_index, retry_of_call_id: null, fallback_for_call_id, started_at: 1000, completed_at: 2000, requested_model: model, reported_model: model, reasoning_effort: 'low', requested_service_tier: 'default', reported_service_tier: 'default', provider_status: 'completed', application_status: 'accepted', usage_source: 'provider_reported', usage: record.usage, file_search_calls: record.file_search_calls, pricing_snapshot: record.pricing_snapshot, pricing_regime: 'standard-30m-estimate', usage_coverage: 'observed', cost_nano_usd: Math.round(record.pricing_snapshot.estimated_cost_usd * 1e9), error_class: null };
     // Emulate actual pending -> final PK upsert, without writing a second accounting row.
     db.prepare('INSERT INTO telemetry_ai_calls VALUES (?,?,?,?,?,?,?,?)').run(callId, session, workflow, 1000, 'pending', JSON.stringify(identity), JSON.stringify({ ...projection, state: 'pending', completed_at: null }), null);
-    evidence.pending_call_ids.push(callId);
+    evidence.lifecycle_observations.push({ call_id: callId, state: 'pending', observed_at: 1000, source: 'd1-sql' }, { call_id: callId, state: 'final', observed_at: 2000, source: 'd1-sql' });
     db.prepare("UPDATE telemetry_ai_calls SET state='final',projection_json=?,cost_nano_usd=? WHERE call_id=? AND state='pending'").run(JSON.stringify(projection), projection.cost_nano_usd, callId);
     evidence.calls.push({ call_id: callId, operation, model, provider_status: 'completed', usage: rawUsage, file_search_calls: record.file_search_calls });
     if (operation === 'grounding') continue; // Server subcalls share the extraction ticket; no invented client grounding event.
@@ -69,7 +69,6 @@ for (const [name, mutate, expected] of [
 ]) test('verification rejects ' + name, () => { const f = fixture(); try { f.mutate((p, row) => mutate(p, row, f.db)); assert.throws(() => verify(f.db, f.plan.cohort, f.session, f.evidence), expected); } finally { f.db.close(); } });
 for (const [name, change, expected] of [
   ['no independent provider evidence', e => delete e.provider_basis, /BLOCKED_PROVIDER_EVIDENCE/],
-  ['no pending observation', e => e.pending_call_ids = [], /BLOCKED_PENDING_NOT_OBSERVED/],
   ['not accepted UI', e => e.ui_accepted = false, /FAIL_UI_OR_ROUTE_COUNT/],
   ['unexpected fourth request', e => e.browser_paths.push('/api/chat'), /FAIL_UI_OR_ROUTE_COUNT/],
   ['provider usage null differs from zero', e => e.calls[0].usage.input_tokens_details = { cached_tokens: 0 }, /FAIL_PROVIDER_RECONCILIATION/],
@@ -92,15 +91,18 @@ test('pending records prevent every cleanup delete', () => {
     assert.equal(f.db.prepare('SELECT count(*) n FROM telemetry_sessions').get().n, 1);
   } finally { f.db.close(); }
 });
+function exportFixture(db) {
+  // Like a SQLite dump, recreate triggers after loading data: stopped sessions legitimately own old events.
+  const definitions = db.prepare("SELECT type,sql FROM sqlite_schema WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' ORDER BY rowid").all();
+  const source = definitions.filter(r => r.type !== 'trigger').map(r => r.sql + ';').join('\n');
+  const triggers = definitions.filter(r => r.type === 'trigger').map(r => r.sql + ';').join('\n');
+  const quote = v => v === null ? 'NULL' : typeof v === 'number' ? String(v) : "'" + v.replaceAll("'", "''") + "'";
+  return source + '\n' + ['telemetry_sessions', 'telemetry_ai_calls', 'telemetry_events'].flatMap(table => db.prepare('SELECT * FROM ' + table).all().map(row => 'INSERT INTO ' + table + ' VALUES (' + Object.values(row).map(quote).join(',') + ');')).join('\n') + '\n' + triggers;
+}
 test('snapshot is exclusive, scoped, hashed and has the existing B3 target sidecar', () => {
   const f = fixture(), dir = mkdtempSync(join(tmpdir(), 'apu-t5-'));
   try {
-    const source = readFileSync(new URL('../telemetry/migrations/0001_pilot_v1.sql', import.meta.url), 'utf8');
-    const data = ['telemetry_sessions', 'telemetry_ai_calls', 'telemetry_events'].flatMap(table => f.db.prepare('SELECT * FROM ' + table).all().map(row => {
-      const quote = v => v === null ? 'NULL' : typeof v === 'number' ? String(v) : "'" + v.replaceAll("'", "''") + "'";
-      return 'INSERT INTO ' + table + ' VALUES (' + Object.values(row).map(quote).join(',') + ');';
-    })).join('\n');
-    const input = join(dir, 'snapshot.sql'), output = join(dir, 'telemetry-t5.sqlite'); writeFileSync(input, source + '\n' + data);
+    const input = join(dir, 'snapshot.sql'), output = join(dir, 'telemetry-t5.sqlite'); writeFileSync(input, exportFixture(f.db));
     assert.equal(snapshot(input, output, f.plan.cohort, f.session, process.cwd()).result, 'SNAPSHOT_PRESERVED_NOT_ACCEPTANCE_PASS');
     assert.equal(JSON.parse(readFileSync(output + '.target.json')).test_class, 'tester');
     assert.match(JSON.parse(readFileSync(output + '.sha256.json')).sqlite, /^[a-f0-9]{64}$/);
@@ -149,9 +151,112 @@ test('CLI refuses overwrites, invalid SQL phases and evidence inside the reposit
     assert.equal(run(['prepare', dir, process.cwd()]).status, 1);
     assert.equal(run(['prepare', process.cwd(), process.cwd()]).status, 1);
     assert.equal(run(['sql', plan.cohort, id(), 'anything']).status, 1);
+    const guard = run(['execute-reviewed-restore', 'MISSING_CLI', 'MISSING_CONFIG', 'MISSING_LOG', process.cwd(), '1', 'T5_PRESERVING_AND_10220_REVIEWED', 'NO_GUARD']);
+    assert.equal(guard.status, 1); assert.match(guard.stderr, /BLOCKED_RESTORE_GUARD/);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
 test('known subtotal beyond USD 1 fails the proposed soft budget rather than claiming a hard cap', () => {
   const f = fixture(0, 300000); try { assert.equal(verify(f.db, f.plan.cohort, f.session, f.evidence).result, 'FAIL_SOFT_BUDGET_EXCEEDED'); } finally { f.db.close(); }
+});
+
+test('missing SQL pending observations allow final reconciliation but never full hosted lifecycle PASS', () => {
+  const f = fixture(); try {
+    f.evidence.lifecycle_observations = [];
+    const result = verify(f.db, f.plan.cohort, f.session, f.evidence);
+    assert.equal(result.reconciliation, 'PASS'); assert.equal(result.lifecycle.status, 'NOT_VERIFIED'); assert.equal(result.result, 'PARTIAL_LIFECYCLE_NOT_VERIFIED');
+    f.evidence.lifecycle_observations = [{ call_id: f.evidence.calls[0].call_id, state: 'final', observed_at: 3000, source: 'd1-sql' }];
+    assert.equal(verify(f.db, f.plan.cohort, f.session, f.evidence).result, 'PARTIAL_LIFECYCLE_NOT_VERIFIED');
+    f.evidence.lifecycle_observations.push({ call_id: f.evidence.calls[0].call_id, state: 'pending', observed_at: 4000, source: 'd1-sql' });
+    assert.throws(() => verify(f.db, f.plan.cohort, f.session, f.evidence), /FAIL_LIFECYCLE_ORDER/);
+  } finally { f.db.close(); }
+});
+test('full CLI prepare -> distinct export path -> snapshot flow has no query/export collision', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'apu-t5-flow-')); let f;
+  const run = args => { const r = spawnSync(process.execPath, [fileURLToPath(new URL('../scripts/telemetry/t5-evidence.mjs', import.meta.url)), ...args], { encoding: 'utf8' }); if (r.error) throw r.error; return r; };
+  try {
+    assert.equal(run(['prepare', dir, process.cwd()]).status, 0);
+    f = fixture(0, 100, JSON.parse(readFileSync(join(dir, 't5-overlay-proposal.json'))));
+    const paths = JSON.parse(run(['paths', dir, process.cwd()]).stdout);
+    assert.equal(new Set(Object.values(paths)).size, Object.values(paths).length);
+    const query = readFileSync(paths.final, 'utf8'); assert.match(query, /^SELECT /);
+    // Local fixture export into the real handoff path; exclusive creation would reproduce the original bug.
+    writeFileSync(paths.exportFinal, exportFixture(f.db), { flag: 'wx' });
+    assert.equal(run(['snapshot', paths.exportFinal, paths.snapshotFinal, f.plan.cohort, f.session, process.cwd()]).status, 0);
+    assert.equal(readFileSync(paths.final, 'utf8'), query);
+    assert.equal(JSON.parse(readFileSync(paths.snapshotFinal + '.target.json')).cohorts[0], f.plan.cohort);
+    const e = join(dir, 'provider.json'); f.evidence.lifecycle_observations = []; writeFileSync(e, JSON.stringify(f.evidence));
+    const partial = run(['verify', paths.snapshotFinal, f.plan.cohort, f.session, e, process.cwd()]);
+    assert.equal(partial.status, 2); assert.equal(JSON.parse(partial.stdout).result, 'PARTIAL_LIFECYCLE_NOT_VERIFIED');
+    const plan = restorePlan(paths.restoreConfig, process.cwd());
+    assert.equal(plan.args[0], 'rollback'); assert.equal(plan.args[1], T5.baseline); assert.ok(!plan.args.includes('deploy'));
+    const c = JSON.parse(readFileSync(paths.restoreConfig)); c.vars = { APU_TELEMETRY_ENABLED: '1' }; writeFileSync(paths.restoreConfig, JSON.stringify(c));
+    assert.throws(() => restorePlan(paths.restoreConfig, process.cwd()), /BLOCKED_RESTORE_CONFIG/);
+  } finally { f?.db.close(); rmSync(dir, { recursive: true, force: true }); }
+});
+test('failure deadline is independent of pending completion; snapshots retain pending and cleanup remains blocked', () => {
+  const f = fixture(), dir = mkdtempSync(join(tmpdir(), 'apu-t5-pending-'));
+  try {
+    const opened = 1000, submitted = 2000;
+    assert.equal(windowDecision(opened, submitted, submitted + T5.drainMs - 1, 1).action, 'DRAIN_WITHIN_DEADLINE');
+    const close = windowDecision(opened, submitted, submitted + T5.drainMs, 1);
+    assert.equal(close.action, 'SNAPSHOT_STOP_RESTORE_NOW'); assert.equal(close.cleanup_allowed, false); assert.equal(close.hosted_closed, 'NOT_VERIFIED');
+    assert.ok(close.restore_by <= close.absolute_close_by);
+    assert.equal(windowDecision(opened, null, opened + T5.windowMs - T5.evidenceMs - T5.restoreMs, 0).action, 'SNAPSHOT_STOP_RESTORE_NOW');
+    assert.throws(() => windowDecision(opened, submitted, opened - 1, 1), /BLOCKED_WINDOW_CLOCK/);
+    for (const row of f.db.prepare('SELECT call_id,projection_json FROM telemetry_ai_calls').all()) {
+      const p = { ...JSON.parse(row.projection_json), state: 'pending', event_name: 'ai_call_started', completed_at: null, cost_nano_usd: null, usage_coverage: 'incomplete' };
+      f.db.prepare("UPDATE telemetry_ai_calls SET state='pending',projection_json=?,cost_nano_usd=NULL WHERE call_id=?").run(JSON.stringify(p), row.call_id);
+    }
+    f.db.prepare('UPDATE telemetry_sessions SET stopped_at=3000').run();
+    const paths = artifactPaths(dir, process.cwd()); writeFileSync(paths.exportFailure, exportFixture(f.db), { flag: 'wx' });
+    snapshot(paths.exportFailure, paths.snapshotFailure, f.plan.cohort, f.session, process.cwd());
+    const copy = new DatabaseSync(paths.snapshotFailure, { readOnly: true });
+    try { assert.equal(copy.prepare("SELECT count(*) n FROM telemetry_ai_calls WHERE state='pending' AND json_extract(projection_json,'$.state')='pending' AND cost_nano_usd IS NULL").get().n, 3); } finally { copy.close(); }
+    f.db.exec(sql(f.plan.cohort, f.session).cleanup);
+    assert.equal(f.db.prepare('SELECT count(*) n FROM telemetry_sessions').get().n, 1);
+  } finally { f.db.close(); rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('installed Wrangler proves latest-only secret patch, and exact-version deployment restore without code reconstruction', async () => {
+  const { runInNewContext } = await import('node:vm'), { createHash } = await import('node:crypto');
+  const cli = readFileSync(new URL('../node_modules/wrangler/wrangler-dist/cli.js', import.meta.url), 'utf8');
+  assert.equal(JSON.parse(readFileSync(new URL('../node_modules/wrangler/package.json', import.meta.url))).version, '4.150.0');
+  assert.equal(createHash('sha256').update(cli).digest('hex'), '71da1f9bcf69a9f56c4ff4f68e71315365d03db8ea11207577b47a8e1a0a1064');
+  const patch = cli.slice(cli.indexOf('async function patchLatestWorkerVersionWithSecrets('), cli.indexOf('var versionsSecretNamespace,'));
+  const writes = [], fakeFetch = async (config, path, init) => { writes.push({ path, body: JSON.parse(init.body) }); return { id: 'synthetic-version' }; };
+  const fn = runInNewContext('(' + patch + ')', { fetchResult2: fakeFetch, getMetricsUsageHeaders: async () => ({}) });
+  await fn({ config: {}, accountId: T5.account, scriptName: T5.worker, secrets: { SYNTHETIC: 'fixture-only' } });
+  assert.match(writes[0].path, /\/versions\/latest$/);
+  assert.deepEqual(writes[0].body.env, { SYNTHETIC: { type: 'secret_text', text: 'fixture-only' } });
+  const bulk = cli.slice(cli.indexOf('// src/versions/secrets/bulk.ts'), cli.indexOf('// src/versions/secrets/delete.ts'));
+  assert.ok(!bulk.includes('"version-id"') && !bulk.includes('"from-version"'));
+  const start = cli.indexOf('async function createDeployment('), end = cli.indexOf('async function patchNonVersionedScriptSettings(', start);
+  const deploy = runInNewContext('(' + cli.slice(start, end).trim() + ')', { fetchResult: fakeFetch });
+  await deploy({}, T5.account, T5.worker, new Map([[T5.baseline, 100]]), 'T5 bounded window restore');
+  assert.deepEqual(writes[1].body.versions, [{ version_id: T5.baseline, percentage: 100 }]);
+  assert.deepEqual(Object.keys(writes[1].body).sort(), ['annotations', 'strategy', 'versions']);
+  await deploy({}, T5.account, T5.worker, new Map([[T5.baseline, 100]]), 'T5 bounded window restore', true);
+  assert.match(writes[2].path, /deployments\?force=true$/);
+});
+
+test('bounded restore is explicit, exact-version-only, deadline capped, exclusive and never claims hosted closure', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'apu-t5-restore-')), cfg = join(dir, 'restore.json'), log = join(dir, 't5-restore-result-test.jsonl');
+  const cli = realpathSync(fileURLToPath(new URL('../node_modules/wrangler/wrangler-dist/cli.js', import.meta.url)));
+  writeFileSync(cfg, JSON.stringify({ name: T5.worker, account_id: T5.account, send_metrics: false }));
+  const approved = 'T5_PRESERVING_AND_10220_REVIEWED'; let attempts = 0;
+  const runner = (file, args, options) => { attempts++; assert.equal(file, process.execPath); assert.deepEqual(args.slice(1), restorePlan(cfg, process.cwd()).args); assert.equal(options.timeout, 10000); assert.equal(options.killSignal, 'SIGKILL'); return { error: { code: 'ETIMEDOUT' }, status: null, stdout: 'PRIVATE_DO_NOT_LOG', stderr: 'PRIVATE_DO_NOT_LOG' }; };
+  try {
+    assert.throws(() => boundedRestore(cli, cfg, log, process.cwd(), 11000, 'not authorized', runner, () => 1000), /BLOCKED_RESTORE_AUTHORIZATION/);
+    assert.throws(() => boundedRestore(cli, cfg, log, process.cwd(), -1, approved, runner, () => 1000), /BLOCKED_WINDOW_CLOCK/);
+    assert.equal(attempts, 0);
+    const r = boundedRestore(cli, cfg, log, process.cwd(), 11000, approved, runner, () => 1000);
+    assert.equal(attempts, 1); assert.equal(r.result, 'RESTORE_UNCONFIRMED'); assert.equal(r.hosted_closed, 'NOT_VERIFIED'); assert.equal(r.cleanup_allowed, false);
+    assert.doesNotMatch(readFileSync(log, 'utf8'), /PRIVATE_DO_NOT_LOG/);
+    assert.throws(() => boundedRestore(cli, cfg, log, process.cwd(), 11000, approved, runner, () => 1000), /EEXIST/); assert.equal(attempts, 1);
+    const ok = boundedRestore(cli, cfg, join(dir, 't5-restore-result-ok.jsonl'), process.cwd(), 1000000, approved, (_file, _args, options) => { assert.equal(options.timeout, 60000); return { status: 0 }; }, () => 1000);
+    assert.equal(ok.result, 'RESTORE_COMMAND_COMPLETED_READBACK_REQUIRED'); assert.equal(ok.hosted_closed, 'NOT_VERIFIED');
+    const overdue = boundedRestore(cli, cfg, join(dir, 't5-restore-result-overdue.jsonl'), process.cwd(), 999, approved, (_file, _args, options) => { assert.equal(options.timeout, 60000); return { status: 0 }; }, () => 1000);
+    assert.equal(overdue.deadline_missed, true); assert.equal(overdue.result, 'RESTORE_COMMAND_COMPLETED_READBACK_REQUIRED'); assert.equal(overdue.hosted_closed, 'NOT_VERIFIED');
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });
