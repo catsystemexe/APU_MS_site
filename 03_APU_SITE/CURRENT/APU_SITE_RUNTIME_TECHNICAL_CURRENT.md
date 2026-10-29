@@ -4,6 +4,10 @@ Status: CURRENT SOURCE/RUNTIME CONTRACT
 
 Purpose: describe the current repository/runtime contract. Deployment state is recorded only when independently verified; this document must not infer production state from repository contents alone.
 
+## PILOT-TECH-T4 — first receipt acceptance (2026-10-29)
+
+**FIRST_POST_GET_UI_RELOAD — PASS**, from operator observations/screenshots supplied in ChatGPT; Codex did not run the hosted test. On `apu-ms-site-dev`, version `732bf950-30cf-444a-90fc-8927d9c8b16c` at 100% traffic, preflight reported telemetry/metadata 0/0 and TTL 86400. Initially `receipt:null`/locked UI; one POST 200 → matching GET 200 → unlock; reload GET 200 preserved the entire draft-2 receipt and unlocked UI. **Exactly one POST.** [Exact preflight, receipt timestamps/versions and provenance](../TELEMETRY/TELEMETRY_ROADMAP.md#pilot-tech-t4--first_post_get_ui_reload--2026-10-29). The original incident's historical cause remains NOT VERIFIED; provider E2E/PUBLIC readiness and B-07 remain OPEN. Documentation only; no application change, hosted operation, merge or deployment by Codex.
+
 ## PILOT-TECH-T2 — verified DEV baseline rollback (2026-10-26)
 
 The authorized rollback was executed with explicit Worker Version ID `732bf950-30cf-444a-90fc-8927d9c8b16c` using a target-only Wrangler configuration. `wrangler versions view` confirmed the protected version identity, original plain `APU_DEVELOPER_EMAILS` value, `APU_LOCAL_DEV_AUTH=0`, telemetry/metadata **0/0**, receipt TTL **86400**, Access configuration, `DEV_LOG_STATE`, `PILOT_RULES_ACCEPTANCE`, `TELEMETRY_DB` and `ASSETS`. No vars, secrets or PUBLIC scope were supplied to the rollback command.
