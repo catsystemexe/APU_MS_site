@@ -7,19 +7,25 @@ import {
 import { upsertUsageRecord, type ModelUsageRecord, type TelemetryPhase, type UsageOperation } from "./usage-ledger.ts";
 import { authorizedModelPayload, type ServerIdentity } from "./server-capabilities.ts";
 
+import type { T5Trace } from "./telemetry/t5-trace.ts";
+import type { ModelCallSink } from "./model-call-instrumentation.ts";
+
 export type RequestUsageCollector = {
+  trace?: T5Trace;
   sink: (record: ModelUsageRecord) => void | Promise<void>;
   records: () => ModelUsageRecord[];
 };
 
-export function createRequestUsageCollector(persistence?: (record: ModelUsageRecord) => void | Promise<void>): RequestUsageCollector {
+export function createRequestUsageCollector(persistence?: ModelCallSink | { sink: ModelCallSink; trace?: T5Trace }): RequestUsageCollector {
   let current: ModelUsageRecord[] = [];
+  const persist = typeof persistence === "function" ? persistence : persistence?.sink;
   return {
+    trace: typeof persistence === "function" ? undefined : persistence?.trace,
     sink(record) {
       current = upsertUsageRecord(current, record);
-      if (persistence) {
+      if (persist) {
         // Optional B1 hook; the request-scoped adapter owns its 100ms bound/lifetime.
-        try { return Promise.resolve(persistence(record)).catch(() => {}); } catch { /* fail-open */ }
+        try { return Promise.resolve(persist(record)).catch(() => {}); } catch { /* fail-open */ }
       }
     },
     records: () => current,
@@ -104,18 +110,17 @@ export async function callOpenAIResponses<TApplicationResult = void>(input: Open
     requested_service_tier: input.requested_service_tier ?? null,
     sink: input.collector.sink,
     validate_application_response: input.validate_application_response,
-    invoke: async ({ headers }) => {
-      const upstream = await fetcher("https://api.openai.com/v1/responses", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${input.api_key}`,
-          "Content-Type": "application/json",
-          ...headers,
-        },
-        body: JSON.stringify(input.payload),
-      });
-      const body = await upstream.json().catch(() => ({}));
-      return { body: responseBody(body), headers: upstream.headers, status_code: upstream.status };
+    invoke: async ({ headers, call_id }) => {
+      // Observe the original transport response before any ledger normalization/projection.
+      const init = { method: "POST", headers: { Authorization: `Bearer ${input.api_key}`, "Content-Type": "application/json", ...headers }, body: JSON.stringify(input.payload) };
+      const trace = input.collector.trace?.call(call_id, input.operation, input.attempt_index ?? 0);
+      trace?.invoke();
+      try {
+        const upstream = await fetcher("https://api.openai.com/v1/responses", init);
+        const body = await upstream.json().catch(() => ({}));
+        trace?.response(body, upstream.status);
+        return { body: responseBody(body), headers: upstream.headers, status_code: upstream.status };
+      } catch (error) { trace?.error(error instanceof Error && error.name === "AbortError"); throw error; }
     },
   });
 }

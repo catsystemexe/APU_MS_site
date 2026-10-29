@@ -1,12 +1,13 @@
 # APU T5 — jeden Rozbor, provider a telemetry ledger
 
-**Příprava, nikoli hosted PASS ani autorizace.** VS agent: Luna Low, bez delegování, dalších promptů a náhradních postupů. Aktuálně **BLOCKED před aktivací a provider voláním**: instalovaný CLI neumí potřebný preserving plain-text patch z přesné verze a současná aplikace neposkytuje nezávislý provider trace (§4). Tento dokument nesmí být vykonán celý jako shell skript. Části označené „po autorizaci“ jsou návrh samostatného operátorského zadání; nyní pouze offline příprava.
+**T5-R2: source příprava, nikoli hosted PASS ani autorizace.** VS agent Luna Low: bez delegování, dalších promptů, úprav skriptů a náhradních postupů. Nyní se nesmí provést žádný hosted příkaz. Níže uvedené příkazy jsou pevný návrh následného samostatně autorizovaného Windows zadání; dokument se nespouští celý jako skript. Při chybě STOP; po aktivaci vždy přejít do bounded restore větve.
 
 ## 1. Neměnné body a zdroj kontroly
 
 | Bod | Přesná hodnota |
 | --- | --- |
-| Aplikační source | `d706a55c7ff80b1439079badfda88c9baa5807c4` |
+| Historický aplikační source | `d706a55c7ff80b1439079badfda88c9baa5807c4`; nový T5-R2 kandidát jej mění, přesný SHA je v odvozeném Draft PR |
+| Přesný základ T5-R2 | PR #90 `d796994829565208f503d3493b07b1d1a3b726e1`, `docs/t5-provider-telemetry-handoff` |
 | Evidence / základ tohoto PR | PR #88, `019f3caf1150e5c00f5577464c67e021b61fea42`, `docs/pilot-tech-t2-hosted-evidence` |
 | T4 postup | PR #89, `1cfef6a8eed8b421c6584b97b9e56761e92a52db` |
 | Worker / jediný origin | `apu-ms-site-dev` / `https://apu-ms-site-dev.catsystem-exe.workers.dev` |
@@ -17,7 +18,7 @@
 
 T3 a T4 jsou převzaté operátorské **PASS**. Neopakovat refusal test, první receipt POST/GET/reload ani jejich historickou diagnostiku. Historická příčina incidentu zůstává NOT VERIFIED. PUBLIC readiness je otevřená.
 
-Kontrola source proběhla nad uvedeným aplikačním commitem. Relevantní soubory: [klient](../../app/apu-client.tsx), [textová navigace](../../app/dialog-action.ts), [desktop gating](../../app/desktop-workspace.ts), [router cache](../../app/f2-need-routing.ts), [extract](../../app/api/extract/route.ts), [need-route](../../app/api/need-route/route.ts), [analysis](../../app/api/analysis/route.ts), [provider wrapper](../../app/openai-responses-instrumentation.ts), [lifecycle](../../app/model-call-instrumentation.ts), [projekce/sink](../../app/telemetry/model-usage-adapter.ts), [ceník](../../app/usage-ledger.ts). Helper používá stávající tři tabulky, nikoli nové schéma.
+Původní kontrola UI cesty proběhla nad d706; T5-R2 nemění klientskou cestu, payloady, počty volání ani retry pravidla. Relevantní soubory: [klient](../../../app/apu-client.tsx), [textová navigace](../../../app/dialog-action.ts), [desktop gating](../../../app/desktop-workspace.ts), [router cache](../../../app/f2-need-routing.ts), [extract](../../../app/api/extract/route.ts), [need-route](../../../app/api/need-route/route.ts), [analysis](../../../app/api/analysis/route.ts), [provider wrapper](../../../app/openai-responses-instrumentation.ts), [lifecycle](../../../app/model-call-instrumentation.ts), [projekce/sink](../../../app/telemetry/model-usage-adapter.ts), [ceník](../../../app/usage-ledger.ts). Helper používá stávající tři tabulky, nikoli nové schéma.
 
 ## 2. Nejmenší doložený běžný UI průchod
 
@@ -52,239 +53,327 @@ Navržen jeden účet, jeden panel, jeden cohort, jedna návštěva/session, jed
 - **USD 1.00 celkem** jako navržený měkký autorizační rozpočet/STOP práh, ne garantovaný hard spending cap. `analysis` ani `need-route` nemají explicitní `max_output_tokens`; analysis nemá `max_tool_calls`. `file_search` může proběhnout vícekrát uvnitř jednoho Responses requestu. Konečný absolutní finanční strop source nezaručuje. Pokud schvalovatel vyžaduje technicky vynutitelný USD cap před utracením, **BLOCKED_BUDGET_GUARANTEE**; samostatný Repair návrh output/tool/request limitů, žádná oprava v T5.
 - Reprodukovatelný orientační scénář: dohromady Terra 40 000 input + 10 000 output = USD 0.20; tři Luna calls dohromady 30 000 input + 7200 output = USD 0.01464; dvě file_search calls = USD 0.005; součet **USD 0.21964**. To jsou předpoklady, nikoli predikce tokenů, počet garantovaných tools ani vyúčtování.
 - Použitý aplikační snapshot `openai-standard-2026-08-25`: short input ≤272000, Terra 2/0.2/2.5/12, Luna 0.2/0.02/0.25/1.2 USD/milion input/cached/cache-write/output; long Terra 4/0.4/5/18 a Luna 0.4/0.04/0.5/1.8. File search USD 2.5/1000 calls. Reasoning tokens jsou podmnožina output, nepřičítat znovu; cached/cache-write jsou podmnožiny input. Existující vector-store storage náklady nejsou nový testovací resource ani zahrnuté vyúčtování tohoto průchodu.
-- Chybějící usage/cost je **null / incomplete**, nikoli nula. Úspěšný API status nestačí. Při známém nákladu >USD 1 FAIL_SOFT_BUDGET_EXCEEDED; měření uzavřít až po vyřešení pending zápisů. Nikdy automaticky neopakovat pokus kvůli neúspěšné evidenci.
+- Chybějící usage/cost je **null / incomplete**, nikoli nula. Úspěšný API status nestačí. Při známém nákladu >USD 1 FAIL_SOFT_BUDGET_EXCEEDED; normálně uzavřít po finalizaci, při failure nejpozději v bounded restore větvi i s uchovanými pending. Nikdy automaticky neopakovat pokus kvůli neúspěšné evidenci.
 
-## 4. Gates — před provider testem musí být všechny uzavřené
+## 4. Nový technický kontrakt a gates
 
-1. **Read-only preflight + exact rollback availability:** z [T4 přesného commitu](https://github.com/catsystemexe/APU_MS_site/blob/1cfef6a8eed8b421c6584b97b9e56761e92a52db/03_APU_SITE/TELEMETRY/T4_RECEIPT_OPERATOR_HANDOFF.md#2-powershell--pouze-read-only-dev-preflight) vykonat **jen celý PowerShell blok §2**, nikoli T4 browser scénář. Pokaždé vytvoří a odstraní vlastní target-only config; nepotřebuje starý temp config, čistý checkout ani baseline build. Ověří Wrangler 4.150.0, přesný účet/Worker/verzi, 100 %, dostupnost verze, OFF/OFF, TTL 86400, local auth 0. Žádný login/install fallback. `/api/session` v běžném browseru musí mít 200 a `isDeveloper:true`; zaznamenat jen status/boolean. Z chráněných version metadata ověřit identitu D1/bindings/Access/ASSETS a **pouze jména** provider secrets `OPENAI_API_KEY`, `APU_VECTOR_STORE_ID`; hodnoty nikdy nečíst. Změna baseline = STOP a nové review, ne automatický rollback cizího deploymentu.
-2. **BLOCKED_ACTIVATION_METHOD:** konkrétně chybí v instalovaném Wrangleru 4.150.0 operace „copy/patch přesné baseline verze, změnit plain-text vars a dvě telemetry secrets, ostatní code/assets/bindings/secrets zdědit beze změny“. Není to tvrzení, že takovou operaci neumí celá Cloudflare platforma. Důkaz a oddělený restore jsou níže. Žádný upload z lokálního checkoutu, `keep_vars:false`, plain vars jako secrets nebo ruční rekonstrukce konfigurace.
-3. **BLOCKED_PROVIDER_TRACE_REPAIR:** žádný doložený současný povrch nevrací potřebné jednotlivé provider calls/usage nezávisle na telemetry ledgeru. Níže je přesný rozbor a minimální samostatný návrh Repairu, **nyní neimplementovaný**. Dashboardová pole se nepředpokládají.
-4. **Autorizace a closure gate:** před aktivací schválit §3, privacy/notice, přesný preserving postup a odstranění dočasných keys, absenci hard financial cap, snapshot a scoped cleanup. Restore musí být připravený **před** aktivací, s výhradním operátorským oknem a konkrétním očekávaným T5 version ID; žádný souběžný writer. Chybí-li přístup k přesné baseline nebo ověřitelná bounded obnova, **BLOCKED_WINDOW_CLOSURE — neaktivovat**. Toto zadání nedává hosted autorizaci.
+T5-R2 přidává skutečný raw response-boundary trace do společného Responses wrapperu a MAIN SSE pumpy. Je nezávislý na `ModelUsageRecord`, cenové projekci i D1. Výchozí gate je vypnutý; `APU_T5_TRACE_ENABLED=1` funguje pouze na přesném DEV originu, policy env=dev, synthetic=0, metadata=0, matching cohort, tester identitě a platném explicitním opt-in kontextu s UUID workflow/operation. Access/rules odmítnutí jsou před collector. Žádné nové requesty, retries, response chaining ani změny `store:false`.
 
-### 4.1 Offline důkaz schopností a omezení Wrangleru
+Trace obsahuje jen verzi, cohort, call UUID (stejný X-Client-Request-Id), operation/attempt, čas, stage invoke/response/transport_error, HTTP/provider status, model/tier, číselnou usage s rozdílem absent/null/0 a počet file_search z původního output typu. Žádný prompt, odpověď, body, headers, e-mail, JWT, credentials nebo provider raw IDs. Neznámá/nečíselná usage = invalid, nikoli úspěšná nula. Chybějící output = neznámý tool count. Logger selhává fail-open. Zvláštní `write_ack` obsahuje pouze technickou obálku cohort/version + call_id/state/time a vzniká až po skutečně úspěšném D1 upsertu s changes=1; není provider evidence.
 
-Zkoumán pouze instalovaný `node_modules/wrangler/wrangler-dist/cli.js`, verze **4.150.0**, SHA256 **`71da1f9bcf69a9f56c4ff4f68e71315365d03db8ea11207577b47a8e1a0a1064`**. Regrese vykonává vyjmuté skutečné funkce s in-memory `fetchResult` double, který pouze zaznamená argumenty; žádná CF autentizace nebo síť. Při jiné verzi/hash STOP, neopakovat výzkum na hosted účtu.
+Tail je best-effort diagnostika transportní hranice aplikace, **nikoli nezávislé provider vyúčtování/dashboard audit**. Nevyžaduje přístup k provider účtu. Raw Tail je pouze omezeně v paměti inline sanitizeru: max frame 1 MiB, celkem 8 MiB, trace zpráva 8192 znaků, nejvýše 10 min. Disk/terminál dostanou jen přísný trace allowlist a status. Stderr (včetně reconnect) se nikdy nevypisuje/ukládá a zneplatní capture. Ztráta streamu, neúplný/duplicitní invoke/response pár nebo nesoulad s DB = NOT VERIFIED/FAIL, nikdy odhad. I zdravý Tail není garantovaný audit všech operací na provider účtu.
 
-| Operace / source | Doložené chování | Důsledek |
+### 4.1 Úplná konfigurace a zachování secrets
+
+Explicitní T5 varianta `ops/dev/prepare-t5-worker.mjs` nejprve volá původní striktní `buildDevConfig()`; `prepare-worker.mjs` se nemění. Baseline metadata získává `ops/dev/t5-baseline.mjs` pouze pevnými GET endpoints přes existující **Cloudflare** auth instalovaného Wrangleru. Auth je jen v paměti, stdout auth commandu se nikam nepropouští; provider secrets se nikdy nečtou. Není to beta version-copy adaptér: jediný read moderního version metadata endpointu slouží k ASSETS config read-backu. Neznámý tvar metadata, chybějící settings nebo nepodporované script tags/migration_tag = STOP, bez odhadování. Service/settings/routing GET cesty odpovídají `fetchWorkerConfig()`/`downloadWorkerConfig()` skutečného instalovaného CLI.
+
+Config explicitně obsahuje původní Access plain vars, local auth 0, receipt TTL 86400, obě dedikované KV, EU D1, ASSETS binding a původní asset chování, compatibility a relevantní settings (observability/logpush/placement/tail consumers/streaming tail consumers/limits/cache, pokud je baseline vrací). Obsah kódu/ASSETS je nový reprodukovatelný build kandidáta; netvrdíme shodu s d706. Zakázané/neočekávané bindings, cizí worker/účet/D1, resource reuse nebo settings mimo podporovaný kontrakt = STOP. Režimy:
+
+| Režim | Telemetry / metadata / trace | Role a secrets |
 | --- | --- | --- |
-| `patchLatestWorkerVersionWithSecrets`, ř. 360662–360703 | PATCH `/workers/workers/<worker>/versions/latest`; každý nenulový klíč převádí na `type:secret_text`. | Nevybírá přesnou baseline, neumí plain vars. Bulk args file/name/message/tag nemají base-version selector. |
-| `versions upload` / strict DEV preparer | Upload lokálního artefaktu/configu; preparer nastavuje developer identitu. | Není preserving změna hosted verze a není povolenou náhradou. `--keep-vars` není důkaz zachování ostatních bindings. |
-| `createDeployment`, ř. 168171–168190; `handleRollback`, ř. 360561–360648 | Explicitní `version-id` → POST deployments, `{strategy:percentage,versions:[{version_id,percentage:100}]}`. Bez modulů/binding rekonstrukce. | Přesná obnova existující baseline je doložitelná; rollback **nepřepíná „latest uploaded“**. „Rollback a pak secret bulk“ tedy problém neřeší. |
-| Rollback error `10220` | CLI umí potvrdit změněné secrets a znovu POSTnout s `force=true`. `--yes` přijímá i toto potvrzení. | Nikdy nepoužít jako obecný force workaround. Budoucí review musí prokázat pouze dvě schválené T5 key změny, žádnou změnu provider secrets; při cizí změně STOP. |
+| staged | 0 / 0 / 0 | původní jediný developer; pouze provider secrets required/inherit |
+| enabled | 1 / 0 / 1 | jediný enrolled účet jako tester; dvě nové telemetry keys, provider secrets inherit |
+| rollback původní 732bf950… | původní 0 / 0; starý source bez trace | původní developer a bindings; receipt data/TTL beze změny |
 
-[Oficiální CLI dokumentace](https://developers.cloudflare.com/workers/wrangler/commands/workers/) rozlišuje upload, secret změny a rollback. [Settings PATCH](https://developers.cloudflare.com/api/resources/workers/subresources/scripts/subresources/script_and_version_settings/methods/edit/) pracuje se script settings; nedokládá požadovaný CLI baseline selector. [Beta Versions Create](https://developers.cloudflare.com/api/resources/workers/subresources/beta/subresources/workers/subresources/versions/methods/create/) dokumentuje explicitní inheritance jednotlivých bindings, ale není zde implementován/reviewován adaptér pro úplné převzetí code/assets/configu. **Závěr: konkrétní chybějící CLI schopnost doložena; aktivace BLOCKED.** Nejmenší další operátorská dávka: reviewovaný version-copy/patch adaptér s immutable baseline, automatickým zachováním a diff allowlistem, nikoli ruční přepis konfigurace. Nyní žádný takový adaptér nevytváříme.
+Povolený overlay: jen vyjmenované telemetry policy/cohort/enrollment/notice vars, developer role a dvě T5 diagnostic vars, dvě nové telemetry keys. Sanitizovaný review uvádí jména změněných vars a hashe zachovaných hodnot/resource identities/settings; ne UUID, audience, e-mail, enrollment ani klíče. Private configs/evidence nesmějí do Git ani veřejného logu.
 
-### 4.2 Provider evidence — skutečné povrchy a samostatný Repair návrh
+**Důkaz instalovaného Wrangleru 4.150.0** (`cli.js` SHA256 `71da1f9bcf69a9f56c4ff4f68e71315365d03db8ea11207577b47a8e1a0a1064`): standardní deploy přijímá `--secrets-file`; `addRequiredSecretsInheritBindings` převádí neposkytnuté required secrets na `{type:inherit}`; deploy nastavuje `keepSecrets:true`; skutečný upload form zahrnuje keep_bindings secret_text/secret_key a explicitní provider inherit bindings. Provider hodnoty se vůbec nedodávají, dvě telemetry hodnoty jsou jen v private secrets-file. In-memory test skutečných vyjmutých funkcí to ověřuje; nejde o emulaci tvrzeného CLI chování. Neužívá se secret bulk/put, versions/latest patch, keep_vars:false ani ruční rekonstrukce baseline. Plain vars zůstávají plain vars. `keep_vars:true` je doplněno úplným explicitním allowlistem včetně resetu známých chybějících T5 flags. Byte equality provider secret plaintextu záměrně nelze ověřit; zachování je doloženo inherit kontraktem a metadata bindings. Aktuální i poslední upload musí mít před začátkem pouze původní dva provider secrets; jinak STOP.
 
-Veřejná dokumentace, nikoli přístup do provider účtu:
+### 4.2 Co ještě vyžaduje samostatnou autorizaci
 
-| Povrch | Skutečně doložená data | Proč nestačí nyní |
-| --- | --- | --- |
-| [Responses HTTP response](https://developers.openai.com/api/reference/resources/responses/methods/create) | `model`, `status`, `service_tier`, nullable `usage` s input/output/total a cached/cache-write/reasoning details; `output` obsahuje i file_search_call items. | Existují na serverové transportní hranici; testerovi se debug ledger neposílá a samostatný sanitizovaný trace nevzniká. |
-| [Usage API completions](https://developers.openai.com/api/reference/resources/admin/subresources/organization/subresources/usage/methods/completions) | Časové buckety, `num_model_requests`, input/output/cached/cache-write agregace, volitelné model/project/key/tier grouping. | Ne per-call call_id/status/tool events ani request→session vazba. Admin-key přístup není doložen a nové credentials nejsou povolené. |
-| [Dashboard logs / GET Responses](https://developers.openai.com/api/docs/guides/conversation-state) | Dokumentovaná persistence uložených Responses. | `store:false` ji vypíná. Neukládat responses ani neměnit store flag kvůli T5. Žádný slib dostupných dashboardových polí. |
-| [X-Client-Request-Id](https://developers.openai.com/api/reference/overview#debugging-requests) | Provider interně loguje dodaný identifikátor; podpora umí dohledat přijetí a čas. | Není dokumentovaný samoobslužný per-call usage export. Žádný support onboarding ani provider ticket v této dávce. |
-| Browser Network / developer model_usage_records | API paths/status; developer ledger pochází ze stejného normalizátoru jako D1 projekce. | Tři browser requesty nejsou počet fyzických provider calls. Ledger sám není nezávislý důkaz. |
+Schválit nový přesný source SHA a config review; standardní nový DEV build/deploy nejprve OFF staged a potom dočasný tester overlay, dvě nové telemetry keys, explicitní notice/privacy a UI opt-in, bounded Tail subscription, D1 SELECT/export a případně samostatně scoped cleanup, jeden UI send/3–5 Responses requests/USD1 soft budget, stop a přesný rollback včetně Wrangler 10220 secret-change force retry. Žádné provider credentials work, nové resources, receipt seed/delete, Access policy, PUBLIC nebo onboarding. Pokud tyto podmínky nejsou výslovně schváleny, **BLOCKED před hosted příkazy**.
 
-**Samostatný návrh `T5-PROVIDER-TRACE-REPAIR` (neimplementovat zde):**
+Native Windows/Node22, skutečná dostupnost baseline/version/assets metadata API pro tento účet, native deploy/rollback a capture jsou **NOT VERIFIED**. Při neodpovídající metadata shape žádný deployment ani improvizovaný fallback; samostatný minimální Repair. Výpadek Cloudflare control plane může znemožnit potvrzení obnovy; časový plán ani kill lokálního procesu nejsou hard expiry nebo záruka hosted closure. Pokud je požadována tato garance, neaktivovat.
 
-1. V `app/openai-responses-instrumentation.ts` u jediného skutečného `fetch` emitovat oddělený allowlisted `response-boundary-trace-v1`: `stage=invoke|response|transport_error`, call UUID z odchozího `X-Client-Request-Id`, UTC čas, operation/attempt, HTTP status, reported model/status/tier, pouze původní číselná usage pole (přítomnost/null/0 zachovat), počet `output[].type=file_search_call`. Bez reuse kanonického ModelUsageRecord/pricing/projekce; body odpovědi se nikdy neloguje. Počet invoke je počet transportních pokusů; provider HTTP response dokládá přijetí. Transport timeout neprokazuje nepřijetí ani nulovou útratu.
-2. Pouze explicitně schválené dočasné DEV/tester/cohort/opt-in okno s novým default-OFF diagnostic gate. Žádné nové provider call/retry, store změna, frontend debug exposure ani další persistence. Selhání evidence fail-open pro business, ale T5 evidence NOT VERIFIED.
-3. Dostupný navržený transport je existující **Wrangler tail**, nikoli hypotetický dashboard. Před testem spustit omezený capture; sampler/stream není garantovaný bezeztrátový audit. Povinný inline sanitizer propustí **jen** prefixed trace zprávu se striktním numeric/enum/UUID allowlistem. Veškeré Tail request/event metadata, headers, cookies, author/email, provider IDs, prompt/answer a credentials zahodí ještě před uložením/výpisem; nikdy full raw Tail JSON/HAR. Sanitizer a bounded capture budou součástí samostatného Repair review, zde chybí. Chybějící invoke/response/pár nebo přerušený stream = PARTIAL, žádný odhad.
-4. Join pouze `trace.call_id = telemetry_ai_calls.call_id`; 3–5 úplných invoke/response párů, každý jednou, stejná usage/model/tool count v raw trace a projekci. Session/workflow/operation ověřit odděleně z D1; provider sám tyto aplikační IDs nevrací. Evidence je **nezávislá na ledgerové projekci**, nikoli nezávislý účetní audit či invoice poskytovatele. Není-li tato úroveň nezávislosti přijatelná, gate zůstává BLOCKED pro samostatné rozhodnutí.
-5. Pro deterministický hosted pending→final důkaz lze ve stejném odděleném Repairu přidat dva minimální **write-ack** trace body po skutečně úspěšném pending/final D1 upsertu v `app/telemetry/d1-store.ts`, pouze call_id/state/time. Ne před zápisem a ne z callbacku bez výsledku `.run()`. Ztracený ack není storage FAIL ani pozorovaný lifecycle. Nezávislost provider trace to nenahrazuje. Současný helper přijímá jen skutečná SQL pozorování; případný ack input contract bude reviewován s Repair.
+## 5. Pevná Windows příprava a read-only preflight — budoucí autorizovaná fáze
 
-Toto je minimální návrh nové diagnostiky, ne schválení implementace. Před přijetím: syntetické tests transport vs ledger (včetně záměrně chybné projekce), redaction všech vnořených JSON, disabled/no-enrollment bez logů, error/nulls/cancellation, ztracený stream, žádný další provider call, removal a rollback gate. **Současný source T5 není pro provider E2E připravený.**
+Použít schválený T5-R2 source worktree a jeho existující dependencies. **Neresetovat runtime checkout**, nepožadovat jeho čistotu ani starý dočasný config. Build worktree musí mít přesný reviewovaný SHA a žádné změněné/untracked source; ignorované build výstupy a vlastní tsbuildinfo nevadí. Git Bash a GNU timeout vyžaduje stávající canonical build; chybí-li, STOP před aktivací, žádné instalování náhradního toolchainu agentem. Podporovaný projektový Node >=22.13.0, pro operátora Node22.23.2; aktuální lokální verifikace Node24.19.0, native22 NOT VERIFIED.
 
-## 5. Offline příprava — žádný deployment config
-
-Operátor načte tento runbook a helper **z přesného reviewovaného T5 commitu v completion reportu/Draft PR**, nikoli pohyblivého branche. Lokální HEAD a čistota runtime checkoutu nejsou podmínkou. Režimy prepare/paths/sql/snapshot/verify/window/restore-plan pracují pouze offline, bez subprocessu nebo credentials. Jediný nový režim `execute-reviewed-restore` může po samostatné autorizaci spustit pinned Wrangler rollback; nyní se nespouští. Nemá implicitní aktivaci ani provider executor. `restore-plan` pouze vrací argv/timeout. Použít existující Node 22.23.2 nebo podporované novější Node; zde ověřeno Node 24.19.0 na Linuxu. Windows/PowerShell a Node 22 runtime této přípravy **NOT VERIFIED**.
-
-V existujícím checkoutu nainstalované závislosti neměnit. `$Repo` je jen absolutní repo root pro ochranu evidence a vyhledání existujícího Wrangleru; `$Helper` je stažený reviewovaný `scripts/telemetry/t5-evidence.mjs` mimo repo. `$Evidence` je **nový již existující chráněný lokální adresář mimo repo**. Cesty vybere člověk, agent je neodhaduje. Zkontrolovat Windows ACL, žádné široké Users/Everyone/cloud-sync sdílení. Bez ověřené ochrany STOP; POSIX 0600 nenahrazuje Windows ACL. Transcript a záznam plného terminálu při práci s privátními soubory vypnout podle existujících operátorských pravidel, nikoli měnit bezpečnostní politiku stroje.
+Všechny `Read-Host` níže jsou pevné identity/cesty z již schválené evidence nebo skutečného CLI outputu, nikoli pokyn doplnit novou konfiguraci. Restricted adresář mimo Git se schválenými ACL (jen operátor) je předpoklad; bez nich STOP. Nikdy nezobrazovat návrh keys/configs ani ukládat HAR.
 
 ```powershell
-$Repo = (git rev-parse --show-toplevel | Out-String).Trim()
-if ($LASTEXITCODE -ne 0 -or !$Repo) { throw 'BLOCKED_REPOSITORY' }
-$Helper = Read-Host 'Absolutni cesta k helperu z reviewovaneho T5 commitu'
-$Evidence = Read-Host 'Absolutni cesta k existujicimu chranenemu T5 adresari mimo repo'
+$ErrorActionPreference = 'Stop'
+$Repo = (Resolve-Path (Read-Host 'Absolutni cesta ke schvalenemu T5-R2 source worktree')).Path
+$SourceSha = Read-Host 'Presny plny schvaleny T5-R2 SHA z Draft PR'
+if ($SourceSha -notmatch '^[a-f0-9]{40}$' -or (git -C $Repo rev-parse HEAD) -ne $SourceSha) { throw 'BLOCKED_SOURCE' }
+$Evidence = (Resolve-Path (Read-Host 'Existujici novy restricted adresar mimo Git, s overenymi ACL')).Path
+$Inputs = (Resolve-Path (Read-Host 'Restricted schvalene strict DEV inputs G1, staged D1 + receipt KV + TTL86400')).Path
+$Identity = (Resolve-Path (Read-Host 'Restricted puvodni G1 identity JSON accountId/databaseId/databaseName/jurisdiction')).Path
+$Helper = Join-Path $Repo 'scripts/telemetry/t5-evidence.mjs'
+$Ops = Join-Path $Repo 'ops/dev/prepare-t5-worker.mjs'
+$Reader = Join-Path $Repo 'ops/dev/t5-baseline.mjs'
+$Capture = Join-Path $Repo 'scripts/telemetry/t5-tail-capture.mjs'
+$Cli = (Get-Item -LiteralPath (Join-Path $Repo 'node_modules/wrangler/wrangler-dist/cli.js')).FullName
+$env:CI='true'; $env:WRANGLER_WRITE_LOGS='false'; $env:WRANGLER_SEND_METRICS='false'
+function Invoke-T5Command([string[]]$CommandArgs,[string]$Stem,[int]$Ms) {
+  $out = Join-Path $Evidence ($Stem+'.json')
+  $err = Join-Path $Evidence ($Stem+'.stderr.txt')
+  if ((Test-Path -LiteralPath $out) -or (Test-Path -LiteralPath $err)) { throw 'BLOCKED_READ_EVIDENCE_EXISTS' }
+  # Pouze presny plan deploy nebo pevne read/export argv tohoto runbooku; zadne user SQL.
+  $quoted = @($Cli) + $CommandArgs | ForEach-Object { if ($_ -match '["\r\n]') { throw 'BLOCKED_ARGUMENT_QUOTE' }; '"'+$_+'"' }
+  $p = Start-Process -FilePath (Get-Command node).Source -ArgumentList $quoted -PassThru -NoNewWindow -RedirectStandardOutput $out -RedirectStandardError $err
+  if (!$p.WaitForExit($Ms)) { $p.Kill(); if (!$p.WaitForExit(1000)) { throw 'PROCESS_KILL_UNCONFIRMED_RESTORE_NOW' }; throw 'READ_TIMEOUT_PRESERVE_RESTORE_NOW' }
+  $p.Refresh()
+  if ($p.ExitCode -ne 0) { throw 'READ_FAILED_PRESERVE_RESTORE_NOW' }
+}
+node --version
+node $Ops --build $Repo $SourceSha
+if ($LASTEXITCODE -ne 0) { throw 'BLOCKED_CANONICAL_BUILD' }
 node $Helper prepare $Evidence $Repo
-if ($LASTEXITCODE -ne 0) { throw 'BLOCKED_LOCAL_PREPARATION' }
-$PlanPath = Join-Path $Evidence 't5-overlay-proposal.json'
-$Plan = Get-Content -LiteralPath $PlanPath -Raw | ConvertFrom-Json
-$Cohort = $Plan.cohort
+if ($LASTEXITCODE -ne 0) { throw 'BLOCKED_OFFLINE_PROPOSAL' }
 $Paths = node $Helper paths $Evidence $Repo | ConvertFrom-Json
-if ($LASTEXITCODE -ne 0) { throw 'BLOCKED_ARTIFACT_PATHS' }
-# Plan/secrets nevypisovat. Soubor neni Wrangler config a nesmi se predat --config.
-```
-
-Helper vytváří výhradně nové soubory, nic nepřepisuje. SQL dotazy mají názvy `t5-query-{before,observe,final,cleanup}.sql`; žádný `t5-export-*.sql` při prepare nevzniká. Navíc vytváří vlastní target-only `t5-restore-target.json` (name/account/send_metrics:false), bez vars/bindings/secrets; použije se pouze k explicitnímu restore, nikdy pro upload/deploy aplikace. Cohort `t5_YYYYMMDD_<8hex>`, dvě různé nové 32byte telemetry keys; enrollment = base64url HMAC-SHA256 **UTF-8 string key**, zpráva `cohort + NUL + normalized-email`, přesně DEV `participantId()` (nikoli PUBLIC domain). Do browseru se pseudonym neposílá. Návrh obsahuje `synthetic=0`, privacy-approved návrh `1` **až po samostatném schválení**, metadata `0`, novou notice/key version `t5-v1`, jediný eligible pseudonym a prázdný `APU_DEVELOPER_EMAILS` pro dočasnou tester roli jediného účtu. Notice text je návrh, ne právní schválení. TTL, Access, provider secrets ani resource ID návrh neobsahuje. HMAC keys/pseudonym/opaque context nesmí do Git či veřejné evidence.
-
-Pokud není uzavřen §4, zde **STOP**. Návrh není návod obejít BLOCKED_ACTIVATION_METHOD. Žádné čtení `.dev.vars`, provider klíčů, kopírování secret hodnot, instalace ani publikace tohoto JSON.
-
-## 6. Podmíněný hosted checklist — až po uzavření gates a autorizaci
-
-1. Znovu preflight §4. Použít existující G1 restricted resource identity; čerstvý read-only D1 inventory/info potvrdí právě jednu očekávanou DB, shodné UUID, účet a `jurisdiction=eu`. Neuvádět UUID veřejně. Čerstvý migration-only config může vytvořit stávající `ops/dev/prepare-telemetry-migration.mjs --prepare --identity <protected-identity> --config <fresh-absolute-json>`; ověřit jeho source z d706 a cílovou identitu. Žádné migrations list/apply — i list může inicializovat bookkeeping. Config není Worker deployment config. Pokud schválený preparer/identity není dostupný, BLOCKED_D1_TARGET, žádný vlastní náhradní config.
-2. Před aktivací read-only počty všech tří tabulek musí být **0/0/0**; následně chráněný export těchto tří tabulek jako pre-test SQL snapshot. Pouze config z bodu 1. Jiné rows či souběžné telemetry okno = STOP, ne smazání cizích dat. Export celých tří tabulek je povolen pouze při prokázaném jediném T5 scope.
-3. **Před první aktivační mutací jednou** zaznamenat `$ActivatedAtMs = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()` a spustit `$WindowWatch = [Diagnostics.Stopwatch]::StartNew()`; později je nikdy neresetovat. Vykonat **jen nově dodaný reviewovaný preserving postup §4**, nikoli tento JSON jako deploy config. Read-back musí potvrdit zachované Access/ASSETS/KV/D1/provider secret **names**, metadata 0, TTL 86400, local auth 0, přesný cohort/enrollment, tester role `/api/session` 200 `isDeveloper:false`. Aktivní verzi a její přesný diff chráněně zaznamenat. Nic nerozšiřovat na další účty. Není-li splněno, žádná AI akce.
-4. Jediný běžný browser panel na přesném DEV originu, účet stejný. Platný existující receipt pouze použít. Je-li expirovaný/null, jednou výslovně přijmout aktuální rules/information v běžném UI; při nejasném výsledku STOP, žádný druhý POST. Receipt **nikdy nemaž/seeduj** a neopakuj T4 reload test. Zkontrolovat platnost pro celý krátký průchod.
-5. Před opt-in ověřit nový prázdný projekt. Pokud by „Nový projekt“ smazal jinou práci, BLOCKED_BROWSER_STATE — bez čištění storage nebo resetu cizí práce. V novém projektu přidat výhradně dvě položky §2 přes „Přidat položku“ příslušných kategorií, bez odesílání do chatu. Network: **žádný AI POST**. Jednou kliknout **„Zapojit měření pro tuto návštěvu“**; `/api/telemetry/context` musí být ready, `metadata_enabled:false`. Zaznamenat jen session_id/tab_id do restricted evidence, nikoli opaque context; přesně jedna tester session, žádná AI row před odesláním. Připravit omezené SQL pending pozorování ještě před odesláním.
-6. Před jediným kliknutím Odeslat jednou zaznamenat `$SubmittedAtMs = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()`; pak jednou odeslat přesnou zprávu §2. Žádný dvojklik, druhý panel, refresh, reset, upřesnění potřeby, retry, změna modelu, Výstup ani další AI tlačítko. Z Network zaznamenat pouze časy/metody/cesty/statusy a skutečný počet tří browser AI POSTů. Nekopírovat HAR, request headers/body, odpovědi ani JWT. Změna účtu/428/403/clarification/conflict/error = neúspěšný pokus; nespouštět znovu. Přijaté F2 hypotézy a dokončený Rozbor musí být viditelné; lidsky potvrdit `ui_accepted`, neukládat jejich obsah do telemetry JSON.
-7. Lifecycle a reconciliation jsou **dva různé důkazy**. Nejvýše tři ruční `observe` SQL čtení mohou zachytit jen některé pending rows; nejsou zárukou zachycení každého rychlého call. Zapsat jen skutečné `{call_id,state,observed_at,source:d1-sql}` v časovém pořadí. Žádné doplňování pending z finálního řádku, lokálního testu nebo předpokladu. Nezachycený call = hosted lifecycle **NOT VERIFIED**, nikoli storage FAIL. Lokální test skutečného provider lifecycle a PK upsertu je samostatné **SOURCE PASS**. Jediný pokus neopakovat kvůli chybějícím pending pozorováním.
-8. Provider počty/usage porovnat z budoucího reviewovaného trace §4.2. Pro normální dokončení požadovat UI ready, všechny fyzické response páry, nulové pending, 3–5 unikátních final rows, 3 requested/3 accepted resolved events a dvě shodné souhrnné kontroly. Nejvýše tři ruční final read-backy s 15s rozestupem, **vždy uvnitř deadline §8.1**. HTTP200 není ukončený waitUntil. V normální úspěšné větvi nejprve finalizace, potom UI stop, snapshot, restore. Missing lifecycle observation nebrání finální reconciliation, ale plný T5 bude PARTIAL.
-9. **Timeout, neúplná evidence, UI/provider chyba nebo deadline = větev §8.1, ne další čekání.** Už žádné AI ani re-opt-in. Pending se uchová, neodstraní a nevydává za nulu. V exceptional failure větvi je povolená a povinná bounded obnova OFF/OFF i s unresolved pending; tato výjimka se nikdy nevydává za finalization PASS. Chybějící finální zápis při úspěšném UI je telemetry problém, ne API acceptance.
-10. Úspěch: po doložených finálních zápisech jednou UI „Zastavit měření“, read-back stopped_at, chráněný finální export/SQLite/hash **před cleanupem**, pak přesný restore §8. Failure: snapshot a restore v bounded větvi. Export/import failure nesmí blokovat vypnutí za deadline; zachovat vše dostupné, bez destruktivního cleanupu. Doložení finálního read-backu OFF/OFF a developer session je povinné pro closure PASS.
-
-### Přesná příprava D1 read configu pro §6.1
-
-Tento blok je až pro autorizovaného operátora. Nevyžaduje čistý checkout ani změnu HEAD; kontroluje jen tři skutečně vykonávané závislosti existujícího prepareru proti aplikačnímu source. Liší-li se, STOP, nikoli checkout/reset nebo stažení náhradní aplikace. Restricted identity je původní G1 evidence se čtyřmi poli accountId/databaseId/databaseName/jurisdiction, ne hodnota odhadnutá z inventory. Již existující starý config se nepoužije.
-
-```powershell
-git -C $Repo diff --quiet d706a55c7ff80b1439079badfda88c9baa5807c4 -- ops/dev/prepare-telemetry-migration.mjs ops/dev/prepare-worker.mjs telemetry/migrations/0001_pilot_v1.sql
-if ($LASTEXITCODE -ne 0) { throw 'BLOCKED_REVIEWED_D1_TOOL_UNAVAILABLE' }
-$Identity = Read-Host 'Absolutni cesta k puvodni restricted G1 identity evidence'
+if ($LASTEXITCODE -ne 0) { throw 'BLOCKED_PATHS' }
+$Proposal = Join-Path $Evidence 't5-overlay-proposal.json'
+$Cohort = (Get-Content -Raw -LiteralPath $Proposal | ConvertFrom-Json).cohort
 $DbConfig = Join-Path $Evidence 't5-d1-read.json'
 node (Join-Path $Repo 'ops/dev/prepare-telemetry-migration.mjs') --prepare --identity $Identity --config $DbConfig
 if ($LASTEXITCODE -ne 0) { throw 'BLOCKED_D1_TARGET' }
-# Jen overeni uctu/inventory/info, nikoli migracni prikazy:
-$Wrangler = Join-Path $Repo 'node_modules\.bin\wrangler.cmd'
-& $Wrangler whoami --config $DbConfig
+# Od tohoto bodu jen po samostatne autorizaci hosted read-only preflight:
+node $Cli whoami --config $Paths.restoreConfig *> (Join-Path $Evidence 't5-whoami.txt')
 if ($LASTEXITCODE -ne 0) { throw 'BLOCKED_ACCOUNT' }
-& $Wrangler d1 list --config $DbConfig --json
-if ($LASTEXITCODE -ne 0) { throw 'BLOCKED_D1_INVENTORY' }
-& $Wrangler d1 info apu-ms-site-dev-telemetry --config $DbConfig --json
-if ($LASTEXITCODE -ne 0) { throw 'BLOCKED_D1_INFO' }
+$Baseline = Join-Path $Evidence 't5-baseline.json'
+node $Reader --execute-authorized-read $Paths.restoreConfig $Inputs $Baseline $Repo $Cli
+if ($LASTEXITCODE -ne 0) { throw 'BLOCKED_BASELINE_METADATA' }
+$Configs = Join-Path $Evidence 'configs'
+if (Test-Path -LiteralPath $Configs) { throw 'BLOCKED_CONFIG_DIR_EXISTS' }
+New-Item -ItemType Directory -Path $Configs | Out-Null
+node $Ops --prepare $Baseline $Inputs $Proposal $Configs $SourceSha $Repo
+if ($LASTEXITCODE -ne 0) { throw 'BLOCKED_COMPLETE_CONFIG' }
+$Staged = Join-Path $Configs 't5-staged.wrangler.json'
+$Enabled = Join-Path $Configs 't5-enabled.wrangler.json'
+# Pred dalsim krokem clovek reviewuje t5-config-review.json a private binding identities.
 ```
 
-Výstup jen do chráněné operátorské evidence, ne ChatGPT/Git/veřejný log. Zkontrolovat účet shodný s identity/configem, právě jednu shodu jména **nebo** UUID a obě hodnoty téže DB, jurisdiction výslovně eu. UUID/účet/jurisdiction nečitelné či rozdílné = STOP před SQL/exportem. Seznam resources nepovažovat za povolení měnit ostatní DB. Automatické opravy, provisioning a migrations zůstávají zakázané.
+Preflight člověk ověří správný účet, přesný původní DEV version ID/100 %, rollback verzi čitelnou, EU D1 a správné dvě KV, Access audience/issuer, ASSETS/settings, metadata0/telemetry0/developer/TTL86400. Reader obsahuje before/after deployment + latest catalog guard a ETag kontrolu active service. Neshoda = STOP. Restricted inputs nejsou získávány z produkce ani odhadovány. Sanitizovaný review sám nenahrazuje kontrolu identit.
 
-## 7. Pevné SQL a chráněná evidence
+## 6. Budoucí aktivace a browser checklist
 
-Následující příkazy jsou **budoucí autorizované D1 čtení/export**, nyní se nevykonávají. `$DbConfig` = nový validovaný migration-only config z §6.1, `$Wrangler` = existující `node_modules\.bin\wrangler.cmd` 4.150.0, `$Session` = jediný skutečný session UUID z §6.5. Žádné SQL sestavování operátorem. Všechny CLI výstupy s technickými identifikátory pouze do chráněného adresáře. Zakázán broad KV/receipt cleanup.
+**Provést až po schválení §4.2.** Výhradní DEV okno bez jiných writerů je podmínka; fresh guard není atomický zámek. Neodstraňovat `--strict` při Wrangler conflict. Nepoužívat npm deploy nebo produkční config.
 
 ```powershell
-$Wrangler = Join-Path $Repo 'node_modules\.bin\wrangler.cmd'
-$Session = Read-Host 'Jediny skutecny T5 session UUID'
-$DbConfig = Read-Host 'Absolutni cesta k novemu validovanemu D1-only configu'
+$Guard = Join-Path $Evidence 't5-original-guard.json'
+node $Reader --execute-authorized-read $Paths.restoreConfig $Inputs $Guard $Repo $Cli
+if ($LASTEXITCODE -ne 0) { throw 'BLOCKED_FRESH_BASELINE' }
+node $Ops --guard-baseline $Guard $Baseline $Repo
+if ($LASTEXITCODE -ne 0) { throw 'BLOCKED_BASELINE_CHANGED' }
+$StageArgs = @(node $Ops --plan staged $Configs $Repo | ConvertFrom-Json)
+if ($LASTEXITCODE -ne 0) { throw 'BLOCKED_STAGE_PLAN' }
+Invoke-T5Command $StageArgs 't5-stage-deploy' 60000
+# Pri timeout/failure uz zadny deploy retry; overit skutecny deployment a prejit do §8.
+$StagedVersion = Read-Host 'Presny skutecny version UUID z stage deploy outputu'
+$StageRead = Join-Path $Evidence 't5-stage-readback.json'
+node $Reader --execute-authorized-read $Paths.restoreConfig $Inputs $StageRead $Repo $Cli $StagedVersion
+if ($LASTEXITCODE -ne 0) { throw 'BLOCKED_STAGE_READBACK_RESTORE' }
+node $Ops --verify $StageRead $Staged $SourceSha $StagedVersion $Repo
+if ($LASTEXITCODE -ne 0) { throw 'BLOCKED_STAGE_CONTRACT_RESTORE' }
+```
+
+Staged verze má nový source, ale collection/metadata/trace0/0/0. Zde `/api/session` musí být 200/isDeveloper:true, browser správný účet. Žádné AI requesty. Baseline source zůstává přesný rollback target. **Selhání po stage není povolení pokus opakovat**: použít restore větev s právě doloženým stage version ID; neaktivovat ON.
+
+### 6.1 Capture před jakýmkoli provider voláním
+
+Spustit v **druhém PowerShell terminálu**, stejný reviewovaný `$Repo/$Cli/$Evidence/$Cohort`; přesné hodnoty převzít z prvního terminálu, žádné nové paths/cohort. Vykonává přímo stávající Wrangler Tail. Neukládat/samostatně nespouštět raw `wrangler tail`.
+
+```powershell
+node $Capture --execute-authorized $Cli $Paths.restoreConfig $Evidence $Repo $Cohort 600000
+# Bezi bounded 10 min; ukoncit Ctrl+C az po dolozeni final zapisu/restore, nikoli Stop-Job.
+# Raw stdout/stderr child procesu jsou pipe -> sanitizer/discard, nikdy terminal nebo soubor.
+```
+
+V browser console jediného DEV panelu provést pouze tento předem připravený ne-AI GET (bez tisku response body/identity/headers):
+
+```javascript
+await fetch('/api/session', {cache:'no-store'}).then(r => r.status)
+```
+
+Po 200, v prvním terminálu:
+
+```powershell
+$CaptureManifest = Join-Path $Evidence 't5-provider-trace.capture.json'
+node $Capture --ready $CaptureManifest $Cohort $Repo
+if ($LASTEXITCODE -ne 0) { throw 'BLOCKED_TAIL_NOT_READY_NO_ACTIVATION' }
+```
+
+Readiness vyžaduje skutečně přijatý Tail event přesného DEV GET/session200, žádné parse/reconnect faults, capture ještě běží a zbývají ≥3min. JSON režim Wrangleru sám connection marker neemitoval; živý proces nestačí. Žádné AI keep-alive/probe. Nedorazí marker do 30s (ruční stopky), žádná aktivace; ukončit capture a obnovit baseline. Žádná poll smyčka, nový test, fallback nebo čtení raw Tail. Před odesláním znovu `--ready` a fresh enabled read-back.
+
+### 6.2 ON overlay a přesné jedno UI odeslání
+
+```powershell
+# Znovu fresh staged read-back pred ON; verejne pouze status, nikoli config.
+$BeforeOn = Join-Path $Evidence 't5-before-on.json'
+node $Reader --execute-authorized-read $Paths.restoreConfig $Inputs $BeforeOn $Repo $Cli $StagedVersion
+if ($LASTEXITCODE -ne 0) { throw 'BLOCKED_BEFORE_ON' }
+node $Ops --verify $BeforeOn $Staged $SourceSha $StagedVersion $Repo
+if ($LASTEXITCODE -ne 0) { throw 'BLOCKED_BEFORE_ON_CONTRACT' }
+$OnArgs = @(node $Ops --plan enabled $Configs $Repo | ConvertFrom-Json)
+if ($LASTEXITCODE -ne 0) { throw 'BLOCKED_ON_PLAN' }
+$ActivatedAtMs = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
+$WindowWatch = [Diagnostics.Stopwatch]::StartNew()
+Invoke-T5Command $OnArgs 't5-on-deploy' 60000
+# Pri timeout/failure okamzite do §8; timeout nepotvrzuje zruseni remote deploy.
+$T5Version = Read-Host 'Presny skutecny version UUID z ON deploy outputu'
+$OnRead = Join-Path $Evidence 't5-on-readback.json'
+node $Reader --execute-authorized-read $Paths.restoreConfig $Inputs $OnRead $Repo $Cli $T5Version
+if ($LASTEXITCODE -ne 0) { throw 'BLOCKED_ON_READBACK_RESTORE' }
+node $Ops --verify $OnRead $Enabled $SourceSha $T5Version $Repo
+if ($LASTEXITCODE -ne 0) { throw 'BLOCKED_ON_CONTRACT_RESTORE' }
+```
+
+Čas začíná konzervativně **před ON deploy**, ne až po jeho doběhu. Celé okno nejvýše10min; před každým krokem sledovat jediné monotonic stopky, nikoli je restartovat. Další kontroly jen uvnitř deadline §8. Před UI send musí být dostatek času na 120s drain +30s evidence +60s restore a capture readiness ≥3min; při nedostatku žádný send, restore. ON config může být zveřejněn jen se dvěma novými telemetry keys v private secrets-file; provider jména jsou pouze inherit/required, žádné `secret put/bulk`.
+
+Pevný browser checklist:
+
+1. Jediný panel/přesný origin/stejný účet. `/api/session`200/isDeveloper:false. Platný receipt použít; je-li expirovaný, pouze jedno běžné výslovné UI přijetí aktuálních rules/information, žádný seed/delete nebo T4 replay. Nejasný výsledek = STOP/restore.
+2. Nový prázdný projekt pouze pokud neohrozí jinou práci; žádné storage čištění. Dvě přesné položky §2, ostatní prázdné, žádný AI POST. Před send D1 before query musí být0/0/0 (§7). Jiná data = STOP, ne cleanup.
+3. Jednou „Zapojit měření pro tuto návštěvu“. Context ready/metadata_enabled:false; uchovat jen skutečný session/tab UUID mimo Git, nikdy opaque context. Přesně jedna tester session, žádné AI rows. Znovu `--ready`, ověřit ON0metadata/trace1 read-back a dostatek času.
+4. `$SubmittedAtMs` zapsat těsně před jediným sendem. Jednou odeslat `Přejít do fáze 2`. Síť jen `/api/extract`→`/api/need-route`→`/api/analysis`, fyzicky3–5 Responses. Bez dvojkliku, retry, druhého panelu, reset/reload, upřesňujícího promptu či dalšího AI tlačítka. MAIN/controller nemají být volány. Přijatý Rozbor musí být viditelný; obsah se neeviduje.
+5. 428/403/error/clarification/conflict, extra route/call, změna účtu = neúspěšný jediný pokus, žádný další provider request z vůle operátora. Původní automatické subcalls mohou doběhnout. Při chybě bounded restore, ne nový pokus.
+6. Normální větev: všechny raw response páry, UI accepted,3–5final/0pending,3requested/3accepted resolved, dvě shodná finální SQL čtení s15s odstupem a uvnitř deadline. Potom jednou UI stop, stopped_at, protected snapshot a rollback. Stop flags nesmí předběhnout čekající AI writes. Failure deadline má výjimku: zachovat pending a obnovit runtime, nikoli neomezeně čekat.
+
+## 7. SQL, snapshot a nezávislá reconciliation
+
+Příkazy jsou budoucí autorizované D1 reads/export, ne migrace. Účet/D1 EU ověřuje §5 reader i původní striktní D1 preparer. SQL se generuje výhradně helperem; query a export názvy jsou oddělené. D1 export zahrnuje jen tři telemetry tabulky; při nečekaných cizích rows snapshot/verify selže, žádná automatická oprava. Chráněné evidence adresáře nesdílet do PR.
+
+Pevná PowerShell funkce `Invoke-T5Command` z §5 omezuje každý deploy/read/export lokálního CLI procesem s timeoutem; SQL v tomto oddílu obsahuje pouze čtení/export. Native process kill neodvolá již odeslaný deploy/GET/export; nesmí blokovat restore. Výstupy do nových private souborů, žádný overwrite. Neprovádí automatický retry.
+
+```powershell
+# Pred opt-in (before SQL je pripraveny prepare helperem):
+Invoke-T5Command @('d1','execute','apu-ms-site-dev-telemetry','--remote','--config',$DbConfig,'--file',$Paths.before,'--json') 't5-before' 10000
+# Po opt-in: pouze jediny skutecny UUID, ne odhad nebo vygenerovana hodnota.
+$Session = Read-Host 'Skutecny jediny T5 session UUID'
 $Observe = node $Helper sql $Cohort $Session observe | ConvertFrom-Json
 if ($LASTEXITCODE -ne 0) { throw 'BLOCKED_SQL_SCOPE' }
 $Final = node $Helper sql $Cohort $Session final | ConvertFrom-Json
 if ($LASTEXITCODE -ne 0) { throw 'BLOCKED_SQL_SCOPE' }
-& $Wrangler d1 execute apu-ms-site-dev-telemetry --remote --config $DbConfig --command $Observe --json
-if ($LASTEXITCODE -ne 0) { throw 'BLOCKED_D1_OBSERVE' }
-# Volat Final pouze v bodech 6.8/6.9, ne smyckou:
-& $Wrangler d1 execute apu-ms-site-dev-telemetry --remote --config $DbConfig --command $Final --json
-if ($LASTEXITCODE -ne 0) { throw 'BLOCKED_D1_FINAL' }
+$SubmittedAtMs = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() # tesne pred jedinym UI send
+# Nize jen po skutecnem send; nejvyse tri manualni final reads uvnitr drain deadline.
+Invoke-T5Command @('d1','execute','apu-ms-site-dev-telemetry','--remote','--config',$DbConfig,'--command',$Final,'--json') 't5-final-read-1' 10000
+# Po 15s manualni neblokujici kontrole casu, pouze pokud to deadline dovoli:
+Invoke-T5Command @('d1','execute','apu-ms-site-dev-telemetry','--remote','--config',$DbConfig,'--command',$Final,'--json') 't5-final-read-2' 10000
 ```
 
-`before` SQL je v souboru `t5-query-before.sql` vytvořeném helperem; v §6.2 jej předat stejnému `d1 execute` přes `--file`, výsledek pouze 0/0/0. Pro pre-test export použít stejný následující export příkaz s **jinou novou** cestou `t5-export-before.sql`; neimportuje se jako finální tester snapshot (je prázdný). Pro všechny nové výstupy předem `Test-Path` a STOP při existenci; nikoli overwrite.
+Nejvýše třetí read je stejný pevný příkaz s novým stem `t5-final-read-3`. Pending SQL sampling není záruka lifecycle. `observe` je volitelné, nesmí nahrazovat raw trace ani vést k domyšleným pending záznamům. Lifecycle PASS vyžaduje pro každý call skutečný úspěšný pending→final write_ack (nebo skutečný časový SQL pár). Chybějící ack/SQL observation = lifecycle NOT VERIFIED i při final reconciliation PASS. D1 PK upsert znamená jeden účetní řádek na call; ACK není další účetní záznam.
+
+Po úspěšné finalizaci + UI stop; `stopped_at` ověřit session read-backem. Export/import **před jakýmkoli cleanupem**:
 
 ```powershell
-$Sql = $Paths.exportFinal
-$Snapshot = $Paths.snapshotFinal
-if ((Test-Path -LiteralPath $Sql) -or (Test-Path -LiteralPath $Snapshot)) { throw 'BLOCKED_EVIDENCE_EXISTS' }
-& $Wrangler d1 export apu-ms-site-dev-telemetry --remote --config $DbConfig --table telemetry_sessions --table telemetry_events --table telemetry_ai_calls --output $Sql
-if ($LASTEXITCODE -ne 0) { throw 'BLOCKED_SNAPSHOT_EXPORT' }
-node $Helper snapshot $Sql $Snapshot $Cohort $Session $Repo
-if ($LASTEXITCODE -ne 0) { throw 'BLOCKED_SNAPSHOT_IMPORT' }
+if ((Test-Path -LiteralPath $Paths.exportFinal) -or (Test-Path -LiteralPath $Paths.snapshotFinal)) { throw 'BLOCKED_EVIDENCE_EXISTS' }
+Invoke-T5Command @('d1','export','apu-ms-site-dev-telemetry','--remote','--config',$DbConfig,'--table','telemetry_sessions','--table','telemetry_events','--table','telemetry_ai_calls','--output',$Paths.exportFinal) 't5-export-final-result' 15000
+node $Helper snapshot $Paths.exportFinal $Paths.snapshotFinal $Cohort $Session $Repo
+if ($LASTEXITCODE -ne 0) { throw 'BLOCKED_SNAPSHOT_PRESERVE_RESTORE' }
 ```
 
-SQL pochází výhradně z právě autorizovaného Wrangler exportu; nezaměňovat/importovat cizí SQL. Helper odmítá přepsání, cesty v repo/symlinky, jiné tabulky/scope a chyby integrity/FK. Hashuje zdrojový SQL a uzavřený SQLite, přidává existující striktní pětifieldový `.target.json` s `mode=operator-snapshot`, `test_class=tester`, jediným cohort. Originální SQL/SQLite/sidecars dále neměnit; chráněná kopie je evidence, ne veřejná příloha PR. Při chybě zachovat částečný soubor jako neověřený, nepřepisovat jej.
+Helper provádí skutečný SQLite import, schema/scope/FK/integrity kontroly, SHA256 SQL/SQLite, striktní report target sidecar, exclusive paths; žádné nové schéma. Importovat jen právě autorizovaný export. Při neúplném exportu soubor zachovat jako NOT VERIFIED, nepřepsat. Nezdržovat restore importem, pokud nezbývá čas.
 
-V chráněném `t5-provider-evidence.json` naplnit **jen z reviewovaného response-boundary trace §4.2 po jeho samostatné implementaci** následující strukturu (3–5 calls); žádné odhady, kopie samotné DB jako „provider důkaz“, odpověď nebo prompt. `call_id` koreluje X-Client-Request-Id; nikoli provider response ID. `usage` zachová původní přítomnost/null/0 a pouze číselná pole uvedená níže; absent details lze vynechat, nevymýšlet nuly. Pole `operation` je korelační označení podle route/ledgeru, nikoli původní provider pole; nezávisle se ověřují call IDs, úplný počet, model, status, usage a tools. Model může mít skutečný datovaný suffix. `file_search_calls` zahrnuje všechny tool calls daného response. Nezávislá evidence musí pokrýt **všechny** requesty testu v okně, nikoli jen vybrané známé IDs, jinak nepodloží jejich celkový počet.
-
-```json
-{"provider_basis":"response-boundary-trace-v1","ui_accepted":true,"browser_paths":["/api/extract","/api/need-route","/api/analysis"],"lifecycle_observations":[{"call_id":"<observed UUID>","state":"pending","observed_at":0,"source":"d1-sql"},{"call_id":"<same UUID>","state":"final","observed_at":1,"source":"d1-sql"}],"calls":[{"call_id":"<client request UUID>","operation":"extraction","model":"gpt-5.6-luna","provider_status":"completed","usage":{"input_tokens":100,"output_tokens":10,"total_tokens":110},"file_search_calls":0}]}
-```
-
-Hodnoty 100/10/110 a časy 0/1 jsou **pouze popis formátu**, nikdy testovací evidence. `lifecycle_observations:[]` je legitimní nepřítomnost pozorování, nikoli důkaz pending zápisu. Volitelné původní details: `input_tokens_details.cached_tokens`, `.cache_write_tokens`, `output_tokens_details.reasoning_tokens`. Další calls podle tabulky §2; rescue sdílí extraction ticket, má attempt 1 a fallback reference na primary. Všechny další části provider response vynechat.
+Po finalizaci/restore ukončit capture v druhém terminálu jedním Ctrl+C; počkat na sanitizovaný summary. V prvním terminálu vytvořit pouze pevný UI evidence soubor (obsah odpovědi neukládat):
 
 ```powershell
+$Ui = Join-Path $Evidence 't5-ui.json'
+if (Test-Path -LiteralPath $Ui) { throw 'BLOCKED_UI_EVIDENCE_EXISTS' }
+# Tento true pouze pokud clovek skutecne videl prijaty Rozbor a tri presne browser cesty.
+[IO.File]::WriteAllText($Ui,'{"ui_accepted":true,"browser_paths":["/api/extract","/api/need-route","/api/analysis"]}',[Text.UTF8Encoding]::new($false))
 $ProviderEvidence = Join-Path $Evidence 't5-provider-evidence.json'
-node $Helper verify $Snapshot $Cohort $Session $ProviderEvidence $Repo
-# exit 0 = reconciliation + vsechny SQL lifecycle pary dolozeny; 2 = reconciliation PASS, lifecycle NOT VERIFIED (PARTIAL); 1 = FAIL/BLOCKED.
-if ($LASTEXITCODE -eq 2) { 'T5_PARTIAL_LIFECYCLE_NOT_VERIFIED' }
-elseif ($LASTEXITCODE -ne 0) { throw 'FAIL_OR_BLOCKED_TELEMETRY_EVIDENCE' }
+node $Capture --evidence (Join-Path $Evidence 't5-provider-trace.jsonl') $CaptureManifest $Ui $ProviderEvidence $Repo
+if ($LASTEXITCODE -ne 0) { throw 'BLOCKED_CAPTURE_NO_T5_PASS' }
+node $Helper verify $Paths.snapshotFinal $Cohort $Session $ProviderEvidence $Repo
+# 0 reconciliation+lifecycle PASS; 2 reconciliation PASS/lifecycle NOT VERIFIED; 1 FAIL/BLOCKED.
+if ($LASTEXITCODE -eq 2) { 'PARTIAL_LIFECYCLE_NOT_VERIFIED' }
+elseif ($LASTEXITCODE -ne 0) { throw 'FAIL_OR_BLOCKED_RECONCILIATION' }
 ```
 
-Kontrola čte všechny tři relevantní JSON struktury **`identity_json`, `projection_json`, `event_json`**, jejich vnořené usage/pricing/owner/payload allowlisty a zakázané klíče/hodnoty. Vyžaduje jeden tester/session/cohort, stejný workflow, request/operation ownership, finální completed/accepted/provider_reported, observed coverage, zachované null tokeny, korektní součty/podmnožiny a jediné účtování call ID, ceny dle snapshotu v nanoUSD a file_search. Žádné prompty, odpovědi, e-mail, JWT, credentials, provider raw IDs ani pedagogický obsah. Neznámé pole = FAIL, ne automatická redakce. Porovná všechny původní provider usage hodnoty; snapshot ceny **není invoice**. Výstup má oddělené `reconciliation` a `lifecycle` stavy: bez SQL pending→final párů všech calls vrátí `PARTIAL_LIFECYCLE_NOT_VERIFIED`, i když final reconciliation PASS. Samotný helper výstup nenahrazuje důkaz původu trace ani hosted restore read-back.
+Evidence není ručně doplňovaná usage tabulka: capture helper ji odvodí pouze z hashově ověřených sanitizovaných raw boundary zpráv. Vyžaduje3–5unikátních ID a přesně jeden invoke+response pár, bez transporterror; uchová model/tier/attempt/raw numeric usage/tools. Final helper porovná kompletní ID množinu a počet s DB, provider_status/application_status/usage_source, nullable tokeny/součty/podmnožiny, session/tab/cohort/workflow/operation ownership, request/fallback vazby, snapshot ceny/cost/usage_coverage a všechny identity_json/projection_json/event_json allowlisty. Neobsahuje prompt/odpověď/e-mail/secrets/provider IDs. Úmyslně chybná ledger usage v lokálním testu nemění trace; při skutečném nesouladu je FAIL. Chybějící capture/lifecycle není falešný PASS.
 
-Po skutečném uzavření Europe/Prague dne lze na **lokální pracovní kopii** snapshotu použít existující `scripts/telemetry/report.ts export --database <absolute telemetry-*.sqlite> --mode operator-snapshot --cohort <exact> --test-class tester --operator yes --view summary --linkage unavailable --from <actual Prague test date> --to <next Prague date> --retained-since <actual retained UTC timestamp> --as-of <actual current UTC timestamp> --out <fresh absolute telemetry-*.csv>`. Toto je argumentový kontrakt, **nikoli povolení agentovi vyplňovat data**: při handoffu po uzavření dne musí člověk dodat skutečná data a reviewovaný lokální report tool z d706 (bez změny runtime checkoutu); jinak BLOCKED_CSV_HANDOFF. Není nutné držet hosted sběr aktivní do půlnoci. Žádné budoucí `as-of`, obcházení guards, prázdný cizí den ani blokující smyčka. SQL akceptace ihned a pozdější CSV/reconciliation mají oddělený stav; hlavičky, hodnoty, formula guards a sedmidenní export expiry se kontrolují existujícími B3 pravidly. Snapshot zachovat do této kontroly; retenční termín a konečné smazání chráněných kopií musí být zvlášť schváleny.
+CSV až po skutečně uzavřeném Europe/Prague dni, na chráněné pracovní kopii snapshotu, existujícím `scripts/telemetry/report.ts export` s `mode=operator-snapshot`, `test-class=tester`, skutečným cohort/date/as-of a linkage unavailable. Je to samostatný pozdější reviewovaný krok, ne podmínka držet hosted sběr ON. Nevymýšlet budoucí as-of, neobcházet guardy, nečekat blokující smyčkou. SQL lze ověřit ihned. Retenci snapshotů a jejich konečné smazání musí zvlášť schválit člověk.
 
-## 8. Scoped cleanup a obnova — také vyžaduje uzavřený gate §4
+## 8. Bounded stop/restore, pending retention a cleanup
 
-Pouze po chráněném snapshotu/hash kontrole, ukončené session a nulových pending. Před cleanupem zaznamenat přesné očekávané counts a potvrdit, že se nemění. Helper generuje jen **cohort + tester + přesný session UUID**, child-before-parent, stopped/pending guards, bez DDL či jiných tabulek. Není to atomický vzdálený transaction lock; bezpečnost předpokládá ukončenou návštěvu, žádný souběžný test a disabled nové enrollment/sběr podle reviewovaného postupu. Bez těchto předpokladů STOP. Nemaž receipt, nečti/neměň `PILOT_RULES_ACCEPTANCE` KV.
-
-```powershell
-# POUZE po samostatnem schvaleni cleanupu a obnove OFF/OFF dle preserving postupu:
-$Cleanup = node $Helper sql $Cohort $Session cleanup | ConvertFrom-Json
-if ($LASTEXITCODE -ne 0) { throw 'BLOCKED_CLEANUP_SCOPE' }
-& $Wrangler d1 execute apu-ms-site-dev-telemetry --remote --config $DbConfig --command $Cleanup --json
-if ($LASTEXITCODE -ne 0) { throw 'BLOCKED_CLEANUP_READBACK_REQUIRED' }
-& $Wrangler d1 execute apu-ms-site-dev-telemetry --remote --config $DbConfig --file (Join-Path $Evidence 't5-query-before.sql') --json
-if ($LASTEXITCODE -ne 0) { throw 'BLOCKED_CLEANUP_READBACK' }
-# Pozadovany vysledek vsech tri tabulek: 0/0/0. Bez automatickeho opakovani DELETE.
-```
-
-### 8.1 Bounded failure / restore — bez čekání na nekonečné pending
-
-**Před aktivací:** určit člověka odpovědného za uzavření, připravit read-only baseline metadata a vlastní `$Paths.restoreConfig`, pevný restore argv níže, a schválit výhradní okno bez cizích změn. Chybí-li některý bod, **neaktivovat**. Od startu dočasné verze zaznamenat skutečný UTC `ActivatedAtMs`; při jediném Odeslat skutečný `SubmittedAtMs`. Maximální návrh okna **10 minut od aktivace**. Drain deadline = dřívější z `SubmittedAt+120s` a `ActivatedAt+510s`. Na failure snapshot nejvýše 30s, na restore pokus 60s; žádná z těchto operací nesmí posouvat deadline. Před odesláním musí zbývat dost času, jinak žádný provider call a rovnou restore. Nejde o CSV as-of.
+Člověk odpovědný za closure musí být přítomen už před ON. Limit okna10min od `$ActivatedAtMs`; drain deadline=min(send+120s,activation+510s). Evidence nejvýše30s, restore nejvýše60s. Žádný hard expiry/watchdog/spending cap se nezavádí. Posun hodin nebo zmeškané monotonic stopky = failure, emergency restore bez čekání. Při dlouhém ON deploy je čas už spotřebován, neobnovovat T0.
 
 ```powershell
-# Pouze spotrebovat existujici timestampy a stopky z §6; zde je NIKDY nevytvaret/resetovat:
-if (!(Get-Variable ActivatedAtMs -ErrorAction SilentlyContinue) -or !(Get-Variable WindowWatch -ErrorAction SilentlyContinue)) { throw 'BLOCKED_WINDOW_CLOCK' }
 $SubmittedArg = '-'
 if (Get-Variable SubmittedAtMs -ErrorAction SilentlyContinue) { $SubmittedArg = $SubmittedAtMs }
-# Check pri kazdem kontrolnim bodu; Pending pochazi ze skutecneho SQL read-backu:
+# Pending musi byt skutecny SQL pocet; neznamy stav je failure, nikoli nula.
 $Decision = node $Helper window $ActivatedAtMs $SubmittedArg ([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()) $Pending | ConvertFrom-Json
-if ($LASTEXITCODE -ne 0) { throw 'BLOCKED_WINDOW_CLOCK' }
-# SNAPSHOT_STOP_RESTORE_NOW: vykonat nasledujici vetev, nikdy dalsi drain/retry.
+if ($LASTEXITCODE -ne 0) { throw 'BLOCKED_CLOCK_EMERGENCY_RESTORE' }
+# action SNAPSHOT_STOP_RESTORE_NOW => zadne dalsi drain/AI/retry.
 ```
 
-Režim `window` je pouze offline deadline kalkulátor, **není watchdog, nenastavuje Worker TTL a nepotvrzuje hosted closure**. Operátor používá jednou spuštěné nezávislé neblokující stopky z §6; posun systémových hodin nebo zmeškaný deadline znamená failure a okamžitý restore, nikdy prodloužení drainu nebo nové T0. Bounded restore režim níže omezuje běh Node procesu na min(60s, zbývající čas), s vynuceným ukončením přímého Node CLI procesu (`SIGKILL`), ale nezaručuje dokončení vzdálené operace nebo její odvolání po timeoutu. Při již překročeném deadline **restore neodmítne**: dovolí jeden emergency pokus nejvýše 60s a zapíše `deadline_missed:true`; SLA okna tím není PASS. Je lokálně ověřen injektovaným process double; Native Windows/PowerShell NOT VERIFIED. Chybí-li schválení tohoto mechanismu, čerstvý version guard či operátor odpovědný za read-back, `BLOCKED_WINDOW_CLOSURE`, neaktivovat.
+Při stage-only failure není sběr ON: nepoužít `window` bez activation timestampu; pokračovat přímo guarded rollbackem s60s stage-only rozpočtem. Při timeoutu deploy bez doloženého nového version ID je closure **BLOCKED_UNKNOWN_DEPLOYMENT**; žádný blind rollback. Zachovat výhradní okno, žádný provider send; člověk musí zvlášť ověřit aktuální immutable version/config. To je control-plane failure, nikoli povolení agentovi vymýšlet opravu.
 
-Pevné kroky na deadline nebo při chybě:
+**Failure/pending větev:** žádná další AI akce/re-opt-in. Pokud zbývá evidence budget, jednou bounded D1 export přes `Invoke-T5Command`15s do `$Paths.exportFailure` (stejný pevný export argv §7, jiný output a stem `t5-export-failure-result`). Import do `$Paths.snapshotFailure` jen uvnitř zbývajícího30s budgetu. Uchovat pending IDs/počty/časy/trace; při export failure zachovat poslední SQL a DB data bez cleanupu. Export ani import nesmějí odložit restore. UI stop jednou (nejvýše5s, failure neblokuje restore); není-li UI dostupné, zavřít testovací panel. Neprohlašovat tím zrušení provider volání nebo nulový náklad.
 
-1. Už žádné UI odeslání, retry, reset ani reload. Nejvýše 30s na protected **failure-before-restore** export (při dosažení budgetu přerušit pouze lokální read/export proces, bez remote cleanupu; pokud to operátor neumí bezpečně zajistit, export přeskočit a uchovat poslední SQL pozorování): stejný přesný `d1 export` §7, ale `--output $Paths.exportFailure`; lokální import do `$Paths.snapshotFailure`, stejný cohort/session. Uchovat skutečné pending IDs/počty/časy a dostupný trace. Je-li export nedostupný nebo timeoutuje, zachovat dostupná SQL pozorování a označit snapshot NOT VERIFIED; **nezdržovat restore a nic nemazat**. Plné telemetry JSON zůstávají jen chráněně.
-2. Jednou UI „Zastavit měření“: uzavře lokální consent/queue, pokusí se revokovat session. Nejvýše 5s na odpověď uvnitř restore rozpočtu; failure stop requestu restore neblokuje. Při nedostupném UI zavřít pouze testovací panel a pokračovat přímo rollbackem. Neprohlašovat tím provider call za zrušený ani cenu za nulovou.
-3. Bez čekání na pending provést **přímý explicitní rollback** pod schváleným procesovým timeoutem 60s. Před ním čerstvý deployment read-back musí být přesně schválený T5 version ID/100 % (ne jiný writer), nebo již baseline/100 % (pak rollback vynechat a ověřit closure). Pouze target-only restore config, žádný deployment config z runtime checkoutu. Při cizím version ID žádný blind rollback, incident/closure NOT VERIFIED.
+Před rollbackem fresh read-only deployment guard: právě schválený aktuální T5Version/100% (nebo StagedVersion, pokud ON nikdy nenastal); již baseline100% znamená rollback přeskočit a udělat finální read-back. Cizí verze/traffic = žádný blind rollback, closure BLOCKED/incident. Nepřečítat celý metadata balík na úkor deadline: pevný Wrangler read, bounded10s, výsledek jen v restricted souboru:
 
 ```powershell
-$Restore = node $Helper restore-plan $Paths.restoreConfig $Repo | ConvertFrom-Json
-if ($LASTEXITCODE -ne 0) { throw 'BLOCKED_RESTORE_PLAN' }
-# Pevny budouci argv; nespoustet pred uzavrenim activation/authorization/timeout gates:
-# wrangler rollback 732bf950-30cf-444a-90fc-8927d9c8b16c --name apu-ms-site-dev --config <fresh t5-restore-target.json> --message "T5 bounded window restore" --yes
-# $Restore.args obsahuje prave tento prikaz, $Restore.timeout_ms = 60000.
-# --yes zahrnuje i secret-change force retry 10220; musi byt vyslovne reviewovano,
-# ze jedine zmeny jsou dve T5 telemetry keys. Neni to povoleni prepsat cizi secrets.
-# AZ PO SAMOSTATNE AUTORIZACI a cerstvem skutecnem overeni vyhradniho T5 version ID:
-$WranglerCli = (Get-Item -LiteralPath (Join-Path $Repo 'node_modules\wrangler\wrangler-dist\cli.js')).FullName
+$GuardOut = Join-Path $Evidence 't5-restore-deployments.json'
+$CurrentTestVersion = $StagedVersion
+if (Get-Variable T5Version -ErrorAction SilentlyContinue) { $CurrentTestVersion = $T5Version }
+# Pevny read-only prikaz; obdobne jako Invoke-T5Command, ale vlastni presny target-only config:
+Invoke-T5Command @('deployments','list','--name','apu-ms-site-dev','--config',$Paths.restoreConfig,'--json') 't5-restore-deployments' 10000
+# Instalovany deployments list --json vraci pole; guard zvoli nejcerstvejsi created_on, nikoli prvni radek.
+$RestoreGuard = node $Ops --guard-deployment $GuardOut $CurrentTestVersion $Repo | ConvertFrom-Json
+if ($LASTEXITCODE -ne 0) { throw 'BLOCKED_FOREIGN_OR_UNKNOWN_VERSION_NO_BLIND_ROLLBACK' }
+# Pri ALREADY_BASELINE_READBACK_REQUIRED preskocit rollback a prejit na nezavisly read-back nize.
+# Pri EXCLUSIVE_T5_VERSION_GUARD_VERIFIED provest prave jeden nasledujici rollback.
+$CloseBy = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() + 60000 # stage-only OFF restore
+if (Get-Variable ActivatedAtMs -ErrorAction SilentlyContinue) { $CloseBy = $ActivatedAtMs + 600000 }
 $RestoreLog = Join-Path $Evidence 't5-restore-result-attempt1.jsonl'
-node $Helper execute-reviewed-restore $WranglerCli $Paths.restoreConfig $RestoreLog $Repo $Decision.restore_by T5_PRESERVING_AND_10220_REVIEWED EXCLUSIVE_T5_VERSION_GUARD_VERIFIED
-# Presny CLI hash/config/approval/log/deadline se validuji pred subprocess spustenim.
-# Exit 0 = COMMAND_COMPLETED_READBACK_REQUIRED; 2 = RESTORE_UNCONFIRMED, nikoli dokaz CF selhani.
-# Log obsahuje jen intent/status/casy, zadny raw stdout/stderr. Bez automatickeho druheho pokusu.
+if ($RestoreGuard.status -eq 'EXCLUSIVE_T5_VERSION_GUARD_VERIFIED') {
+  node $Helper execute-reviewed-restore $Cli $Paths.restoreConfig $RestoreLog $Repo $CloseBy T5_PRESERVING_AND_10220_REVIEWED EXCLUSIVE_T5_VERSION_GUARD_VERIFIED
+  if ($LASTEXITCODE -ne 0) { 'RESTORE_UNCONFIRMED_NO_CLEANUP_NO_CLOSURE_PASS' }
+}
 ```
 
-Oba povinné literal acknowledgement argumenty potvrzují již získaný samostatný souhlas a skutečnou kontrolu výhradní T5 verze; **neudělují autorizaci a nejsou samy důkazem read-backu**. Tento režim se v rámci přípravy nikdy nespouští proti skutečnému Wrangleru.
+`execute-reviewed-restore` je pouze explicitní budoucí autorizovaný executor, pinned CLI, pevný rollback732bf950…/100%, target-only config, min(60s,zbývajícíčas), přímý Node kill bez raw stdout/stderr. Při již překročeném deadline povolí jeden emergency60s pokus a zaznamená deadline_missed; to není SLA PASS. `--yes` zahrnuje10220 force retry pouze po review, že secret delta je výhradně dvě T5 keys. Žádný automatický druhý deployment/provider pokus. Command success stále **není hosted closure PASS**.
 
-4. Ihned nezávislý read-back: použít jen §2 přesného T4 preflightu z §4 (čerstvý vlastní target-only config) a běžný `/api/session` GET. Vyžadovat baseline **732bf950… / 100 %, OFF/OFF, TTL86400, local auth0, původní developer config/isDeveloper:true**, zachované původní Access/bindings/provider secret names a neaktivní T5 enrollment. Exit0 rollbacku sám není read-back. Při chybě procesu/timeoutu není outcome rollbacku známý — **žádný automatický druhý deploy/force/secret put/delete**, zavřít lokální test panel, předat člověku jako `RESTORE_UNCONFIRMED`, uchovat pending/evidence. Nevydávat za runtime OFF. Možnost potvrdit omezený návrat musí být předem ověřenou activation gate; pokud je vyžadováno garantované globální OFF i při nedostupném CF control plane, stávající flags nemají expirační cutoff: **BLOCKED_HARD_WINDOW_EXPIRY**, samostatný Repair/operátorské rozhodnutí před aktivací. Žádný nekonečný drain ani tvrzení o automatickém vypnutí.
-5. Po potvrzeném OFF/OFF provést nejvýše dva read-only D1 read-backy s 15s rozestupem a nový **failure-after-restore** export/SQLite (`$Paths.exportAfterRestore`, `$Paths.snapshotAfterRestore`), bez přepsání prvního. Starý request-scoped sink může i po stop/rollback finalizovat: `D1TelemetryStore.upsertAi()` ověřuje owner, ne aktuální readiness/stopped_at; jeho zachycené waitUntil promise mohou doběhnout. Toto je důvod ponechat session/rows. Zaznamenat nové skutečné stavy, nic ručně nefinalizovat a nezapočítat pending jako free. Dvě čtení nejsou důkazem, že neexistuje žádný další in-flight callback.
-6. Failure/pending větev **nemá DELETE, receipt cleanup, smazání snapshotu ani odstranění secret hodnot manuální rekonstrukcí**. Baseline obnoví efektivní bindings; přítomnost dočasných keys ve starých verzích a jejich pozdější odstranění je samostatný operátorský gate, nikoli automatický `secret delete`. Scoped D1 cleanup z §8 je jen pro separátně schválenou normální/finalizovanou větev. Po failure je vyžadováno nové rozhodnutí o zachovaných datech/retenci a případných late writes; žádný další provider pokus.
+Nezávislý finální read-back:
 
-**Oddělený minimální návrh `T5-HARD-EXPIRY-REPAIR`, jen pokud je vyžadován nepodmíněný časový cutoff:** explicitní DEV-only schválený `window_end` v readiness/novém enrollment/context/ingest/request-sink admission, default OFF, po cutoff žádný nový sběr nebo kontext. Již zachycené request sinks mohou dokončit vlastní pending→final zápisy. Bez nové DB/schema, změny activity-clock či provider calls. Cutoff nezmění doslovné hosted vars na 0/0 a nezruší zahájené provider účtování; skutečný rollback/read-back stále potřebuje control plane. Vyžaduje samostatné review/gate rozhodnutí a before/at/after-expiry/concurrent/late-final tests; **nyní neimplementováno**. Bez tohoto mechanismu nelze garantovat globální zastavení sběru v pevné sekundě při CF výpadku, proto se takový slib nedává.
+```powershell
+$Restored = Join-Path $Evidence 't5-restored-readback.json'
+node $Reader --execute-authorized-read $Paths.restoreConfig $Inputs $Restored $Repo $Cli
+if ($LASTEXITCODE -ne 0) { throw 'RESTORE_NOT_VERIFIED_NO_CLEANUP' }
+node $Ops --verify-restore $Restored $Baseline $Repo
+if ($LASTEXITCODE -ne 0) { throw 'RESTORE_CONTRACT_NOT_VERIFIED_NO_CLEANUP' }
+```
 
-Rozlišit `WINDOW_CLOSED_RUNTIME_PASS` (čerstvý OFF/OFF/developer/session read-back), `TELEMETRY_PARTIAL_PENDING_RETAINED` a `RESTORE_UNCONFIRMED`. Uzavření okna může být úspěšné, i když telemetry acceptance selhala. **Nyní žádný z těchto hosted stavů nebyl proveden nebo ověřen.**
+Po návratu původní verze ověřit v normálním DEV browseru `/api/session`200/isDeveloper:true, telemetry/metadata0/0, žádný nový opt-in a původní TTL86400. Baseline code neobsahuje nový trace. API context musí být disabled; browser session/consent lokálně stopped nebo testovací panel zavřený. Při nedostupném control plane/outputu potvrzení chybí: **runtime closure NOT VERIFIED**, žádné další provider akce/cleanup, eskalovat člověku s chráněnými evidence; nelze slíbit technicky vynucené OFF při výpadku. Vyžaduje-li schvalovatel takovou garanci, neaktivovat.
 
-## 9. Akceptace a evidence přípravy
+Pending data z failure snapshotu nikdy nemazat. Po restore lze samostatně autorizovaným bounded D1 čtením/exportem do `$Paths.exportAfterRestore`/`$Paths.snapshotAfterRestore` uchovat pozdní finalizace; původní failure snapshot nepřepisovat. Starý waitUntil může doběhnout po změně traffic/stop, proto pozdější stav nefalšuje původní observation. Obnova runtime, final reconciliation, lifecycle evidence a retained pending mají čtyři samostatné stavy.
 
-| Stav | Kritérium |
+**Cleanup není součást autorizace přípravy:** až po úspěšném chráněném snapshotu,0pending, stopped_at, runtimeOFF a zvláštním schválení. `node $Helper sql $Cohort $Session cleanup` generuje přesný cohort+tester+session scope, child-before-parent, stopped/pending guardy. Nikdy broad delete, receipt/KV write, DDL nebo automatický retry DELETE. Při retained pending žádný cleanup. D1 schema i migrace zůstávají beze změny.
+
+## 9. PASS / FAIL / BLOCKED a lokální důkazy
+
+| Stav | Podmínka |
 | --- | --- |
-| PREPARATION SOURCE PASS | Lokální syntetické testy/helpers a source graph prověřené; žádná hosted akce. Neznamená průchod gates §4 ani schopnost automaticky ukončit hosted okno. |
-| T5 PROVIDER+SQL PASS | Samostatně autorizované okno, přesný UI graf, přijatý Rozbor, nezávislá shoda všech calls/usage, odděleně doložený hosted lifecycle (nikoli jen finální reconciliation), žádné dvojí účtování, správná session/workflow/operation, pricing/coverage/privacy PASS, snapshot před cleanupem, doložená obnova baseline. CSV stav uvést zvlášť. |
-| FAIL | Nesoulad skutečně pozorovaného kontraktu, počtu/usage/ownership/cost/privacy nebo nepřijatý UI výsledek; žádný retry. HTTP200 samo není PASS. |
-| BLOCKED / PARTIAL | Chybí autorizace/bezpečný preserving postup, response-boundary trace, hosted lifecycle observation, ochrana evidence, Windows capability nebo restore důkaz. Neoznačovat chybějící důkaz jako úspěch. Při pending žádný cleanup; normal branch čeká jen do deadline, failure branch včas obnoví runtime a uchová pending evidence. |
+| SOURCE PASS | Provider-free tests, raw trace independence/privacy/gates, successful-write ACK, pinned Wrangler inherit proof, strict config/readback a normal/failure restore doubles, typecheck/lint/canonical build/artifact/isolation. Nepotvrzuje hosted. |
+| Hosted T5 PASS | Jediný přijatý UI průchod, všechny raw call páry a DB rows3–5shodné, completed/accepted/provider_reported a observed usage/cena/privacy/ownership, každý skutečný pending→final důkaz, snapshot před cleanupem a nezávislá baselineOFF/OFF/developer closure. |
+| PARTIAL / NOT VERIFIED | Reconciliation může být PASS, ale chybí Tail/lifecycle nebo finální closure; žádné domyšlené údaje. Native Windows/Node22/hosted nebyly touto dávkou provedeny. |
+| FAIL / BLOCKED | Skutečný nesoulad kontraktu, nepřijatý výsledek, neznámá config/metadata shape, cizí target/writer, chybějící autorizace/capability nebo nedoložené rollback okno. Žádný retry/improvizace. |
 
-Lokální výsledky a přesný finální commit jsou v Draft PR/completion reportu; příkazy pro reprodukci v reviewovaném T5 checkoutu: `node tests/t5-handoff.test.mjs`, `node tests/usage-ledger.test.mjs`, `node tests/model-call-instrumentation.test.mjs`, `node tests/telemetry-b2.test.mjs`, `node tests/telemetry-local-tools.test.mjs`, `node tests/dialog-action.test.mjs`, `npm run typecheck`, `node_modules/.bin/eslint scripts/telemetry/t5-evidence.mjs tests/t5-handoff.test.mjs`, `git diff --check`. Syntetické fixtures, žádné provider credentials/network. Nativní Windows/PowerShell a hosted test **NOT VERIFIED**. Žádný aplikační source/config/migration diff, žádný provider request, resource/secret/hosted mutation, merge, PUBLIC zásah ani nové B4/B5 rozšíření. Tento handoff neuzavírá provider E2E ani PUBLIC readiness.
+Přesný nový source SHA, příkazy a výsledky aktuální source verifikace jsou v odvozeném Draft PR. T3/T4 se nepřetestovaly. Žádná hosted/provider/Cloudflare/D1/KV operace nebyla vykonána; žádné credentials, resources, deployment, merge ani PUBLIC změna. Provider E2E a PUBLIC readiness zůstávají otevřené.
+
+### T5-R2 lokální source ověření — 2026-10-29
+
+Základ je přesný PR #90 HEAD `d796994829565208f503d3493b07b1d1a3b726e1`; nová odvozená větev `codex/t5-r2-provider-trace`, žádná změna původní větve. Linux/Node24.19.0/Wrangler4.150.0. Provedeno:
+
+```sh
+node --test --test-concurrency=1 tests/*.test.mjs
+node --test tests/t5-worker-preparation.test.mjs tests/t5-tail-capture.test.mjs tests/t5-provider-trace.test.mjs tests/t5-handoff.test.mjs
+npm run typecheck
+# Cileny eslint: zmenene app/API/telemetry soubory, oba ops nastroje,
+# t5-evidence/t5-tail-capture a pet zmenenych T5/stream test souboru.
+npm run build
+npm run validate:artifact
+node tests/browser/telemetry/check-isolation.mjs
+git diff --check
+```
+
+Celá provider-free Node sada **1580/1580 PASS**, bez SKIP. Po následném zpřesnění restore guardu cílená T5 sada **71/71 PASS**; po doplnění guardu nepodporovaných script settings ještě config sada **25/25 PASS**. Typecheck a focused lint PASS. Canonical build/standalone artifact PASS; source/artifact isolation se ověřuje také pro finální commit, výsledky a SHA v Draft PR. Build a runtime-sensitive testy běží odděleně. Testy skutečně používají emulovanou SQL DB, raw provider fixtures, pinned Wrangler form functions a process/GET doubles. Žádný reálný provider/Cloudflare executor nebyl spuštěn.
+
+Původní strict DEV preparer, produkční/DEV templates, SQL migrace, dependency versions, Access/pilot rules a klientská business cesta jsou proti PR #90 beze změny. Aplikační delta je pouze gated raw transport trace, jeho request-scoped předání a post-commit diagnostic ACK; jde o **nový source**, nikoli shodu s d706. Native Windows/PowerShell/Node22, skutečné baseline metadata/read-back, Tail/provider T5 a hosted restore **NOT VERIFIED**. SOURCE PASS nedává hosted autorizaci ani neuzavírá T5/PUBLIC readiness.
+
+## 10. Historická evidence — nepřebírat jako nový T5-R2 PASS
 
 ### Historická lokální verifikace facb100 — 2026-10-29
 

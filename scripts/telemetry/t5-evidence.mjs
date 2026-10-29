@@ -6,7 +6,7 @@ import { DatabaseSync } from 'node:sqlite';
 
 // Preparation/assertions are offline. Only execute-reviewed-restore explicitly invokes a pinned CLI. Never automatic; no credential lookup or provider executor.
 export const T5 = Object.freeze({ account: '4638092f63fa7fe58bcb9d2d041b7855', windowMs: 600000, drainMs: 120000, evidenceMs: 30000, restoreMs: 60000, worker: 'apu-ms-site-dev', baseline: '732bf950-30cf-444a-90fc-8927d9c8b16c',
-  source: 'd706a55c7ff80b1439079badfda88c9baa5807c4', database: 'apu-ms-site-dev-telemetry',
+  baselineSource: 'd706a55c7ff80b1439079badfda88c9baa5807c4', database: 'apu-ms-site-dev-telemetry',
   observation: 'Ve smyšlené skupině při společném stavění po dlouhém slovním zadání několik účastníků nezačne pracovat; po krátké ukázce se zapojí.',
   need: 'Potřebuji porozumět tomu, jak délka a podoba zadání souvisí se zapojením do společné činnosti.',
   navigation: 'Přejít do fáze 2' });
@@ -96,7 +96,7 @@ export function lifecycle(observations, calls) {
   const state = new Map();
   for (const o of observations) {
     keys(o, ['call_id', 'state', 'observed_at', 'source']);
-    requireThat(calls.includes(o.call_id) && ['pending', 'final'].includes(o.state) && count(o.observed_at) && o.source === 'd1-sql', 'FAIL_LIFECYCLE_EVIDENCE');
+    requireThat(calls.includes(o.call_id) && ['pending', 'final'].includes(o.state) && count(o.observed_at) && ['d1-sql', 'd1-write-ack'].includes(o.source), 'FAIL_LIFECYCLE_EVIDENCE');
     const prior = state.get(o.call_id);
     requireThat(!prior || o.observed_at >= prior.time && !(prior.final && o.state === 'pending'), 'FAIL_LIFECYCLE_ORDER');
     state.set(o.call_id, { time: o.observed_at, pending: prior?.pending || o.state === 'pending', final: prior?.final || o.state === 'final', observed: prior?.observed || Boolean(prior?.pending && o.state === 'final') });
@@ -118,6 +118,7 @@ export function privacy(value, forbiddenValues = []) {
 export function verify(db, cohort, session, evidence, forbiddenValues = []) {
   scope(cohort, session);
   requireThat(object(evidence) && evidence.provider_basis === 'response-boundary-trace-v1', 'BLOCKED_PROVIDER_EVIDENCE');
+  requireThat(evidence.cohort === undefined || evidence.cohort === cohort, 'FAIL_CAPTURE_COHORT');
   requireThat(evidence.ui_accepted === true && same(evidence.browser_paths, ['/api/extract', '/api/need-route', '/api/analysis']), 'FAIL_UI_OR_ROUTE_COUNT');
   requireThat(same(db.prepare("SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name").all().map(r => r.name), ['telemetry_ai_calls', 'telemetry_events', 'telemetry_sessions']), 'FAIL_SNAPSHOT_TABLES');
   const sessions = db.prepare('SELECT * FROM telemetry_sessions').all();
@@ -164,7 +165,7 @@ export function verify(db, cohort, session, evidence, forbiddenValues = []) {
       cached_input_tokens: raw.input_tokens_details?.cached_tokens ?? null, cache_write_tokens: raw.input_tokens_details?.cache_write_tokens ?? null,
       reasoning_tokens: raw.output_tokens_details?.reasoning_tokens ?? null, provider_total_tokens: raw.total_tokens ?? null,
       normalized_total_tokens: raw.input_tokens === undefined || raw.output_tokens === undefined ? null : raw.input_tokens + raw.output_tokens, has_invalid_values: false };
-    requireThat(call.operation === p.operation && call.model === p.reported_model && call.provider_status === p.provider_status && usageKeys.every(k => Object.is(reportedUsage[k], u[k])) && call.file_search_calls === p.file_search_calls, 'FAIL_PROVIDER_RECONCILIATION');
+    requireThat(call.operation === p.operation && call.attempt_index === p.attempt_index && call.service_tier === p.reported_service_tier && call.model === p.reported_model && call.provider_status === p.provider_status && usageKeys.every(k => Object.is(reportedUsage[k], u[k])) && call.file_search_calls === p.file_search_calls, 'FAIL_PROVIDER_RECONCILIATION');
     requireThat(p.operation === 'analysis' || p.file_search_calls === 0, 'FAIL_ROUTER_FILE_SEARCH');
     const price = p.pricing_snapshot, rates = price.rates_per_million;
     requireThat(['reported', 'requested'].includes(price.tier_source) && price.status === 'priced' && price.currency === 'USD' && price.pricing_version === 'openai-standard-2026-08-25' && price.service_tier === 'default' && p.pricing_regime === 'standard-30m-estimate' && price.file_search_rate_per_1000 === 2.5 && rates && ['input', 'cached_input', 'cache_write', 'output'].every(k => Object.hasOwn(rates, k)) && Object.values(rates).every(v => typeof v === 'number' && v >= 0) && count(p.file_search_calls), 'FAIL_PRICING');
@@ -205,7 +206,7 @@ export function snapshot(sqlPath, database, cohort, session, repoPath) {
   writeFileSync(dbFile + '.sha256.json', JSON.stringify({ sql: hash(source), sqlite: hash(readFileSync(dbFile)), created_at: new Date().toISOString() }), { flag: 'wx', mode: 0o600 });
   return { result: 'SNAPSHOT_PRESERVED_NOT_ACCEPTANCE_PASS' };
 }
-function privatePath(path, repoPath, directory = false) {
+export function privatePath(path, repoPath, directory = false) {
   requireThat(isAbsolute(path) && realpathSync(path) === resolve(path), 'BLOCKED_PATH');
   const stat = lstatSync(path); requireThat(!stat.isSymbolicLink() && (directory ? stat.isDirectory() : stat.isFile()), 'BLOCKED_PATH');
   requireThat(isAbsolute(repoPath) && realpathSync(repoPath) === resolve(repoPath), 'BLOCKED_REPO_PATH');
@@ -225,7 +226,7 @@ async function main(args) {
     writeFileSync(join(directory, 't5-overlay-proposal.json'), JSON.stringify(plan), { flag: 'wx', mode: 0o600 });
     for (const [name, text] of Object.entries(sql(plan.cohort))) writeFileSync(paths[name], text, { flag: 'wx', mode: 0o600 });
     writeFileSync(paths.restoreConfig, JSON.stringify({ name: T5.worker, account_id: T5.account, send_metrics: false }), { flag: 'wx', mode: 0o600 });
-    console.log(JSON.stringify({ result: 'PREPARED_OFFLINE_NOT_ACTIVATED', cohort: plan.cohort, execution: 'BLOCKED_ACTIVATION_METHOD' })); return;
+    console.log(JSON.stringify({ result: 'PREPARED_OFFLINE_NOT_ACTIVATED', cohort: plan.cohort, execution: 'PROPOSAL_ONLY_REQUIRES_REVIEWED_T5_CONFIG_AND_AUTHORIZATION' })); return;
   }
   if (args.length === 3 && args[0] === 'paths') { console.log(JSON.stringify(artifactPaths(args[1], args[2]))); return; }
   if (args.length === 3 && args[0] === 'restore-plan') { console.log(JSON.stringify(restorePlan(args[1], args[2]))); return; }

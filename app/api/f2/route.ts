@@ -108,7 +108,7 @@ export async function POST(request: Request) {
   } else return error("Neplatný nebo nepodporovaný F2 požadavek.", 400);
   if (manualModelOverrideDenied(identity, body.model)) return error("Ruční volba modelu je dostupná pouze developerům.", 403);
   if (!apiKey) return error("APU není dokončeno: chybí serverová konfigurace.", 503);
-  const collector = createRequestUsageCollector((await createRequestTelemetrySink(request, identity)).sink);
+  const collector = createRequestUsageCollector(await createRequestTelemetrySink(request, identity));
   const requestId = crypto.randomUUID();
   try {
     const { response, usage_record, application_result } = await callOpenAIResponses({

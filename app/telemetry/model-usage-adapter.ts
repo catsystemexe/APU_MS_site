@@ -1,3 +1,4 @@
+import { createT5Trace, type T5Trace } from "./t5-trace.ts";
 import { getRequestExecutionContext } from "vinext/shims/request-context";
 import { USAGE_PRICING_VERSION, type ModelUsageRecord } from "../usage-ledger.ts";
 import type { ModelCallSink } from "../model-call-instrumentation.ts";
@@ -74,14 +75,14 @@ export function projectModelUsage(record: ModelUsageRecord, scope: AiScope): AiC
     attempt_index: record.attempt_index, retry_of_call_id: record.retry_of_call_id, fallback_for_call_id: record.fallback_for_call_id };
   return { owner: { ...scope.owner }, identity, projection };
 }
-export type SafeRequestSink = { sink: ModelCallSink; retain: (work: Promise<unknown>) => void; health: () => Health };
+export type SafeRequestSink = { trace?: T5Trace; sink: ModelCallSink; retain: (work: Promise<unknown>) => void; health: () => Health };
 /** Captures the current Vinext lifetime once, including for later stream callbacks. */
-export function createSafeRequestSink(store: TelemetryStore, scope: AiScope): SafeRequestSink {
+export function createSafeRequestSink(store: TelemetryStore, scope: AiScope, trace?: T5Trace): SafeRequestSink {
   const lifetime = getRequestExecutionContext();
   // Copy immutable request context before yielding; no worker-global identity bridge.
   const captured = JSON.parse(canonical(scope)) as AiScope;
   let health: Health = lifetime ? "ready" : "unavailable";
-  return { health: () => health, retain(work) {
+  return { trace, health: () => health, retain(work) {
     if (!lifetime) return;
     const contained = Promise.resolve(work).catch(() => { health = "unavailable"; });
     try { lifetime.waitUntil(contained); } catch { health = "unavailable"; }
@@ -90,7 +91,7 @@ export function createSafeRequestSink(store: TelemetryStore, scope: AiScope): Sa
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
       const call = projectModelUsage(captured.request_id ? { ...record, request_id: captured.request_id } : record, captured);
-      const write = Promise.resolve().then(() => store.upsertAi(call)).catch(() => { health = "unavailable"; });
+      const write = Promise.resolve().then(() => store.upsertAi(call, () => trace?.writeAck(call.projection.call_id, call.projection.state))).catch(() => { health = "unavailable"; });
       lifetime.waitUntil(write);
       await Promise.race([write, new Promise<void>(resolve => { timer = setTimeout(() => { health = "sink_timeout"; resolve(); }, 100); })]);
     } catch { health = "unavailable"; }
@@ -115,7 +116,10 @@ export async function createRequestTelemetrySink(request: Request, identity: Acc
       const participant = await eligibleParticipant(validatedIdentity, policy), now = Date.now();
       const session = await resolveContext(token, participant, policy, r, now);
       await store.touchRequest(ownerOf(session), now);
-      return createSafeRequestSink(store, { ...(options.requestIdIsClientOwned ? { request_id: crypto.randomUUID() } : {}), owner: ownerOf(session), workflow_id, operation_instance_id });
+      const c = r.config, url = new URL(request.url);
+      const trace = c.APU_T5_TRACE_ENABLED === "1" && c.APU_T5_TRACE_COHORT === policy.cohort && policy.environment === "dev" && !policy.synthetic && !policy.metadata && validatedIdentity.role === "tester" &&
+        url.origin === "https://apu-ms-site-dev.catsystem-exe.workers.dev" && uuid(workflow_id) && uuid(operation_instance_id) ? createT5Trace(policy.cohort) : undefined;
+      return createSafeRequestSink(store, { ...(options.requestIdIsClientOwned ? { request_id: crypto.randomUUID() } : {}), owner: ownerOf(session), workflow_id, operation_instance_id }, trace);
     })().catch(() => { health = "invalid_context"; return noop; });
     lifetime.waitUntil(resolve.then(() => {}));
     return await Promise.race([resolve, new Promise<SafeRequestSink>(done => {

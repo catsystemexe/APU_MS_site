@@ -307,7 +307,7 @@ export async function POST(request: Request) {
   if (!apiKey) return jsonError("Extrakční vrstva není nakonfigurována.", 503);
 
   const extractStarted = performance.now();
-  const collector = createRequestUsageCollector((await createRequestTelemetrySink(request, identity)).sink);
+  const collector = createRequestUsageCollector(await createRequestTelemetrySink(request, identity));
   const requestId = crypto.randomUUID();
   let response: Record<string, unknown>;
   let extraction: RawExtraction;
