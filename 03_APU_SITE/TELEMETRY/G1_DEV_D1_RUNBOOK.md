@@ -1,8 +1,40 @@
 # G1 — existing EU D1 migration-only handoff
 
-## PILOT-TECH-R1 — subsequent isolated DEV test (not executed)
+## PILOT-TECH-T2 — verified baseline rollback (2026-10-26)
 
-**HANDOFF ONLY; separate operator authorization required for hosted deployment/configuration/test/cleanup.** Source base is exact PR #83 `cb48a9de19d5847b0ca68d097f8bb572e4e6992d`; use the reviewed full PILOT-TECH-R1 source SHA from its draft PR/completion report, not the moving branch name. Target only existing `apu-ms-site-dev` / `https://apu-ms-site-dev.catsystem-exe.workers.dev`. PUBLIC is a later stage. Do not repeat historical migration steps A–C below: G1-B acceptance and PR #85 G1-D4 are later evidence. This source task ran no command in this hosted procedure.
+The authorized restore used `wrangler versions view` followed by an explicit rollback to `732bf950-30cf-444a-90fc-8927d9c8b16c`. The protected version metadata confirmed the expected DEV bindings, original developer list, Access configuration, `APU_LOCAL_DEV_AUTH=0`, telemetry/metadata `0/0` and receipt TTL `86400`. Rollback completed at 100% traffic, replacing `747d661f-72c5-4ce2-9d6c-c22526d5dfed`.
+
+Read-only D1 counts after rollback were `telemetry_sessions=0`, `telemetry_events=0`, `telemetry_ai_calls=0`. The standard DEV browser session then returned HTTP 200 and `isDeveloper:true` from `/api/session`. No telemetry, provider call, role change, Access-policy change or PUBLIC operation was performed. The pre-rollback HTTP 401 remains retained as historical evidence; cause **NOT VERIFIED**.
+
+## PILOT-TECH-T3 — bounded hosted telemetry acceptance (2026-10-26)
+
+T3 completed one isolated DEV collection window using one normal authenticated tester identity, one cohort, `synthetic=0`, `privacy_approved=1` and metadata `0`. The existing receipt was retained and verified through GET/UI rehydration; first acceptance POST was intentionally not repeated. The pre-test three-table snapshot was zero-row and the final snapshot was exported before cleanup, imported offline and integrity-checked at sessions=1, events=5, ai_calls=0. The working copy `telemetry-t3-20261026.sqlite` subsequently passed SQLite integrity, foreign-key and orphan-event checks, with the exact three telemetry tables and expected cohort/test class.
+
+The UI refusal path produced zero rows. Explicit UI opt-in created one tester session and five actual activity intervals while visibility/focus were verified. Withdrawal acknowledgement was reflected by `stopped_at`; subsequent normal interaction produced no new rows. Restricted JSON inspection covered event, projection and identity trees without publishing raw rows and found zero forbidden content/identity key or value matches. No AI/provider request was made.
+
+Collection was disabled before scoped child-before-parent cleanup. The exact cohort/test-class rows were removed and D1 returned to zero. Temporary telemetry secrets were deleted. Final direct rollback to `732bf950-30cf-444a-90fc-8927d9c8b16c` restored 100% traffic, OFF/OFF, TTL 86400, original developer configuration and `/api/session` HTTP 200 with `isDeveloper:true`. The protected local snapshot/sidecar remain restricted operator evidence; no raw rows, pseudonym or key material belongs in Git. First receipt POST, provider E2E and PUBLIC readiness remain separate gates.
+
+After the Europe/Prague civil day closed, the existing report tool generated the restricted operator summary CSV (`operator=yes`, `view=summary`, `linkage=unavailable`). Independent SQL reconciliation matched sessions=1, events=5, activity intervals=5 and ai_calls=0; the seven-day expiry metadata and strict five-field target manifest passed. Offline evidence statuses: integrity **PASS**, snapshot contract **PASS**, CSV **PASS**, reconciliation **PASS**. Raw snapshot and CSV artifacts remain restricted operator evidence and are not committed.
+
+## PILOT-TECH-R1 — subsequent isolated DEV test (T2 deployment and receipt rehydration completed; telemetry acceptance blocked)
+
+**T2 deployment executed; receipt and telemetry acceptance blocked.** Source candidate `d706a55c7ff80b1439079badfda88c9baa5807c4` was built and deployed only to existing `apu-ms-site-dev` / `https://apu-ms-site-dev.catsystem-exe.workers.dev` as version `732bf950-30cf-444a-90fc-8927d9c8b16c`, with 100% traffic. No migration or resource creation occurred. The Access login callback ended in `invalid state`, so no authenticated application test was attempted. PUBLIC was not changed.
+
+The required continuation remains authorized only after a valid operator-controlled tester session is established. Keep telemetry/metadata OFF/OFF until then; do not retry receipt or telemetry blindly.
+
+Follow-up attempt, 2026-10-26 20:55 UTC: a new DEV browser session was started without the prior callback URL. SSO navigated to the Cloudflare Dashboard login page instead of returning to Access/DEV; no `/api/session` response was available. Stop here. This observed navigation does not prove a cause and is separate from the earlier `invalid state`.
+
+The next operator login returned to DEV successfully. Read-only `GET /api/session` reported `isDeveloper:true`, and the UI showed Developer mode rather than tester role. Under the separately authorized temporary DEV-only configuration, `APU_DEVELOPER_EMAILS` was explicitly empty in deployment `e7429915-9f43-42d2-98c6-d41813b5cbca`; the same session then returned HTTP 200 with `isDeveloper:false`. Existing draft-2 receipt GET returned HTTP 200 with matching versions and `acceptedAt`/`expiresAt` exactly 86400 seconds apart; UI reload remained available. First acceptance was not repeated. The original developer configuration was restored in deployment `401e5cd2-e9ea-4e6a-ac8e-6c9d0b7ae4f3`, and `/api/session` again returned `isDeveloper:true`.
+
+No telemetry window was enabled: explicit enrollment and opt-in were not established, so refusal/opt-in/withdrawal, D1 deltas, forbidden-field inspection, SQL/CSV reconciliation and cleanup acceptance remain BLOCKED/PENDING. Final DEV telemetry/metadata stayed OFF/OFF and D1 counts stayed sessions/events/ai_calls `0/0/0`.
+
+Follow-up bounded window result: dedicated DEV HMAC keys and one enrolled tester pseudonym were prepared privately with `synthetic=0`, `privacy_approved=1`, metadata `0`, and a unique cohort. Refusal produced no rows. Explicit UI opt-in produced one `tester` session and one `workflow_started` event; no AI/provider call occurred. Withdrawal set `stopped_at`; the scoped SQL check found zero prohibited-key hits; the single test session/event was deleted after evidence capture. Temporary secrets and private enrollment material were removed. Final D1 counts are `0/0/0`.
+
+Final restore explicitly reinstated the Access issuer/audience variables, original developer email, OFF/OFF and TTL 86400. A new standard operator login was attempted in the continuing browser session, but `/api/session` still returned HTTP 401 (`Přihlášení není platné`). The cause is NOT VERIFIED. Do not bypass Access or infer a cause from this result.
+
+The bounded telemetry result is a smoke only. The scoped SQL cleanup and final zero-count check were performed; the required protected pre-test SQL snapshot and SQL/CSV report procedure were **NOT PERFORMED**.
+
+Authentication diagnosis follow-up: active DEV version `747d661f-72c5-4ce2-9d6c-c22526d5dfed` remained at 100% traffic. A new standard operator-session GET `/api/session` returned HTTP 401 (`Přihlášení není platné`). The filtered short tail emitted no allowlisted `validation_failed reason`; the cause is NOT VERIFIED. Wrangler deployment metadata did not expose per-version runtime-variable values, so no additional correction was attempted.
 
 Reused evidence: PR #85 at `1729fce641fab5015407acdd5be06fe8941ed58c` records DEV deployment of #83, config/Access and receipt GET/rehydration PASS, telemetry/metadata OFF/OFF, receipt test TTL **86400**. First-acceptance POST status/body were unavailable; its root cause remains unknown. The new local lag/retry and lost-response reproductions do not establish that hosted cause. No fresh Cloudflare audit is requested here; recheck only the dynamic target/source/config/identity required for this next operation.
 
