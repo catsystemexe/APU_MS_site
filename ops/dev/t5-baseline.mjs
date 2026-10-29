@@ -2,6 +2,7 @@
 import { readFileSync, writeFileSync, realpathSync } from 'node:fs';
 import { resolve, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isDeepStrictEqual as same } from 'node:util';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { DEV, validateDevInputs } from './prepare-worker.mjs';
@@ -21,7 +22,8 @@ export async function collectBaseline(get, inputs, expected = T5.baseline) {
   ]);
   check(Array.isArray(catalog.items) && /^[a-f0-9-]{36}$/.test(catalog.items[0]?.id), 'BLOCKED_VERSION_CATALOG');
   const latest=await get(script+'/versions/'+catalog.items[0].id), after=await get(script+'/deployments'), catalogAfter=await get(script+'/versions');
-  check(activeVersion(after.deployments) === expected && catalogAfter.items?.[0]?.id === catalog.items[0].id && environment.script?.etag === current.resources?.script?.etag, 'BLOCKED_PREFLIGHT_RACE');
+  const [latestAfter,environmentAfter]=await Promise.all([get(script+'/versions/'+catalog.items[0].id),get(service)]);
+  check(latest.id === catalog.items[0].id && same(before.deployments,after.deployments) && same(latest,latestAfter) && same(environment.script,environmentAfter.script) && activeVersion(after.deployments) === expected && catalogAfter.items?.[0]?.id === catalog.items[0].id && environment.script?.etag === current.resources?.script?.etag, 'BLOCKED_PREFLIGHT_RACE');
   for(const v of [version,current,latest]) {
     check(Array.isArray(v.resources?.bindings), 'BLOCKED_VERSION_SHAPE');
     for(const b of v.resources.bindings.filter(b => b.type === 'secret_text')) check(Object.keys(b).every(k => ['name','type'].includes(k)), 'BLOCKED_SECRET_METADATA_SHAPE');

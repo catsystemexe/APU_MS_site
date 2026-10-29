@@ -48,9 +48,10 @@ export function verifyBaselineGuard(record, original, now = Date.now(), restored
   routing(record); return {status:restored?'RUNTIME_RESTORED_READBACK_VERIFIED_NOT_RECONCILIATION_PASS':'BASELINE_GUARD_VERIFIED'};
 }
 export function buildT5Configs(baseline, inputs, proposal, template, artifact, artifactRoot, sourceSha) {
-  check(baseline?.kind === 'apu-t5-baseline' && baseline.account_id === DEV.account && baseline.worker === DEV.worker && baseline.version?.id === T5.baseline && same(baseline.latest,baseline.version) && same(baseline.current,baseline.version) && activeVersion(baseline.deployments) === T5.baseline, 'BLOCKED_BASELINE_TARGET');
+  check(baseline?.kind === 'apu-t5-baseline' && baseline.account_id === DEV.account && baseline.worker === DEV.worker && baseline.version?.id === T5.baseline && same(baseline.current,baseline.version) && activeVersion(baseline.deployments) === T5.baseline, 'BLOCKED_BASELINE_TARGET');
   check(baseline.d1?.uuid === inputs?.telemetry?.databaseId && baseline.d1?.name === T5.database && baseline.d1?.jurisdiction === 'eu', 'BLOCKED_D1_IDENTITY');
   check(inputs.telemetry?.enabled === false && inputs.telemetry.staged === true && inputs.pilotRules?.ttlSeconds === 86400, 'BLOCKED_STRICT_STAGE_INPUTS');
+  check(/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(baseline.latest?.id), 'BLOCKED_LATEST_VERSION');
   const base = buildDevConfig(template, artifact, inputs), bindings = bindingMap(baseline.version), latest = bindingMap(baseline.latest);
   for (const [name, expected] of [['DEV_LOG_STATE', { name:'DEV_LOG_STATE', type:'kv_namespace', namespace_id:inputs.kvNamespaceId }], ['PILOT_RULES_ACCEPTANCE', { name:'PILOT_RULES_ACCEPTANCE', type:'kv_namespace', namespace_id:inputs.pilotRules.namespaceId }], ['TELEMETRY_DB', { name:'TELEMETRY_DB', type:'d1', id:inputs.telemetry.databaseId }], ['ASSETS',{ name:'ASSETS',type:'assets' }], ...PROVIDER.map(name => [name,{name,type:'secret_text'}])]) {
     check(same(bindings.get(name), expected) && same(latest.get(name), expected), 'BLOCKED_RESOURCE_SUBSTITUTION');
@@ -63,6 +64,9 @@ export function buildT5Configs(baseline, inputs, proposal, template, artifact, a
   routing(baseline);
   const runtime = baseline.version.resources.script_runtime;
   check(runtime.compatibility_date === base.compatibility_date && same(runtime.compatibility_flags, base.compatibility_flags), 'BLOCKED_RUNTIME_COMPATIBILITY');
+  // Standard deploy inherits secrets from the last upload, not the active deployment.
+  // Validate that source independently; never require identical version IDs/code/metadata.
+  check(baseline.latest.resources.script_runtime.compatibility_date === runtime.compatibility_date && same(baseline.latest.resources.script_runtime.compatibility_flags, runtime.compatibility_flags), 'BLOCKED_LATEST_RUNTIME_COMPATIBILITY');
   keys(baseline.settings, ['observability','logpush','placement','tail_consumers','streaming_tail_consumers','limits','cache']);
   check(obj(baseline.settings.observability) && typeof baseline.settings.observability.enabled === 'boolean', 'BLOCKED_MISSING_RUNTIME_SETTINGS');
   check(obj(baseline.assets) && baseline.assets.not_found_handling === 'none', 'BLOCKED_ASSET_SETTINGS');
@@ -83,10 +87,10 @@ export function buildT5Configs(baseline, inputs, proposal, template, artifact, a
   const changed = Object.keys(enabled.vars).filter(k => enabled.vars[k] !== vars[k]);
   check(changed.every(k => k === 'APU_DEVELOPER_EMAILS' || T5_VARS.includes(k)), 'BLOCKED_UNAUTHORIZED_DELTA');
   // Review artifact contains hashes, never resource UUIDs, Access values, email, enrollment or key material.
-  const review = { kind:'apu-t5-config-review', baseline:T5.baseline, source_sha:sourceSha, staged_sha256:hash(staged), enabled_sha256:hash(enabled),
+  const review = { kind:'apu-t5-config-review', baseline:T5.baseline, latest_upload:{version_id:baseline.latest.id,sha256:hash(baseline.latest),differs_from_active:baseline.latest.id !== T5.baseline}, source_sha:sourceSha, staged_sha256:hash(staged), enabled_sha256:hash(enabled),
     preserved_bindings:[...bindings.values()].filter(b => b.type !== 'plain_text').map(b => ({name:b.name,type:b.type,identity_sha256:hash(b)})),
     preserved_vars:BASE_VARS.filter(k => k !== 'APU_DEVELOPER_EMAILS').map(name => ({name,sha256:hash(vars[name])})), changed_vars:changed,
-    settings_sha256:hash(baseline.settings), assets_sha256:hash(baseline.assets), inherited_provider_secret_names:PROVIDER, new_secret_names:TEMP_KEYS, telemetry_secrets_sha256:hash(proposal.secrets), secrets_preservation:'Wrangler keepSecrets + explicit required inherit bindings; no provider secret values retrieved or supplied' };
+    settings_sha256:hash(baseline.settings), assets_sha256:hash(baseline.assets), inherited_provider_secret_names:PROVIDER, new_secret_names:TEMP_KEYS, telemetry_secrets_sha256:hash(proposal.secrets), secrets_preservation:'Wrangler keepSecrets + required inherit bindings without version_id: previous/latest upload, independently validated and freshness guarded; provider plaintext not retrieved or supplied' };
   return { staged, enabled, review, telemetrySecrets:structuredClone(proposal.secrets) };
 }
 export function guardDeployment(deployments, expected, readAt, now=Date.now()) {

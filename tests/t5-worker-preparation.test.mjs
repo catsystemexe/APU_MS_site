@@ -69,8 +69,9 @@ function fakeGet(f,alter=()=>{}) {
   const script=`/accounts/${DEV.account}/workers/scripts/${DEV.worker}`,service=`/accounts/${DEV.account}/workers/services/${DEV.worker}/environments/production`;
   const calls=[];const get=async path=>{calls.push(path);let result;
     if(path===script+'/deployments')result={deployments:f.baseline.deployments};
-    else if(path===script+'/versions')result={items:[{id:T5.baseline}]};
+    else if(path===script+'/versions')result={items:[{id:f.baseline.latest.id}]};
     else if(path===script+'/versions/'+T5.baseline)result=f.baseline.version;
+    else if(path===script+'/versions/'+f.baseline.latest.id)result=f.baseline.latest;
     else if(path===service)result={script:{etag:f.baseline.version.resources.script.etag,...f.baseline.settings}};
     else if(path===service+'/subdomain')result=f.baseline.subdomain;
     else if(path===service+'/routes?show_zonename=true')result=[];
@@ -92,7 +93,7 @@ test('future baseline reader uses only fixed GET endpoints and existing CF auth 
     const secret=fakeGet(f,(path,v)=>{if(path.endsWith('/versions/'+T5.baseline)&&v.resources)v.resources.bindings.find(b=>b.name==='OPENAI_API_KEY').text='NEVER_READ';});await assert.rejects(collectBaseline(secret.get,f.i),/SECRET_METADATA/);
   }finally{f.close();}
 });
-test('pinned actual Wrangler upload form inherits provider secrets and supplies only two synthetic T5 keys',()=>{
+test('pinned actual Wrangler standard deploy inherits provider secrets from previous upload, not an explicit active version',async()=>{
   const src=readFileSync(cli,'utf8');assert.equal(createHash('sha256').update(src).digest('hex'),'71da1f9bcf69a9f56c4ff4f68e71315365d03db8ea11207577b47a8e1a0a1064');
   const section=(start,end)=>src.slice(src.indexOf(start),src.indexOf(end,src.indexOf(start)));
   const context={import_undici9:{FormData},File,INHERIT_SYMBOL:Symbol(),toMimeType:()=> 'application/javascript+module',__name:()=>{},getBindingKey:()=> 'binding',isUnsafeBindingType:t=>t.startsWith('unsafe_')};
@@ -109,6 +110,20 @@ test('pinned actual Wrangler upload form inherits provider secrets and supplies 
   assert.deepEqual(metadata.bindings.find(b=>b.name==='ASSETS'),{name:'ASSETS',type:'assets'});
   assert.equal(metadata.bindings.find(b=>b.name==='APU_TELEMETRY_ENABLED').text,'1');
   assert.deepEqual(metadata.observability,{enabled:false});
+  // Exercise the pinned standard deploy's actual upload branch, with a local HTTP double.
+  const start=src.indexOf('const versionResult = await retryOnAPIFailure(',src.indexOf('keepSecrets: true,',src.indexOf('const worker = {')));
+  const end=src.indexOf('const versionMap =',start);assert.ok(start>0&&end>start);
+  assert.match(src.slice(src.indexOf('const worker = {'),start),/keepSecrets: true,/);
+  const uploads=[];
+  await runInNewContext('(async()=>{'+src.slice(start,end)+'return versionResult;})()',{
+    config2:{},accountId:DEV.account,scriptName:DEV.worker,workerBundle:form,props:{sendMetrics:false},Url:{URLSearchParams},logger:{},
+    retryOnAPIFailure:fn=>fn(),fetchResult:async(_config,path,init,query)=>{uploads.push({path,init,query});return{id:candidate};},
+  });
+  assert.equal(uploads.length,1);assert.equal(uploads[0].path,`/accounts/${DEV.account}/workers/scripts/${DEV.worker}/versions`);
+  assert.equal(uploads[0].init.method,'POST');assert.equal(uploads[0].init.body,form);
+  assert.equal(uploads[0].query.toString(),'bindings_inherit=strict');
+  assert.equal(JSON.stringify(metadata).includes(T5.baseline),false); // No explicit version_id: API default is latest/previous_upload.
+
 });
 test('normal and failure restore use exact original version; failure never claims closure or erases evidence',()=>{
   const f=fixture();try {
@@ -127,4 +142,48 @@ test('restore guard accepts only fresh sole test version or already original, an
   assert.equal(guardDeployment(deployments(T5.baseline),candidate,1000,1001).status,'ALREADY_BASELINE_READBACK_REQUIRED');
   assert.throws(()=>guardDeployment(deployments(crypto.randomUUID()),candidate,1000,1001),/FOREIGN/);
   assert.throws(()=>guardDeployment(deployments(candidate),candidate,1000,20000),/FRESHNESS/);
+});
+
+function afterRollback(f) {
+  f.baseline.latest=version(f.base,candidate);
+  f.baseline.latest.annotations={'workers/tag':'compatible-upload'};
+  f.baseline.latest.metadata={created_on:'2026-10-29T00:00:00Z'};
+  f.baseline.deployments=[{created_on:'2026-10-30T00:00:00Z',versions:[{version_id:T5.baseline,percentage:100}]},...deployments(candidate)];
+}
+test('active exact baseline after rollback with a distinct compatible latest passes reader, preparation and fresh guard',async()=>{
+  const f=fixture();try {
+    afterRollback(f);
+    const original=await collectBaseline(fakeGet(f).get,f.i);f.baseline=original;
+    const result=f.build();assert.equal(result.review.baseline,T5.baseline);assert.equal(result.review.latest_upload.version_id,candidate);
+    assert.equal(result.review.latest_upload.differs_from_active,true);assert.match(result.review.latest_upload.sha256,/^[a-f0-9]{64}$/);
+    assert.equal(result.staged.vars.APU_TELEMETRY_ENABLED,'0');assert.equal(result.staged.vars.APU_TELEMETRY_METADATA_ENABLED,'0');
+    assert.equal(verifyBaselineGuard(await collectBaseline(fakeGet(f).get,f.i),original).status,'BASELINE_GUARD_VERIFIED');
+    // A reviewed last upload must stay unchanged even while the active baseline stays exact.
+    const changed=structuredClone(original);changed.latest.annotations['workers/tag']='changed-after-review';
+    assert.throws(()=>verifyBaselineGuard(changed,original),/BASELINE_CHANGED/);
+    const settingsChanged=structuredClone(original);settingsChanged.settings.observability.enabled=true;
+    assert.throws(()=>verifyBaselineGuard(settingsChanged,original),/BASELINE_CHANGED/);
+  }finally{f.close();}
+});
+for(const [name,mutate]of [
+  ['foreign KV',v=>v.resources.bindings.find(b=>b.name==='DEV_LOG_STATE').namespace_id='f'.repeat(32)],
+  ['extra binding',v=>v.resources.bindings.push({name:'OTHER',type:'kv_namespace',namespace_id:'f'.repeat(32)})],
+  ['unapproved secret',v=>v.resources.bindings.push({name:'OTHER_KEY',type:'secret_text'})],
+  ['stale telemetry secret',v=>v.resources.bindings.push({name:'TELEMETRY_CONTEXT_KEY',type:'secret_text'})],
+  ['missing provider secret',v=>v.resources.bindings=v.resources.bindings.filter(b=>b.name!=='OPENAI_API_KEY')],
+  ['provider secret plaintext',v=>v.resources.bindings.find(b=>b.name==='OPENAI_API_KEY').text='SYNTHETIC_FORBIDDEN'],
+  ['runtime incompatibility',v=>v.resources.script_runtime.compatibility_date='2000-01-01'],
+])test('distinct latest rejects '+name,()=>{const f=fixture();try{afterRollback(f);mutate(f.baseline.latest);assert.throws(f.build);}finally{f.close();}});
+for(const change of ['latest catalog','latest metadata','latest identity','deployment','settings'])test('preflight stops on '+change+' race while baseline ID remains exact',async()=>{
+  const f=fixture();try {
+    afterRollback(f);
+    const fake=fakeGet(f,(path,value,calls)=>{
+      if(change==='latest catalog'&&path.endsWith('/versions')&&calls.filter(p=>p.endsWith('/versions')).length===2)value.items[0].id=crypto.randomUUID();
+      if(change==='latest identity'&&path.endsWith('/versions/'+candidate))value.id=T5.baseline;
+      if(change==='latest metadata'&&path.endsWith('/versions/'+candidate)&&calls.filter(p=>p.endsWith('/versions/'+candidate)).length===2)value.annotations['workers/tag']='concurrent-change';
+      if(change==='settings'&&path.endsWith('/environments/production')&&calls.filter(p=>p.endsWith('/environments/production')).length===2)value.script.observability.enabled=true;
+      if(change==='deployment'&&path.endsWith('/deployments')&&calls.filter(p=>p.endsWith('/deployments')).length===2)value.deployments[0].created_on='2026-10-30T00:00:01Z';
+    });
+    await assert.rejects(collectBaseline(fake.get,f.i),/PREFLIGHT_RACE/);
+  }finally{f.close();}
 });
