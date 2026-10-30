@@ -23,7 +23,18 @@ export function activeVersion(deployments) {
   check(Array.isArray(latest.versions) && latest.versions.length === 1 && latest.versions[0].percentage === 100, 'BLOCKED_TRAFFIC');
   return latest.versions[0].version_id;
 }
-function bindingMap(version) {
+function normalizeD1(binding, expectedId) {
+  check(Object.keys(binding).every(k => ['name','type','id','database_id'].includes(k)), 'BLOCKED_D1_BINDING_SCHEMA');
+  const present=['id','database_id'].filter(k => Object.hasOwn(binding,k));
+  const uuid=v => typeof v === 'string' && /^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(v);
+  check(present.length > 0 && present.every(k => uuid(binding[k])) && uuid(expectedId), 'BLOCKED_D1_BINDING_ID');
+  check(present.length !== 2 || binding.id === binding.database_id, 'BLOCKED_D1_BINDING_CONFLICT');
+  const id=binding[present[0]];
+  check(id === expectedId, 'BLOCKED_D1_BINDING_TARGET');
+  // Comparison view only: raw metadata remains untouched for hashes/freshness.
+  return {name:binding.name,type:'d1',id};
+}
+function bindingMap(version, databaseId) {
   check(obj(version?.resources?.script_runtime) && Array.isArray(version.resources.bindings), 'BLOCKED_VERSION_SHAPE');
   const out = new Map();
   for (const b of version.resources.bindings) {
@@ -31,7 +42,7 @@ function bindingMap(version) {
     if (b.type === 'plain_text') { keys(b, ['name','type','text']); check(typeof b.text === 'string' && [...BASE_VARS, ...T5_VARS].includes(b.name), 'BLOCKED_UNEXPECTED_BINDING'); }
     else if (b.type === 'secret_text') { keys(b, ['name','type']); check([...PROVIDER, ...TEMP_KEYS].includes(b.name), 'BLOCKED_UNEXPECTED_SECRET'); }
     else if (b.type === 'kv_namespace') { keys(b, ['name','type','namespace_id']); check(['DEV_LOG_STATE','PILOT_RULES_ACCEPTANCE'].includes(b.name), 'BLOCKED_UNEXPECTED_KV'); }
-    else if (b.type === 'd1') { keys(b, ['name','type','id']); check(b.name === 'TELEMETRY_DB', 'BLOCKED_UNEXPECTED_D1'); }
+    else if (b.type === 'd1') { check(b.name === 'TELEMETRY_DB', 'BLOCKED_UNEXPECTED_D1'); out.set(b.name,normalizeD1(b,databaseId)); continue; }
     else if (b.type === 'assets') { keys(b, ['name','type']); check(b.name === 'ASSETS', 'BLOCKED_UNEXPECTED_ASSETS'); }
     else throw Error('BLOCKED_UNSUPPORTED_BINDING');
     out.set(b.name, b);
@@ -52,7 +63,7 @@ export function buildT5Configs(baseline, inputs, proposal, template, artifact, a
   check(baseline.d1?.uuid === inputs?.telemetry?.databaseId && baseline.d1?.name === T5.database && baseline.d1?.jurisdiction === 'eu', 'BLOCKED_D1_IDENTITY');
   check(inputs.telemetry?.enabled === false && inputs.telemetry.staged === true && inputs.pilotRules?.ttlSeconds === 86400, 'BLOCKED_STRICT_STAGE_INPUTS');
   check(/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(baseline.latest?.id), 'BLOCKED_LATEST_VERSION');
-  const base = buildDevConfig(template, artifact, inputs), bindings = bindingMap(baseline.version), latest = bindingMap(baseline.latest);
+  const base = buildDevConfig(template, artifact, inputs), bindings = bindingMap(baseline.version,inputs.telemetry.databaseId), latest = bindingMap(baseline.latest,inputs.telemetry.databaseId);
   for (const [name, expected] of [['DEV_LOG_STATE', { name:'DEV_LOG_STATE', type:'kv_namespace', namespace_id:inputs.kvNamespaceId }], ['PILOT_RULES_ACCEPTANCE', { name:'PILOT_RULES_ACCEPTANCE', type:'kv_namespace', namespace_id:inputs.pilotRules.namespaceId }], ['TELEMETRY_DB', { name:'TELEMETRY_DB', type:'d1', id:inputs.telemetry.databaseId }], ['ASSETS',{ name:'ASSETS',type:'assets' }], ...PROVIDER.map(name => [name,{name,type:'secret_text'}])]) {
     check(same(bindings.get(name), expected) && same(latest.get(name), expected), 'BLOCKED_RESOURCE_SUBSTITUTION');
   }
@@ -88,7 +99,7 @@ export function buildT5Configs(baseline, inputs, proposal, template, artifact, a
   check(changed.every(k => k === 'APU_DEVELOPER_EMAILS' || T5_VARS.includes(k)), 'BLOCKED_UNAUTHORIZED_DELTA');
   // Review artifact contains hashes, never resource UUIDs, Access values, email, enrollment or key material.
   const review = { kind:'apu-t5-config-review', baseline:T5.baseline, latest_upload:{version_id:baseline.latest.id,sha256:hash(baseline.latest),differs_from_active:baseline.latest.id !== T5.baseline}, source_sha:sourceSha, staged_sha256:hash(staged), enabled_sha256:hash(enabled),
-    preserved_bindings:[...bindings.values()].filter(b => b.type !== 'plain_text').map(b => ({name:b.name,type:b.type,identity_sha256:hash(b)})),
+    preserved_bindings:baseline.version.resources.bindings.filter(b => b.type !== 'plain_text').map(b => ({name:b.name,type:b.type,identity_sha256:hash(b)})),
     preserved_vars:BASE_VARS.filter(k => k !== 'APU_DEVELOPER_EMAILS').map(name => ({name,sha256:hash(vars[name])})), changed_vars:changed,
     settings_sha256:hash(baseline.settings), assets_sha256:hash(baseline.assets), inherited_provider_secret_names:PROVIDER, new_secret_names:TEMP_KEYS, telemetry_secrets_sha256:hash(proposal.secrets), secrets_preservation:'Wrangler keepSecrets + required inherit bindings without version_id: previous/latest upload, independently validated and freshness guarded; provider plaintext not retrieved or supplied' };
   return { staged, enabled, review, telemetrySecrets:structuredClone(proposal.secrets) };
@@ -107,7 +118,7 @@ export function verifyT5Readback(record, config, sourceSha, expectedId, now = Da
   check(Number.isSafeInteger(record.read_at) && record.read_at <= now + 5000 && now - record.read_at <= 60000, 'BLOCKED_STALE_READBACK');
   check(record.current.annotations?.['workers/tag'] === 't5-r2-'+sourceSha, 'BLOCKED_CANDIDATE_SOURCE_TAG');
   routing(record);
-  const map=bindingMap(record.current), vars=Object.fromEntries([...map.values()].filter(b => b.type === 'plain_text').map(b=>[b.name,b.text]));
+  const map=bindingMap(record.current,config.d1_databases?.find(d=>d.binding === 'TELEMETRY_DB')?.database_id), vars=Object.fromEntries([...map.values()].filter(b => b.type === 'plain_text').map(b=>[b.name,b.text]));
   check(same(vars,config.vars),'BLOCKED_CANDIDATE_FLAGS');
   const expectedBindings=[...config.kv_namespaces.map(k=>({name:k.binding,type:'kv_namespace',namespace_id:k.id})),...config.d1_databases.map(d=>({name:d.binding,type:'d1',id:d.database_id})),{name:'ASSETS',type:'assets'},...config.secrets.required.map(name=>({name,type:'secret_text'}))];
   const actual=[...map.values()].filter(b=>b.type !== 'plain_text').sort((a,b)=>a.name.localeCompare(b.name));
@@ -171,4 +182,4 @@ async function main(a) {
   for(const [name,value] of [['t5-staged.wrangler.json',result.staged],['t5-enabled.wrangler.json',result.enabled],['t5-config-review.json',result.review],['t5-telemetry-secrets.json',result.telemetrySecrets]]) writeFileSync(join(out,name),JSON.stringify(value,null,2)+'\n',{flag:'wx',mode:0o600});
   console.log(JSON.stringify({status:'PREPARED_NOT_DEPLOYED',review_sha256:hash(result.review)}));
 }
-if(process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) { try { await main(process.argv.slice(2)); } catch(e) { console.error(/^(BLOCKED)_[A-Z_]+$/.test(e.message)?e.message:'BLOCKED_T5_PREPARATION'); process.exitCode=1; } }
+if(process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) { try { await main(process.argv.slice(2)); } catch(e) { console.error(/^BLOCKED_[A-Z0-9_]+$/.test(e.message)?e.message:'BLOCKED_T5_PREPARATION'); process.exitCode=1; } }

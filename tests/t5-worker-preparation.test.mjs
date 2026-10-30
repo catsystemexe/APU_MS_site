@@ -4,6 +4,7 @@ import { readFileSync, mkdtempSync, rmSync, writeFileSync, realpathSync } from '
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { spawnSync } from 'node:child_process';
 import { runInNewContext } from 'node:vm';
 import { createHash } from 'node:crypto';
 import { DEV, buildDevConfig } from '../ops/dev/prepare-worker.mjs';
@@ -185,5 +186,72 @@ for(const change of ['latest catalog','latest metadata','latest identity','deplo
       if(change==='deployment'&&path.endsWith('/deployments')&&calls.filter(p=>p.endsWith('/deployments')).length===2)value.deployments[0].created_on='2026-10-30T00:00:01Z';
     });
     await assert.rejects(collectBaseline(fake.get,f.i),/PREFLIGHT_RACE/);
+  }finally{f.close();}
+});
+
+const d1Binding=v=>v.resources.bindings.find(b=>b.type==='d1');
+function d1Form(v,form) {
+  const b=d1Binding(v),id=b.id;
+  if(form!=='id')b.database_id=id;
+  if(form==='database_id')delete b.id;
+}
+for(const form of ['id','database_id','both'])test('D1 '+form+' preparation and candidate readback preserve raw metadata and hashes',()=>{
+  const f=fixture();try {
+    afterRollback(f);d1Form(f.baseline.version,form);d1Form(f.baseline.latest,form==='id'?'database_id':form==='database_id'?'both':'id');
+    const raw=structuredClone(f.baseline),r=f.build();
+    assert.equal(r.staged.d1_databases[0].database_id,f.i.telemetry.databaseId);
+    assert.equal(r.enabled.d1_databases[0].database_id,f.i.telemetry.databaseId);
+    assert.equal(r.review.latest_upload.sha256,createHash('sha256').update(JSON.stringify(raw.latest)).digest('hex'));
+    assert.equal(r.review.preserved_bindings.find(b=>b.name==='TELEMETRY_DB').identity_sha256,createHash('sha256').update(JSON.stringify(d1Binding(raw.version))).digest('hex'));
+    assert.deepEqual(f.baseline,raw);assert.equal(verifyBaselineGuard(f.baseline,raw).status,'BASELINE_GUARD_VERIFIED');
+    const current=version(r.enabled,candidate);d1Form(current,form);
+    const record={...f.baseline,current,latest:current,deployments:deployments(candidate)},before=structuredClone(record);
+    assert.equal(verifyT5Readback(record,r.enabled,sha,candidate).status,'CANDIDATE_CONFIG_VERIFIED_NOT_PROVIDER_PASS');
+    assert.deepEqual(record,before);
+    const changed=structuredClone(raw),b=d1Binding(changed.latest);
+    if(Object.hasOwn(b,'id')) {b.database_id=b.id;delete b.id;} else {b.id=b.database_id;delete b.database_id;}
+    assert.throws(()=>verifyBaselineGuard(changed,raw),/BASELINE_CHANGED/); // Same UUID, changed raw snapshot: never normalize freshness evidence.
+  }finally{f.close();}
+});
+for(const [name,change,code]of [
+  ['conflicting aliases',b=>b.database_id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','BLOCKED_D1_BINDING_CONFLICT'],
+  ['wrong id target',b=>b.id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','BLOCKED_D1_BINDING_TARGET'],
+  ['wrong database_id target',b=>{delete b.id;b.database_id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';},'BLOCKED_D1_BINDING_TARGET'],
+  ['numeric id',b=>b.id=123,'BLOCKED_D1_BINDING_ID'],
+  ['undefined id beside valid database_id',b=>{b.database_id=b.id;b.id=undefined;},'BLOCKED_D1_BINDING_ID'],
+  ['null database_id beside valid id',b=>b.database_id=null,'BLOCKED_D1_BINDING_ID'],
+  ['malformed UUID',b=>b.id='not-a-uuid','BLOCKED_D1_BINDING_ID'],
+  ['malformed database_id beside valid id',b=>b.database_id='not-a-uuid','BLOCKED_D1_BINDING_ID'],
+  ['missing identity',b=>delete b.id,'BLOCKED_D1_BINDING_ID'],
+  ['unknown field',b=>b.database_name='unexpected','BLOCKED_D1_BINDING_SCHEMA'],
+])test('D1 '+name+' stops preparation for baseline/latest and candidate readback with a safe code',()=>{
+  for(const scope of ['baseline','latest','candidate']) {
+    const f=fixture();try {
+      afterRollback(f);const r=f.build(),current=version(r.enabled,candidate);
+      const record={...f.baseline,current,latest:current,deployments:deployments(candidate)};
+      change(d1Binding(scope==='baseline'?f.baseline.version:scope==='latest'?f.baseline.latest:current));
+      assert.throws(scope==='candidate'?()=>verifyT5Readback(record,r.enabled,sha,candidate):f.build,{message:code});
+    }finally{f.close();}
+  }
+});
+
+test('pinned Wrangler recognizes D1 database_id and legacy id without executing any command',()=>{
+  const src=readFileSync(cli,'utf8');assert.equal(createHash('sha256').update(src).digest('hex'),'71da1f9bcf69a9f56c4ff4f68e71315365d03db8ea11207577b47a8e1a0a1064');
+  const fn=runInNewContext('('+src.slice(src.indexOf('function convertBinding(name2, binding, usePlaceholderValue)'),src.indexOf('var REPLACE_ME;',src.indexOf('function convertBinding(name2, binding, usePlaceholderValue)')))+')');
+  const id=inputs().telemetry.databaseId;
+  for(const identity of [{id},{database_id:id},{id,database_id:id}])assert.equal(fn('TELEMETRY_DB',{type:'d1',...identity},false).config.d1_databases[0].database_id,id);
+});
+test('actual local verify CLI reports only safe D1 schema/identity codes, never binding values',()=>{
+  const f=fixture();try {
+    const config=f.build().enabled,configPath=join(f.dir,'config.json'),recordPath=join(f.dir,'readback.json');
+    writeFileSync(configPath,JSON.stringify(config));
+    for(const [change,expected]of [[b=>{b.database_id=b.id;delete b.id;},null],[b=>b.database_name='NEVER_PRINT_THIS','BLOCKED_D1_BINDING_SCHEMA'],[b=>b.id='NEVER_PRINT_THIS','BLOCKED_D1_BINDING_ID'],[b=>b.id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','BLOCKED_D1_BINDING_TARGET']]) {
+      const current=version(config,candidate);change(d1Binding(current));
+      writeFileSync(recordPath,JSON.stringify({...f.baseline,current,latest:current,deployments:deployments(candidate)}));
+      const result=spawnSync(process.execPath,['ops/dev/prepare-t5-worker.mjs','--verify',recordPath,configPath,sha,candidate,root],{cwd:root,encoding:'utf8',timeout:20000});
+      if(expected){assert.equal(result.status,1);assert.equal(result.stdout,'');assert.equal(result.stderr.trim(),expected);}
+      else{assert.equal(result.status,0,result.stderr);assert.match(result.stdout,/CANDIDATE_CONFIG_VERIFIED/);}
+      assert.doesNotMatch(result.stderr,/NEVER_PRINT_THIS|aaaaaaaa-|database_name|database_id/);
+    }
   }finally{f.close();}
 });

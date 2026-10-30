@@ -83,15 +83,17 @@ Povolený overlay: jen vyjmenované telemetry policy/cohort/enrollment/notice va
 
 Review zaznamená `latest_upload.version_id`, hash celých metadata a `differs_from_active`. Během preflight musí zůstat stejné deploymenty, katalog/latest ID, metadata posledního uploadu i aktivní service settings/ETag; změna = STOP. Fresh guard před stage dál porovnává přesnou aktivní baseline, bindings/settings/ASSETS/D1 a celý schválený poslední upload s reviewovaným snapshotem. Odlišnost baseline vs latest je přípustná; změna latest od review přípustná není. Následný read-back vlastní nově nasazené stage/ON verze nadále kontroluje, že během výhradního okna nepřibyl další upload.
 
+**D1 metadata aliasy:** [API kontrakt D1 bindingu](https://developers.cloudflare.com/api/resources/workers/subresources/scripts/subresources/versions/methods/create/) uvádí `database_id` a starší `id`. Pinned Wrangler 4.150.0 (`convertBinding`, `mapWorkerMetadataBindings`, `createWorkerUploadForm`) čte `database_id ?? id`, převádí starší metadata `id` do config `database_id` a ve standardním upload formu používá `id`. T5 podporuje pouze tyto doložené reprezentace: každé přítomné pole musí být platný UUID ve stejném kanonickém formátu jako strict inputs; při obou polích musí být hodnoty přesně shodné. Příprava kontroluje identitu vůči schválenému `inputs.telemetry.databaseId`; candidate read-back vůči `database_id` v configu odvozeném tímto strict preparerem. Další pole zůstávají zakázaná. Chyby bez hodnot: `BLOCKED_D1_BINDING_SCHEMA` (extra pole), `BLOCKED_D1_BINDING_ID` (chybějící/neplatný UUID nebo typ), `BLOCKED_D1_BINDING_CONFLICT` (rozdílné aliasy), `BLOCKED_D1_BINDING_TARGET` (jiný cílový UUID). Normalizuje se pouze porovnávací pohled; původní raw metadata, jejich hashe včetně `preserved_bindings` a raw freshness porovnání zůstávají zachované.
+
 ### 4.2 Co ještě vyžaduje samostatnou autorizaci
 
 Schválit nový přesný source SHA a config review; standardní nový DEV build/deploy nejprve OFF staged a potom dočasný tester overlay, dvě nové telemetry keys, explicitní notice/privacy a UI opt-in, bounded Tail subscription, D1 SELECT/export a případně samostatně scoped cleanup, jeden UI send/3–5 Responses requests/USD1 soft budget, stop a přesný rollback včetně Wrangler 10220 secret-change force retry. Žádné provider credentials work, nové resources, receipt seed/delete, Access policy, PUBLIC nebo onboarding. Pokud tyto podmínky nejsou výslovně schváleny, **BLOCKED před hosted příkazy**.
 
-Native Windows/Node22, skutečná dostupnost baseline/version/assets metadata API pro tento účet, native deploy/rollback a capture jsou **NOT VERIFIED**. Při neodpovídající metadata shape žádný deployment ani improvizovaný fallback; samostatný minimální Repair. Výpadek Cloudflare control plane může znemožnit potvrzení obnovy; časový plán ani kill lokálního procesu nejsou hard expiry nebo záruka hosted closure. Pokud je požadována tato garance, neaktivovat.
+Aktuální operátorský dílčí Windows výsledek je uveden v §5.1; nový D1 repair, native deploy/rollback a capture jsou **NOT VERIFIED**. Dokončení readeru samo neověřilo shodu D1 UUID ve všech bindings. Při neodpovídající metadata shape žádný deployment ani improvizovaný fallback; samostatný minimální Repair. Výpadek Cloudflare control plane může znemožnit potvrzení obnovy; časový plán ani kill lokálního procesu nejsou hard expiry nebo záruka hosted closure. Pokud je požadována tato garance, neaktivovat.
 
 ## 5. Pevná Windows příprava a read-only preflight — budoucí autorizovaná fáze
 
-Použít schválený T5-R2 source worktree a jeho existující dependencies. **Neresetovat runtime checkout**, nepožadovat jeho čistotu ani starý dočasný config. Build worktree musí mít přesný reviewovaný SHA a žádné změněné/untracked source; ignorované build výstupy a vlastní tsbuildinfo nevadí. Git Bash a GNU timeout vyžaduje stávající canonical build; chybí-li, STOP před aktivací, žádné instalování náhradního toolchainu agentem. Podporovaný projektový Node >=22.13.0, pro operátora Node22.23.2; aktuální lokální verifikace Node24.19.0, native22 NOT VERIFIED.
+Použít schválený T5-R2 source worktree a jeho existující dependencies. **Neresetovat runtime checkout**, nepožadovat jeho čistotu ani starý dočasný config. Build worktree musí mít přesný reviewovaný SHA a žádné změněné/untracked source; ignorované build výstupy a vlastní tsbuildinfo nevadí. Git Bash a GNU timeout vyžaduje stávající canonical build; chybí-li, STOP před aktivací, žádné instalování náhradního toolchainu agentem. Podporovaný projektový Node >=22.13.0, pro operátora Node22.23.2; lokální Cloud verifikace Node24.19.0. Operátor následně doložil na Windows Node22.23.2, Git Bash/GNU timeout, canonical build/artifact a reader PASS před opravou D1 aliasů (§5.1); opravená normalizace na Windows dosud NOT VERIFIED.
 
 Všechny `Read-Host` níže jsou pevné identity/cesty z již schválené evidence nebo skutečného CLI outputu, nikoli pokyn doplnit novou konfiguraci. Restricted adresář mimo Git se schválenými ACL (jen operátor) je předpoklad; bez nich STOP. Nikdy nezobrazovat návrh keys/configs ani ukládat HAR.
 
@@ -149,6 +151,52 @@ $Enabled = Join-Path $Configs 't5-enabled.wrangler.json'
 ```
 
 Preflight člověk ověří správný účet, přesný původní DEV version ID/100 %, rollback verzi čitelnou, EU D1 a správné dvě KV, Access audience/issuer, ASSETS/settings, metadata0/telemetry0/developer/TTL86400. Reader obsahuje before/after deployment, latest catalog/metadata i active service settings/ETag guard; odlišné kompatibilní latest samo o sobě není chyba. Neshoda = STOP. Restricted inputs nejsou získávány z produkce ani odhadovány. Sanitizovaný review sám nenahrazuje kontrolu identit.
+
+### 5.1 Pokračování po Windows BLOCKED_UNEXPECTED_FIELDS — pouze offline příprava
+
+**Operátorská evidence, nikoli Cloud native test:** na výchozím `ffb1092c56f226ae841328a775cb656b96187a87` byly dostupné Node22.23.2/Git Bash/GNU timeout, canonical build a Worker artifact PASS, offline proposal/D1 config a read-only baseline reader dokončeny. Config preparation skončila `BLOCKED_UNEXPECTED_FIELDS`. Diagnostika našla `database_id` typu String v raw baseline a latest bindings; hodnoty nebyly zveřejněny ani diagnostikou porovnány. Hosted mutations=0/provider calls=0. To nedokládá správnost konkrétních UUID; nová příprava je striktně porovná. Opravený source na native Windows zatím NOT VERIFIED.
+
+Po review opravného SHA zachovat celý původní restricted evidence adresář, inputs, raw baseline, proposal i případné částečné config výstupy. **Nespouštět znovu `t5-evidence prepare`, negenerovat nový cohort/keys a nepřepisovat původní configs.** Aktualizaci reviewovaného source worktree provést běžným fast-forwardem bez resetu; runtime checkout zůstává nedotčený. Pro nový SHA musí vzniknout nový skutečný canonical build a nový manifest vytvořený `--build`; starý manifest se ručně nepřepisuje ani nepřeznačuje na nový SHA, i když aplikační soubory zůstaly stejné.
+
+Pevné offline pokračování, bez `--execute-authorized-read`, deploy, D1 příkazu nebo provider volání:
+
+```powershell
+$ErrorActionPreference = 'Stop'
+$Repo = (Resolve-Path (Read-Host 'Absolutni cesta k aktualizovanemu reviewovanemu source worktree')).Path
+$SourceSha = Read-Host 'Presny plny novy schvaleny opravny SHA z PR91'
+if ($SourceSha -notmatch '^[a-f0-9]{40}$' -or (git -C $Repo rev-parse HEAD) -ne $SourceSha) { throw 'BLOCKED_REVIEWED_SOURCE' }
+$Evidence = (Resolve-Path (Read-Host 'Puvodni restricted evidence adresar mimo Git, zachovat beze zmeny')).Path
+$Inputs = (Resolve-Path (Read-Host 'Puvodni validovane strict DEV inputs JSON')).Path
+$Baseline = (Resolve-Path (Read-Host 'Puvodni raw t5-baseline.json z dokonceneho readeru')).Path
+$Proposal = (Resolve-Path (Read-Host 'Puvodni t5-overlay-proposal.json, NEGENEROVAT ZNOVU')).Path
+$Ops = Join-Path $Repo 'ops/dev/prepare-t5-worker.mjs'
+$Resume = Join-Path $Evidence ('resume-d1-'+$SourceSha)
+if (Test-Path -LiteralPath $Resume) { throw 'BLOCKED_RESUME_EXISTS_NO_OVERWRITE' }
+New-Item -ItemType Directory -Path $Resume | Out-Null
+# Resume musi zdedit puvodni schvalene restricted ACL; pri nejasnosti STOP.
+$OldDist = Join-Path $Repo 'dist'
+$OldManifest = Join-Path $OldDist 't5-build.json'
+if (!(Test-Path -LiteralPath $OldManifest)) { throw 'BLOCKED_ORIGINAL_BUILD_MANIFEST_MISSING' }
+$OldManifestHash = (Get-FileHash -LiteralPath $OldManifest -Algorithm SHA256).Hash
+$PreviousDist = Join-Path $Resume 'previous-dist'
+Copy-Item -LiteralPath $OldDist -Destination $PreviousDist -Recurse
+if ((Get-FileHash -LiteralPath (Join-Path $PreviousDist 't5-build.json') -Algorithm SHA256).Hash -ne $OldManifestHash) { throw 'BLOCKED_BUILD_EVIDENCE_COPY' }
+# Puvodni artifacty i jejich skutecny manifest/source_sha jsou ted zachovany v previous-dist.
+node $Ops --build $Repo $SourceSha
+if ($LASTEXITCODE -ne 0) { throw 'BLOCKED_NEW_CANONICAL_BUILD' }
+$Built = Get-Content -Raw -LiteralPath (Join-Path $Repo 'dist/t5-build.json') | ConvertFrom-Json
+if ($Built.kind -ne 'apu-t5-build' -or $Built.source_sha -ne $SourceSha) { throw 'BLOCKED_NEW_BUILD_PROVENANCE' }
+$Configs = Join-Path $Resume 'configs'
+New-Item -ItemType Directory -Path $Configs | Out-Null
+node $Ops --prepare $Baseline $Inputs $Proposal $Configs $SourceSha $Repo
+if ($LASTEXITCODE -ne 0) { throw 'BLOCKED_CONFIG_PREPARATION_PRESERVE_OUTPUTS' }
+$Staged = Join-Path $Configs 't5-staged.wrangler.json'
+$Enabled = Join-Path $Configs 't5-enabled.wrangler.json'
+# Review noveho t5-config-review.json; nevypsat private configs, inputs, keys nebo UUID.
+# Zde STOP. Nevykonavat ani stage/ON plan, natoz deploy nebo hosted read-back.
+```
+
+`--build` kontroluje čistý přesný source a vytvoří vlastní manifest s reálnými artifact hashes; `--prepare` tyto hashe znovu ověří. Původní proposal/inputs/raw baseline se pouze čtou a jejich hodnoty se nedoplňují ani nepřevádějí ručně. Existující neúspěšné outputy se nikdy nemažou. Selže-li pokračování, uchovat i nový partial output a STOP; žádné automatické opakování do stejného adresáře. Raw baseline je zachovaný historický snapshot pro offline review, **nikoli čerstvý preflight pro deployment**. Případná další hosted fáze vyžaduje samostatnou autorizaci a nový čerstvý guard dle §6 do nové evidence cesty; nyní se nepouští. Native výsledky tohoto pokračování musí zaznamenat operátor po skutečném běhu, ne převzít z Cloud testů.
 
 ## 6. Budoucí aktivace a browser checklist
 
@@ -380,6 +428,20 @@ Původní strict DEV preparer, produkční/DEV templates, SQL migrace, dependenc
 ### Oprava PR #91 — oddělení aktivní baseline a posledního uploadu, 2026-10-30
 
 Přesný výchozí SHA `e07564553e403f776399c872830f40209857a409`. Změna je omezena na T5 preparer, read-only preflight, jejich testy a tento runbook; aplikační/runtime/SQL source se nemění. Nová regrese skutečně projde reader → prepare → fresh guard pro aktivní baseline po rollbacku a odlišné kompatibilní latest. Nepovolené resource/secret bindings, runtime nekompatibilita, změna schváleného latest a souběžné změny preflight katalogu/metadata/deploymentu/settings znamenají STOP. Pinned CLI test provádí skutečnou vyjmutou standardní upload větev pouze proti HTTP double a dokládá inherit bez explicitní zdrojové verze. Lokální provider-free regrese `node --test tests/t5-worker-preparation.test.mjs tests/t5-handoff.test.mjs tests/dev-worker-preparation.test.mjs`: **243/243 PASS**, bez SKIP; `npm run typecheck`, focused ESLint obou ops souborů a jejich testu, `git diff --check`: **PASS**. Přesný opravný commit je v PR #91. Historických 1580 regresí ani canonical build/artifact z e075 se tato lokální ops oprava nedovolává jako nového běhu; aplikační source je beze změny. Native Windows a hosted kroky zůstávají NOT VERIFIED, žádná nová autorizace.
+
+### Oprava PR #91 — D1 metadata database_id, 2026-10-30
+
+Výchozí SHA `ffb1092c56f226ae841328a775cb656b96187a87`. Syntetický `database_id` scénář před opravou skutečně reprodukoval `BLOCKED_UNEXPECTED_FIELDS`; po opravě příprava/read-back přijímají `id`, `database_id` a obě shodná pole, včetně rozdílných reprezentací baseline/latest. Konfliktní/nesprávná/neplatná/chybějící identita a neznámé pole znamenají bezpečný STOP. Testy ověřují nezměněné raw metadata/hash i odmítnutí raw freshness změny se stejným normalizovaným UUID; skutečný lokální CLI vypíše pouze D1 error code bez hodnot.
+
+```sh
+node --test tests/t5-worker-preparation.test.mjs tests/t5-handoff.test.mjs tests/dev-worker-preparation.test.mjs
+node --test tests/t5-worker-preparation.test.mjs
+node_modules/.bin/eslint ops/dev/prepare-t5-worker.mjs tests/t5-worker-preparation.test.mjs
+node --check ops/dev/prepare-t5-worker.mjs
+git diff --check
+```
+
+Cloud Linux/Node24.19.0/pinned Wrangler4.150.0: **258/258 kombinovaných regresí PASS**, poté finální cílená sada s doplněnými smíšenými aliasy **53/53 PASS**, bez SKIP; focused lint/syntax/diff PASS. Pinned `convertBinding` byl skutečně vyjmut a vykonán lokálně, bez Wrangler executor/API volání. Aplikační source/SQL/dependencies/templates se nezměnily; canonical build ani typecheck se v této ops opravě znovu nevykonávaly. Operátorský Windows build/reader výsledek je samostatná převzatá evidence §5.1, nikoli Cloud ověření nového SHA. Opravené Windows pokračování je **NOT VERIFIED**; žádné hosted operace, provider calls, deployment, merge nebo PUBLIC změna.
 
 ## 10. Historická evidence — nepřebírat jako nový T5-R2 PASS
 
