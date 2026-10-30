@@ -34,7 +34,7 @@ function normalizeD1(binding, expectedId) {
   // Comparison view only: raw metadata remains untouched for hashes/freshness.
   return {name:binding.name,type:'d1',id};
 }
-function bindingMap(version, databaseId) {
+export function bindingMap(version, databaseId) {
   check(obj(version?.resources?.script_runtime) && Array.isArray(version.resources.bindings), 'BLOCKED_VERSION_SHAPE');
   const out = new Map();
   for (const b of version.resources.bindings) {

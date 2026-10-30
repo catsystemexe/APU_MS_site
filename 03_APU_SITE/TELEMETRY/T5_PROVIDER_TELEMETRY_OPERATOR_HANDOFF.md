@@ -1,5 +1,8 @@
 # APU T5 — jeden Rozbor, provider a telemetry ledger
 
+**Aktuální provider gate:** operátor doložil prázdnou DEV secret inventory `2026-10-30T15:25:06.659Z`, oba provider counts=0; příčina historického rozdílu NOT VERIFIED. Tento T5 postup se nyní nevykonává. Viz [oddělená příprava DEV provider bootstrapu](DEV_PROVIDER_BOOTSTRAP.md). Původní732bf950… není automaticky provider-ready ani správný post-T5 restore bod; po bootstrapu je nutný review skutečného nového baseline UUID a aktualizace T5 helperů. Žádný guard neobcházet.
+
+
 **T5-R2: source příprava, nikoli hosted PASS ani autorizace.** VS agent Luna Low: bez delegování, dalších promptů, úprav skriptů a náhradních postupů. Nyní se nesmí provést žádný hosted příkaz. Níže uvedené příkazy jsou pevný návrh následného samostatně autorizovaného Windows zadání; dokument se nespouští celý jako skript. Při chybě STOP; po aktivaci vždy přejít do bounded restore větve.
 
 ## 1. Neměnné body a zdroj kontroly
