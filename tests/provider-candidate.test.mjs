@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFileSync,mkdtempSync,writeFileSync,rmSync,realpathSync} from 'node:fs';
+import {readFileSync,mkdtempSync,writeFileSync,rmSync,realpathSync,readdirSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {runInNewContext} from 'node:vm';
@@ -8,7 +8,7 @@ import {createHash} from 'node:crypto';
 import {buildDevConfig,DEV} from '../ops/dev/prepare-worker.mjs';
 import {T5} from '../scripts/telemetry/t5-evidence.mjs';
 import {preflight} from '../ops/dev/provider-bootstrap.mjs';
-import {buildCandidate,validateProviderValues,freshGuard,futureCommand,candidateReadback,collectFresh,collectReadback} from '../ops/dev/prepare-provider-candidate.mjs';
+import {buildCandidate,inspectCandidate,offlineCheck,projectSettings,validateProviderValues,freshGuard,futureCommand,candidateReadback,collectFresh,collectReadback} from '../ops/dev/prepare-provider-candidate.mjs';
 const template=JSON.parse(readFileSync('wrangler.dev.json')),artifact=JSON.parse(readFileSync('dist/server/wrangler.json'));
 function fixture(){
  const inputs={kvNamespaceId:'0123456789abcdef0011223344556677',accessApplicationId:'d00d1234-2222-4333-8444-555566667777',accessAudience:'0123456789abcdef'.repeat(4),accessTeamDomain:DEV.issuer,operatorEmail:DEV.operator,telemetry:{enabled:false,staged:true,dedicatedDev:true,databaseName:T5.database,databaseId:'12345678-1234-4234-8234-123456789abc',hostname:'apu-ms-site-dev.catsystem-exe.workers.dev'},pilotRules:{dedicatedDev:true,namespaceId:'1123456789abcdef0011223344556677',ttlSeconds:86400}};
@@ -70,4 +70,84 @@ test('pinned Wrangler maps explicit preview_urls to subdomain API previews_enabl
  const result=await ctx.subdomainDeploy({config:{workers_dev:true,preview_urls:previews}},'synthetic-account','apu-ms-site-dev','/synthetic-worker',[],[],false);
  assert.deepEqual(requests,[{url:'/synthetic-worker/subdomain',method:'POST',body:{enabled:true,previews_enabled:previews}}]);assert.equal(result.previewsInSync,true);
  }
+});
+
+test('missing or null observability stays unresolved, never inherited from template false',()=>{
+ const f=candidateFixture();try{
+ for(const raw of [{logpush:true,tail_consumers:null},{logpush:false,tail_consumers:null},{observability:null,tail_consumers:null}]){
+ f.before.settings=raw;const original=JSON.stringify(f.before);const report=inspectCandidate(f.before,f.inputs,template,artifact,f.root,sha);
+ assert.equal(report.status,'OFFLINE_CONTRACT_BLOCKED');assert.ok(report.issues.some(x=>x.code==='BLOCKED_OBSERVABILITY_EVIDENCE_REQUIRED'));
+ assert.equal(report.checks.find(x=>x.section==='settings.tail_consumers').status,'PASS');assert.equal(report.checks.find(x=>x.section==='assets').status,'PASS');
+ assert.equal(report.checks.find(x=>x.section==='runtime').status,'PASS');assert.equal(JSON.stringify(f.before),original);
+ assert.throws(f.build,/OBSERVABILITY_EVIDENCE_REQUIRED/);
+ }
+ }finally{f.close();}
+});
+for(const enabled of [true,false])test(`explicit observability ${enabled}, logpush and null tail project without fabricated defaults`,()=>{
+ const f=candidateFixture();try{
+ const raw={observability:{enabled,head_sampling_rate:0.25,logs:{enabled,invocation_logs:false,persist:false}},logpush:enabled,tail_consumers:null};
+ f.before.settings=structuredClone(raw);f.after.settings=structuredClone(raw);const {config,review}=f.build();
+ assert.deepEqual(config.observability,raw.observability);assert.equal(config.logpush,enabled);assert.equal(Object.hasOwn(config,'tail_consumers'),false);
+ assert.equal(Object.hasOwn(config,'placement'),false);assert.deepEqual(review.settings_projection,projectSettings(raw));assert.deepEqual(f.before.settings,raw);
+ f.after.current.annotations={'workers/tag':'dev-provider-'+sha};assert.match(candidateReadback(f.after,config,sha,f.after.current.id).status,/NOT_PROVIDER_E2E/);
+ for(const change of [r=>r.settings.logpush=!enabled,r=>r.settings.observability.enabled=!enabled,r=>r.settings.tail_consumers=[],r=>r.settings.unknown='PRIVATE_SENTINEL']){
+ const fresh=structuredClone(f.before);change(fresh);assert.throws(()=>freshGuard(f.before,fresh,f.now),/REVIEW_CHANGED/);
+ const after=structuredClone(f.after);change(after);assert.throws(()=>candidateReadback(after,config,sha,after.current.id));
+ }
+ }finally{f.close();}
+});
+test('explicit supported settings are preserved exactly; unsupported/null values fail without guessing',()=>{
+ const raw={observability:{enabled:false},logpush:false,tail_consumers:[{service:'synthetic-tail',environment:'synthetic-env'}],placement:{mode:'off'},limits:{cpu_ms:50},cache:{enabled:true,cross_version_cache:false},streaming_tail_consumers:[]};
+ assert.deepEqual(projectSettings(raw),raw);
+ for(const change of [r=>r.logpush=null,r=>r.tail_consumers='invalid',r=>r.tail_consumers=[{name:'invalid'}],r=>r.observability={enabled:false,unknown:1},r=>r.observability={enabled:'false'},r=>r.placement=null]){const r=structuredClone(raw);change(r);assert.throws(()=>projectSettings(r));}
+});
+test('offline evaluation reports independent mismatches together and never emits metadata values or candidate config',()=>{
+ const f=candidateFixture();try{
+ f.before.settings={logpush:'PRIVATE_SENTINEL',tail_consumers:null,unknown:'PRIVATE_SENTINEL'};
+ f.before.subdomain.previews_enabled='PRIVATE_SENTINEL';f.before.d1.jurisdiction='wrong';f.before.assets.not_found_handling='wrong';
+ f.before.current.resources.bindings.find(x=>x.name==='APU_LOCAL_DEV_AUTH').text='1';
+ const report=inspectCandidate(f.before,f.inputs,template,artifact,f.root,sha);
+ for(const section of ['routing','d1','assets','baseline_vars','settings.fields','settings.observability','settings.logpush'])assert.ok(report.issues.some(x=>x.section===section&&x.status==='FAIL'),section);
+ assert.equal(report.checks.find(x=>x.section==='settings.tail_consumers').status,'PASS');assert.equal(report.checks.find(x=>x.section==='config_schema').status,'NOT_CHECKED');
+ assert.doesNotMatch(JSON.stringify(report),/PRIVATE_SENTINEL|config_sha256|synthetic-code|APU_LOCAL_DEV_AUTH/);assert.equal(Object.hasOwn(report,'config'),false);assert.equal(report.hosted_verified,false);
+ }finally{f.close();}
+});
+test('offline evaluation passes resolved contract without mutating inputs and still requires a new build/strict prepare',()=>{
+ const f=candidateFixture();try{const before=JSON.stringify(f.before);const report=inspectCandidate(f.before,f.inputs,template,artifact,f.root,sha);assert.equal(report.status,'OFFLINE_CONTRACT_PASS_NOT_PREPARED');assert.equal(report.issues.length,0);assert.equal(report.build_required_after_pass,true);assert.equal(JSON.stringify(f.before),before);assert.equal(f.build().config.vars.APU_TELEMETRY_ENABLED,'0');}finally{f.close();}
+});
+test('pinned deploy omits absent/null-projected tail but forcibly disables unspecified observability: absence is unsafe',async()=>{
+ const src=readFileSync('node_modules/wrangler/wrangler-dist/cli.js','utf8');assert.equal(createHash('sha256').update(src).digest('hex'),'71da1f9bcf69a9f56c4ff4f68e71315365d03db8ea11207577b47a8e1a0a1064');
+ const section=(a,b)=>src.slice(src.indexOf(a),src.indexOf(b,src.indexOf(a)));
+ const ctx={import_undici9:{FormData},File,INHERIT_SYMBOL:Symbol(),toMimeType:()=> 'application/javascript+module',getBindingKey:()=> 'binding',isUnsafeBindingType:t=>t.startsWith('unsafe_')};
+ runInNewContext(section('function extractBindingsOfType(','function getBindings(')+section('function createWorkerUploadForm(','var import_undici9, moduleTypeMimeType;'),ctx);
+ const projected=projectSettings({observability:{enabled:true},logpush:false,tail_consumers:null});
+ const metadata=JSON.parse(ctx.createWorkerUploadForm({main:{name:'index.js',type:'esm',content:'export default {}'},modules:[],...projected},{}).get('metadata'));
+ assert.equal(Object.hasOwn(metadata,'tail_consumers'),false);assert.deepEqual(metadata.observability,{enabled:true});assert.equal(metadata.logpush,false);
+ // Execute the exact pinned deploy PATCH call with local doubles, including its unsafe fallback.
+ const call=section('await patchNonVersionedScriptSettings(config2, accountId, scriptName, {','        } catch {');
+ assert.match(call,/observability: worker.observability \?\? \{ enabled: false \}/);
+ const requests=[];const patchCtx={fetchResult:async(_c,url,opts)=>{requests.push({url,body:JSON.parse(opts.body)});}};
+ runInNewContext(section('async function patchNonVersionedScriptSettings(','var init_versions_api ='),patchCtx);
+ for(const worker of [projected,{logpush:false}]){
+ const context={...patchCtx,worker,config2:{},accountId:'synthetic-account',scriptName:'apu-ms-site-dev',nextTags:[]};
+ await runInNewContext('(async()=>{'+call+'})()',context);
+ }
+ assert.equal(Object.hasOwn(requests[0].body,'tail_consumers'),false);assert.deepEqual(requests[0].body.observability,{enabled:true});assert.deepEqual(requests[1].body.observability,{enabled:false});
+ assert.match(src,/this\._client\.get\(`\/accounts\/\$\{account_id\}\/workers\/scripts\/\$\{scriptName\}\/script-settings`/);
+});
+
+test('offline file validator reads existing artifacts with historical provenance, needs no profile/build, writes nothing',()=>{
+ const f=candidateFixture();try{
+ const repo=process.cwd(),snapshot=join(f.root,'historical.json'),inputs=join(f.root,'inputs.json');
+ f.before.settings={logpush:false,tail_consumers:null};writeFileSync(snapshot,JSON.stringify(f.before));writeFileSync(inputs,JSON.stringify(f.inputs));
+ const beforeFiles=readdirSync(f.root),beforeRaw=readFileSync(snapshot,'utf8'),beforeManifest=readFileSync('dist/t5-build.json','utf8');let checks=0;
+ const report=offlineCheck(repo,sha,snapshot,inputs,join(repo,'dist/server/wrangler.json'),(r,s)=>{checks++;assert.equal(r,repo);assert.equal(s,sha);});
+ assert.equal(checks,1);assert.equal(report.status,'OFFLINE_CONTRACT_BLOCKED');assert.ok(report.issues.some(x=>x.code==='BLOCKED_OBSERVABILITY_EVIDENCE_REQUIRED'));
+ assert.equal(report.artifact_provenance.status,'HISTORICAL_BUILD_NEW_BUILD_REQUIRED');assert.deepEqual(readdirSync(f.root),beforeFiles);assert.equal(readFileSync(snapshot,'utf8'),beforeRaw);assert.equal(readFileSync('dist/t5-build.json','utf8'),beforeManifest);
+ assert.doesNotMatch(JSON.stringify(report),/synthetic-code|namespace_id|database_id|CF_ACCESS_AUD/);
+ writeFileSync(snapshot,'not-json PRIVATE_SENTINEL');writeFileSync(inputs,'not-json PRIVATE_SENTINEL');
+ const malformed=offlineCheck(repo,sha,snapshot,inputs,join(repo,'dist/server/wrangler.json'),()=>{});
+ for(const section of ['file.snapshot','file.input'])assert.ok(malformed.issues.some(x=>x.section===section&&x.code==='BLOCKED_LOCAL_JSON'));
+ assert.doesNotMatch(JSON.stringify(malformed),/PRIVATE_SENTINEL/);assert.deepEqual(readdirSync(f.root),beforeFiles);
+ }finally{f.close();}
 });

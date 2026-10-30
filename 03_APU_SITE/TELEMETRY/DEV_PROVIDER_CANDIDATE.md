@@ -21,6 +21,58 @@ Latest se nenasazuje ani nekopíruje. Jeho known bindings/identity se validují 
 
 Pinned Wrangler4.150.0/CLI hash `71da1f9bcf69a9f56c4ff4f68e71315365d03db8ea11207577b47a8e1a0a1064`: standardní `deploy --secrets-file` převádí dodané hodnoty na explicitní secret_text před required/inherit krokem. Obě required provider položky jsou dodané, takže žádná z nich není inherit. Actual upload form test ověřuje keep_bindings pouze pro secret typy (žádné plain/json), přesně dvě explicitní provider položky, beze změny všech aktivních vars. Standardní deploy **uploaduje a aktivuje**, není to oddělený neaktivní hosted staging. Oddělujeme lokální přípravu/review od budoucí explicitně autorizované aktivace; nevymýšlíme exact-copy API.
 
+## Settings correction — nejdříve úplná offline kontrola, žádný další build
+
+Operátor doložil Windows build/setup na `a7293a21e255b1049e244a4c27f09aff450aa772` PASS a prepare BLOCKED_SETTINGS. Historické settings obsahuje pouze boolean logpush (hodnota není publikována) a tail_consumers:null, **observability chybí**. Raw before.json ani jeho hash se nepřepisují. Následující stav nahrazuje dřívější pokyn rovnou opakovat fázi A: **nejprve offline-check, při BLOCKED žádný nový build/setup/prepare**.
+
+Primární kontrakty a skutečné pinned chování:
+
+- [Cloudflare SDK5.2.0 ScriptSetting (OpenAPI-generated)](https://github.com/cloudflare/cloudflare-typescript/blob/v5.2.0/src/resources/workers/scripts/scripts.ts): logpush je optional boolean; observability a tail_consumers jsou optional/nullable. Optional/null nejsou důkazem konkrétního efektivního observability.enabled. Žádná rovnost absence = false se nepředpokládá.
+- [SDK script-settings GET/PATCH](https://github.com/cloudflare/cloudflare-typescript/blob/v5.2.0/src/resources/workers/scripts/settings.ts): script-level settings jsou non-versioned. Verze ani rollback samy tento kontrakt nenahrazují.
+- Pinned Wrangler4.150.0, CLI SHA256 výše: createWorkerUploadForm vynechává undefined settings a null tail; explicitní logpush true i false zachovává. deployWorker následně volá patchNonVersionedScriptSettings s `observability:worker.observability ?? {enabled:false}`. Proto **vynechání observability v configu není preserving mechanismus** a template observability:false nesmí nahradit chybějící důkaz.
+- Pinned normalizace configu nemá tail_consumers ani logpush fallback (notInheritable/inheritable s undefined). Při vynechaném tail_consumers upload i JSON PATCH pole vynechají; nemění se jeho hodnota. `null` proto projektujeme **jen pro tail_consumers** vynecháním config pole, nikoli vymyšleným [] nebo tvrzením, že null je potvrzený prázdný seznam. Chybějící raw tail také zůstává vynechaný; explicitní podporované pole se přenáší přesně. Žádné obecné odstranění null hodnot.
+
+| Raw settings | Konfigurační projekce / výsledek |
+| --- | --- |
+| explicitní podporované observability s boolean enabled | přesná kopie, žádné doplnění defaultů |
+| observability absent/null/bez boolean enabled | BLOCKED_OBSERVABILITY_EVIDENCE_REQUIRED |
+| boolean logpush | přesně true/false; skutečná hodnota pouze v private evidence |
+| tail_consumers:null nebo absent | konfigurační pole vynechat; upload/PATCH jej nepřenáší |
+| explicitní podporovaný tail seznam / ostatní podporované settings | přesná kopie, validace pinned config-schema |
+| unknown fields / nepodporovaný tvar, včetně jiných null | STOP, neodhadovat převod |
+
+Nový helper odděluje nezměněný raw settings_sha256 od settings_projection v review. Před projekcí odstraní všechna settings pole template, aby nevniklo observability:false z template. Fresh preflight stále porovnává **raw** settings přesně včetně presence/null. Read-back validuje stejnou striktní projekci; přepnutí boolean, změněný tail seznam nebo neznámé pole STOP. Neodhadnuté optional defaulty se do configu nedoplňují. Skutečné pinned upload/PATCH funkce byly spuštěny jen lokálně s doubles; žádná API operace.
+
+### Právě jeden chybějící read-only údaj
+
+Chybí **úplný explicitní efektivní objekt result.observability** pro přesný DEV Worker ze zdroje:
+
+`GET /accounts/<ověřený DEV account>/workers/scripts/apu-ms-site-dev/script-settings`
+
+To je jeden cílený script-settings údaj, ne nový obecný audit a ne další build. Reader původního before.json promítal environment.script, který jej neposkytl; historický snapshot se nepovažuje za důkaz disabled. Žádné čtení se nyní neprovádí. Případné získání vyžaduje samostatně autorizovaný read-only krok a chráněný raw sidecar; původní before.json zůstane nedotčený. Jestli i tento zdroj vrátí absent/null, efektivní nastavení zůstává **NOT VERIFIED / BLOCKED**, nikoli false. Bez review důkazu a jeho explicitního zapojení do review/fresh/read-back kontraktu prepare dál odmítá postup; tato oprava nezavádí override, neseeduje settings ani nespojuje sidecar ručním editováním snapshotu. Nebyl prokázán efektivní observability stav reálného Workeru.
+
+### Soběstačný Windows blok — jen existující soubory, žádný build
+
+Po review opraveného SHA aktualizovat existující source worktree běžným schváleným source postupem. Zachovat staré dist/manifest, inputs, target, proposal, všechny profily a before.json. Tento blok **nevyžaduje nový setup ani profil navázaný na nové SHA**, nevolá Wrangler CLI/API, nic nezapisuje. Výstup obsahuje pouze pevná jména kontrol, status/kódy a source SHA historického buildu, nikoli resource hodnoty či celé JSON struktury. `$Artifact` musí být existující canonical dist/server/wrangler.json v tomto worktree.
+
+```powershell
+$ErrorActionPreference='Stop'
+$Repo=(Resolve-Path -LiteralPath (Read-Host 'Existujici aktualizovany reviewovany source worktree')).Path
+$Sha=Read-Host 'Presny plny reviewovany SHA settings correction v PR93'
+$Historical=(Resolve-Path -LiteralPath (Read-Host 'Puvodni existujici before.json s Node inventory')).Path
+$Inputs=(Resolve-Path -LiteralPath (Read-Host 'Puvodni existujici validovane DEV inputs')).Path
+$Artifact=(Resolve-Path -LiteralPath (Join-Path $Repo 'dist/server/wrangler.json')).Path
+$Candidate=Join-Path $Repo 'ops/dev/prepare-provider-candidate.mjs'
+node $Candidate offline-check $Repo $Sha $Historical $Inputs $Artifact
+if ($LASTEXITCODE -ne 0) { throw 'OFFLINE_CONTRACT_BLOCKED_NO_BUILD_NO_HOSTED_ACTION' }
+# I OFFLINE_CONTRACT_PASS_NOT_PREPARED znamena STOP pred novym buildem/prepare.
+# Nejprve review celeho souhrnu a teprve potom samostatne povolit lokalni fazi A.
+```
+
+`offline-check` vyhodnocuje stejné fáze jako strict prepare: active/latest, routing, inventory, OFF inputs/DEV preparer, active/latest bindings a isolation, D1 EU, Access/plain vars/developer/trace/TTL, runtime, jednotlivá settings, ASSETS, source/artifact path a dostupnou konfigurační schema projekci. Nálezy vrací souhrnně (`issues`, exit1). Poškozený JSON a neočekávané chyby vracejí bezpečné kódy bez hodnot. Nelze-li odvozenou kontrolu provést kvůli předchozí chybě, je **NOT_CHECKED/BLOCKED_DEPENDENCY**, nikdy falešný PASS. Strukturální schema projekce může projít i bez unresolved setting, jeho samostatná chyba ale blokuje celkový PASS i prepare. Source/root/remote, private paths a pinned Wrangler jsou ověřované; trust/path chyba může ukončit zpracování před načtením dat.
+
+Historický build je pouze vstup pro offline kontrakt, ne nový kandidát. Report odděleně uvede artifact_provenance; OFFLINE_CONTRACT_PASS_NOT_PREPARED není artifact provenance/hosted PASS ani autorizace zápisu. Finální prepare stále vyžaduje nový skutečný canonical build na finálním SHA, odpovídající artifact hashes a nový profil/adresář. **Žádný nový Windows build nyní nezadáváme**, protože explicitní observability důkaz chybí. Starý manifest nepřeznačovat. T3/T4 ani obecnou Windows diagnostiku neopakovat.
+
 ## Routing correction a lokální resume po BLOCKED_ROUTING
 
 Windows canonical build a setup nad `55a86530edd85652aa50ea84105eaf8786305201` operátor doložil jako PASS; prepare skončil BLOCKED_ROUTING. Lokální diagnostika historického before.json doložila přesně `subdomain={enabled:true,previews_enabled:true}`, routes/domains/schedules prázdné, bez dalších subdomain polí. Žádné hosted mutace; tato dávka další hosted čtení neprováděla. Příčina: nový candidate helper svévolně vyžadoval preview false. Původní T5/bootstrap guardy zůstávají beze změny.
@@ -31,9 +83,9 @@ Pinned Wrangler4.150.0 (CLI hash výše), config-schema.json definuje boolean `p
 
 **Zachování preview nastavení není ověření Access ochrany preview URL. Preview URL Access protection je NOT VERIFIED a zůstává samostatnou hosted bezpečnostní podmínkou před případnou autorizací aktivace.** Zachování Access vars a ochrany hlavní DEV URL tento důkaz nenahrazuje. Tato oprava preview URLs nezapíná ani nevypíná.
 
-Resume je pouze lokální fáze A níže: po review nového přesného SHA použít tentýž existující source worktree, původní validované inputs/target a nezměněný historický before.json. Vybrat jiný již existující prázdný restricted adresář; starý profil, review, proposal, logs i případné partial outputs zachovat. Žádný další diagnostický read-before. Blok A před canonical buildem kopíruje dosavadní dist včetně manifestu do nového evidence adresáře, poté provede **nový canonical build na novém SHA**, nový setup/profile a prepare do nového adresáře. Starý build manifest se nepřepisuje ručně ani nepřeznačuje na nový SHA. Nepoužívat starý profil s novým SHA nebo staré artifacts s novým profilem. Žádný blok B/C/D se nyní nespouští.
+Následující routing resume platí až po celkovém offline-check PASS a vyřešení settings důkazu výše. Resume je pouze lokální fáze A níže: po review nového přesného SHA použít tentýž existující source worktree, původní validované inputs/target a nezměněný historický before.json. Vybrat jiný již existující prázdný restricted adresář; starý profil, review, proposal, logs i případné partial outputs zachovat. Žádný další diagnostický read-before. Blok A před canonical buildem kopíruje dosavadní dist včetně manifestu do nového evidence adresáře, poté provede **nový canonical build na novém SHA**, nový setup/profile a prepare do nového adresáře. Starý build manifest se nepřepisuje ručně ani nepřeznačuje na nový SHA. Nepoužívat starý profil s novým SHA nebo staré artifacts s novým profilem. Žádný blok B/C/D se nyní nespouští.
 
-## A. Soběstačná lokální příprava — nyní dovolený typ práce
+## A. Soběstačná lokální příprava — až po úplném offline PASS
 
 Úplné Windows cesty v zadání nejsou. Vybrat skutečné **existující** cesty z dosavadního T5 handoffu; nevymýšlet nový kořen, nesahat na runtime checkout. `$Dir` je již existující nový prázdný restricted adresář mimo Git, ACL jen operátor. Původní snapshot/inputs/proposal i partial outputs zachovat. Historický **before.json** z dokončeného read-before obsahuje raw metadata + Node inventory i když následný guard skončil BLOCKED_LATEST_NOT_ACTIVE. Nepoužívat místo něj ručně doplněný raw snapshot bez inventory.
 
@@ -49,6 +101,10 @@ if ((Get-ChildItem -LiteralPath $Dir -Force).Count -ne 0) { throw 'BLOCKED_OUTPU
 $Build=Join-Path $Repo 'ops/dev/prepare-t5-worker.mjs'
 $Setup=Join-Path $Repo 'ops/dev/provider-bootstrap-operator.mjs'
 $Candidate=Join-Path $Repo 'ops/dev/prepare-provider-candidate.mjs'
+# Povinna offline brana PRED jakymkoli novym buildem, historicky artifact zachovat:
+$Artifact=(Resolve-Path -LiteralPath (Join-Path $Repo 'dist/server/wrangler.json')).Path
+node $Candidate offline-check $Repo $Sha $Historical $Inputs $Artifact
+if ($LASTEXITCODE -ne 0) { throw 'OFFLINE_CONTRACT_BLOCKED_NO_BUILD' }
 # Pred buildem uchovat drivejsi dist/manifest mimo repo, zadne preznaceni stareho source_sha:
 if (Test-Path -LiteralPath (Join-Path $Repo 'dist')) { Copy-Item -LiteralPath (Join-Path $Repo 'dist') -Destination (Join-Path $Dir 'previous-dist') -Recurse }
 node $Build --build $Repo $Sha
@@ -174,3 +230,5 @@ git diff --check
 **270/270 PASS**, bez SKIP, včetně18 nových candidate kontrol; lint/diff PASS. Pinned form test dokládá complete keep_vars:false a dvě explicitně dodané provider položky, ne inherit. Původní bootstrap/T5 guardy prošly beze změny. Canonical build/provenance a skutečný offline prepare/plan CLI pro finální SHA jsou doloženy v Draft PR; tyto lokální kroky neudělují hosted autorizaci. T3/T4 nebyly opakovány. Build artifact/template/SQL ani aplikace nejsou ručně rekonstruované z hosted verze. Jediná změna starého T5 prepareru je export již existující artifactHashes, žádná úprava validace.
 
 Routing repair — lokální regrese nad novým source: navíc baseline preview true/false, jejich přesné mapování do Wrangler API, změna mezi review/fresh/read-back a odmítnutí neznámých či změněných routovacích polí. Výsledky této opravy jsou uvedeny v PR #93; předchozí canonical build PASS výše platí pouze pro svůj původní SHA. Native Windows resume i hosted preservation/preview Access zůstávají NOT VERIFIED.
+
+Settings repair — Linux/Node24.19.0/pinned Wrangler4.150.0: **288/288 provider-free serial regressions PASS, 0 SKIP**, včetně8 nových settings/offline kontrol; původní T5/bootstrap/DEV guardy PASS beze změny. Spuštěno `node --test --test-concurrency=1 --test-reporter=tap tests/provider-candidate.test.mjs tests/provider-bootstrap.test.mjs tests/t5-worker-preparation.test.mjs tests/dev-worker-preparation.test.mjs`; focused eslint obou změněných .mjs, `node --check` a `git diff --check` PASS. Žádný nový build, hosted read či mutace. Skutečný Windows snapshot v Cloud není dostupný: jeho celkový offline výsledek není předstírán, z doložené shape plyne unresolved observability. Native Windows offline-check NOT VERIFIED; candidate readiness BLOCKED do vyřešení důkazu.
