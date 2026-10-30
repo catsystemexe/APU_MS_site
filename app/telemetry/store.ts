@@ -12,7 +12,7 @@ export interface TelemetryStore {
   stopSession(owner: Owner, now: number): Promise<void>;
   ingest(owner: Owner, events: StoredEvent[], now: number): Promise<string[]>;
   touchRequest(owner: Owner, now: number): Promise<void>;
-  upsertAi(call: AiCall): Promise<void>;
+  upsertAi(call: AiCall, committed?: () => void): Promise<void>;
 }
 export function ownerOf(session: Session): Owner {
   const { session_id, participant_id, cohort_id, key_version, tab_id } = session;

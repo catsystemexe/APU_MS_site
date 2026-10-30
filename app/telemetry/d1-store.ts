@@ -72,15 +72,16 @@ export class D1TelemetryStore implements TelemetryStore {
       return events.map(v => v.event.event_id);
     } catch (error) { return failure(error); }
   }
-  async upsertAi(call: AiCall) {
+  async upsertAi(call: AiCall, committed?: () => void) {
     try {
       await this.owned(call.owner);
       const p = call.projection;
-      await this.db.prepare(`INSERT INTO telemetry_ai_calls
+      const result = await this.db.prepare(`INSERT INTO telemetry_ai_calls
         (call_id,session_id,workflow_id,started_at,state,identity_json,projection_json,cost_nano_usd) VALUES (?,?,?,?,?,?,?,?)
         ON CONFLICT(call_id) DO UPDATE SET state=excluded.state,projection_json=excluded.projection_json,cost_nano_usd=excluded.cost_nano_usd
         WHERE telemetry_ai_calls.state='pending' AND excluded.state='final'`)
         .bind(p.call_id, call.owner.session_id, p.workflow_id, p.started_at, p.state, canonical(call.identity), canonical(p), p.cost_nano_usd).run();
+      if (result.meta.changes === 1) { try { committed?.(); } catch { /* diagnostic acknowledgement only */ } }
     } catch (error) { failure(error); }
   }
 }

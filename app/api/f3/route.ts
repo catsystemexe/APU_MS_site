@@ -33,7 +33,7 @@ export async function POST(request: Request) {
   try { assertF2SnapshotSupportsMaterialization(body.sourceSnapshot); }
   catch (cause) { return Response.json({ result: { kind: "boundary_issue", reason: cause instanceof Error ? cause.message : "Chybí věcný podklad.", affectedArea: "Specializovaný výstup", suggestedReturnToF2: "Doplňte potřebný podklad v Rozboru; pracovní analýzu lze exportovat ihned." } }); }
   const model = isSupportedModel(body.model) ? body.model : "gpt-5.6-terra"; const path = body.sourceSnapshot.activePath;
-  const collector = createRequestUsageCollector((await createRequestTelemetrySink(request, identity)).sink);
+  const collector = createRequestUsageCollector(await createRequestTelemetrySink(request, identity));
   try {
     const source = body.sourceSnapshot;
     const { response, usage_record, application_result } = await callOpenAIResponses({

@@ -17,7 +17,7 @@ export async function POST(request: Request) {
   if (typeof needText !== "string" || !needText.trim() || needText.length > 2000) return Response.json({ error: "Neplatná pedagogická potřeba." }, { status: 400 });
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return Response.json({ error: "APU není dokončeno: chybí serverová konfigurace." }, { status: 503 });
-  const collector = createRequestUsageCollector((await createRequestTelemetrySink(request, identity)).sink);
+  const collector = createRequestUsageCollector(await createRequestTelemetrySink(request, identity));
   try {
     const { usage_record, application_result } = await callOpenAIResponses({
       api_key: apiKey, request_id: crypto.randomUUID(), phase: "F2", operation: "need_routing", requested_model: "gpt-5.6-terra", reasoning_effort: "low", requested_service_tier: "default", collector,

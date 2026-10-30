@@ -6,7 +6,7 @@ const route = await readFile(new URL("../app/api/chat/route.ts", import.meta.url
 const controller = await readFile(new URL("../app/quest-controller.ts", import.meta.url), "utf8");
 
 test("chat shares one request collector across controller and main streaming calls", () => {
-  assert.match(route, /const usageCollector = createRequestUsageCollector\(telemetrySink\.sink\)/);
+  assert.match(route, /const usageCollector = createRequestUsageCollector\(telemetrySink\)/);
   assert.match(route, /const telemetrySink = await createRequestTelemetrySink\(request, authorization, undefined, \{ requestIdIsClientOwned: true \}\)/);
   assert.match(route, /telemetrySink\.retain\(completion\)/);
   assert.match(route, /runQuestController\(\{[^]*requestId,[^]*turnId,[^]*collector: usageCollector,/);

@@ -190,7 +190,7 @@ export async function POST(request: Request) {
   const turnId = typeof body.turnId === "string" && body.turnId.length <= 160 ? body.turnId : null;
   const input = { notebook: body.notebook, canonicalNeed, previousAnalysis, selectedHypothesisId: typeof body.selectedHypothesisId === "string" ? body.selectedHypothesisId : null, activeNeedId: typeof body.activeNeedId === "string" ? body.activeNeedId : null, focusInstruction, skippedQuestions: skipped };
   const analysisStarted = performance.now();
-  const collector = createRequestUsageCollector((await createRequestTelemetrySink(request, identity)).sink);
+  const collector = createRequestUsageCollector(await createRequestTelemetrySink(request, identity));
   try {
     const { response, usage_record, application_result } = await callOpenAIResponses({
       api_key: apiKey, request_id: crypto.randomUUID(), turn_id: turnId, phase: "F2", operation: "analysis", requested_model: "gpt-5.6-terra", reasoning_effort: "low", requested_service_tier: "default", collector,

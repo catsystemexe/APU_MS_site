@@ -32,7 +32,7 @@ function fixture(groundingCount = 0, inputTokens = 100, plan = prepare()) {
     db.prepare('INSERT INTO telemetry_ai_calls VALUES (?,?,?,?,?,?,?,?)').run(callId, session, workflow, 1000, 'pending', JSON.stringify(identity), JSON.stringify({ ...projection, state: 'pending', completed_at: null }), null);
     evidence.lifecycle_observations.push({ call_id: callId, state: 'pending', observed_at: 1000, source: 'd1-sql' }, { call_id: callId, state: 'final', observed_at: 2000, source: 'd1-sql' });
     db.prepare("UPDATE telemetry_ai_calls SET state='final',projection_json=?,cost_nano_usd=? WHERE call_id=? AND state='pending'").run(JSON.stringify(projection), projection.cost_nano_usd, callId);
-    evidence.calls.push({ call_id: callId, operation, model, provider_status: 'completed', usage: rawUsage, file_search_calls: record.file_search_calls });
+    evidence.calls.push({ call_id: callId, operation, attempt_index, service_tier:'default', model, provider_status: 'completed', usage: rawUsage, file_search_calls: record.file_search_calls });
     if (operation === 'grounding') continue; // Server subcalls share the extraction ticket; no invented client grounding event.
     for (const [event_name, payload] of [['operation_requested', { operation_instance_id: operationId, operation, reason: 'initial', prior_operation_id: null }], ['operation_resolved', { operation_instance_id: operationId, outcome: 'accepted' }]]) {
       const e = { schema_version: 1, measurement_version: 'pilot-v1', source: 'client', event_id: id(), event_name, session_id: session, tab_id: tab, workflow_id: workflow, client_seq: seq++, elapsed_ms: 0, payload };
@@ -145,7 +145,7 @@ test('CLI refuses overwrites, invalid SQL phases and evidence inside the reposit
   const run = args => { const result = spawnSync(process.execPath, [fileURLToPath(helper), ...args], { encoding: 'utf8' }); if (result.error) throw result.error; return result; };
   try {
     const first = run(['prepare', dir, process.cwd()]); assert.equal(first.status, 0);
-    assert.equal(JSON.parse(first.stdout).execution, 'BLOCKED_ACTIVATION_METHOD');
+    assert.equal(JSON.parse(first.stdout).execution, 'PROPOSAL_ONLY_REQUIRES_REVIEWED_T5_CONFIG_AND_AUTHORIZATION');
     const plan = JSON.parse(readFileSync(join(dir, 't5-overlay-proposal.json')));
     assert.ok(!first.stdout.includes(plan.secrets.TELEMETRY_PSEUDONYM_KEY));
     assert.equal(run(['prepare', dir, process.cwd()]).status, 1);

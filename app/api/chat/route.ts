@@ -254,7 +254,7 @@ export async function POST(request: Request) {
   const requestId = typeof body.requestId === "string" ? body.requestId : crypto.randomUUID();
   const turnId = typeof body.turnId === "string" ? body.turnId : null;
   const telemetrySink = await createRequestTelemetrySink(request, authorization, undefined, { requestIdIsClientOwned: true });
-  const usageCollector = createRequestUsageCollector(telemetrySink.sink);
+  const usageCollector = createRequestUsageCollector(telemetrySink);
   const communicationProfile = body.communicationProfile ?? DEFAULT_COMMUNICATION_PROFILE_ID;
   if (!isCommunicationProfile(communicationProfile)) {
     return jsonError("Zvolený komunikační profil backend nepodporuje.", 400);
@@ -362,6 +362,7 @@ export async function POST(request: Request) {
     sink: usageCollector.sink,
   });
   const callId = mainLifecycle.call_id;
+  const providerTrace = usageCollector.trace?.call(callId, "main_chat", 0);
   const controllerUsageRecord = usageCollector.records().find((record) => record.operation === "controller") ?? null;
 
   const encoder = new TextEncoder();
@@ -391,6 +392,8 @@ export async function POST(request: Request) {
         let upstream: Response;
         try {
           await mainLifecycle.begin();
+          const providerBody = JSON.stringify(payload);
+          providerTrace?.invoke();
           upstream = await fetch("https://api.openai.com/v1/responses", {
             method: "POST",
             headers: {
@@ -398,9 +401,10 @@ export async function POST(request: Request) {
               "Content-Type": "application/json",
               ...mainLifecycle.headers,
             },
-            body: JSON.stringify(payload),
+            body: providerBody,
           });
         } catch {
+          providerTrace?.error();
           await mainLifecycle.finish_transport("fetch_error");
           emit({ type: "error", message: "Main odpověď se nepodařilo zahájit.", model_usage_records: usageCollector.records() });
           close();
@@ -409,6 +413,7 @@ export async function POST(request: Request) {
 
         if (!upstream.ok || !upstream.body) {
           const detail = await upstream.json().catch(() => null) as (ProviderResponseBody & { error?: { message?: string; code?: unknown } | null }) | null;
+          providerTrace?.response(detail ?? {}, upstream.status);
           if (!upstream.ok) await mainLifecycle.finish_provider({ body: detail ?? {}, headers: upstream.headers, status_code: upstream.status });
           else await mainLifecycle.finish_transport("missing_stream_body");
           emit({ type: "error", message: isDeveloper && detail?.error?.message || "OpenAI API request selhal.", model_usage_records: usageCollector.records() });
@@ -431,6 +436,7 @@ export async function POST(request: Request) {
           }
           if (event.type === "response.completed") {
             const response = event.response as CompletedResponse;
+            providerTrace?.response(response, upstream.status);
             await mainLifecycle.finish_provider({ body: { ...response, status: response.status ?? "completed" }, headers: upstream.headers, status_code: upstream.status });
             terminalEvent = true;
             const completedAt = performance.now();
@@ -477,11 +483,13 @@ export async function POST(request: Request) {
             });
           }
           if (event.type === "response.incomplete" || event.type === "response.failed") {
+            providerTrace?.response(event.response ?? {}, upstream.status);
             await mainLifecycle.finish_provider({ body: { ...(event.response ?? {}), status: event.type === "response.incomplete" ? "incomplete" : "failed" }, headers: upstream.headers, status_code: upstream.status });
             terminalEvent = true;
             emit({ type: "error", message: "Model odpověď nedokončil.", model_usage_records: usageCollector.records() });
           }
           if (event.type === "error") {
+            providerTrace?.response({ status: "failed" }, upstream.status);
             await mainLifecycle.finish_provider({ body: { status: "failed", error: { code: typeof event.code === "string" ? event.code : null } }, headers: upstream.headers, status_code: upstream.status });
             terminalEvent = true;
             emit({ type: "error", message: isDeveloper && event.message || "Streaming selhal.", model_usage_records: usageCollector.records() });
@@ -501,11 +509,13 @@ export async function POST(request: Request) {
           buffer += decoder.decode();
           if (buffer) await processSseLine(buffer);
           if (!terminalEvent) {
+            providerTrace?.error();
             await mainLifecycle.finish_transport("stream_ended_without_terminal_event");
             emit({ type: "error", message: "Přenos odpovědi skončil bez dokončení.", model_usage_records: usageCollector.records() });
           }
         } catch {
           if (!terminalEvent) {
+            providerTrace?.error();
             await mainLifecycle.finish_transport("stream_interrupted");
             emit({ type: "error", message: "Přenos odpovědi byl přerušen.", model_usage_records: usageCollector.records() });
           }
