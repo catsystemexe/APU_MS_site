@@ -45,3 +45,29 @@ test('future readback collector binds the actual expected new UUID, keeps raw ev
 });
 
 test('known provider names in unactivated latest are overwritten explicitly, never inherited or copied',()=>{const f=candidateFixture();try{f.before.latest.resources.bindings.push({name:'OPENAI_API_KEY',type:'secret_text'},{name:'APU_VECTOR_STORE_ID',type:'secret_text'});const r=f.build();assert.deepEqual(r.review.overwritten_latest_provider_names,['APU_VECTOR_STORE_ID','OPENAI_API_KEY']);assert.deepEqual(r.config.secrets.required,r.review.overwritten_latest_provider_names);assert.deepEqual(r.review.vars_changed,[]);}finally{f.close();}});
+
+for(const previews of [true,false])test(`reviewed preview ${previews} is explicit, fresh-stable and preserved at readback`,()=>{
+ const f=candidateFixture();try{
+ f.before.subdomain.previews_enabled=previews;f.after.subdomain.previews_enabled=previews;
+ const {config,review}=f.build();assert.equal(config.workers_dev,true);assert.equal(config.preview_urls,previews);assert.deepEqual(review.routing.subdomain,f.before.subdomain);
+ assert.match(freshGuard(f.before,structuredClone(f.before),f.now).status,/PASS/);
+ const changed=structuredClone(f.before);changed.subdomain.previews_enabled=!previews;assert.throws(()=>freshGuard(f.before,changed,f.now),/REVIEW_CHANGED/);
+ f.after.current.annotations={'workers/tag':'dev-provider-'+sha};assert.match(candidateReadback(f.after,config,sha,f.after.current.id).status,/NOT_PROVIDER_E2E/);
+ f.after.subdomain.previews_enabled=!previews;assert.throws(()=>candidateReadback(f.after,config,sha,f.after.current.id),/ROUTING/);
+ }finally{f.close();}
+});
+for(const [name,change]of [
+ ['missing preview',r=>delete r.subdomain.previews_enabled],['nonboolean preview',r=>r.subdomain.previews_enabled='true'],['extra subdomain field',r=>r.subdomain.extra=true],['workers.dev disabled',r=>r.subdomain.enabled=false],['route',r=>r.routes=['example.invalid/*']],['domain',r=>r.domains=['example.invalid']],['schedule',r=>r.schedules=['* * * * *']]
+])test('candidate routing still rejects '+name+' at review, fresh preflight and readback',()=>{
+ const f=candidateFixture();try{const {config}=f.build();const fresh=structuredClone(f.before);change(fresh);assert.throws(()=>freshGuard(f.before,fresh,f.now),/ROUTING/);f.after.current.annotations={'workers/tag':'dev-provider-'+sha};change(f.after);assert.throws(()=>candidateReadback(f.after,config,sha,f.after.current.id),/ROUTING/);change(f.before);assert.throws(f.build,/ROUTING/);}finally{f.close();}
+});
+test('pinned Wrangler maps explicit preview_urls to subdomain API previews_enabled for both baseline states',async()=>{
+ const src=readFileSync('node_modules/wrangler/wrangler-dist/cli.js','utf8');assert.equal(createHash('sha256').update(src).digest('hex'),'71da1f9bcf69a9f56c4ff4f68e71315365d03db8ea11207577b47a8e1a0a1064');
+ const section=(a,b)=>src.slice(src.indexOf(a),src.indexOf(b,src.indexOf(a)));
+ for(const previews of [true,false]){
+ const requests=[],ctx={URL,logger:{},getWorkerSubdomain:async()=>({enabled:true,previews_enabled:previews,url:'https://apu-ms-site-dev.example.workers.dev'}),retryOnAPIFailure:fn=>fn(),fetchResult:async(_config,url,opts)=>{requests.push({url,method:opts.method,body:JSON.parse(opts.body)});return JSON.parse(opts.body);},validateSubdomainMixedState:async()=>{}};
+ runInNewContext(section('function getSubdomainValues(','function getSubdomainValuesAPIMock(')+section('async function subdomainDeploy(','function validateEventTriggerTargets('),ctx);
+ const result=await ctx.subdomainDeploy({config:{workers_dev:true,preview_urls:previews}},'synthetic-account','apu-ms-site-dev','/synthetic-worker',[],[],false);
+ assert.deepEqual(requests,[{url:'/synthetic-worker/subdomain',method:'POST',body:{enabled:true,previews_enabled:previews}}]);assert.equal(result.previewsInSync,true);
+ }
+});

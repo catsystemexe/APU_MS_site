@@ -17,10 +17,14 @@ const hash=v=>createHash('sha256').update(JSON.stringify(v)).digest('hex');
 const names=['APU_VECTOR_STORE_ID','OPENAI_API_KEY'];
 const settingKeys=['observability','logpush','placement','tail_consumers','streaming_tail_consumers','limits','cache'];
 const schema=new Ajv({allErrors:true}).compile(read(new URL('../../node_modules/wrangler/config-schema.json',import.meta.url)));
+function routing(r){
+ check(typeof r.subdomain?.previews_enabled==='boolean'&&same(r.subdomain,{enabled:true,previews_enabled:r.subdomain.previews_enabled})&&same(r.routes,[])&&same(r.domains,[])&&same(r.schedules,[]),'BLOCKED_ROUTING');
+ return {workers_dev:true,preview_urls:r.subdomain.previews_enabled};
+}
 function context(r){
  check(r.account_id===DEV.account&&r.worker===DEV.worker&&r.current?.id===T5.baseline&&same(r.current,r.version)&&activeVersion(r.deployments)===T5.baseline,'BLOCKED_ACTIVE_BASELINE');
  check(typeof r.latest?.id==='string'&&/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(r.latest.id),'BLOCKED_LATEST_ID');
- check(same(r.subdomain,{enabled:true,previews_enabled:false})&&same(r.routes,[])&&same(r.domains,[])&&same(r.schedules,[]),'BLOCKED_ROUTING');
+ routing(r);
  check(parseInventory(JSON.stringify(r.inventory)).length===0,'BLOCKED_SECRET_INVENTORY');
 }
 export function buildCandidate(r,inputs,template,artifact,root,sha){
@@ -37,10 +41,10 @@ export function buildCandidate(r,inputs,template,artifact,root,sha){
  check(r.settings&&Object.keys(r.settings).every(k=>settingKeys.includes(k))&&typeof r.settings.observability?.enabled==='boolean','BLOCKED_SETTINGS');
  check(r.assets&&Object.keys(r.assets).every(k=>['not_found_handling','html_handling','run_worker_first','base_path'].includes(k))&&r.assets.not_found_handling==='none'&&same(r.current_assets,r.assets),'BLOCKED_ASSETS');
  check(isAbsolute(root)&&realpathSync(root)===root&&/^[a-f0-9]{40}$/.test(sha),'BLOCKED_SOURCE_ARTIFACT');
- Object.assign(config,structuredClone(r.settings),{vars,keep_vars:false,main:join(root,'server/index.js'),base_dir:join(root,'server'),assets:{directory:join(root,'client'),binding:'ASSETS',...r.assets},secrets:{required:names},send_metrics:false});
+ Object.assign(config,structuredClone(r.settings),routing(r),{vars,keep_vars:false,main:join(root,'server/index.js'),base_dir:join(root,'server'),assets:{directory:join(root,'client'),binding:'ASSETS',...r.assets},secrets:{required:names},send_metrics:false});
  config.d1_databases[0].migrations_dir=fileURLToPath(new URL('../../telemetry/migrations',import.meta.url));
  check(schema(config),'BLOCKED_WRANGLER_SCHEMA');
- return {config,review:{kind:'apu-new-dev-provider-candidate',source_sha:sha,pre_change_version:T5.baseline,active_sha256:hash(r.current),latest_sha256:hash(r.latest),settings_sha256:hash(r.settings),assets_sha256:hash(r.assets),config_sha256:hash(config),intended_changes:['new canonical server/client artifact (no binary equivalence claim)','add exactly OPENAI_API_KEY and APU_VECTOR_STORE_ID'],vars_changed:[],preserved_bindings:r.current.resources.bindings.map(b=>({name:b.name,type:b.type,sha256:hash(b)})),complete_plain_vars:true,flags:{telemetry:vars.APU_TELEMETRY_ENABLED,metadata:vars.APU_TELEMETRY_METADATA_ENABLED,trace:vars.APU_T5_TRACE_ENABLED??'absent: default OFF'},keep_vars:false,reason:'All active plain vars supplied explicitly; inherit no latest plain vars. Pinned deploy keeps secrets: active set must be empty; latest may contain only the two explicitly overwritten provider names, never any unprovided secret.',provider_secret_names:names,overwritten_latest_provider_names:[...latest.values()].filter(b=>b.type==='secret_text').map(b=>b.name).sort(),pre_change_restore_provider_ready:false,new_t5_restore_version:null}};
+ return {config,review:{kind:'apu-new-dev-provider-candidate',source_sha:sha,pre_change_version:T5.baseline,active_sha256:hash(r.current),latest_sha256:hash(r.latest),settings_sha256:hash(r.settings),assets_sha256:hash(r.assets),routing:structuredClone({subdomain:r.subdomain,routes:r.routes,domains:r.domains,schedules:r.schedules}),config_sha256:hash(config),intended_changes:['new canonical server/client artifact (no binary equivalence claim)','add exactly OPENAI_API_KEY and APU_VECTOR_STORE_ID'],vars_changed:[],preserved_bindings:r.current.resources.bindings.map(b=>({name:b.name,type:b.type,sha256:hash(b)})),complete_plain_vars:true,flags:{telemetry:vars.APU_TELEMETRY_ENABLED,metadata:vars.APU_TELEMETRY_METADATA_ENABLED,trace:vars.APU_T5_TRACE_ENABLED??'absent: default OFF'},keep_vars:false,reason:'All active plain vars supplied explicitly; inherit no latest plain vars. Pinned deploy keeps secrets: active set must be empty; latest may contain only the two explicitly overwritten provider names, never any unprovided secret.',provider_secret_names:names,overwritten_latest_provider_names:[...latest.values()].filter(b=>b.type==='secret_text').map(b=>b.name).sort(),pre_change_restore_provider_ready:false,new_t5_restore_version:null}};
 }
 export function validateProviderValues(v){
  check(v&&typeof v==='object'&&!Array.isArray(v)&&same(Object.keys(v).sort(),names)&&Object.values(v).every(x=>typeof x==='string'&&x.trim().length>0&&x.length<=8192&&!/[\r\n]/.test(x)),'BLOCKED_PROVIDER_FILE');
@@ -71,7 +75,7 @@ export function candidateReadback(r,config,sha,id){
  const runtime=r.current.resources.script_runtime;
  check(runtime.compatibility_date===config.compatibility_date&&same(runtime.compatibility_flags,config.compatibility_flags),'BLOCKED_RUNTIME');
  check(same(r.settings,Object.fromEntries(settingKeys.filter(k=>Object.hasOwn(config,k)).map(k=>[k,config[k]])))&&same(r.current_assets,Object.fromEntries(Object.entries(config.assets).filter(([k])=>!['directory','binding'].includes(k)))),'BLOCKED_SETTINGS');
- check(same(r.subdomain,{enabled:true,previews_enabled:false})&&same(r.routes,[])&&same(r.domains,[])&&same(r.schedules,[]),'BLOCKED_ROUTING');
+ check(same(routing(r),{workers_dev:config.workers_dev,preview_urls:config.preview_urls}),'BLOCKED_ROUTING');
  return {status:'DEPLOYMENT_METADATA_VERIFIED_NOT_PROVIDER_E2E',version:id,new_t5_restore_version:null,gate:'Artifact upload provenance, session/developer/OFF readback and review required before nominating a T5 restore point'};
 }
 function captureSnapshot(p,prefix,version,runner){
