@@ -21,7 +21,57 @@ Latest se nenasazuje ani nekopíruje. Jeho known bindings/identity se validují 
 
 Pinned Wrangler4.150.0/CLI hash `71da1f9bcf69a9f56c4ff4f68e71315365d03db8ea11207577b47a8e1a0a1064`: standardní `deploy --secrets-file` převádí dodané hodnoty na explicitní secret_text před required/inherit krokem. Obě required provider položky jsou dodané, takže žádná z nich není inherit. Actual upload form test ověřuje keep_bindings pouze pro secret typy (žádné plain/json), přesně dvě explicitní provider položky, beze změny všech aktivních vars. Standardní deploy **uploaduje a aktivuje**, není to oddělený neaktivní hosted staging. Oddělujeme lokální přípravu/review od budoucí explicitně autorizované aktivace; nevymýšlíme exact-copy API.
 
-## Cílený script-settings důkaz — nový reader a oddělený zdroj
+## Aktuální varianta: explicitní nové observability.enabled=false — bez dalšího GET/build
+
+Operátor doložil uložený HTTP200 script-settings výsledek: logpush:boolean (hodnota neveřejná), tags:null, tail_consumers:null, observability:null. **Původní raw evidence se zachová beze změny. Žádný další GET nyní nepožadujeme.** Předchozí reader instrukce níže jsou historický postup; nynější nejbližší krok je pouze offline kontrola již existujících souborů. Žádný nový build, setup, inventura, T3/T4 ani obecná diagnostika.
+
+Nová varianta se volí jen explicitním `--declare-observability-disabled` pro offline-check a pozdější prepare. Bez tohoto přepínače zůstává preserving režim a null observability nadále BLOCKED. Přepínač není alias/default/null normalizace: přijímá pouze doložený **explicitní top-level observability:null** v platném sidecaru a nullish historický údaj. Absent, nesprávný typ, jiný explicitní stav, neznámé pole nebo nesoulad ostatních settings = STOP. Neodhaduje se historická hodnota enabled.
+
+Review má `observability_policy:declare-disabled`, přesnou navrženou projekci `{enabled:false}` a **třetí intended_changes**: nové non-versioned observability.enabled=false; historický null není důkaz disabled. První dva zamýšlené rozdíly (nový canonical artifact, přesně dvě provider secret bindings) zůstávají. Offline report rozlišuje `explicit-change-to-enabled-false` od `preserved-explicit`, samostatně uvádí zachovaná ostatní settings a tags chování. Raw snapshot/sidecar/hash/timestamps zůstávají oddělené a neměnné. Žádný tajný runtime override; policy je uložená v review a používá se při regeneraci configu i preflightu.
+
+### Primární pinned kontrakt tags:null
+
+Skutečná API evidence je nullable, ačkoli starší OpenAPI-generated SDK5.2.0 deklaruje tags jako optional array. Netvrdíme, že jeho TypeScript typ dokazuje null. Rozhodující podporu této runtime reprezentace dokládá **pinned Wrangler4.150.0** (CLI hash výše):
+
+1. `preUploadApiChecks` začíná `let tags=[]`, poté přesně `tags=script.tags ?? tags`. Nullish tags tedy pro vlastní deploy považuje za žádné tags.
+2. `applyServiceAndEnvironmentTags` bez definedEnvironments nepřidá service/environment tags. Tento úplný explicitní DEV config je nemá. Nový workers/tag source tag je version annotation, nikoli script-level tags.
+3. Standardní deploy explicitně PATCHuje script-settings s `tags:nextTags`, zde **[]**, a `observability:{enabled:false}`. Toto chování je lokálně ověřené spuštěním skutečných extrahovaných pinned funkcí s doubles, ne jen textovým výskytem.
+
+Naše aplikace **nepřepisuje raw tags:null na [] a nezavádí obecnou null→[] normalizaci**. Reader/validator přijímá pouze tags absent/null/[] jako doloženou no-tags reprezentaci; neprázdný seznam, nesprávný typ a ostatní neznámá pole odmítá. Review výslovně uvádí expected deploy PATCH [] a tuto možnou reprezentaci read-backu; neprohlašuje raw equality null/[] ani zavedení nových tags. Fresh preflight musí dál potvrdit **přesně původní raw tags:null**; změna na [] před deploymentem = STOP. Po případném deployi read-back přijme pouze null nebo [] bez nových tags a explicitní observability.enabled=false. Null observability po deploymentu nestačí.
+
+### Non-versioned nastavení a restore omezení
+
+Observability i script tags jsou script-level/non-versioned. **Rollback Worker UUID není automatická obnova observability ani celého pre-change runtime.** Pokud budoucí deployment nastaví enabled=false a pak se obnoví staré732bf950… UUID, non-versioned nastavení může zůstat false. Neexistuje důkaz původního efektivního enabled stavu: uchovaný null není recept k reverznímu PATCHi a tato dávka žádnou takovou obnovu neimplementuje ani neslibuje. Rovněž neslibuje návrat serialized tags:null místo [].
+
+Původní UUID zůstává omezený code/version pre-change restore bod s dříve doloženou chybějící provider readiness. Budoucí autorizace aktivace musí výslovně akceptovat nové non-versioned disabled nastavení a toto omezení návratu; nesmí být prezentovaná jako přesně vratný bootstrap. Jakákoli další změna observability/restore settings vyžaduje zvláštní review známého explicitního cíle, ne odhad historického null. Nový T5 restore bod lze určit až po skutečném hosted ověření nového OFF/OFF kandidáta a explicitního false; po budoucím T5 rollbacku je stále nutný non-versioned read-back, nikoli pouhé UUID. Žádný restore/deploy se zde neprovádí.
+
+### Soběstačná nejbližší Windows fáze — pouze offline
+
+Převzít existující cesty z původního profilu a uloženého raw souboru; neprovádět znovu cílený GET. Historický artifact `a7293a21e255b1049e244a4c27f09aff450aa772` a manifest se nepřeznačují. Tato fáze nevytváří candidate config ani profil:
+
+```powershell
+$ErrorActionPreference='Stop'
+$Profile=(Resolve-Path -LiteralPath (Read-Host 'Existujici bootstrap-local-profile.json')).Path
+$OldProfile=Get-Content -LiteralPath $Profile -Raw | ConvertFrom-Json
+if ($OldProfile.kind -ne 'apu-provider-bootstrap-local-profile') { throw 'BLOCKED_PROFILE_IDENTITY' }
+$Repo=(Resolve-Path -LiteralPath $OldProfile.repo).Path
+$Inputs=(Resolve-Path -LiteralPath $OldProfile.inputs).Path
+$Historical=(Resolve-Path -LiteralPath (Read-Host 'Puvodni existujici before.json s inventory')).Path
+$Settings=(Resolve-Path -LiteralPath (Join-Path $OldProfile.dir 'script-settings-review.json')).Path
+$Artifact=(Resolve-Path -LiteralPath (Join-Path $Repo 'dist/server/wrangler.json')).Path
+$Sha=Read-Host 'Presny plny reviewovany SHA explicit disabled varianty v PR93'
+$Candidate=Join-Path $Repo 'ops/dev/prepare-provider-candidate.mjs'
+node $Candidate offline-check $Repo $Sha $Historical $Inputs $Artifact $Settings --declare-observability-disabled
+if ($LASTEXITCODE -ne 0) { throw 'OFFLINE_CONTRACT_BLOCKED_NO_BUILD' }
+# STOP. Review celeho vystupu vcetne zamyslene observability zmeny a restore omezeni.
+# Ani PASS nespousti novy build/setup/prepare/GET/deploy.
+```
+
+Teprve po review **celého** offline výsledku lze samostatně navázat novým canonical buildem se skutečnou provenance nového SHA a novým output profilem/adresářem. Pozdější prepare této varianty má stejný explicitní přepínač; fresh-read/future-plan už použije uloženou policy. Budoucí samostatně autorizovaný předdeployový reader umí pouze pro tuto policy uchovat raw null (`--capture-null-observability`, status NULL_NOT_DISABLED); nekonvertuje jej na false ani se nyní nespouští. Fresh result se musí shodovat s reviewovaným raw result a zachovává původní freshness guardy. Postdeployový reader capture-null režim nepoužívá: vyžaduje explicitní objekt a read-back configu false. Také tento budoucí krok není autorizovaný nyní.
+
+Ostatní settings/routing/Access/KV/D1/ASSETS i úplné active vars jsou zachované; telemetry/metadata0/0, trace OFF, původní bootstrap/T5 guardy beze změny. Skutečný hosted observability stav se touto source změnou **nemění**. Native Windows nová offline varianta a hosted verification zůstávají NOT VERIFIED.
+
+## Historický cílený script-settings reader — nyní znovu NESPOUŠTĚT
 
 Operátor nad `10d2a28d3562258f5484691b92d4ce4cb0071ac6` doložil **32 PASS a jedinou chybu settings.observability/BLOCKED_OBSERVABILITY_EVIDENCE_REQUIRED**; existující artifact má source SHA `a7293a21e255b1049e244a4c27f09aff450aa772`. Neprovádíme nový build, inventuru, T3/T4 ani obecnou diagnostiku. Níže je připravené budoucí cílené čtení; v této source/local dávce se skutečný GET **nespouští** a jeho výsledek není známý.
 
@@ -108,7 +158,7 @@ $Inputs=(Resolve-Path -LiteralPath (Read-Host 'Puvodni existujici validovane DEV
 $Artifact=(Resolve-Path -LiteralPath (Join-Path $Repo 'dist/server/wrangler.json')).Path
 $Settings=(Resolve-Path -LiteralPath (Read-Host 'Existujici chráněný script-settings-review.json z cíleneho readu')).Path
 $Candidate=Join-Path $Repo 'ops/dev/prepare-provider-candidate.mjs'
-node $Candidate offline-check $Repo $Sha $Historical $Inputs $Artifact $Settings
+node $Candidate offline-check $Repo $Sha $Historical $Inputs $Artifact $Settings --declare-observability-disabled
 if ($LASTEXITCODE -ne 0) { throw 'OFFLINE_CONTRACT_BLOCKED_NO_BUILD_NO_HOSTED_ACTION' }
 # I OFFLINE_CONTRACT_PASS_NOT_PREPARED znamena STOP pred novym buildem/prepare.
 # Nejprve review celeho souhrnu a teprve potom samostatne povolit lokalni fazi A.
@@ -149,7 +199,7 @@ $Setup=Join-Path $Repo 'ops/dev/provider-bootstrap-operator.mjs'
 $Candidate=Join-Path $Repo 'ops/dev/prepare-provider-candidate.mjs'
 # Povinna offline brana PRED jakymkoli novym buildem, historicky artifact zachovat:
 $Artifact=(Resolve-Path -LiteralPath (Join-Path $Repo 'dist/server/wrangler.json')).Path
-node $Candidate offline-check $Repo $Sha $Historical $Inputs $Artifact $Settings
+node $Candidate offline-check $Repo $Sha $Historical $Inputs $Artifact $Settings --declare-observability-disabled
 if ($LASTEXITCODE -ne 0) { throw 'OFFLINE_CONTRACT_BLOCKED_NO_BUILD' }
 # Pred buildem uchovat drivejsi dist/manifest mimo repo, zadne preznaceni stareho source_sha:
 if (Test-Path -LiteralPath (Join-Path $Repo 'dist')) { Copy-Item -LiteralPath (Join-Path $Repo 'dist') -Destination (Join-Path $Dir 'previous-dist') -Recurse }
@@ -158,7 +208,7 @@ if ($LASTEXITCODE -ne 0) { throw 'BLOCKED_CANONICAL_BUILD' }
 node $Setup setup $Repo $Sha $Inputs $Target $Dir
 if ($LASTEXITCODE -ne 0) { throw 'BLOCKED_LOCAL_PROFILE' }
 $Profile=Join-Path $Dir 'bootstrap-local-profile.json'
-node $Candidate prepare $Profile $Repo $Sha $Historical $Settings
+node $Candidate prepare $Profile $Repo $Sha $Historical $Settings --declare-observability-disabled
 if ($LASTEXITCODE -ne 0) { throw 'BLOCKED_CANDIDATE_PREPARATION' }
 # STOP. Review provider-candidate.review.json a private kompletni config, zadny hosted prikaz.
 ```
@@ -280,3 +330,5 @@ Routing repair — lokální regrese nad novým source: navíc baseline preview 
 Settings repair — Linux/Node24.19.0/pinned Wrangler4.150.0: **288/288 provider-free serial regressions PASS, 0 SKIP**, včetně8 nových settings/offline kontrol; původní T5/bootstrap/DEV guardy PASS beze změny. Spuštěno `node --test --test-concurrency=1 --test-reporter=tap tests/provider-candidate.test.mjs tests/provider-bootstrap.test.mjs tests/t5-worker-preparation.test.mjs tests/dev-worker-preparation.test.mjs`; focused eslint obou změněných .mjs, `node --check` a `git diff --check` PASS. Žádný nový build, hosted read či mutace. Skutečný Windows snapshot v Cloud není dostupný: jeho celkový offline výsledek není předstírán, z doložené shape plyne unresolved observability. Native Windows offline-check NOT VERIFIED; candidate readiness BLOCKED do vyřešení důkazu.
 
 Authoritative script-settings source — lokálně **308/308 provider-free serial regressions PASS, 0 SKIP**: `node --test --test-concurrency=1 --test-reporter=tap tests/provider-script-settings.test.mjs tests/provider-candidate.test.mjs tests/provider-bootstrap.test.mjs tests/t5-worker-preparation.test.mjs tests/dev-worker-preparation.test.mjs`. Finální targeted reader/candidate recheck **56/56 PASS**; focused eslint všech čtyř dotčených .mjs, syntax a diff PASS. API/auth procesy jsou pouze doubles se syntetickými tokeny. Ověřeno raw uchování/žádný overwrite, pevný GET/redirect:error/no retry, safe output, old-profile paths bez buildu, separate-source provenance, absent/null/identity mismatch/changed/stale/cached evidence STOP a původní guards. Native Windows/cílený skutečný GET a hosted preservation **NOT VERIFIED**. Předchozí operátorova 32 PASS evidence se nepřeznačuje na výsledek nového readeru.
+
+Explicit disabled varianta — lokálně Linux/Node24.19.0/pinned Wrangler4.150.0: **313/313 serial provider-free regresí PASS, 0 SKIP**, včetně5 nových kontrol explicitního návrhu/null tags/pinned deploy. Cílená sada reader/candidate **61/61 PASS**. První společný běh měl jeden procesový timeout existujícího local D1 testu (exit143); izolované opakování PASS a závěrečný celý serial běh výše PASS. Příkazy: `node --test --test-concurrency=1 --test-reporter=tap tests/provider-script-settings.test.mjs tests/provider-candidate.test.mjs tests/provider-bootstrap.test.mjs tests/t5-worker-preparation.test.mjs tests/dev-worker-preparation.test.mjs`; focused eslint čtyř změněných .mjs, obě syntax kontroly a `git diff --check` PASS. Žádný build ani skutečný GET/hosted operace. Native Windows offline výsledek nové policy není předstírán; musí být reviewován před dalším buildem.

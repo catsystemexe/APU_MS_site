@@ -17,25 +17,27 @@ function evidenceEnvelope(e,now=Date.now(),fresh=false){
  check(e&&same(Object.keys(e).sort(),[...evidenceKeys].sort())&&e.kind==='apu-dev-script-settings-read'&&e.account_id===DEV.account&&e.worker===DEV.worker&&e.endpoint===SETTINGS_ENDPOINT&&e.method==='GET'&&e.cli_sha256===CLI_PIN&&typeof e.source_sha==='string'&&/^[a-f0-9]{40}$/.test(e.source_sha),'BLOCKED_SCRIPT_SETTINGS_SOURCE');
  check(Number.isSafeInteger(e.read_started_at)&&Number.isSafeInteger(e.read_at)&&e.read_started_at>=0&&e.read_at>=e.read_started_at&&e.read_at-e.read_started_at<=10000&&e.read_at<=now+5000&&(!fresh||now-e.read_started_at<=60000),'BLOCKED_SCRIPT_SETTINGS_TIME');
 }
-export function scriptSettingsResult(e,now=Date.now(),fresh=false){
+export function scriptSettingsResult(e,now=Date.now(),fresh=false,allowNull=false){
  evidenceEnvelope(e,now,fresh);
  check(e.http_status===200&&typeof e.raw_body==='string','BLOCKED_SCRIPT_SETTINGS_RESPONSE');
  let body;try{body=JSON.parse(e.raw_body);}catch{throw Error('BLOCKED_SCRIPT_SETTINGS_RESPONSE');}
  check(body?.success===true&&body.result&&typeof body.result==='object'&&!Array.isArray(body.result),'BLOCKED_SCRIPT_SETTINGS_RESPONSE');
  const result=body.result;
  check((!Object.hasOwn(result,'logpush')||typeof result.logpush==='boolean')&&(!Object.hasOwn(result,'tail_consumers')||result.tail_consumers===null||Array.isArray(result.tail_consumers)),'BLOCKED_SCRIPT_SETTINGS_FIELDS');
- check(Object.keys(result).every(k=>['observability','logpush','tail_consumers','tags'].includes(k))&&(!Object.hasOwn(result,'tags')||same(result.tags,[])),'BLOCKED_SCRIPT_SETTINGS_FIELDS');
- check(result.observability&&typeof result.observability==='object'&&!Array.isArray(result.observability)&&typeof result.observability.enabled==='boolean','BLOCKED_OBSERVABILITY_EVIDENCE_REQUIRED');
+ check(Object.keys(result).every(k=>['observability','logpush','tail_consumers','tags'].includes(k))&&(!Object.hasOwn(result,'tags')||result.tags===null||same(result.tags,[])),'BLOCKED_SCRIPT_SETTINGS_FIELDS');
+ check((allowNull&&Object.hasOwn(result,'observability')&&result.observability===null)||(result.observability&&typeof result.observability==='object'&&!Array.isArray(result.observability)&&typeof result.observability.enabled==='boolean'),'BLOCKED_OBSERVABILITY_EVIDENCE_REQUIRED');
  return result;
 }
-export function effectiveSettings(raw,evidence,now=Date.now(),fresh=false){
- check(evidence,'BLOCKED_OBSERVABILITY_EVIDENCE_REQUIRED');const result=scriptSettingsResult(evidence,now,fresh);
+export function effectiveSettings(raw,evidence,now=Date.now(),fresh=false,policy='preserve-explicit'){
+ check(['preserve-explicit','declare-disabled'].includes(policy),'BLOCKED_OBSERVABILITY_POLICY');
+ check(evidence,'BLOCKED_OBSERVABILITY_EVIDENCE_REQUIRED');const result=scriptSettingsResult(evidence,now,fresh,policy==='declare-disabled');
  for(const key of ['logpush','tail_consumers'])if(Object.hasOwn(raw,key))check(Object.hasOwn(result,key)&&same(raw[key],result[key]),'BLOCKED_SCRIPT_SETTINGS_CHANGED');
  if(raw.observability!=null)check(same(raw.observability,result.observability),'BLOCKED_SCRIPT_SETTINGS_CHANGED');
+ if(policy==='declare-disabled'){check(result.observability===null&&raw.observability==null,'BLOCKED_OBSERVABILITY_POLICY_SOURCE');return {...raw,observability:{enabled:false}};}
  return {...raw,observability:result.observability};
 }
 export function settingsOrigin(e){evidenceEnvelope(e);return {kind:e.kind,endpoint:e.endpoint,method:e.method,source_sha:e.source_sha,read_started_at:e.read_started_at,read_at:e.read_at,sha256:createHash('sha256').update(JSON.stringify(e)).digest('hex')};}
-export async function readScriptSettings(repo,sha,target,out,getFetch=fetch,runner=spawnSync,checkSource=sourceCheck,now=Date.now){
+export async function readScriptSettings(repo,sha,target,out,getFetch=fetch,runner=spawnSync,checkSource=sourceCheck,now=Date.now,allowNull=false){
  checkSource(repo,sha);restorePlan(target,repo);
  check(isAbsolute(out)&&resolve(out)===out,'BLOCKED_SETTINGS_OUTPUT');privatePath(dirname(out),repo,true);
  const cli=realpathSync(join(repo,'node_modules/wrangler/wrangler-dist/cli.js'));check(hash(cli)===CLI_PIN,'BLOCKED_WRANGLER_VERSION');
@@ -51,8 +53,8 @@ export async function readScriptSettings(repo,sha,target,out,getFetch=fetch,runn
   const raw=await response.text(),ended=now();
   const evidence={kind:'apu-dev-script-settings-read',account_id:DEV.account,worker:DEV.worker,endpoint:SETTINGS_ENDPOINT,method:'GET',source_sha:sha,cli_sha256:CLI_PIN,read_started_at:started,read_at:ended,http_status:response.status,raw_body:raw};
   writeFileSync(fd,JSON.stringify(evidence)+'\n'); // Exact response text retained only in restricted evidence.
-  scriptSettingsResult(evidence,ended); // absent/null still leaves raw evidence and fails closed.
-  return {status:'SCRIPT_SETTINGS_READ_EXPLICIT_OBSERVABILITY',checked_at:new Date(ended).toISOString(),evidence:out,explicit_observability_enabled_boolean:true};
+  const result=scriptSettingsResult(evidence,ended,false,allowNull);
+  return {status:result.observability===null?'SCRIPT_SETTINGS_READ_NULL_NOT_DISABLED':'SCRIPT_SETTINGS_READ_EXPLICIT_OBSERVABILITY',checked_at:new Date(ended).toISOString(),evidence:out,explicit_observability_enabled_boolean:result.observability!==null};
  }finally{auth=undefined;closeSync(fd);}
 }
 export function profileReadPaths(profile,repo){
@@ -66,9 +68,10 @@ async function main(a){
  let out;try{
   check(['--execute-authorized-read','--execute-profile-read'].includes(a[0]),'BLOCKED_ARGUMENTS');
   const [mode,repo,sha,...rest]=a;sourceCheck(repo,sha);let target;
+  const allowNull=rest.at(-1)==='--capture-null-observability';if(allowNull)rest.pop();
   if(mode==='--execute-profile-read'){check(rest.length===1,'BLOCKED_ARGUMENTS');({target,out}=profileReadPaths(rest[0],repo));}
   else{check(rest.length===2,'BLOCKED_ARGUMENTS');[target,out]=rest;}
-  console.log(JSON.stringify(await readScriptSettings(repo,sha,target,out)));
+  console.log(JSON.stringify(await readScriptSettings(repo,sha,target,out,fetch,spawnSync,sourceCheck,Date.now,allowNull)));
  }catch(e){let explicit=false;try{const v=JSON.parse(JSON.parse(readFileSync(out,'utf8')).raw_body)?.result?.observability;explicit=!!v&&typeof v==='object'&&!Array.isArray(v)&&typeof v.enabled==='boolean';}catch{}console.log(JSON.stringify({status:/^BLOCKED_[A-Z0-9_]+$/.test(e.message)?e.message:'BLOCKED_SCRIPT_SETTINGS_READ',checked_at:new Date().toISOString(),evidence:out??null,explicit_observability_enabled_boolean:explicit}));process.exitCode=1;}
 }
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url))await main(process.argv.slice(2));

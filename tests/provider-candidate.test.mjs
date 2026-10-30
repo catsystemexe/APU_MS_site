@@ -184,3 +184,37 @@ test('fresh preflight and candidate readback require the same fresh script-setti
  const afterChanged=evidenceFor(f.after);afterChanged.raw_body=JSON.stringify({success:true,result:{observability:{enabled:true}}});assert.throws(()=>candidateReadback(f.after,config,sha,f.after.current.id,afterChanged));
  }finally{f.close();}
 });
+
+test('explicit disabled proposal is a third intended change, never historical null-to-false preservation',()=>{
+ const f=candidateFixture();try{f.before.settings={logpush:false,tail_consumers:null};const e=evidenceFor(f.before);e.raw_body=JSON.stringify({success:true,result:{logpush:false,tags:null,tail_consumers:null,observability:null}});const before=JSON.stringify(f.before),raw=JSON.stringify(e);
+ assert.equal(inspectCandidate(f.before,f.inputs,template,artifact,f.root,sha,e).status,'OFFLINE_CONTRACT_BLOCKED');
+ const report=inspectCandidate(f.before,f.inputs,template,artifact,f.root,sha,e,'declare-disabled');assert.equal(report.status,'OFFLINE_CONTRACT_PASS_NOT_PREPARED');assert.equal(report.settings_disposition.observability,'explicit-change-to-enabled-false');assert.ok(report.settings_disposition.preserved_settings.includes('logpush'));
+ const {config,review}=buildCandidate(f.before,f.inputs,template,artifact,f.root,sha,e,'declare-disabled');assert.deepEqual(config.observability,{enabled:false});assert.equal(review.intended_changes.length,3);assert.match(review.intended_changes[2],/explicit new non-versioned/);assert.equal(review.observability_policy,'declare-disabled');assert.match(review.observability_restore,/UNKNOWN.*NOT_RESTORABLE_BY_UUID/);assert.deepEqual(review.vars_changed,[]);assert.equal(config.logpush,false);assert.equal(config.vars.APU_TELEMETRY_ENABLED,'0');assert.equal(config.vars.APU_TELEMETRY_METADATA_ENABLED,'0');assert.equal(JSON.stringify(e),raw);assert.equal(JSON.stringify(f.before),before);
+ const snapshot=join(f.root,'before.json'),inputs=join(f.root,'inputs.json'),path=join(f.root,'settings.json');writeFileSync(snapshot,before);writeFileSync(inputs,JSON.stringify(f.inputs));writeFileSync(path,raw);assert.equal(offlineCheck(process.cwd(),sha,snapshot,inputs,join(process.cwd(),'dist/server/wrangler.json'),()=>{},path,'declare-disabled').status,'OFFLINE_CONTRACT_PASS_NOT_PREPARED');assert.equal(readFileSync(path,'utf8'),raw);
+ }finally{f.close();}
+});
+test('explicit disabled proposal keeps all other guards and rejects absent, invalid, non-null and unknown policy sources',()=>{
+ const f=candidateFixture();try{f.before.settings={logpush:false,tail_consumers:null};const e=evidenceFor(f.before),good={logpush:false,tags:null,tail_consumers:null,observability:null};e.raw_body=JSON.stringify({success:true,result:good});
+ for(const result of [{...good,observability:undefined},{...good,observability:{enabled:'false'}},{...good,observability:{enabled:true}},{...good,tags:['UNREVIEWED']},{...good,tags:{}},{...good,unknown:null},{...good,logpush:true}]){const x={...e,raw_body:JSON.stringify({success:true,result})};assert.throws(()=>buildCandidate(f.before,f.inputs,template,artifact,f.root,sha,x,'declare-disabled'));}
+ assert.throws(()=>buildCandidate(f.before,f.inputs,template,artifact,f.root,sha,e,'anything'),/OBSERVABILITY_POLICY/);
+ for(const change of [r=>r.current.resources.bindings.find(b=>b.name==='APU_TELEMETRY_ENABLED').text='1',r=>r.subdomain.extra=true,r=>r.d1.jurisdiction='wrong']){const r=structuredClone(f.before);change(r);assert.throws(()=>buildCandidate(r,f.inputs,template,artifact,f.root,sha,e,'declare-disabled'));}
+ }finally{f.close();}
+});
+test('disabled proposal preflight preserves reviewed null and tags exactly; postdeploy readback requires explicit false',()=>{
+ const f=candidateFixture();try{f.before.settings={logpush:false,tail_consumers:null};const e=evidenceFor(f.before);e.raw_body=JSON.stringify({success:true,result:{logpush:false,tags:null,tail_consumers:null,observability:null}});const fresh=structuredClone(e);assert.match(freshGuard(f.before,structuredClone(f.before),Date.now(),e,fresh,'declare-disabled').status,/PASS/);
+ for(const result of [{logpush:false,tags:[],tail_consumers:null,observability:null},{logpush:false,tags:null,tail_consumers:null,observability:{enabled:false}}]){const changed={...fresh,raw_body:JSON.stringify({success:true,result})};assert.throws(()=>freshGuard(f.before,structuredClone(f.before),Date.now(),e,changed,'declare-disabled'),/SCRIPT_SETTINGS_CHANGED/);}
+ const {config}=buildCandidate(f.before,f.inputs,template,artifact,f.root,sha,e,'declare-disabled');f.after.settings={logpush:false,tail_consumers:null};f.after.current.annotations={'workers/tag':'dev-provider-'+sha};
+ const after=evidenceFor(f.after);for(const tags of [null,[]]){after.raw_body=JSON.stringify({success:true,result:{logpush:false,tail_consumers:null,tags,observability:{enabled:false}}});assert.match(candidateReadback(f.after,config,sha,f.after.current.id,after).status,/NOT_PROVIDER_E2E/);}
+ after.raw_body=JSON.stringify({success:true,result:{logpush:false,tail_consumers:null,tags:[],observability:null}});assert.throws(()=>candidateReadback(f.after,config,sha,f.after.current.id,after),/OBSERVABILITY_EVIDENCE_REQUIRED/);
+ after.raw_body=JSON.stringify({success:true,result:{logpush:false,tail_consumers:null,tags:[],observability:{enabled:true}}});assert.throws(()=>candidateReadback(f.after,config,sha,f.after.current.id,after),/SETTINGS/);
+ }finally{f.close();}
+});
+test('pinned standard deploy resolves specifically nullish tags to no tags and PATCHes empty tags with explicit observability false',async()=>{
+ const src=readFileSync('node_modules/wrangler/wrangler-dist/cli.js','utf8');assert.equal(createHash('sha256').update(src).digest('hex'),CLI_PIN);const section=(a,b)=>src.slice(src.indexOf(a),src.indexOf(b,src.indexOf(a)));
+ const ctx={verifyWorkerMatchesCITag:async()=>{},getDeployConfirmFunction:()=>async()=>true,fetchResult:async()=>({default_environment:{script:{tags:null,last_deployed_from:'wrangler'}}}),checkRemoteSecretsOverride:async()=>null,checkWorkflowConflicts:async()=>({hasConflicts:false}),ensureQueuesExistByConfig:async()=>{},getSubdomainValues:()=>({workers_dev:true}),SERVICE_TAG_PREFIX:'cf:service=',ENVIRONMENT_TAG_PREFIX:'cf:environment='};
+ runInNewContext(section('async function preUploadApiChecks(','var init_validate_worker_props =')+section('function hasDefinedEnvironments(','function warnOnErrorUpdatingServiceAndEnvironmentTags()'),ctx);
+ const pre=await ctx.preUploadApiChecks({command:'deploy',accountId:'synthetic',name:'apu-ms-site-dev',routes:[],resourcesProvision:false},{});assert.deepEqual(Array.from(pre.tags),[]);assert.equal(pre.workerExists,true);const nextTags=ctx.applyServiceAndEnvironmentTags({},pre.tags);assert.deepEqual(Array.from(nextTags),[]);
+ const calls=[],patchCtx={worker:{observability:{enabled:false},logpush:false},config2:{},accountId:'synthetic',scriptName:'apu-ms-site-dev',nextTags,fetchResult:async(_c,url,opts)=>{calls.push({url,body:JSON.parse(opts.body)});}};
+ runInNewContext(section('async function patchNonVersionedScriptSettings(','var init_versions_api ='),patchCtx);const call=section('await patchNonVersionedScriptSettings(config2, accountId, scriptName, {','        } catch {');await runInNewContext('(async()=>{'+call+'})()',patchCtx);
+ assert.deepEqual(calls,[{url:'/accounts/synthetic/workers/scripts/apu-ms-site-dev/script-settings',body:{logpush:false,observability:{enabled:false},tags:[]}}]);
+});
