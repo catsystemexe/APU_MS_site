@@ -1,13 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync,writeFileSync,rmSync,readFileSync} from 'node:fs';
+import {existsSync,mkdtempSync,writeFileSync,rmSync,readFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createHash} from 'node:crypto';
 import {runInNewContext} from 'node:vm';
 import {buildDevConfig,DEV} from '../ops/dev/prepare-worker.mjs';
 import {T5} from '../scripts/telemetry/t5-evidence.mjs';
-import {preflight,verify,rollbackPlan} from '../ops/dev/provider-bootstrap.mjs';
+import {preflight,verify,rollbackPlan,parseInventory} from '../ops/dev/provider-bootstrap.mjs';
+import {setup,readPhase,loadProfile,sourceCheck} from '../ops/dev/provider-bootstrap-operator.mjs';
 const template=JSON.parse(readFileSync('wrangler.dev.json')),artifact=JSON.parse(readFileSync('dist/server/wrangler.json'));
 function fixture(){
  const inputs={kvNamespaceId:'0123456789abcdef0011223344556677',accessApplicationId:'d00d1234-2222-4333-8444-555566667777',accessAudience:'0123456789abcdef'.repeat(4),accessTeamDomain:DEV.issuer,operatorEmail:DEV.operator,telemetry:{enabled:false,staged:true,dedicatedDev:true,databaseName:T5.database,databaseId:'12345678-1234-4234-8234-123456789abc',hostname:'apu-ms-site-dev.catsystem-exe.workers.dev'},pilotRules:{dedicatedDev:true,namespaceId:'1123456789abcdef0011223344556677',ttlSeconds:86400}};
@@ -29,3 +30,36 @@ test('pinned bulk function uses one fixed PATCH without draft Worker creation; i
 test('historical before validation keeps actual inventory timestamp when reads were several seconds apart',()=>{const f=fixture();f.before.inventory_read_at+=9000;assert.equal(preflight(f.before,f.inputs,template,artifact,f.now+9000).status,'PREFLIGHT_PASS_NOT_AUTHORIZATION');assert.match(verify(f.before,f.after,f.inputs,template,artifact,f.now+9000).status,/VERIFIED/);});
 
 test('optional version metadata absence is preserved while comparing non-secret state',()=>{const f=fixture();delete f.before.current.annotations;delete f.before.current.metadata;assert.match(verify(f.before,f.after,f.inputs,template,artifact,f.now).status,/VERIFIED/);});
+
+test('inventory is parsed from complete stdout: empty and two rows preserve arrays; malformed shapes never escape',()=>{
+ assert.deepEqual(parseInventory(' \n[]\n'),[]);
+ const rows=['OPENAI_API_KEY','APU_VECTOR_STORE_ID'].map(name=>({name,type:'secret_text'}));
+ assert.deepEqual(parseInventory(JSON.stringify(rows,null,2)),rows);
+ for(const raw of ['', 'null','{}','"NEVER_RAW"','[]\n[]','banner\n[]',JSON.stringify([{name:'OPENAI_API_KEY',type:'secret_text',text:'NEVER_RAW'}]),JSON.stringify([null]),JSON.stringify([rows[0],rows[0]])])assert.throws(()=>parseInventory(raw),e=>/^BLOCKED_SECRET_INVENTORY_/.test(e.message)&&!e.message.includes('NEVER_RAW'));
+});
+test('independent read phases load verified paths from persisted profile; complete child stdout stays private',()=>{
+ const f=fixture(),dir=mkdtempSync(join(tmpdir(),'apu-bootstrap-profile-')),repo=process.cwd(),sha='a'.repeat(40),inputs=join(dir,'inputs.json'),target=join(dir,'t5-restore-target.json');
+ const checkSource=(r,s)=>{assert.equal(r,repo);assert.equal(s,sha);};
+ try {
+  writeFileSync(inputs,JSON.stringify(f.inputs));writeFileSync(target,JSON.stringify({name:DEV.worker,account_id:DEV.account,send_metrics:false}));
+  const profile=setup(repo,sha,inputs,target,dir,checkSource);let calls=0;
+  const runner=(_node,args,opts)=>{calls++;assert.deepEqual(opts.stdio,['ignore','pipe','pipe']);assert.ok(!args.includes('PATCH'));if(args[0].endsWith('t5-baseline.mjs')){const r=args.at(-1)===f.after.current.id?f.after:f.before;writeFileSync(args[4],JSON.stringify(r));return{status:0,stdout:'{"status":"READ"}'};}return{status:0,stdout:JSON.stringify(calls===2?[]:f.after.inventory,null,2)};};
+  assert.equal(readPhase(profile,repo,sha,'before',undefined,runner,checkSource).status,'PREFLIGHT_PASS_NOT_AUTHORIZATION');
+  assert.equal(loadProfile(profile,repo,sha,checkSource).target,target);
+  assert.match(readPhase(profile,repo,sha,'after',f.after.current.id,runner,checkSource).status,/VERIFIED_NOT_PROVIDER/);
+  assert.equal(calls,4);assert.throws(()=>readPhase(profile,repo,sha,'before',undefined,runner,checkSource),/OUTPUT_EXISTS/);assert.equal(calls,4);
+  writeFileSync(inputs,'{}');assert.throws(()=>loadProfile(profile,repo,sha,checkSource),/PROFILE_CHANGED/);
+  assert.throws(()=>sourceCheck(repo,'wrong'),/SOURCE/);
+ }finally{rmSync(dir,{recursive:true,force:true});}
+});
+
+test('malformed full inventory stdout produces only a safe code and never an enriched snapshot',()=>{
+ const f=fixture(),dir=mkdtempSync(join(tmpdir(),'apu-bootstrap-invalid-')),repo=process.cwd(),sha='b'.repeat(40),inputs=join(dir,'inputs.json'),target=join(dir,'t5-restore-target.json');
+ try{
+  writeFileSync(inputs,JSON.stringify(f.inputs));writeFileSync(target,JSON.stringify({name:DEV.worker,account_id:DEV.account,send_metrics:false}));
+  const profile=setup(repo,sha,inputs,target,dir,()=>{});
+  const runner=(_node,args)=>{if(args[0].endsWith('t5-baseline.mjs')){writeFileSync(args[4],JSON.stringify(f.before));return{status:0,stdout:'safe reader status'};}return{status:0,stdout:'NEVER_RAW_CREDENTIAL\n[]',stderr:'NEVER_RAW_STDERR'};};
+  assert.throws(()=>readPhase(profile,repo,sha,'before',undefined,runner,()=>{}),{message:'BLOCKED_SECRET_INVENTORY_JSON'});
+  assert.equal(existsSync(join(dir,'before.json')),false);assert.doesNotMatch(readFileSync(join(dir,'before-raw.json'),'utf8'),/NEVER_RAW/);
+ }finally{rmSync(dir,{recursive:true,force:true});}
+});

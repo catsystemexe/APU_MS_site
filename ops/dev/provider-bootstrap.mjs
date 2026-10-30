@@ -11,6 +11,12 @@ const check=(ok,code)=>{if(!ok)throw Error(code);};
 const provider=['APU_VECTOR_STORE_ID','OPENAI_API_KEY'];
 const digest=v=>createHash('sha256').update(JSON.stringify(v)).digest('hex');
 const uuid=v=>typeof v==='string'&&/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(v);
+export function parseInventory(stdout) {
+  let rows;try{rows=JSON.parse(stdout);}catch{throw Error('BLOCKED_SECRET_INVENTORY_JSON');}
+  check(Array.isArray(rows)&&rows.every(b=>b!==null&&typeof b==='object'&&!Array.isArray(b)&&same(Object.keys(b).sort(),['name','type'])&&typeof b.name==='string'&&provider.includes(b.name)&&b.type==='secret_text'),'BLOCKED_SECRET_INVENTORY_SCHEMA');
+  check(new Set(rows.map(b=>b.name)).size===rows.length,'BLOCKED_SECRET_INVENTORY_SCHEMA');
+  return rows;
+}
 function inventory(record,names) {
   check(Array.isArray(record.inventory)&&record.inventory.every(b=>same(Object.keys(b).sort(),['name','type'])&&b.type==='secret_text'),'BLOCKED_SECRET_INVENTORY_SCHEMA');
   check(same(record.inventory.map(b=>b.name).sort(),names),'BLOCKED_SECRET_INVENTORY');
