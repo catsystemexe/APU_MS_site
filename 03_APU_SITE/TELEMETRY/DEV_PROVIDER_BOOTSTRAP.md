@@ -1,5 +1,8 @@
 # DEV provider bootstrap — příprava, ne autorizace
 
+**Novější schválená strategie:** hledání exact-copy staré verze je ukončeno. Viz [nový DEV provider kandidát z canonical T5 source](DEV_PROVIDER_CANDIDATE.md). Následující latest=active/STOP evidence zůstává historická a její guardy nejsou uvolněny; nový kandidát má samostatný explicitní full-config kontrakt a netvrdí binární shodu se starým Workerem.
+
+
 **Aktuální stav: BLOCKED při latest != active.** Operátor doložil lokální Windows setup PASS a skutečný read-before `BLOCKED_LATEST_NOT_ACTIVE`; žádná hosted mutace/provider call. Příčina rozdílu active/latest není ověřena. Nyní neopakovat fázi A ani další Windows diagnostiku; aktuální soběstačná předávka je STOP níže. Původní raw snapshot zůstává historická evidence, nikoli fresh oprávnění k zápisu.
 
 ## Latest != active — technická překážka a koncová Windows předávka
