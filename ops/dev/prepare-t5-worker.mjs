@@ -129,7 +129,7 @@ export function verifyT5Readback(record, config, sourceSha, expectedId, now = Da
   check(same(expectedSettings,record.settings) && same(record.current_assets, Object.fromEntries(Object.entries(config.assets).filter(([k])=>!['directory','binding'].includes(k)))), 'BLOCKED_CANDIDATE_SETTINGS');
   return {status:'CANDIDATE_CONFIG_VERIFIED_NOT_PROVIDER_PASS',version:expectedId,telemetry:vars.APU_TELEMETRY_ENABLED,metadata:vars.APU_TELEMETRY_METADATA_ENABLED,trace:vars.APU_T5_TRACE_ENABLED};
 }
-function artifactHashes(dir) {
+export function artifactHashes(dir) {
   const out = {};
   const walk = (root, prefix = '') => { for (const item of readdirSync(root).sort()) { const p=join(root,item), rel=prefix+item, st=lstatSync(p); if(rel === 't5-build.json') continue; check(!st.isSymbolicLink(), 'BLOCKED_ARTIFACT_SYMLINK'); if(st.isDirectory()) walk(p,rel+'/'); else if(st.isFile()) out[rel]=hash(readFileSync(p)); } };
   walk(dir); check(out['server/index.js'] && out['server/wrangler.json'] && Object.keys(out).some(k => k.startsWith('client/')), 'BLOCKED_ARTIFACT_INCOMPLETE'); return out;
