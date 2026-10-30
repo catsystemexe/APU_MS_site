@@ -10,6 +10,7 @@ import {DEV,buildDevConfig} from './prepare-worker.mjs';
 import {bindingMap,activeVersion,artifactHashes} from './prepare-t5-worker.mjs';
 import {loadProfile,sourceCheck} from './provider-bootstrap-operator.mjs';
 import {parseInventory} from './provider-bootstrap.mjs';
+import {effectiveSettings,scriptSettingsResult,settingsOrigin} from './read-provider-script-settings.mjs';
 import {T5,privatePath} from '../../scripts/telemetry/t5-evidence.mjs';
 const check=(ok,code)=>{if(!ok)throw Error(code);};
 const read=p=>JSON.parse(readFileSync(p,'utf8'));
@@ -36,17 +37,18 @@ function projectedSetting(raw,key){
  check(schema({[key]:value}),'BLOCKED_SETTINGS_SCHEMA');
  return structuredClone(value);
 }
-function settingsStages(raw,run){
+function settingsStages(raw,run,evidence,authoritative=false){
  const shape=run('settings.shape',()=>{check(raw&&typeof raw==='object'&&!Array.isArray(raw),'BLOCKED_SETTINGS');return raw;});
  run('settings.fields',()=>check(Object.keys(shape).every(k=>settingKeys.includes(k)),'BLOCKED_SETTINGS'),['settings.shape']);
  const projection={};
- for(const key of settingKeys){const v=run('settings.'+key,()=>projectedSetting(shape,key),['settings.shape']);if(v!==undefined)projection[key]=v;}
+ for(const key of settingKeys){const v=run('settings.'+key,()=>projectedSetting(authoritative&&key==='observability'?effectiveSettings(shape,evidence):shape,key),['settings.shape']);if(v!==undefined)projection[key]=v;}
  return projection;
 }
 export function projectSettings(raw){
  return settingsStages(raw,(_section,fn)=>fn());
 }
-function candidateEvaluation(r,inputs,template,artifact,root,sha,collect){
+function safeSettingsOrigin(e){try{return settingsOrigin(e);}catch{return null;}}
+function candidateEvaluation(r,inputs,template,artifact,root,sha,collect,evidence){
  const checks=[],values=new Map();
  const run=(section,fn,deps=[])=>{
   if(deps.some(d=>!values.has(d))){checks.push({section,status:'NOT_CHECKED',code:'BLOCKED_DEPENDENCY'});return;}
@@ -71,7 +73,7 @@ function candidateEvaluation(r,inputs,template,artifact,root,sha,collect){
  run('baseline_vars',()=>{for(const [name,value]of Object.entries(config.vars))check(vars[name]===value,'BLOCKED_BASELINE_VARS');},['plain_vars','dev_config']);
  run('role_trace',()=>check(vars.APU_DEVELOPER_EMAILS===DEV.operator&&['0',undefined].includes(vars.APU_T5_TRACE_ENABLED),'BLOCKED_ROLE_OR_TRACE'),['plain_vars']);
  run('runtime',()=>check(r.current.resources.script_runtime.compatibility_date===config.compatibility_date&&same(r.current.resources.script_runtime.compatibility_flags,config.compatibility_flags),'BLOCKED_RUNTIME'),['dev_config']);
- const settings=settingsStages(r?.settings,run);
+ const settings=settingsStages(r?.settings,run,evidence,true);
  run('assets',()=>check(r?.assets&&Object.keys(r.assets).every(k=>['not_found_handling','html_handling','run_worker_first','base_path'].includes(k))&&r.assets.not_found_handling==='none'&&same(r.current_assets,r.assets),'BLOCKED_ASSETS'));
  run('source_artifact',()=>check(isAbsolute(root)&&realpathSync(root)===root&&/^[a-f0-9]{40}$/.test(sha),'BLOCKED_SOURCE_ARTIFACT'));
  run('config_schema',()=>{
@@ -83,11 +85,11 @@ function candidateEvaluation(r,inputs,template,artifact,root,sha,collect){
   config.d1_databases[0].migrations_dir=fileURLToPath(new URL('../../telemetry/migrations',import.meta.url));
   check(schema(config),'BLOCKED_WRANGLER_SCHEMA');
  },['dev_config','routing','plain_vars','assets','source_artifact']);
- if(collect)return {status:checks.every(c=>c.status==='PASS')?'OFFLINE_CONTRACT_PASS_NOT_PREPARED':'OFFLINE_CONTRACT_BLOCKED',checks,issues:checks.filter(c=>c.status!=='PASS'),build_required_after_pass:true,hosted_verified:false};
- return {config,review:{kind:'apu-new-dev-provider-candidate',source_sha:sha,pre_change_version:T5.baseline,active_sha256:hash(r.current),latest_sha256:hash(r.latest),settings_sha256:hash(r.settings),settings_projection:structuredClone(settings),assets_sha256:hash(r.assets),routing:structuredClone({subdomain:r.subdomain,routes:r.routes,domains:r.domains,schedules:r.schedules}),config_sha256:hash(config),intended_changes:['new canonical server/client artifact (no binary equivalence claim)','add exactly OPENAI_API_KEY and APU_VECTOR_STORE_ID'],vars_changed:[],preserved_bindings:r.current.resources.bindings.map(b=>({name:b.name,type:b.type,sha256:hash(b)})),complete_plain_vars:true,flags:{telemetry:vars.APU_TELEMETRY_ENABLED,metadata:vars.APU_TELEMETRY_METADATA_ENABLED,trace:vars.APU_T5_TRACE_ENABLED??'absent: default OFF'},keep_vars:false,reason:'All active plain vars supplied explicitly; inherit no latest plain vars. Pinned deploy keeps secrets: active set must be empty; latest may contain only the two explicitly overwritten provider names, never any unprovided secret.',provider_secret_names:names,overwritten_latest_provider_names:[...latest.values()].filter(b=>b.type==='secret_text').map(b=>b.name).sort(),pre_change_restore_provider_ready:false,new_t5_restore_version:null}};
+ if(collect)return {status:checks.every(c=>c.status==='PASS')?'OFFLINE_CONTRACT_PASS_NOT_PREPARED':'OFFLINE_CONTRACT_BLOCKED',checks,issues:checks.filter(c=>c.status!=='PASS'),build_required_after_pass:true,hosted_verified:false,settings_sources:{historical:{sha256:r?hash(r):null,read_at:Number.isSafeInteger(r?.read_at)?r.read_at:null},script_settings:safeSettingsOrigin(evidence)}};
+ return {config,review:{kind:'apu-new-dev-provider-candidate',source_sha:sha,pre_change_version:T5.baseline,active_sha256:hash(r.current),latest_sha256:hash(r.latest),settings_sha256:hash(r.settings),script_settings_source:settingsOrigin(evidence),settings_projection:structuredClone(settings),assets_sha256:hash(r.assets),routing:structuredClone({subdomain:r.subdomain,routes:r.routes,domains:r.domains,schedules:r.schedules}),config_sha256:hash(config),intended_changes:['new canonical server/client artifact (no binary equivalence claim)','add exactly OPENAI_API_KEY and APU_VECTOR_STORE_ID'],vars_changed:[],preserved_bindings:r.current.resources.bindings.map(b=>({name:b.name,type:b.type,sha256:hash(b)})),complete_plain_vars:true,flags:{telemetry:vars.APU_TELEMETRY_ENABLED,metadata:vars.APU_TELEMETRY_METADATA_ENABLED,trace:vars.APU_T5_TRACE_ENABLED??'absent: default OFF'},keep_vars:false,reason:'All active plain vars supplied explicitly; inherit no latest plain vars. Pinned deploy keeps secrets: active set must be empty; latest may contain only the two explicitly overwritten provider names, never any unprovided secret.',provider_secret_names:names,overwritten_latest_provider_names:[...latest.values()].filter(b=>b.type==='secret_text').map(b=>b.name).sort(),pre_change_restore_provider_ready:false,new_t5_restore_version:null}};
 }
-export function buildCandidate(...args){return candidateEvaluation(...args,false);}
-export function inspectCandidate(...args){return candidateEvaluation(...args,true);}
+export function buildCandidate(r,i,t,a,root,sha,evidence){return candidateEvaluation(r,i,t,a,root,sha,false,evidence);}
+export function inspectCandidate(r,i,t,a,root,sha,evidence){return candidateEvaluation(r,i,t,a,root,sha,true,evidence);}
 export function validateProviderValues(v){
  check(v&&typeof v==='object'&&!Array.isArray(v)&&same(Object.keys(v).sort(),names)&&Object.values(v).every(x=>typeof x==='string'&&x.trim().length>0&&x.length<=8192&&!/[\r\n]/.test(x)),'BLOCKED_PROVIDER_FILE');
  return {status:'LOCAL_PROVIDER_FILE_VALID_NO_VALUES_EMITTED'};
@@ -95,16 +97,19 @@ export function validateProviderValues(v){
 function freshTimes(r,now=Date.now()){
  check(Number.isSafeInteger(r.read_at)&&Number.isSafeInteger(r.inventory_read_at)&&now-r.read_at<=60000&&now-r.inventory_read_at<=60000&&r.read_at<=now+5000&&r.inventory_read_at<=now+5000&&Math.abs(r.read_at-r.inventory_read_at)<=10000,'BLOCKED_STALE_PREFLIGHT');
 }
-export function freshGuard(reviewed,fresh,now=Date.now()){
+export function freshGuard(reviewed,fresh,now=Date.now(),reviewEvidence,freshEvidence){
  context(fresh);freshTimes(fresh,now);
  for(const field of ['current','version','latest','deployments','settings','assets','current_assets','d1','subdomain','routes','domains','schedules'])check(same(reviewed[field],fresh[field]),'BLOCKED_REVIEW_CHANGED');
+ check(same(scriptSettingsResult(reviewEvidence),scriptSettingsResult(freshEvidence,now,true)),'BLOCKED_SCRIPT_SETTINGS_CHANGED');
+ check(freshEvidence.read_started_at>=Math.max(fresh.read_at,fresh.inventory_read_at)&&Math.abs(freshEvidence.read_at-fresh.read_at)<=10000&&Math.abs(freshEvidence.read_at-fresh.inventory_read_at)<=10000,'BLOCKED_SCRIPT_SETTINGS_TIME');
+ effectiveSettings(fresh.settings,freshEvidence,now,true);
  return {status:'FRESH_SOURCE_REVIEW_PASS_NOT_AUTHORIZATION'};
 }
 export function futureCommand(config,providerFile,sha){
  check(isAbsolute(config)&&isAbsolute(providerFile)&&/^[a-f0-9]{40}$/.test(sha),'BLOCKED_COMMAND');
  return ['deploy','--config',config,'--name',DEV.worker,'--strict','--tag','dev-provider-'+sha,'--experimental-provision=false','--experimental-auto-create=false','--secrets-file',providerFile];
 }
-export function candidateReadback(r,config,sha,id){
+export function candidateReadback(r,config,sha,id,evidence){
  freshTimes(r);
  check(typeof id==='string'&&/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(id)&&r.account_id===DEV.account&&r.worker===DEV.worker&&r.current?.id===id&&id!==T5.baseline&&same(r.current,r.latest)&&activeVersion(r.deployments)===id,'BLOCKED_CANDIDATE_TARGET');
  check(r.current.annotations?.['workers/tag']==='dev-provider-'+sha,'BLOCKED_SOURCE_TAG');
@@ -116,32 +121,35 @@ export function candidateReadback(r,config,sha,id){
  check(r.d1?.uuid===config.d1_databases[0].database_id&&r.d1.name===T5.database&&r.d1.jurisdiction==='eu','BLOCKED_D1_IDENTITY');
  const runtime=r.current.resources.script_runtime;
  check(runtime.compatibility_date===config.compatibility_date&&same(runtime.compatibility_flags,config.compatibility_flags),'BLOCKED_RUNTIME');
- check(same(projectSettings(r.settings),Object.fromEntries(settingKeys.filter(k=>Object.hasOwn(config,k)).map(k=>[k,config[k]])))&&same(r.current_assets,Object.fromEntries(Object.entries(config.assets).filter(([k])=>!['directory','binding'].includes(k)))),'BLOCKED_SETTINGS');
+ check(evidence?.read_started_at>=Math.max(r.read_at,r.inventory_read_at)&&Math.abs(evidence?.read_at-r.read_at)<=10000&&Math.abs(evidence?.read_at-r.inventory_read_at)<=10000,'BLOCKED_SCRIPT_SETTINGS_TIME');
+ check(same(projectSettings(effectiveSettings(r.settings,evidence,Date.now(),true)),Object.fromEntries(settingKeys.filter(k=>Object.hasOwn(config,k)).map(k=>[k,config[k]])))&&same(r.current_assets,Object.fromEntries(Object.entries(config.assets).filter(([k])=>!['directory','binding'].includes(k)))),'BLOCKED_SETTINGS');
  check(same(routing(r),{workers_dev:config.workers_dev,preview_urls:config.preview_urls}),'BLOCKED_ROUTING');
  return {status:'DEPLOYMENT_METADATA_VERIFIED_NOT_PROVIDER_E2E',version:id,new_t5_restore_version:null,gate:'Artifact upload provenance, session/developer/OFF readback and review required before nominating a T5 restore point'};
 }
 function captureSnapshot(p,prefix,version,runner){
- const raw=join(p.dir,prefix+'-raw.json'),out=join(p.dir,prefix+'.json');check(!existsSync(raw)&&!existsSync(out),'BLOCKED_OUTPUT_EXISTS');
+ const raw=join(p.dir,prefix+'-raw.json'),out=join(p.dir,prefix+'.json'),settingsPath=join(p.dir,prefix+'-script-settings.json');check(!existsSync(raw)&&!existsSync(out)&&!existsSync(settingsPath),'BLOCKED_OUTPUT_EXISTS');
  const run=(args,timeout)=>{const r=runner(process.execPath,args,{cwd:p.repo,env:{...process.env,CI:'true',WRANGLER_WRITE_LOGS:'false',WRANGLER_SEND_METRICS:'false'},encoding:'utf8',stdio:['ignore','pipe','pipe'],timeout,killSignal:'SIGKILL',maxBuffer:1048576,windowsHide:true});check(!r.error&&r.status===0,'BLOCKED_READ_PROCESS');return r.stdout;};
  run([join(p.repo,'ops/dev/t5-baseline.mjs'),'--execute-authorized-read',p.target,p.inputs,raw,p.repo,p.cli,...(version?[version]:[])],90000);
  const inventory=parseInventory(run([p.cli,'secret','list','--format','json','--name',DEV.worker,'--config',p.target],10000));
- const record={...read(raw),inventory,inventory_read_at:Date.now()};writeFileSync(out,JSON.stringify(record)+'\n',{flag:'wx',mode:0o600});return {record,path:out};
+ const record={...read(raw),inventory,inventory_read_at:Date.now()};writeFileSync(out,JSON.stringify(record)+'\n',{flag:'wx',mode:0o600});
+ run([join(p.repo,'ops/dev/read-provider-script-settings.mjs'),'--execute-authorized-read',p.repo,p.sha,p.target,settingsPath],25000);
+ return {record,path:out,evidence:read(settingsPath)};
 }
-export function collectFresh(p,historical,runner=spawnSync){const result=captureSnapshot(p,'candidate-fresh',undefined,runner);freshGuard(historical,result.record);return result.path;}
+export function collectFresh(p,historical,runner=spawnSync,reviewEvidence){const result=captureSnapshot(p,'candidate-fresh',undefined,runner);freshGuard(historical,result.record,Date.now(),reviewEvidence,result.evidence);return result.path;}
 export function collectReadback(p,config,sha,id,runner=spawnSync){
  check(typeof id==='string'&&/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(id),'BLOCKED_EXPECTED_VERSION');
- const result=captureSnapshot(p,'candidate-after',id,runner);return candidateReadback(result.record,config,sha,id);
+ const result=captureSnapshot(p,'candidate-after',id,runner);return candidateReadback(result.record,config,sha,id,result.evidence);
 }
 function built(p){const b=read(join(p.repo,'dist/t5-build.json'));check(b.kind==='apu-t5-build'&&b.source_sha===p.sha&&same(b.artifact_hashes,artifactHashes(join(p.repo,'dist'))),'BLOCKED_BUILD_PROVENANCE');return b;}
-export function offlineCheck(repo,sha,snapshot,input,artifactPath,checkSource=sourceCheck){
-  checkSource(repo,sha);for(const p of [snapshot,input])privatePath(p,repo);
+export function offlineCheck(repo,sha,snapshot,input,artifactPath,checkSource=sourceCheck,evidencePath){
+  checkSource(repo,sha);for(const p of [snapshot,input,...(evidencePath?[evidencePath]:[])])privatePath(p,repo);
   check(realpathSync(artifactPath)===join(realpathSync(join(repo,'dist')),'server','wrangler.json'),'BLOCKED_ARTIFACT_PATH');
   const files={},fileChecks=[];
   try{check(createHash('sha256').update(readFileSync(join(repo,'node_modules/wrangler/wrangler-dist/cli.js'))).digest('hex')==='71da1f9bcf69a9f56c4ff4f68e71315365d03db8ea11207577b47a8e1a0a1064','BLOCKED_PINNED_CLI');fileChecks.push({section:'pinned_cli',status:'PASS'});}catch{fileChecks.push({section:'pinned_cli',status:'FAIL',code:'BLOCKED_PINNED_CLI'});}
-  for(const [key,path]of Object.entries({snapshot,input,artifact:artifactPath,template:join(repo,'wrangler.dev.json')})){
+  for(const [key,path]of Object.entries({snapshot,input,artifact:artifactPath,template:join(repo,'wrangler.dev.json'),...(evidencePath?{evidence:evidencePath}:{})})){
    try{files[key]=read(path);fileChecks.push({section:'file.'+key,status:'PASS'});}catch{fileChecks.push({section:'file.'+key,status:'FAIL',code:'BLOCKED_LOCAL_JSON'});}
   }
-  const report=inspectCandidate(files.snapshot,files.input,files.template,files.artifact,dirname(dirname(artifactPath)),sha);
+  const report=inspectCandidate(files.snapshot,files.input,files.template,files.artifact,dirname(dirname(artifactPath)),sha,files.evidence);
   report.checks=[...fileChecks,...report.checks];report.issues=report.checks.filter(c=>c.status!=='PASS');
   report.status=report.issues.length?'OFFLINE_CONTRACT_BLOCKED':'OFFLINE_CONTRACT_PASS_NOT_PREPARED';
   // Old manifest remains evidence, never re-label it as this source's build.
@@ -150,7 +158,7 @@ export function offlineCheck(repo,sha,snapshot,input,artifactPath,checkSource=so
 }
 async function main(a){
  if(a[0]==='offline-check'){
-  check(a.length===6,'BLOCKED_ARGUMENTS');const report=offlineCheck(...a.slice(1));
+  check([6,7].includes(a.length),'BLOCKED_ARGUMENTS');const report=offlineCheck(...a.slice(1,6),sourceCheck,a[6]);
   console.log(JSON.stringify(report));if(report.issues.length)process.exitCode=1;return;
  }
  check(['prepare','future-plan','readback','fresh-read','validate-provider-file','hosted-readback','provider-file-path'].includes(a[0]),'BLOCKED_ARGUMENTS');
@@ -158,18 +166,20 @@ async function main(a){
  if(mode==='provider-file-path'){check(rest.length===0,'BLOCKED_ARGUMENTS');const path=join(p.dir,'provider-values.json');check(!existsSync(path),'BLOCKED_PROVIDER_FILE_EXISTS');console.log(JSON.stringify({path}));return;}
  if(mode==='validate-provider-file'){check(rest.length===1,'BLOCKED_ARGUMENTS');privatePath(rest[0],repo);console.log(JSON.stringify(validateProviderValues(read(rest[0]))));return;}
  if(mode==='prepare'){
-  check(rest.length===1,'BLOCKED_ARGUMENTS');privatePath(rest[0],repo);const r=read(rest[0]),result=buildCandidate(r,read(p.inputs),read(join(repo,'wrangler.dev.json')),read(join(repo,'dist/server/wrangler.json')),join(repo,'dist'),sha);
+  check(rest.length===2,'BLOCKED_ARGUMENTS');for(const f of rest)privatePath(f,repo);const r=read(rest[0]),evidence=read(rest[1]),result=buildCandidate(r,read(p.inputs),read(join(repo,'wrangler.dev.json')),read(join(repo,'dist/server/wrangler.json')),join(repo,'dist'),sha,evidence);
+  result.review.script_settings_path=rest[1];
   result.review.artifact_hashes=b.artifact_hashes;result.review.snapshot_sha256=hash(r);
   writeFileSync(configPath,JSON.stringify(result.config,null,2)+'\n',{flag:'wx',mode:0o600});writeFileSync(reviewPath,JSON.stringify(result.review,null,2)+'\n',{flag:'wx',mode:0o600});
   console.log(JSON.stringify({status:'PREPARED_NEW_SOURCE_NOT_DEPLOYED',review:reviewPath}));return;
  }
  const config=read(configPath),review=read(reviewPath);check(hash(config)===review.config_sha256&&same(review.artifact_hashes,b.artifact_hashes),'BLOCKED_CONFIG_CHANGED');
- if(mode==='fresh-read'){check(rest.length===1,'BLOCKED_ARGUMENTS');privatePath(rest[0],repo);const historical=read(rest[0]);check(hash(historical)===review.snapshot_sha256,'BLOCKED_SNAPSHOT_CHANGED');buildCandidate(historical,read(p.inputs),read(join(repo,'wrangler.dev.json')),read(join(repo,'dist/server/wrangler.json')),join(repo,'dist'),sha);const path=collectFresh(p,historical);buildCandidate(read(path),read(p.inputs),read(join(repo,'wrangler.dev.json')),read(join(repo,'dist/server/wrangler.json')),join(repo,'dist'),sha);console.log(JSON.stringify({status:'FRESH_REVIEW_PASS_NOT_AUTHORIZATION',snapshot:path}));return;}
+ privatePath(review.script_settings_path,repo);const reviewEvidence=read(review.script_settings_path);check(hash(reviewEvidence)===review.script_settings_source.sha256,'BLOCKED_SCRIPT_SETTINGS_REVIEW_CHANGED');
+ if(mode==='fresh-read'){check(rest.length===1,'BLOCKED_ARGUMENTS');privatePath(rest[0],repo);const historical=read(rest[0]);check(hash(historical)===review.snapshot_sha256,'BLOCKED_SNAPSHOT_CHANGED');buildCandidate(historical,read(p.inputs),read(join(repo,'wrangler.dev.json')),read(join(repo,'dist/server/wrangler.json')),join(repo,'dist'),sha,reviewEvidence);const path=collectFresh(p,historical,spawnSync,reviewEvidence);buildCandidate(read(path),read(p.inputs),read(join(repo,'wrangler.dev.json')),read(join(repo,'dist/server/wrangler.json')),join(repo,'dist'),sha,read(join(p.dir,'candidate-fresh-script-settings.json')));console.log(JSON.stringify({status:'FRESH_REVIEW_PASS_NOT_AUTHORIZATION',snapshot:path}));return;}
  if(mode==='hosted-readback'){check(rest.length===1,'BLOCKED_ARGUMENTS');console.log(JSON.stringify(collectReadback(p,config,sha,rest[0])));return;}
- if(mode==='readback'){check(rest.length===2,'BLOCKED_ARGUMENTS');privatePath(rest[0],repo);console.log(JSON.stringify(candidateReadback(read(rest[0]),config,sha,rest[1])));return;}
+ if(mode==='readback'){check(rest.length===3,'BLOCKED_ARGUMENTS');for(const f of [rest[0],rest[2]])privatePath(f,repo);console.log(JSON.stringify(candidateReadback(read(rest[0]),config,sha,rest[1],read(rest[2]))));return;}
  check(rest.length===3,'BLOCKED_ARGUMENTS');for(const f of rest)privatePath(f,repo);
- const historical=read(rest[0]);check(hash(historical)===review.snapshot_sha256,'BLOCKED_SNAPSHOT_CHANGED');freshGuard(historical,read(rest[1]));
- const regenerated=buildCandidate(read(rest[1]),read(p.inputs),read(join(repo,'wrangler.dev.json')),read(join(repo,'dist/server/wrangler.json')),join(repo,'dist'),sha);check(same(config,regenerated.config),'BLOCKED_CONFIG_CONTRACT');
+ const historical=read(rest[0]);check(hash(historical)===review.snapshot_sha256,'BLOCKED_SNAPSHOT_CHANGED');const freshEvidence=read(join(p.dir,'candidate-fresh-script-settings.json'));freshGuard(historical,read(rest[1]),Date.now(),reviewEvidence,freshEvidence);
+ const regenerated=buildCandidate(read(rest[1]),read(p.inputs),read(join(repo,'wrangler.dev.json')),read(join(repo,'dist/server/wrangler.json')),join(repo,'dist'),sha,freshEvidence);check(same(config,regenerated.config),'BLOCKED_CONFIG_CONTRACT');
  validateProviderValues(read(rest[2]));console.log(JSON.stringify(futureCommand(configPath,rest[2],sha)));
 }
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){try{await main(process.argv.slice(2));}catch(e){console.error(/^BLOCKED_[A-Z0-9_]+$/.test(e.message)?e.message:'BLOCKED_PROVIDER_CANDIDATE');process.exitCode=1;}}

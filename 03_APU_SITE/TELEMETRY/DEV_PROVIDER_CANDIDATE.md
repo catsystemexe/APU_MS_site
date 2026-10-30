@@ -21,7 +21,51 @@ Latest se nenasazuje ani nekopíruje. Jeho known bindings/identity se validují 
 
 Pinned Wrangler4.150.0/CLI hash `71da1f9bcf69a9f56c4ff4f68e71315365d03db8ea11207577b47a8e1a0a1064`: standardní `deploy --secrets-file` převádí dodané hodnoty na explicitní secret_text před required/inherit krokem. Obě required provider položky jsou dodané, takže žádná z nich není inherit. Actual upload form test ověřuje keep_bindings pouze pro secret typy (žádné plain/json), přesně dvě explicitní provider položky, beze změny všech aktivních vars. Standardní deploy **uploaduje a aktivuje**, není to oddělený neaktivní hosted staging. Oddělujeme lokální přípravu/review od budoucí explicitně autorizované aktivace; nevymýšlíme exact-copy API.
 
-## Settings correction — nejdříve úplná offline kontrola, žádný další build
+## Cílený script-settings důkaz — nový reader a oddělený zdroj
+
+Operátor nad `10d2a28d3562258f5484691b92d4ce4cb0071ac6` doložil **32 PASS a jedinou chybu settings.observability/BLOCKED_OBSERVABILITY_EVIDENCE_REQUIRED**; existující artifact má source SHA `a7293a21e255b1049e244a4c27f09aff450aa772`. Neprovádíme nový build, inventuru, T3/T4 ani obecnou diagnostiku. Níže je připravené budoucí cílené čtení; v této source/local dávce se skutečný GET **nespouští** a jeho výsledek není známý.
+
+Nový `ops/dev/read-provider-script-settings.mjs` má právě jeden pevný HTTP cíl:
+
+`GET https://api.cloudflare.com/client/v4/accounts/4638092f63fa7fe58bcb9d2d041b7855/workers/scripts/apu-ms-site-dev/script-settings`
+
+Používá stejný zavedený mechanismus jako baseline reader: pinned Wrangler `auth token --json --config <původní exact DEV target>` jako omezený child process (10s, stdout jen v Node paměti, stderr ignorovaný). Žádný login, whoami, inventory, provider secrets, retry, alternativní endpoint ani redirect. Samotný GET má timeout10s, redirect:error; token neopouští paměť ani se neukládá do evidence. stdout/stderr autentizačního příkazu se do terminálu nepřeposílá.
+
+Reader před autentizací rezervuje **nový** restricted soubor pomocí wx/0600; existující soubor/symlink = STOP bez GET, nic nepřepisuje. Uloží obal `apu-dev-script-settings-read` s pevným účtem/Workerem/endpointem/GET, source SHA readeru, pinned CLI hash, původním read_started_at/read_at, HTTP status a **nezměněným response textem v raw_body**. Žádná vazba na staré Worker UUID: observability je non-versioned script-level stav. Původní before.json, jeho timestamp ani starý build manifest se nemění. API chyba/missing/null zachová raw odpověď; auth/network failure může zanechat neúplný rezervovaný soubor, který je pouze evidence chyby, nikoli platný sidecar. Žádný automatický retry/overwrite/cleanup.
+
+Terminál obsahuje pouze bezpečný status, checked_at, cestu evidence a `explicit_observability_enabled_boolean` (existence boolean pole, **nikoli jeho hodnota**). Při chybě nevypisuje API messages, raw metadata, token ani stack. Boolean true sám není schema/contract PASS; např. nepovolené pole může stále způsobit STOP.
+
+### Jeden soběstačný Windows blok — pouze cílený GET, až po autorizaci tohoto readu
+
+Použije **existující** bootstrap-local-profile.json z dokončeného Windows setupu: původní uložené repo, target a evidence adresář se převezmou z něj, žádný nový setup/build ani vymyšlené C:\ cesty. Starý profil se zde používá jen pro ověřené cesty, ne pro tvrzení o novém artifactu: jeho historické sha/node/artifact se nepřeznačuje. Reader ověří přesný aktuální reviewovaný source/root/remote, profil identity, target hash/exact DEV config a pinned CLI. Windows ACL existujícího evidence adresáře musí zůstávat pouze pro operátora; mode0600 nenahrazuje kontrolu Windows ACL.
+
+```powershell
+$ErrorActionPreference='Stop'
+$Profile=(Resolve-Path -LiteralPath (Read-Host 'Existujici bootstrap-local-profile.json z dokonceneho T5 setupu')).Path
+$OldProfile=Get-Content -LiteralPath $Profile -Raw | ConvertFrom-Json
+if ($OldProfile.kind -ne 'apu-provider-bootstrap-local-profile') { throw 'BLOCKED_PROFILE_IDENTITY' }
+$Repo=(Resolve-Path -LiteralPath $OldProfile.repo).Path
+$Sha=Read-Host 'Presny plny reviewovany SHA noveho readeru v PR93'
+$Reader=Join-Path $Repo 'ops/dev/read-provider-script-settings.mjs'
+node $Reader --execute-profile-read $Repo $Sha $Profile
+if ($LASTEXITCODE -ne 0) { throw 'BLOCKED_SCRIPT_SETTINGS_REVIEW_PRESERVE_EVIDENCE_NO_RETRY' }
+# STOP. Zadny dalsi read, build, setup, secrets, upload ani deployment.
+```
+
+Jde o jeden JSON objekt profilu, nikoli problémový PowerShell inventory array postup. Reader sám odvodí nový výstup `<původní profile.dir>/script-settings-review.json`; celé původní profily/inputs/proposal/evidence zůstanou. Existuje-li výstup již nyní, STOP před autentizací; nezadávat další diagnostické kolo nebo jej přepsat. Případnou chybu řešit odděleně nad chráněnou evidencí, ne retry smyčkou.
+
+### Zapojení do offline review, fresh preflight a read-backu
+
+- Offline kontrola přijímá sidecar jako poslední argument: `offline-check <repo> <reviewovaný-source-SHA> <before.json> <inputs> <existující-dist/server/wrangler.json> <script-settings-review.json>`. Žádný nový build/profil. Explicitní observability se bere **povinně z tohoto endpointu**, nikoli ze starého version UUID nebo template; source absent/null/bez boolean enabled zůstává BLOCKED. Schema/unknown fields se dál validují. Logpush/tail metadata, která historický snapshot obsahuje, musejí se zdrojem souhlasit; žádné rozšíření ostatních nastavení.
+- Raw snapshot se nespojuje ručním přepisem. Offline report i candidate review mají dva odlišné původy: původní snapshot hash/read_at a script_settings_source endpoint/method/source_sha/read_started_at/read_at/hash. Pro projekci se použije kopie se zdrojově doloženým observability; raw objekty/timestamps se nemutují. Explicitní dřívější observability musí souhlasit, neznámé obs pole se nikdy neodhaduje false. Historický sidecar není fresh oprávnění k zápisu.
+- Budoucí `prepare` vyžaduje `<historical-before.json> <script-settings-review.json>`. Do review uloží i původní restricted cestu a hash sidecaru. Změněný sidecar po review = STOP.
+- Budoucí autorizovaný `fresh-read` zachová všechny původní read-only baseline/inventory guardy a **navíc** jednou spustí stejný cílený reader do nového `candidate-fresh-script-settings.json`. Raw baseline/inventory i raw script-settings zůstanou samostatné. Výsledek endpointu se musí přesně shodovat s reviewovaným script-settings result; původní raw baseline se musí také shodovat. Žádné převzetí neověřené latest.
+- Fresh settings GET musí začít až po baseline/inventory čtení; zachovává60s freshness a maximálně10s odstup timestampů. Zastaralý/předchozí sidecar nepoužít. `future-plan` ověří znovu obě evidence, neměnnost reviewovaného sidecaru i regeneraci celého configu. Každá změna/missing/null = STOP.
+- Budoucí autorizovaný `hosted-readback` zachová metadata kontroly a načte **tentýž script-settings endpoint čerstvě znovu** do `candidate-after-script-settings.json`, až po novém deployment metadata/inventory čtení. Porovná explicitní projekci s reviewovaným configem; předdeployový sidecar jej nenahradí. Offline readback signature je `<snapshot> <actual-version-UUID> <candidate-after-script-settings.json>`.
+
+Tato dávka pouze implementuje a lokálně testuje postup. **Žádný GET ani nový build nyní nebyl proveden.** Po skutečném operátorském cíleném readu musí nejprve celý offline kontrakt PASS; teprve samostatný navazující krok smí provést nový canonical build na skutečném novém SHA, nový profile a prepare do nových výstupů. Dosavadní artifact/manifest zůstává pravdivě historický. OFF/OFF/trace OFF, Access, developer, KV/D1/ASSETS a původní bootstrap/T5 guardy se nemění. Preview Access a hosted kandidát nadále NOT VERIFIED.
+
+## Historická settings correction — diagnóza zůstává platná; sidecar integrace je výše
 
 Operátor doložil Windows build/setup na `a7293a21e255b1049e244a4c27f09aff450aa772` PASS a prepare BLOCKED_SETTINGS. Historické settings obsahuje pouze boolean logpush (hodnota není publikována) a tail_consumers:null, **observability chybí**. Raw before.json ani jeho hash se nepřepisují. Následující stav nahrazuje dřívější pokyn rovnou opakovat fázi A: **nejprve offline-check, při BLOCKED žádný nový build/setup/prepare**.
 
@@ -49,7 +93,7 @@ Chybí **úplný explicitní efektivní objekt result.observability** pro přesn
 
 `GET /accounts/<ověřený DEV account>/workers/scripts/apu-ms-site-dev/script-settings`
 
-To je jeden cílený script-settings údaj, ne nový obecný audit a ne další build. Reader původního before.json promítal environment.script, který jej neposkytl; historický snapshot se nepovažuje za důkaz disabled. Žádné čtení se nyní neprovádí. Případné získání vyžaduje samostatně autorizovaný read-only krok a chráněný raw sidecar; původní before.json zůstane nedotčený. Jestli i tento zdroj vrátí absent/null, efektivní nastavení zůstává **NOT VERIFIED / BLOCKED**, nikoli false. Bez review důkazu a jeho explicitního zapojení do review/fresh/read-back kontraktu prepare dál odmítá postup; tato oprava nezavádí override, neseeduje settings ani nespojuje sidecar ručním editováním snapshotu. Nebyl prokázán efektivní observability stav reálného Workeru.
+To je jeden cílený script-settings údaj, ne nový obecný audit a ne další build. Reader původního before.json promítal environment.script, který jej neposkytl; historický snapshot se nepovažuje za důkaz disabled. Žádné čtení se nyní neprovádí. Případné získání vyžaduje samostatně autorizovaný read-only krok a chráněný raw sidecar; původní before.json zůstane nedotčený. Jestli i tento zdroj vrátí absent/null, efektivní nastavení zůstává **NOT VERIFIED / BLOCKED**, nikoli false. Bez review důkazu prepare dál odmítá postup; aktuální implementované zapojení samostatného sidecaru je popsáno výše, bez override či ručního editování snapshotu. Nebyl prokázán efektivní observability stav reálného Workeru.
 
 ### Soběstačný Windows blok — jen existující soubory, žádný build
 
@@ -62,8 +106,9 @@ $Sha=Read-Host 'Presny plny reviewovany SHA settings correction v PR93'
 $Historical=(Resolve-Path -LiteralPath (Read-Host 'Puvodni existujici before.json s Node inventory')).Path
 $Inputs=(Resolve-Path -LiteralPath (Read-Host 'Puvodni existujici validovane DEV inputs')).Path
 $Artifact=(Resolve-Path -LiteralPath (Join-Path $Repo 'dist/server/wrangler.json')).Path
+$Settings=(Resolve-Path -LiteralPath (Read-Host 'Existujici chráněný script-settings-review.json z cíleneho readu')).Path
 $Candidate=Join-Path $Repo 'ops/dev/prepare-provider-candidate.mjs'
-node $Candidate offline-check $Repo $Sha $Historical $Inputs $Artifact
+node $Candidate offline-check $Repo $Sha $Historical $Inputs $Artifact $Settings
 if ($LASTEXITCODE -ne 0) { throw 'OFFLINE_CONTRACT_BLOCKED_NO_BUILD_NO_HOSTED_ACTION' }
 # I OFFLINE_CONTRACT_PASS_NOT_PREPARED znamena STOP pred novym buildem/prepare.
 # Nejprve review celeho souhrnu a teprve potom samostatne povolit lokalni fazi A.
@@ -96,6 +141,7 @@ $Sha=Read-Host 'Presny plny schvaleny SHA noveho candidate Draft PR'
 $Inputs=(Resolve-Path -LiteralPath (Read-Host 'Puvodni validovane strict DEV inputs')).Path
 $Target=(Resolve-Path -LiteralPath (Read-Host 'Puvodni t5-restore-target.json')).Path
 $Historical=(Resolve-Path -LiteralPath (Read-Host 'Existujici historicky before.json s Node inventory')).Path
+$Settings=(Resolve-Path -LiteralPath (Read-Host 'Existujici chráněný script-settings-review.json z cíleneho readu')).Path
 $Dir=(Resolve-Path -LiteralPath (Read-Host 'Existujici prazdny restricted adresar pro novy candidate')).Path
 if ((Get-ChildItem -LiteralPath $Dir -Force).Count -ne 0) { throw 'BLOCKED_OUTPUT_EXISTS' }
 $Build=Join-Path $Repo 'ops/dev/prepare-t5-worker.mjs'
@@ -103,7 +149,7 @@ $Setup=Join-Path $Repo 'ops/dev/provider-bootstrap-operator.mjs'
 $Candidate=Join-Path $Repo 'ops/dev/prepare-provider-candidate.mjs'
 # Povinna offline brana PRED jakymkoli novym buildem, historicky artifact zachovat:
 $Artifact=(Resolve-Path -LiteralPath (Join-Path $Repo 'dist/server/wrangler.json')).Path
-node $Candidate offline-check $Repo $Sha $Historical $Inputs $Artifact
+node $Candidate offline-check $Repo $Sha $Historical $Inputs $Artifact $Settings
 if ($LASTEXITCODE -ne 0) { throw 'OFFLINE_CONTRACT_BLOCKED_NO_BUILD' }
 # Pred buildem uchovat drivejsi dist/manifest mimo repo, zadne preznaceni stareho source_sha:
 if (Test-Path -LiteralPath (Join-Path $Repo 'dist')) { Copy-Item -LiteralPath (Join-Path $Repo 'dist') -Destination (Join-Path $Dir 'previous-dist') -Recurse }
@@ -112,7 +158,7 @@ if ($LASTEXITCODE -ne 0) { throw 'BLOCKED_CANONICAL_BUILD' }
 node $Setup setup $Repo $Sha $Inputs $Target $Dir
 if ($LASTEXITCODE -ne 0) { throw 'BLOCKED_LOCAL_PROFILE' }
 $Profile=Join-Path $Dir 'bootstrap-local-profile.json'
-node $Candidate prepare $Profile $Repo $Sha $Historical
+node $Candidate prepare $Profile $Repo $Sha $Historical $Settings
 if ($LASTEXITCODE -ne 0) { throw 'BLOCKED_CANDIDATE_PREPARATION' }
 # STOP. Review provider-candidate.review.json a private kompletni config, zadny hosted prikaz.
 ```
@@ -232,3 +278,5 @@ git diff --check
 Routing repair — lokální regrese nad novým source: navíc baseline preview true/false, jejich přesné mapování do Wrangler API, změna mezi review/fresh/read-back a odmítnutí neznámých či změněných routovacích polí. Výsledky této opravy jsou uvedeny v PR #93; předchozí canonical build PASS výše platí pouze pro svůj původní SHA. Native Windows resume i hosted preservation/preview Access zůstávají NOT VERIFIED.
 
 Settings repair — Linux/Node24.19.0/pinned Wrangler4.150.0: **288/288 provider-free serial regressions PASS, 0 SKIP**, včetně8 nových settings/offline kontrol; původní T5/bootstrap/DEV guardy PASS beze změny. Spuštěno `node --test --test-concurrency=1 --test-reporter=tap tests/provider-candidate.test.mjs tests/provider-bootstrap.test.mjs tests/t5-worker-preparation.test.mjs tests/dev-worker-preparation.test.mjs`; focused eslint obou změněných .mjs, `node --check` a `git diff --check` PASS. Žádný nový build, hosted read či mutace. Skutečný Windows snapshot v Cloud není dostupný: jeho celkový offline výsledek není předstírán, z doložené shape plyne unresolved observability. Native Windows offline-check NOT VERIFIED; candidate readiness BLOCKED do vyřešení důkazu.
+
+Authoritative script-settings source — lokálně **308/308 provider-free serial regressions PASS, 0 SKIP**: `node --test --test-concurrency=1 --test-reporter=tap tests/provider-script-settings.test.mjs tests/provider-candidate.test.mjs tests/provider-bootstrap.test.mjs tests/t5-worker-preparation.test.mjs tests/dev-worker-preparation.test.mjs`. Finální targeted reader/candidate recheck **56/56 PASS**; focused eslint všech čtyř dotčených .mjs, syntax a diff PASS. API/auth procesy jsou pouze doubles se syntetickými tokeny. Ověřeno raw uchování/žádný overwrite, pevný GET/redirect:error/no retry, safe output, old-profile paths bez buildu, separate-source provenance, absent/null/identity mismatch/changed/stale/cached evidence STOP a původní guards. Native Windows/cílený skutečný GET a hosted preservation **NOT VERIFIED**. Předchozí operátorova 32 PASS evidence se nepřeznačuje na výsledek nového readeru.
