@@ -114,4 +114,4 @@ node_modules/.bin/eslint ops/dev/provider-bootstrap.mjs tests/provider-bootstrap
 git diff --check
 ```
 
-**246/246 PASS**, poté finální bootstrap/target-config rollback testy **17/17 PASS**, bez SKIP; lint/diff PASS. Pinned HTTP funkce je testována pouze přes double, nikoli skutečný CLI/network executor. Build/typecheck nejsou znovu vykonány: aplikační source, dependencies, SQL a templates beze změny. Jediná změna existujícího prepareru je export jeho původní přísné bindingMap pro sdílené ověření; žádná validace není odstraněna. Native Windows i hosted PATCH/read-back zůstávají NOT VERIFIED.
+**246/246 PASS**, poté finální bootstrap/target-config rollback testy **18/18 PASS**, bez SKIP; lint/diff PASS. Pinned HTTP funkce je testována pouze přes double, nikoli skutečný CLI/network executor. Build/typecheck nejsou znovu vykonány: aplikační source, dependencies, SQL a templates beze změny. Jediná změna existujícího prepareru je export jeho původní přísné bindingMap pro sdílené ověření; žádná validace není odstraněna. Native Windows i hosted PATCH/read-back zůstávají NOT VERIFIED.

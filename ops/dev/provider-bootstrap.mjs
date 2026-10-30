@@ -43,7 +43,7 @@ export function verify(before,after,inputs,template,artifact,now=Date.now()) {
   check(after.current.id!==before.current.id,'BLOCKED_NEW_VERSION_NOT_IDENTIFIED');
   const map=bindingMap(after.current,inputs.telemetry.databaseId);
   check(same([...map.values()].filter(b=>b.type==='secret_text').map(b=>b.name).sort(),provider),'BLOCKED_PROVIDER_BINDINGS');
-  const stripped=structuredClone(after.current);stripped.id=before.current.id;stripped.annotations=before.current.annotations;stripped.metadata=before.current.metadata;
+  const stripped=structuredClone(after.current);for(const field of ['id','annotations','metadata']) {if(Object.hasOwn(before.current,field)) stripped[field]=before.current[field];else delete stripped[field];}
   stripped.resources.bindings=stripped.resources.bindings.filter(b=>b.type!=='secret_text');
   // Do not discard unrecognized fields/settings; code/runtime/non-secret metadata must stay exact.
   check(same(stripped,before.current),'BLOCKED_NON_SECRET_VERSION_DELTA');

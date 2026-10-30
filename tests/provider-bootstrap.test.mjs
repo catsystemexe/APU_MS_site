@@ -27,3 +27,5 @@ test('pinned bulk function uses one fixed PATCH without draft Worker creation; i
 });
 
 test('historical before validation keeps actual inventory timestamp when reads were several seconds apart',()=>{const f=fixture();f.before.inventory_read_at+=9000;assert.equal(preflight(f.before,f.inputs,template,artifact,f.now+9000).status,'PREFLIGHT_PASS_NOT_AUTHORIZATION');assert.match(verify(f.before,f.after,f.inputs,template,artifact,f.now+9000).status,/VERIFIED/);});
+
+test('optional version metadata absence is preserved while comparing non-secret state',()=>{const f=fixture();delete f.before.current.annotations;delete f.before.current.metadata;assert.match(verify(f.before,f.after,f.inputs,template,artifact,f.now).status,/VERIFIED/);});
