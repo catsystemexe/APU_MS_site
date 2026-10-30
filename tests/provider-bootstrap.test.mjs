@@ -63,3 +63,20 @@ test('malformed full inventory stdout produces only a safe code and never an enr
   assert.equal(existsSync(join(dir,'before.json')),false);assert.doesNotMatch(readFileSync(join(dir,'before-raw.json'),'utf8'),/NEVER_RAW/);
  }finally{rmSync(dir,{recursive:true,force:true});}
 });
+
+test('different latest cannot be promoted implicitly or mutate the preserved active snapshot',()=>{
+ const f=fixture();f.before.latest=structuredClone(f.before.current);f.before.latest.id=crypto.randomUUID();f.before.latest.resources.script.etag='UNVERIFIED_LATEST_CODE';
+ const original=structuredClone(f.before);
+ assert.throws(()=>preflight(f.before,f.inputs,template,artifact,f.now),{message:'BLOCKED_LATEST_NOT_ACTIVE'});
+ assert.deepEqual(f.before,original);
+});
+test('pinned versions-secret helper always targets latest and exposes no exact source-version selector',async()=>{
+ const src=readFileSync('node_modules/wrangler/wrangler-dist/cli.js','utf8');assert.equal(createHash('sha256').update(src).digest('hex'),'71da1f9bcf69a9f56c4ff4f68e71315365d03db8ea11207577b47a8e1a0a1064');
+ const start=src.indexOf('async function patchLatestWorkerVersionWithSecrets('),end=src.indexOf('var versionsSecretNamespace,',start),calls=[];
+ const fn=runInNewContext('('+src.slice(start,end).trim()+')',{fetchResult2:async(_c,path,init)=>{calls.push({path,init});return{id:'SYNTHETIC_VERSION'};},getMetricsUsageHeaders:async()=>({})});
+ await fn({config:{},accountId:DEV.account,scriptName:DEV.worker,secrets:{OPENAI_API_KEY:'SYNTHETIC_ONLY',APU_VECTOR_STORE_ID:'SYNTHETIC_ONLY'},sourceVersionId:T5.baseline});
+ assert.equal(calls.length,1);assert.equal(calls[0].path,`/accounts/${DEV.account}/workers/workers/${DEV.worker}/versions/latest`);assert.equal(calls[0].init.method,'PATCH');
+ assert.equal(JSON.stringify(JSON.parse(calls[0].init.body)).includes(T5.baseline),false);
+ const bulk=src.slice(src.indexOf('versionsSecretPutBulkHandler(args'),src.indexOf('// src/versions/secrets/delete.ts'));
+ assert.doesNotMatch(bulk,/args\.(?:versionId|fromVersion|sourceVersion)/);
+});

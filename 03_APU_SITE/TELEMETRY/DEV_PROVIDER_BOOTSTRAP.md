@@ -1,5 +1,35 @@
 # DEV provider bootstrap — příprava, ne autorizace
 
+**Aktuální stav: BLOCKED při latest != active.** Operátor doložil lokální Windows setup PASS a skutečný read-before `BLOCKED_LATEST_NOT_ACTIVE`; žádná hosted mutace/provider call. Příčina rozdílu active/latest není ověřena. Nyní neopakovat fázi A ani další Windows diagnostiku; aktuální soběstačná předávka je STOP níže. Původní raw snapshot zůstává historická evidence, nikoli fresh oprávnění k zápisu.
+
+## Latest != active — technická překážka a koncová Windows předávka
+
+Ověření nad source `5bd5327e202153c503d6bec73f8f01cd8849f45a`, pinned Wrangler4.150.0/CLI hash uvedený níže:
+
+- `secret bulk` nemá doložený bezpečný výběr jiné zdrojové verze; dosavadní guard latest=active zůstává. Nesmí se vyřešit deployem neověřené latest.
+- `versions secret bulk` skutečně volá `patchLatestWorkerVersionWithSecrets`, jehož endpoint je **natvrdo** `/workers/workers/{worker}/versions/latest`. Nemá CLI source-version selector. Test vykonává tento přesný pinned kód proti HTTP double: i při dodatečném sourceVersionId argumentu směřuje na latest, nikoli na aktivní UUID. To neřeší zachování aktivního kódu/configu.
+- Bundled primární Cloudflare SDK5.2.0 popisuje create/get/list/delete verzí; samotná obecná create metoda nedokládá kopii kompletní aktivní verze ani merge-patch konkrétního UUID. Nahradit `/latest` za UUID nebo přidat domnělý `copy_from` / `deploy:false` payload by byla nepodložená implementace.
+- Aktuální [primární API dokumentaci verzí](https://developers.cloudflare.com/api/resources/workers/subresources/beta/subresources/workers/subresources/versions/) se v této dávce nepodařilo ověřit: webový nástroj vrátil chybu a přímé čtení veřejné dokumentace bylo blokováno proxy HTTP403. To **není důkaz neexistence API schopnosti**. Je to chybějící nutný kontrakt pro bezpečný nový writer.
+
+Konkrétně chybí doložený podporovaný request, který zvolí přesné aktivní version UUID, zachová všechny module bytes/ASSETS i celý env/config, připustí pouze dva provider secrets a vytvoří novou **neaktivní** verzi bez změny traffic/non-versioned settings. Raw metadata snapshot ani code ETag samy nedodávají kompletní kopii modulů/ASSETS a nemohou nahradit tento kontrakt. Standardní rebuild není důkaz shody s kódem skutečně aktivní verze.
+
+| Oddělená fáze | Požadovaný důkaz / současný stav |
+| --- | --- |
+| 1. Příprava nové verze | BLOCKED: neověřený exact-source copy/patch kontrakt. Žádný upload/PATCH adapter není implementován. Žádná aktivace latest. |
+| 2. Původ a povolené rozdíly | Před aktivací bude třeba nezávisle porovnat novou neaktivní verzi s čerstvou přesnou aktivní source verzí: module/ASSETS identity, runtime, kompletní bindings/vars/settings, Access, developer, OFF/OFF; pouze oba secrets a version bookkeeping navíc. Původní verify pro již aktivní bootstrap není náhrada tohoto staged ověření. |
+| 3. Aktivace | Jen zvlášť autorizovaný deployment přesného ověřeného nového UUID. Do té doby původní active/traffic zůstávají, nový UUID není známý a žádný provider request se nepovoluje. |
+| 4. Restore body | Původní732bf950… je před-bootstrap stav bez doložené provider readiness; nový post-bootstrap/post-T5 restore bod lze nominovat až po skutečné ověřené aktivaci nové OFF/OFF verze. Nezaměňovat oba body a neprovádět rollback automaticky. |
+
+**Soběstačná Windows předávka nyní — žádný příkaz ke spuštění:**
+
+1. Zachovat již existující raw snapshot, profil a výsledek `BLOCKED_LATEST_NOT_ACTIVE` jako historickou restricted evidence; nic neupravovat ani nemažte.
+2. Nespouštět další read-before/secret list, secret put/bulk/versions secret, upload, PATCH, deployment, rollback, telemetry opt-in ani provider request. Není nutná žádná nová Windows diagnostická série ani žádné PowerShell proměnné z předchozího volání.
+3. Nepředávat secrets, nečíst PUBLIC credentials a neodvozovat příčinu active/latest rozdílu.
+4. Source review musí nejprve dodat přesný primární API kontrakt zachování aktivní verze a její neaktivní derivace. Teprve poté samostatná minimální implementace source-selector/allowed-delta kontroly a soběstačný blok operátora. Před budoucím zápisem bude vždy nutný **nový** fresh preflight; současný snapshot se nepřeznačuje.
+
+Žádný guard nebyl odstraněn nebo změněn. Ověření této feasibility opravy: `node --test tests/provider-bootstrap.test.mjs` **23/23 PASS**, 0 SKIP; focused ESLint testu a diff check PASS. Testy používají výhradně fixtures/HTTP doubles, žádné hosted příkazy nebo credentials. Native Windows mechanismus kopie/aktivace **NOT VERIFIED**. Výsledek je **BLOCKED**, nikoli připravený bezpečný writer nebo bootstrap PASS. Starší fáze níže zůstávají podmíněným kontraktem pro původní latest=active případ a nejsou nyní instrukcí pokračovat.
+
+
 Source základ PR #91: `41ba9e4642a132331a718cfcad22a70b25af69ba`. Operátor uvedl inventory z `2026-10-30T15:25:06.659Z`: prázdné, oba provider secret counts=0. Příčina rozdílu proti historické evidenci **NOT VERIFIED**. Verze `732bf950-30cf-444a-90fc-8927d9c8b16c` není tímto důkazem provider-ready. Nečíst ani kopírovat credentials z PUBLIC; žádné hodnoty do chatu, Git, cloudového workspace nebo transkriptu.
 
 Tato dávka vykonává pouze source/local testy. Následující hosted příkazy jsou **návrh samostatně autorizované Windows fáze**. Bez samostatného schválení je STOP před preflight reads i PATCH. T5 samotný je BLOCKED. Zachovat původní evidence, configy, inputs a proposal; nic nepřepisovat.
